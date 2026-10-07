@@ -1,0 +1,69 @@
+import { useEffect, useRef, useState } from "react";
+import { touch } from "./touch";
+
+export interface OwnerMenuProps {
+  muted: boolean;
+  onToggleMute: () => void;
+  onSignedOut: () => void;
+}
+
+/** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
+export function OwnerMenu({ muted, onToggleMute, onSignedOut }: OwnerMenuProps) {
+  const [open, setOpen] = useState(false);
+  const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen((o) => !o);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const post = async (path: string) => {
+    try {
+      await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    } catch {
+      /* the session ends either way */
+    }
+    onSignedOut();
+  };
+
+  const cancelHold = () => {
+    if (hold.current) clearTimeout(hold.current);
+    hold.current = null;
+  };
+
+  return (
+    <>
+      <div
+        data-testid="owner-hotspot"
+        className="owner-hotspot"
+        style={{ position: "fixed", top: 0, left: 0, width: 56, height: 56, zIndex: 1100 }}
+        onPointerDown={() => {
+          cancelHold();
+          hold.current = setTimeout(() => setOpen(true), 600);
+        }}
+        onPointerUp={cancelHold}
+        onPointerLeave={cancelHold}
+        onPointerCancel={cancelHold}
+      />
+      {open && (
+        <div className="owner-menu glass" role="dialog" aria-label="Owner menu" style={{ position: "fixed", zIndex: 1100 }}>
+          <button type="button" style={touch} onClick={onToggleMute}>
+            {muted ? "Unmute stage" : "Mute stage"}
+          </button>
+          <button type="button" style={touch} onClick={() => post("/api/logout")}>
+            Log out
+          </button>
+          <button type="button" style={touch} className="danger" onClick={() => post("/api/lock")}>
+            Emergency lock
+          </button>
+          <button type="button" style={touch} onClick={() => setOpen(false)}>
+            Close
+          </button>
+        </div>
+      )}
+    </>
+  );
+}

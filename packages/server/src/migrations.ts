@@ -1,0 +1,61 @@
+export const MIGRATIONS: { id: number; sql: string }[] = [
+  {
+    id: 1,
+    sql: `
+create table owner (
+  id integer primary key check (id = 1),
+  password_hash text not null,
+  pin_hash text not null,
+  assistant_name text not null,
+  created_at integer not null
+);
+create table sessions (
+  id integer primary key autoincrement,
+  token_hash text not null unique,
+  kind text not null,
+  expires_at integer not null,
+  ip text,
+  ua text,
+  revoked integer not null default 0
+);
+create table devices (
+  id integer primary key autoincrement,
+  name text not null,
+  token_hash text not null unique,
+  last_seen integer,
+  config_json text not null default '{}'
+);
+create table pair_codes (
+  code_hash text primary key,
+  expires_at integer not null
+);
+create table messages (
+  id integer primary key autoincrement,
+  role text not null,
+  content_json text not null,
+  created_at integer not null
+);
+create table rules (
+  id integer primary key autoincrement,
+  tool text not null,
+  matcher_json text not null,
+  created_at integer not null
+);
+create table approvals (
+  id text primary key,
+  tool text not null,
+  summary text not null,
+  tier text not null,
+  decision text,
+  decided_at integer
+);
+create table audit_log (
+  id integer primary key autoincrement,
+  ts integer not null,
+  actor text not null,
+  kind text not null,
+  detail_json text not null
+);
+`,
+  },
+];

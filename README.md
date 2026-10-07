@@ -1,0 +1,45 @@
+# Friend
+
+A self-hosted personal AI assistant. It runs on your PC, talks to you from any screen over WebSocket, uses tools on your machine with risk-based approvals, and controls a full-screen sci-fi "stage" itself.
+
+Phase 1 (this release): secure login, agent loop with Claude, CLI device node, approvals with PIN, and a minimal stage with a particle-sphere presence. Voice, camera, memory, heartbeat, taskboard and the plugin store come in later phases. See `docs/superpowers/specs` and `docs/superpowers/plans`.
+
+## Quick start (development)
+
+```bash
+pnpm install
+pnpm build                 # builds the web client
+pnpm friend setup          # password, PIN, assistant name, workspace folder, API key
+pnpm friend start          # gateway + local device node, http://127.0.0.1:8787
+```
+
+Open the address in a browser, sign in, and press any key to talk. Press `Esc` (or long-press the top-left corner) for the owner menu: mute stage, log out, emergency lock.
+
+Other commands: `friend status`, `friend config set <key> <value>`, `friend pair` (code to connect another PC), `friend node --url <ws-url> --code <code>`.
+
+## Safety model
+
+- Reading is free, writing inside your workspace is free, shell commands ask first, destructive commands ask and need your PIN.
+- Approval cards and the PIN pad are drawn by the client, never by the agent.
+- Everything the agent does is written to the audit log.
+
+## Using your own domain later
+
+Run Friend behind a reverse proxy (for example Caddy) and set:
+
+```bash
+friend config set publicUrl https://friend.example.com
+friend config set trustProxy true
+friend config set allowedOrigins https://friend.example.com
+```
+
+Login, PIN, rate limits and lockout stay on in every mode. Phones need HTTPS to use the microphone and camera in later phases, which the domain setup provides.
+
+## Tests
+
+```bash
+pnpm test        # all packages
+pnpm typecheck
+```
+
+`scripts/smoke.md` lists the manual end-to-end checks and their last results.
