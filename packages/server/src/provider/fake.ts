@@ -9,7 +9,7 @@ export class FakeProvider implements Provider {
   constructor(private script: ProviderEvent[][]) {}
 
   async *stream(req: StreamRequest): AsyncIterable<ProviderEvent> {
-    this.calls.push(req);
+    this.calls.push({ ...req, messages: structuredClone(req.messages) });
     const events = this.script[this.i++];
     if (!events) {
       yield { type: "error", message: "FakeProvider script exhausted" };

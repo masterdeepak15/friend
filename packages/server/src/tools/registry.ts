@@ -30,10 +30,12 @@ export function pathArg(tool: string, args: unknown): string | undefined {
 /** Purely lexical roots check (no filesystem access); the device re-checks with real paths. */
 export function lexicalInsideRoots(path: string, roots: string[]): boolean {
   if (roots.length === 0) return false;
-  const win = /^[a-zA-Z]:[\\/]/.test(path) || path.startsWith("\\\\");
+  const isWinPath = (p: string) => /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith("\\\\");
+  const win = isWinPath(path) || (!posix.isAbsolute(path) && isWinPath(roots[0]!));
   const lib = win ? win32 : posix;
   const fold = (s: string) => (win ? s.toLowerCase() : s);
-  const target = fold(lib.normalize(path));
+  const absolute = lib.isAbsolute(path) ? path : lib.join(roots[0]!, path);
+  const target = fold(lib.normalize(absolute));
   return roots.some((r) => {
     const root = fold(lib.normalize(r));
     const rel = lib.relative(root, target);

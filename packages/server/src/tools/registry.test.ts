@@ -19,6 +19,11 @@ describe("registry", () => {
     expect(lexicalInsideRoots("C:\\work-evil\\x", [root])).toBe(false);
     expect(lexicalInsideRoots("D:\\work\\x", [root])).toBe(false);
   });
+  it("lexicalInsideRoots resolves relative paths against the first root", () => {
+    expect(lexicalInsideRoots("notes.txt", ["C:\\work"])).toBe(true);
+    expect(lexicalInsideRoots("sub\\a.txt", ["C:\\work"])).toBe(true);
+    expect(lexicalInsideRoots("..\\secret.txt", ["C:\\work"])).toBe(false);
+  });
   it("lexicalInsideRoots is false when no roots are configured", () => {
     expect(lexicalInsideRoots("C:\\work\\a", [])).toBe(false);
   });
