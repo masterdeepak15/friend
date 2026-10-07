@@ -142,6 +142,19 @@ describe("websocket /ws", () => {
   });
 });
 
+describe("POST /api/lock", () => {
+  it("requires a session", async () => {
+    await post("/api/setup", owner);
+    expect((await post("/api/lock", {})).status).toBe(401);
+  });
+  it("revokes every session so the cookie stops working", async () => {
+    const cookie = await loginCookie();
+    expect((await post("/api/lock", {}, { cookie })).status).toBe(200);
+    const c = await open("/ws", { cookie, origin: base });
+    expect(await c.closed).toBe(4401);
+  });
+});
+
 describe("POST /api/pair", () => {
   it("exchanges a valid code for a device token that /device accepts", async () => {
     await post("/api/setup", owner);

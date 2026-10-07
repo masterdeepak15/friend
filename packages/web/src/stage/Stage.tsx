@@ -58,7 +58,7 @@ export function Stage({ state, send, dispatch }: StageProps) {
         mode={corner ? "corner" : "full"}
         accent={state.mood.accent}
       />
-      <div className={narrow ? "objects objects-stack" : "objects"}>
+      <div className={narrow ? "objects objects-stack" : "objects"} style={{ zIndex: 10 }}>
         {state.objects.map((o) => {
           const View = CATALOG[o.type as keyof typeof CATALOG];
           if (!View) return null;
