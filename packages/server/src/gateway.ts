@@ -54,7 +54,11 @@ function parseCookies(header: string | undefined): Record<string, string> {
 export function createGateway(deps: GatewayDeps) {
   const { config, auth, audit } = deps;
   // One trusted proxy hop: the address that proxy appended is used, never entries a client prepended.
-  const app: FastifyInstance = Fastify({ trustProxy: config.trustProxy ? 1 : false, logger: false, bodyLimit: 64 * 1024 });
+  const app: FastifyInstance = Fastify({ trustProxy: config.trustProxy ? 1 : false,
+    logger: false,
+    bodyLimit: 64 * 1024,
+    forceCloseConnections: true, // shutdown must not wait for idle keep-alive connections
+  });
   app.register(fastifyCookie);
 
   const hostOf = (header: string | undefined): string => {

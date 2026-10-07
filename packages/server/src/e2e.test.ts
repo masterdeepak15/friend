@@ -38,7 +38,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app?.stop();
-});
+}, 30_000);
 
 describe("built web client served by the gateway", () => {
   it("serves index.html at / and for unknown client routes", async () => {
