@@ -48,6 +48,8 @@ def make_server(engines: Engines, token: str, port: int = 0, max_body: int = 4_0
                 self._json(400, {"error": "bad Content-Length"}, close=True)
                 return None
             if length > max_body:
+                # Read (and discard) a bounded amount so the client sees the 413 instead of a connection reset.
+                self.rfile.read(min(length, 4 * max_body))
                 self._json(413, {"error": "body too large"}, close=True)
                 return None
             if length <= 0:
