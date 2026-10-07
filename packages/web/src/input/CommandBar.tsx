@@ -17,6 +17,7 @@ export function CommandBar({ onSend, requestOpen }: { onSend: (text: string) => 
     const onKey = (e: KeyboardEvent) => {
       if (open || isTyping(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key.length === 1) {
+        e.preventDefault(); // the key is kept in state; don't let the browser insert it a second time
         setText(e.key);
         setOpen(true);
       }

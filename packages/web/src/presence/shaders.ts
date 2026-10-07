@@ -36,8 +36,9 @@ void main() {
   vec4 mv = modelViewMatrix * vec4(pos, 1.0);
   gl_Position = projectionMatrix * mv;
   float sz = uSize * (0.7 + aSeed * 0.6) * (1.0 + uAmp * 0.8);
-  gl_PointSize = sz * uPixel * (4.2 / -mv.z);
-  vGlow = 0.6 + 0.4 * n + uAmp * 0.5;
+  gl_PointSize = sz * uPixel * (7.5 / -mv.z);
+  float rim = 1.0 - abs(pos.z) / max(length(pos), 0.001);
+  vGlow = 0.75 + 0.5 * n + uAmp * 0.7 + rim * rim * 0.9;
 }
 `;
 
@@ -50,6 +51,6 @@ void main() {
   float d = length(gl_PointCoord - 0.5);
   if (d > 0.5) discard;
   float a = smoothstep(0.5, 0.0, d);
-  gl_FragColor = vec4(uColor * vGlow * uBright, a * 0.9 * uBright);
+  gl_FragColor = vec4(uColor * vGlow * uBright, a * 0.95);
 }
 `;
