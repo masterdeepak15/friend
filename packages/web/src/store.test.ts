@@ -59,6 +59,14 @@ describe("reduce", () => {
     expect(s.captions).toBe("Next");
   });
 
+  it("increments pulse on every caption delta even when the amplitude is equal", () => {
+    let s = reduce(initialState, { type: "caption.delta", text: "abcd" });
+    const first = s.presence.pulse;
+    s = reduce(s, { type: "caption.delta", text: "wxyz" });
+    expect(s.presence.amplitude).toBe(reduce(initialState, { type: "caption.delta", text: "abcd" }).presence.amplitude);
+    expect(s.presence.pulse).toBe(first + 1);
+  });
+
   it("keeps amplitude within 0..1", () => {
     const s = reduce(initialState, { type: "caption.delta", text: "x".repeat(500) });
     expect(s.presence.amplitude).toBeLessThanOrEqual(1);

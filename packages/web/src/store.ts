@@ -19,7 +19,7 @@ export interface StageViewState {
   objects: StageObject[];
   captions: string;
   captionDone: boolean;
-  presence: { state: PresenceState; style: string; amplitude: number };
+  presence: { state: PresenceState; style: string; amplitude: number; pulse: number };
   mood: { accent: string; intensity: number };
   approval: PendingApproval | null;
   alerts: Alert[];
@@ -33,7 +33,7 @@ export const initialState: StageViewState = {
   objects: [],
   captions: "",
   captionDone: true,
-  presence: { state: "idle", style: "sphere", amplitude: 0 },
+  presence: { state: "idle", style: "sphere", amplitude: 0, pulse: 0 },
   mood: { accent: "#3fd8ff", intensity: 0.6 },
   approval: null,
   alerts: [],
@@ -102,7 +102,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
         ...state,
         captions: (fresh ? "" : state.captions) + m.text,
         captionDone: false,
-        presence: { ...state.presence, amplitude: clamp01(0.3 + m.text.length * 0.04) },
+        presence: { ...state.presence, amplitude: clamp01(0.3 + m.text.length * 0.04), pulse: state.presence.pulse + 1 },
       };
     }
     case "caption.end":
