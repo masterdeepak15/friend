@@ -2,7 +2,7 @@
 
 A self-hosted personal AI assistant. It runs on your PC, talks to you from any screen over WebSocket, uses tools on your machine with risk-based approvals, and controls a full-screen sci-fi "stage" itself.
 
-Phase 1 (this release): secure login, agent loop with Claude, CLI device node, approvals with PIN, and a minimal stage with a particle-sphere presence. Voice, camera, memory, heartbeat, taskboard and the plugin store come in later phases. See `docs/superpowers/specs` and `docs/superpowers/plans`.
+Phase 1: secure login, agent loop with Claude, CLI device node, approvals with PIN, and a minimal stage with a particle-sphere presence. Phase 2a: chart, gauge, timeline and graph objects, automatic layout, fade-out, orb and ring voice styles and mood intensity. Voice, camera, memory, heartbeat, taskboard and the plugin store come in later phases. See `docs/superpowers/specs` and `docs/superpowers/plans`.
 
 ## Quick start (development)
 
@@ -15,7 +15,9 @@ pnpm friend start          # gateway + local device node, http://127.0.0.1:8787
 
 Open the address in a browser, sign in, and press any key to talk. Press `Esc` (or long-press the top-left corner) for the owner menu: mute stage, log out, emergency lock.
 
-Other commands: `friend status`, `friend config set <key> <value>`, `friend pair` (code to connect another PC), `friend node --url <ws-url> --code <code>`.
+Preview the whole look with no API key and no network: `pnpm build && pnpm demo`, then open the printed address. Each message you send shows the next scene (gauges and charts, a timeline, a graph, the orb and ring voice styles, a warm mood).
+
+Other commands: `friend rules list|remove <id>`, `friend devices list|revoke <id>`, `friend status`, `friend config set <key> <value>`, `friend pair` (code to connect another PC), `friend node --url <ws-url> --code <code>`.
 
 ## Safety model
 

@@ -234,4 +234,8 @@ describe("buildSystemPrompt", () => {
     expect(p).toMatch(/approval/i);
     expect(p).toContain("scene=conversation");
   });
+  it("teaches the stage vocabulary: auto placement, rich objects and presence styles", () => {
+    const p = buildSystemPrompt("Jarvis", "x");
+    for (const word of ["auto", "chart", "gauge", "timeline", "graph", "orb", "ring", "sphere"]) expect(p).toContain(word);
+  });
 });

@@ -17,3 +17,17 @@ Run against a built app (`pnpm build`) with a real Anthropic key. Tick each line
 
 - Live model run (rows 3 and 4) needs `friend config set apiKey <key>`.
 - Thinking and speaking presence states were not captured in screenshots.
+
+## Phase 2a (stage visuals) manual check
+
+Run `pnpm build && pnpm demo` and send five messages. Results 2026-10-08 on a 1920 px wide window:
+
+| Scene | What to see | Result |
+|---|---|---|
+| 1 Overview | three gauges (cyan, amber at 83%, red at 97%), two-series area chart with legend, stat; sphere shrinks to the corner | PASS |
+| 2 Plan | timeline with glowing rail, list with a struck-through item, table | PASS |
+| 3 Services | graph fits its card, arrowheads end at node borders; ring voice style in the corner | PASS |
+| 4 Orb | warm amber orb with ripple rim, alert card expires after 20 s | PASS (a seam in the shader and an oversized card were found and fixed) |
+| 5 Reset | back to the cyan sphere | PASS |
+
+Not checked by eye: phone width for the new objects (the test browser window could not be resized; the stacking logic is unit tested), and the thinking/speaking looks of the orb and ring.

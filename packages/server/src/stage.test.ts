@@ -80,6 +80,26 @@ describe("StageState", () => {
   });
 });
 
+describe("presence styles and new objects", () => {
+  it("defaults to the sphere and switches style through the tool", () => {
+    expect(stage.snapshot().presence.style).toBe("sphere");
+    expect(runStageTool("stage.presence", { style: "orb" }, stage, emit).ok).toBe(true);
+    expect(stage.snapshot().presence.style).toBe("orb");
+    expect(emitted).toHaveLength(1);
+  });
+  it("rejects an unknown presence style with a helpful error and changes nothing", () => {
+    const r = runStageTool("stage.presence", { style: "hologram" }, stage, emit);
+    expect(r.ok).toBe(false);
+    expect(stage.snapshot().presence.style).toBe("sphere");
+    expect(emitted).toEqual([]);
+  });
+  it("shows a chart with auto placement", () => {
+    const obj = { id: "c", type: "chart", props: { kind: "line", labels: ["a"], series: [{ name: "s", values: [1] }] }, placement: "auto" };
+    expect(runStageTool("stage.show", { object: obj }, stage, emit).ok).toBe(true);
+    expect(stage.snapshot().objects[0]!.type).toBe("chart");
+  });
+});
+
 describe("runStageTool", () => {
   it("emits exactly one stage message per successful command", () => {
     const r = runStageTool("stage.show", { object: card("a") }, stage, emit);

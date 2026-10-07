@@ -172,6 +172,39 @@ describe("end to end", () => {
     expect(b.of("snapshot")[0]!.stage.objects.map((o) => o.id)).toEqual(["note"]);
   });
 
+  it("lets the agent show an auto-placed chart and switch the presence style; new clients see both", async () => {
+    await boot([
+      [
+        call("1", "stage.show", {
+          object: { id: "load", type: "chart", props: { kind: "line", labels: ["a", "b"], series: [{ name: "cpu", values: [1, 2] }] }, placement: "auto" },
+        }),
+        call("2", "stage.presence", { style: "ring" }),
+        call("3", "stage.mood", { accent: "#ffb454", intensity: 0.9 }),
+        done,
+      ],
+      [text("done"), done],
+    ]);
+    const cookie = await login();
+    const a = await Client.connect(cookie);
+    a.send({ type: "chat.send", text: "show load" });
+    await until(() => a.of("caption.end").length > 0);
+    const b = await Client.connect(cookie);
+    await until(() => b.of("snapshot").length > 0);
+    const snap = b.of("snapshot")[0]!.stage;
+    expect(snap.objects.map((o) => [o.id, o.type, o.placement])).toEqual([["load", "chart", "auto"]]);
+    expect(snap.presence.style).toBe("ring");
+    expect(snap.mood).toEqual({ accent: "#ffb454", intensity: 0.9 });
+  });
+
+  it("answers an invalid presence style with a tool error and leaves the style alone", async () => {
+    await boot([[call("1", "stage.presence", { style: "hologram" }), done], [text("ok"), done]]);
+    const a = await Client.connect(await login());
+    a.send({ type: "chat.send", text: "change look" });
+    await until(() => a.of("caption.end").length > 0);
+    expect(JSON.stringify(provider.calls[1]!.messages.at(-1))).toMatch(/invalid/i);
+    expect(app.stage.snapshot().presence.style).toBe("sphere");
+  });
+
   it("removes an object from the server stage when the owner dismisses it", async () => {
     await boot([
       [call("1", "stage.show", { object: { id: "note", type: "card", props: { text: "hi" }, placement: "center" } }), done],

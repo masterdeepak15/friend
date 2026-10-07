@@ -1,7 +1,7 @@
 import fastifyCookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import { ClientMsg, type ServerMsg } from "@friend/protocol";
-import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerOptions } from "fastify";
 import { existsSync } from "node:fs";
 import { isIP } from "node:net";
 import type { IncomingMessage } from "node:http";
@@ -54,11 +54,13 @@ function parseCookies(header: string | undefined): Record<string, string> {
 export function createGateway(deps: GatewayDeps) {
   const { config, auth, audit } = deps;
   // One trusted proxy hop: the address that proxy appended is used, never entries a client prepended.
-  const app: FastifyInstance = Fastify({ trustProxy: config.trustProxy ? 1 : false,
+  const options: FastifyServerOptions = {
+    trustProxy: config.trustProxy ? (_addr: string, hop: number) => hop < 1 : false,
     logger: false,
     bodyLimit: 64 * 1024,
     forceCloseConnections: true, // shutdown must not wait for idle keep-alive connections
-  });
+  };
+  const app: FastifyInstance = Fastify(options);
   app.register(fastifyCookie);
 
   const hostOf = (header: string | undefined): string => {

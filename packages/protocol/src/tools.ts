@@ -1,5 +1,5 @@
 import { z, type ZodTypeAny } from "zod";
-import { PresenceState, SceneMode, StageObject } from "./stage";
+import { PresenceState, PresenceStyle, SceneMode, StageObject } from "./stage";
 import type { Tier } from "./tiers";
 
 export interface ToolDef {
@@ -67,7 +67,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "stage.show",
     description:
-      "Show an object (card, stat, list, table or code) on the owner's screen at a placement, optionally expiring after ttl seconds.",
+      "Show an object on the owner's screen. Types and props: card {title?, text (markdown)}; stat {label, value, unit?, delta?}; list {title?, items: string[] or {text, done?}[]}; table {title?, columns: string[], rows: any[][]}; code {title?, language?, code}; chart {title?, kind: line|bar|area, labels: string[], series: {name, values: number[]}[], unit?}; gauge {label, value, min?, max?, unit?}; timeline {title?, items: {time, title, detail?}[]}; graph {title?, nodes: {id, label?}[], edges: {from, to, label?}[]}. Placement: prefer \"auto\" (the screen arranges objects in a tidy grid); otherwise a region (center, left, right, top, bottom) or {x, y, w, h} as fractions 0..1. Optional ttl seconds makes it disappear by itself.",
     input: z.object({ object: StageObject }),
     baseTier: "T0",
     target: "gateway",
@@ -95,8 +95,8 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "stage.presence",
-    description: "Set the voice presence animation state and style.",
-    input: z.object({ state: PresenceState.optional(), style: z.string().max(32).optional() }),
+    description: "Set the voice presence animation state (idle, listening, thinking, speaking) and style: sphere (particle sphere), orb (glowing plasma orb) or ring (radial bars).",
+    input: z.object({ state: PresenceState.optional(), style: PresenceStyle.optional() }),
     baseTier: "T0",
     target: "gateway",
   },

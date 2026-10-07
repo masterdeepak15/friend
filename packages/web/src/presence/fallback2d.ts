@@ -83,6 +83,9 @@ export class Fallback2D implements PresenceHandle {
   setAccent(color: string): void {
     this.accent = color;
   }
+  setIntensity(v: number): void {
+    this.core.setIntensity(v);
+  }
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
