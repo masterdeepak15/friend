@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@fastify/cookie": "^11.1.2",
     "@fastify/static": "^10.1.5",
     "@friend/protocol": "workspace:*",
