@@ -67,6 +67,9 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
+      '@friend/agent-cli':
+        specifier: workspace:*
+        version: link:../agent-cli
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0
