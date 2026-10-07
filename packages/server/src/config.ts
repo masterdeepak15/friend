@@ -16,22 +16,22 @@ export interface Config {
 }
 
 export const DEFAULT_DESTRUCTIVE_PATTERNS = [
-  "\brm\s+(-[a-z]*r|-[a-z]*f)",
-  "\bremove-item\b.*-recurse",
-  "\brmdir\b.*\/s",
-  "\bdel\b.*\/[sfq]",
-  "\bformat\b\s+[a-z]:",
-  "\bdiskpart\b",
-  "\bshutdown\b",
-  "\brestart-computer\b",
-  "\bstop-computer\b",
-  "\breg\s+(add|delete|import)",
-  "\bnet\s+user\b",
-  "\bicacls\b",
-  "\bchmod\b|\bchown\b",
-  "\bmkfs\b",
-  "\bdd\s+if=",
-  "c:\\windows",
+  String.raw`\brm\s+(-[a-z]*r|-[a-z]*f)`,
+  String.raw`\bremove-item\b.*-recurse`,
+  String.raw`\brmdir\b.*\/s`,
+  String.raw`\bdel\b.*\/[sfq]`,
+  String.raw`\bformat\b\s+[a-z]:`,
+  String.raw`\bdiskpart\b`,
+  String.raw`\bshutdown\b`,
+  String.raw`\brestart-computer\b`,
+  String.raw`\bstop-computer\b`,
+  String.raw`\breg\s+(add|delete|import)`,
+  String.raw`\bnet\s+user\b`,
+  String.raw`\bicacls\b`,
+  String.raw`\bchmod\b|\bchown\b`,
+  String.raw`\bmkfs\b`,
+  String.raw`\bdd\s+if=`,
+  String.raw`c:\\windows`,
 ];
 
 export function defaultDataDir(): string {
