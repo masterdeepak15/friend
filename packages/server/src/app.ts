@@ -91,6 +91,9 @@ export async function createApp(opts: AppOptions) {
           break;
         case "stage.event":
           audit.log("owner", "stage.event", { objectId: msg.objectId, event: msg.event });
+          if (msg.event === "dismiss" && stage.apply({ cmd: "hide", id: msg.objectId }).ok) {
+            broadcast({ type: "stage", command: { cmd: "hide", id: msg.objectId } });
+          }
           break;
       }
     },

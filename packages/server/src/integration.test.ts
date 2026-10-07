@@ -172,6 +172,21 @@ describe("end to end", () => {
     expect(b.of("snapshot")[0]!.stage.objects.map((o) => o.id)).toEqual(["note"]);
   });
 
+  it("removes an object from the server stage when the owner dismisses it", async () => {
+    await boot([
+      [call("1", "stage.show", { object: { id: "note", type: "card", props: { text: "hi" }, placement: "center" } }), done],
+      [text("shown"), done],
+    ]);
+    const cookie = await login();
+    const a = await Client.connect(cookie);
+    const b = await Client.connect(cookie);
+    a.send({ type: "chat.send", text: "show a note" });
+    await until(() => a.of("caption.end").length > 0);
+    a.send({ type: "stage.event", objectId: "note", event: "dismiss" });
+    await until(() => b.of("stage").some((m) => m.command.cmd === "hide" && m.command.id === "note"));
+    expect(app.stage.snapshot().objects).toEqual([]);
+  });
+
   it("removes objects whose ttl expires and tells clients", async () => {
     await boot([
       [call("1", "stage.show", { object: { id: "tmp", type: "card", props: { text: "x" }, placement: "center", ttl: 1 } }), done],

@@ -1,0 +1,132 @@
+import type { ClientMsg, StageObject } from "@friend/protocol";
+import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { initialState, type StageViewState } from "../store";
+import { placementToStyle } from "./placement";
+import { sanitizeMarkdown } from "./sanitize";
+import { Stage } from "./Stage";
+
+const obj = (id: string, type: StageObject["type"], props: Record<string, unknown>): StageObject => ({
+  id,
+  type,
+  props,
+  placement: "center",
+});
+const withState = (patch: Partial<StageViewState>): StageViewState => ({ ...initialState, connection: "open", ...patch });
+
+describe("sanitizeMarkdown", () => {
+  it("removes event handler attributes and raw images", () => {
+    const html = sanitizeMarkdown("<img src=x onerror=alert(1)>hi");
+    expect(html).not.toMatch(/onerror/i);
+    expect(html).not.toMatch(/<img/i);
+    expect(html).toContain("hi");
+  });
+  it("removes script tags", () => {
+    expect(sanitizeMarkdown("a<script>alert(1)</script>b")).not.toMatch(/<script/i);
+  });
+  it("neutralizes javascript: links", () => {
+    expect(sanitizeMarkdown("[x](javascript:alert(1))")).not.toMatch(/javascript:/i);
+  });
+  it("renders basic markdown and opens links safely", () => {
+    const html = sanitizeMarkdown("**bold** and [site](https://example.com)");
+    expect(html).toContain("<strong>bold</strong>");
+    expect(html).toMatch(/rel="noopener noreferrer"/);
+  });
+});
+
+describe("placementToStyle", () => {
+  const desktop = { w: 1280, h: 800 };
+  it("maps relative boxes to percentages and absolute positioning", () => {
+    const s = placementToStyle({ x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, desktop);
+    expect(s).toMatchObject({ position: "absolute", left: "10%", top: "20%", width: "30%", height: "40%" });
+  });
+  it("maps named regions to percentage boxes", () => {
+    const s = placementToStyle("left", desktop);
+    expect(s.position).toBe("absolute");
+    expect(String(s.left)).toMatch(/%$/);
+  });
+  it("stacks objects in normal flow on narrow screens", () => {
+    expect(placementToStyle("center", { w: 390, h: 844 }).position).toBe("relative");
+    expect(placementToStyle({ x: 0, y: 0, w: 0.5, h: 0.5 }, { w: 390, h: 844 }).position).toBe("relative");
+  });
+});
+
+describe("<Stage>", () => {
+  const noop = () => {};
+
+  it("shows the presence full-screen in conversation and in the corner in focus", () => {
+    const { container, rerender } = render(<Stage state={withState({ scene: "conversation" })} send={noop} dispatch={noop} />);
+    expect((container.querySelector("[data-presence]") as HTMLElement).dataset.mode).toBe("full");
+    rerender(<Stage state={withState({ scene: "focus" })} send={noop} dispatch={noop} />);
+    expect((container.querySelector("[data-presence]") as HTMLElement).dataset.mode).toBe("corner");
+  });
+
+  it("renders captions", () => {
+    render(<Stage state={withState({ captions: "Good evening, boss." })} send={noop} dispatch={noop} />);
+    expect(screen.getByText("Good evening, boss.")).toBeTruthy();
+  });
+
+  it("renders card, stat, list, table and code objects from props", () => {
+    const objects = [
+      obj("c", "card", { title: "Note", text: "hello **world**" }),
+      obj("s", "stat", { label: "CPU", value: 42, unit: "%" }),
+      obj("l", "list", { title: "Todo", items: ["one", { text: "two", done: true }] }),
+      obj("t", "table", { columns: ["Name", "Size"], rows: [["a.txt", 12]] }),
+      obj("k", "code", { language: "ts", code: "const x = 1;" }),
+    ];
+    const { container } = render(<Stage state={withState({ scene: "multi", objects })} send={noop} dispatch={noop} />);
+    expect(container.querySelector("strong")?.textContent).toBe("world");
+    expect(screen.getByText("CPU")).toBeTruthy();
+    expect(screen.getByText("42")).toBeTruthy();
+    expect(screen.getByText("two")).toBeTruthy();
+    expect(screen.getByText("a.txt")).toBeTruthy();
+    expect(container.querySelector("pre code")?.textContent).toBe("const x = 1;");
+  });
+
+  it("renders nothing for an unknown object type and does not throw", () => {
+    const bogus = { ...obj("x", "card", {}), type: "bogus" } as unknown as StageObject;
+    expect(() => render(<Stage state={withState({ objects: [bogus] })} send={noop} dispatch={noop} />)).not.toThrow();
+  });
+
+  it("survives malformed props", () => {
+    const objects = [obj("a", "table", { columns: 5, rows: "no" }), obj("b", "list", { items: { a: 1 } }), obj("c", "stat", {})];
+    expect(() => render(<Stage state={withState({ objects })} send={noop} dispatch={noop} />)).not.toThrow();
+  });
+
+  it("dismissing an object tells the server and removes it locally", async () => {
+    const send = vi.fn<(m: ClientMsg) => void>();
+    const dispatch = vi.fn();
+    render(<Stage state={withState({ objects: [obj("note", "card", { text: "hi" })] })} send={send} dispatch={dispatch} />);
+    await userEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+    expect(send).toHaveBeenCalledWith({ type: "stage.event", objectId: "note", event: "dismiss" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "object.dismiss", id: "note" });
+  });
+});
+
+describe("<CommandBar> inside the stage", () => {
+  it("opens on a key press, sends chat.send on Enter, and hides again", async () => {
+    const send = vi.fn<(m: ClientMsg) => void>();
+    render(<Stage state={withState({})} send={send} dispatch={() => {}} />);
+    expect(screen.queryByLabelText(/message/i)).toBeNull();
+    fireEvent.keyDown(window, { key: "h" }); // the first key is kept: the bar opens pre-filled with "h"
+    const input = (await screen.findByLabelText(/message/i)) as HTMLInputElement;
+    expect(input.value).toBe("h");
+    await userEvent.type(input, "ello there{Enter}");
+    expect(send).toHaveBeenCalledWith({ type: "chat.send", text: "hello there" });
+    expect(screen.queryByLabelText(/message/i)).toBeNull();
+  });
+  it("does not send an empty message", async () => {
+    const send = vi.fn();
+    render(<Stage state={withState({})} send={send} dispatch={() => {}} />);
+    await userEvent.click(screen.getByTestId("stage"));
+    const input = await screen.findByLabelText(/message/i);
+    await userEvent.type(input, "   {Enter}");
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("opens when the empty stage is tapped", async () => {
+    render(<Stage state={withState({})} send={() => {}} dispatch={() => {}} />);
+    await userEvent.click(screen.getByTestId("stage"));
+    expect(await screen.findByLabelText(/message/i)).toBeTruthy();
+  });
+});

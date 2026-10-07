@@ -44,7 +44,8 @@ export const initialState: StageViewState = {
 
 export type LocalAction =
   | { type: "conn"; value: Connection }
-  | { type: "alert.dismiss"; id: number };
+  | { type: "alert.dismiss"; id: number }
+  | { type: "object.dismiss"; id: string };
 
 let alertSeq = 0;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
@@ -79,6 +80,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
   const local = input as LocalAction | null;
   if (local && typeof local === "object") {
     if (local.type === "conn") return { ...state, connection: local.value };
+    if (local.type === "object.dismiss") return { ...state, objects: state.objects.filter((o) => o.id !== local.id) };
     if (local.type === "alert.dismiss") return { ...state, alerts: state.alerts.filter((a) => a.id !== local.id) };
   }
   const parsed = ServerMsg.safeParse(input);
