@@ -9,6 +9,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import type { Audit } from "./audit";
 import { LockoutError, type Auth, type Device, type Session } from "./auth";
+import { RateLimiter } from "./ratelimit";
 import type { Config } from "./config";
 
 export const COOKIE_NAME = "friend_session";
@@ -99,6 +100,27 @@ export function createGateway(deps: GatewayDeps) {
     if (token) auth.revokeSession(token);
     reply.clearCookie(COOKIE_NAME, { path: "/" });
     return { ok: true };
+  });
+
+  const pairLimiter = new RateLimiter(Date.now);
+  app.post("/api/pair", async (req, reply) => {
+    const body = z.object({ code: z.string().min(1).max(64), name: z.string().min(1).max(64) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Invalid input" });
+    const key = `pair:${req.ip}`;
+    try {
+      pairLimiter.check(key);
+    } catch (e) {
+      const ms = e instanceof LockoutError ? e.retryAfterMs : 60_000;
+      return reply.code(429).header("retry-after", Math.ceil(ms / 1000)).send({ error: "Too many attempts" });
+    }
+    try {
+      const token = auth.redeemPairCode(body.data.code, body.data.name);
+      pairLimiter.reset(key);
+      return { token };
+    } catch {
+      pairLimiter.fail(key);
+      return reply.code(400).send({ error: "Invalid or expired pairing code" });
+    }
   });
 
   app.post("/api/lock", async (req, reply) => {

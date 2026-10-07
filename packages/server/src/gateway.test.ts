@@ -15,6 +15,8 @@ let gw: ReturnType<typeof createGateway>;
 let base = "";
 let port = 0;
 let received: ClientMsg[] = [];
+let gwAuth: Auth;
+let deviceConnected = false;
 
 beforeEach(async () => {
   received = [];
@@ -22,6 +24,8 @@ beforeEach(async () => {
   const db = openDb(dir);
   const audit = new Audit(db);
   const auth = new Auth(db, audit);
+  gwAuth = auth;
+  deviceConnected = false;
   const config = loadConfig(dir);
   config.port = 0;
   gw = createGateway({
@@ -32,7 +36,7 @@ beforeEach(async () => {
       received.push(msg);
       if (msg.type === "ping") conn.send({ type: "status", busy: false, deviceOnline: false });
     },
-    onDeviceConnect: () => {},
+    onDeviceConnect: () => { deviceConnected = true; },
   });
   port = (await gw.listen()).port;
   base = `http://127.0.0.1:${port}`;
@@ -135,6 +139,25 @@ describe("websocket /ws", () => {
     await post("/api/logout", {}, { cookie });
     const c = await open("/ws", { cookie, origin: base });
     expect(await c.closed).toBe(4401);
+  });
+});
+
+describe("POST /api/pair", () => {
+  it("exchanges a valid code for a device token that /device accepts", async () => {
+    await post("/api/setup", owner);
+    const code = gwAuth.createPairCode();
+    const res = await post("/api/pair", { code, name: "laptop" });
+    expect(res.status).toBe(200);
+    const { token } = (await res.json()) as { token: string };
+    const c = await open("/device", { authorization: `Bearer ${token}` });
+    await wait(100);
+    expect(deviceConnected).toBe(true);
+    c.ws.close();
+  });
+  it("rejects a wrong code and locks the caller out after repeated failures", async () => {
+    await post("/api/setup", owner);
+    for (let i = 0; i < 5; i++) expect((await post("/api/pair", { code: "WRONG", name: "x" })).status).toBe(400);
+    expect((await post("/api/pair", { code: gwAuth.createPairCode(), name: "x" })).status).toBe(429);
   });
 });
 
