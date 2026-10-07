@@ -1,5 +1,5 @@
 import type { ClientMsg, PendingApproval } from "@friend/protocol";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Stage } from "../stage/Stage";
@@ -35,7 +35,7 @@ describe("<ApprovalCard>", () => {
     render(
       <>
         <Stage state={{ ...initialState, connection: "open", objects: [fake] }} send={() => {}} dispatch={() => {}} />
-        <Overlay approval={t2} alerts={[]} connection="open" deviceOnline send={() => {}} dispatch={() => {}} />
+        <Overlay approval={t2} alerts={[]} connection="open" deviceOnline voiceMode="idle" send={() => {}} dispatch={() => {}} />
       </>,
     );
     expect(screen.getByTestId("approval-summary").textContent).toBe(t2.summary);
@@ -98,7 +98,7 @@ describe("<Overlay>", () => {
     const { container } = render(
       <>
         <Stage state={{ ...initialState, connection: "open" }} send={() => {}} dispatch={() => {}} />
-        <Overlay approval={t2} alerts={[]} connection="open" deviceOnline send={() => {}} dispatch={() => {}} />
+        <Overlay approval={t2} alerts={[]} connection="open" deviceOnline voiceMode="idle" send={() => {}} dispatch={() => {}} />
       </>,
     );
     const objects = container.querySelector(".objects") as HTMLElement;
@@ -106,14 +106,41 @@ describe("<Overlay>", () => {
     expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(objects.style.zIndex));
   });
   it("shows a reconnecting badge and a device-offline hint", () => {
-    render(<Overlay approval={null} alerts={[]} connection="closed" deviceOnline={false} send={() => {}} dispatch={() => {}} />);
+    render(<Overlay approval={null} alerts={[]} connection="closed" deviceOnline={false} voiceMode="idle" send={() => {}} dispatch={() => {}} />);
     expect(screen.getByText(/reconnecting/i)).toBeTruthy();
   });
   it("renders nothing visible when everything is fine", () => {
     const { container } = render(
-      <Overlay approval={null} alerts={[]} connection="open" deviceOnline send={() => {}} dispatch={() => {}} />,
+      <Overlay approval={null} alerts={[]} connection="open" deviceOnline voiceMode="idle" send={() => {}} dispatch={() => {}} />,
     );
     expect(container.querySelector("[data-overlay]")?.children.length ?? 0).toBe(0);
+  });
+});
+
+describe("microphone indicator", () => {
+  const overlay = (voiceMode: "idle" | "listening" | "transcribing" | "speaking") =>
+    render(<Overlay approval={null} alerts={[]} connection="open" deviceOnline voiceMode={voiceMode} send={() => {}} dispatch={() => {}} />);
+
+  it("is shown while the microphone is open", () => {
+    overlay("listening");
+    expect(screen.getByRole("status", { name: /microphone/i }).textContent).toMatch(/listening/i);
+  });
+  it("is shown while the recording is transcribed", () => {
+    overlay("transcribing");
+    expect(screen.getByRole("status", { name: /microphone/i }).textContent).toMatch(/transcribing/i);
+  });
+  it("is not shown when idle or speaking", () => {
+    overlay("idle");
+    expect(screen.queryByRole("status", { name: /microphone/i })).toBeNull();
+    cleanup();
+    overlay("speaking");
+    expect(screen.queryByRole("status", { name: /microphone/i })).toBeNull();
+  });
+  it("lives in the client-owned overlay above the stage layers", () => {
+    const { container } = overlay("listening");
+    const ov = container.querySelector("[data-overlay]") as HTMLElement;
+    expect(Number(ov.style.zIndex)).toBeGreaterThanOrEqual(1000);
+    expect(ov.contains(screen.getByRole("status", { name: /microphone/i }))).toBe(true);
   });
 });
 

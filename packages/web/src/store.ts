@@ -58,6 +58,7 @@ export type LocalAction =
   | { type: "conn"; value: Connection }
   | { type: "alert.dismiss"; id: number }
   | { type: "object.dismiss"; id: string }
+  | { type: "alert.add"; level: "info" | "warn" | "error"; text: string }
   | { type: "voice.mode"; mode: VoiceMode }
   | { type: "voice.level"; level: number };
 
@@ -94,6 +95,9 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
   const local = input as LocalAction | null;
   if (local && typeof local === "object") {
     if (local.type === "conn") return { ...state, connection: local.value };
+    if (local.type === "alert.add") {
+      return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: local.level, text: local.text }] };
+    }
     if (local.type === "voice.mode") {
       return { ...state, voice: { ...state.voice, mode: local.mode, level: local.mode === "idle" ? 0 : state.voice.level } };
     }

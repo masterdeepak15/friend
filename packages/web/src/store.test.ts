@@ -77,6 +77,12 @@ describe("reduce", () => {
     expect(s.voice.available).toBe(false);
   });
 
+  it("adds local alerts for things the browser itself notices", () => {
+    const s = reduce(initialState, { type: "alert.add", level: "warn", text: "Microphone permission was denied." });
+    expect(s.alerts).toHaveLength(1);
+    expect(s.alerts[0]).toMatchObject({ level: "warn", text: "Microphone permission was denied." });
+  });
+
   it("applies local voice mode and level actions, clamping the level", () => {
     let s = reduce(initialState, { type: "voice.mode", mode: "listening" });
     expect(s.voice.mode).toBe("listening");

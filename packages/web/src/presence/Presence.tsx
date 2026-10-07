@@ -43,5 +43,5 @@ export function Presence({ state, amplitude, pulse = 0, mode, accent = "#3fd8ff"
   useEffect(() => handle.current?.setAccent(accent), [accent]);
   useEffect(() => handle.current?.setIntensity(intensity), [intensity]);
 
-  return <div ref={host} data-presence data-mode={mode} data-style={style} className={`presence presence-${mode}`} aria-hidden="true" />;
+  return <div ref={host} data-presence data-mode={mode} data-style={style} data-state={state} data-amplitude={amplitude.toFixed(2)} className={`presence presence-${mode}`} aria-hidden="true" />;
 }
