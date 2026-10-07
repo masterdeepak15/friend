@@ -4,7 +4,12 @@ import { CommandBar } from "../input/CommandBar";
 import { CATALOG } from "../objects/objects";
 import { Presence } from "../presence/Presence";
 import type { LocalAction, StageViewState } from "../store";
+import { useGhosts, type GhostEntry } from "./ghosts";
 import { placementToStyle } from "./placement";
+
+const EXIT_MS = 350;
+const prefersReducedMotion = () =>
+  typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 class Safe extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -40,6 +45,36 @@ export function Stage({ state, send, dispatch }: StageProps) {
   const narrow = viewport.w < 600;
   const corner = state.scene === "focus" || state.scene === "multi";
   const style = { "--accent": state.mood.accent, "--intensity": state.mood.intensity } as React.CSSProperties;
+  const entries = useGhosts(state.objects, prefersReducedMotion() ? 0 : EXIT_MS);
+  const autos = entries.filter((e) => e.object.placement === "auto");
+  const fixed = entries.filter((e) => e.object.placement !== "auto");
+
+  const renderObject = ({ object: o, leaving }: GhostEntry) => {
+    const View = CATALOG[o.type as keyof typeof CATALOG];
+    if (!View) return null;
+    return (
+      <section
+        key={o.id}
+        className={`obj glass${o.style === "alert" ? " alert" : ""}${leaving ? " leaving" : ""}`}
+        style={placementToStyle(o.placement, viewport)}
+      >
+        <button
+          className="obj-close"
+          aria-label={`Dismiss ${o.id}`}
+          disabled={leaving}
+          onClick={() => {
+            send({ type: "stage.event", objectId: o.id, event: "dismiss" });
+            dispatch({ type: "object.dismiss", id: o.id });
+          }}
+        >
+          ×
+        </button>
+        <Safe>
+          <View props={o.props} />
+        </Safe>
+      </section>
+    );
+  };
 
   return (
     <div
@@ -50,7 +85,7 @@ export function Stage({ state, send, dispatch }: StageProps) {
         if (e.target === e.currentTarget || (e.target as HTMLElement).closest("[data-presence]")) setOpenRequest((n) => n + 1);
       }}
     >
-      <div className="ambient" aria-hidden="true" />
+      <div className="ambient" aria-hidden="true" style={{ opacity: 0.35 + 0.65 * state.mood.intensity }} />
       <Presence
         state={state.presence.state}
         amplitude={state.presence.amplitude}
@@ -59,27 +94,8 @@ export function Stage({ state, send, dispatch }: StageProps) {
         accent={state.mood.accent}
       />
       <div className={narrow ? "objects objects-stack" : "objects"} style={{ zIndex: 10 }}>
-        {state.objects.map((o) => {
-          const View = CATALOG[o.type as keyof typeof CATALOG];
-          if (!View) return null;
-          return (
-            <section key={o.id} className={`obj glass${o.style === "alert" ? " alert" : ""}`} style={placementToStyle(o.placement, viewport)}>
-              <button
-                className="obj-close"
-                aria-label={`Dismiss ${o.id}`}
-                onClick={() => {
-                  send({ type: "stage.event", objectId: o.id, event: "dismiss" });
-                  dispatch({ type: "object.dismiss", id: o.id });
-                }}
-              >
-                ×
-              </button>
-              <Safe>
-                <View props={o.props} />
-              </Safe>
-            </section>
-          );
-        })}
+        {autos.length > 0 && <div className="auto-grid">{autos.map(renderObject)}</div>}
+        {fixed.map(renderObject)}
       </div>
       {state.captions && (
         <p className={`captions${state.captionDone ? " done" : ""}`} aria-live="polite">

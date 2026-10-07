@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { sanitizeMarkdown } from "../stage/sanitize";
+import { Chart, Gauge, Graph, Timeline } from "./charts";
 
 type Props = Record<string, unknown>;
 
@@ -88,4 +89,14 @@ export function Code({ props }: { props: Props }) {
   );
 }
 
-export const CATALOG = { card: Card, stat: Stat, list: List, table: Table, code: Code } as const;
+export const CATALOG = {
+  card: Card,
+  stat: Stat,
+  list: List,
+  table: Table,
+  code: Code,
+  chart: Chart,
+  gauge: Gauge,
+  timeline: Timeline,
+  graph: Graph,
+} as const;

@@ -1,5 +1,5 @@
 import type { ClientMsg, StageObject } from "@friend/protocol";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { initialState, type StageViewState } from "../store";
@@ -45,6 +45,9 @@ describe("placementToStyle", () => {
     const s = placementToStyle("left", desktop);
     expect(s.position).toBe("absolute");
     expect(String(s.left)).toMatch(/%$/);
+  });
+  it("leaves auto placement to the grid in normal flow", () => {
+    expect(placementToStyle("auto", desktop)).toEqual({ position: "relative" });
   });
   it("stacks objects in normal flow on narrow screens", () => {
     expect(placementToStyle("center", { w: 390, h: 844 }).position).toBe("relative");
@@ -101,6 +104,46 @@ describe("<Stage>", () => {
     await userEvent.click(screen.getByRole("button", { name: /dismiss/i }));
     expect(send).toHaveBeenCalledWith({ type: "stage.event", objectId: "note", event: "dismiss" });
     expect(dispatch).toHaveBeenCalledWith({ type: "object.dismiss", id: "note" });
+  });
+});
+
+describe("auto layout, exit animation and mood", () => {
+  const noop = () => {};
+
+  it("places auto objects in the grid and keeps explicit placements absolute", () => {
+    const objects = [obj("g1", "card", { text: "one" }), obj("g2", "card", { text: "two" })].map((x) => ({ ...x, placement: "auto" as const }));
+    const fixed = obj("f", "card", { text: "fixed" });
+    const { container } = render(<Stage state={withState({ scene: "multi", objects: [...objects, fixed] })} send={noop} dispatch={noop} />);
+    const grid = container.querySelector(".auto-grid")!;
+    expect(grid.querySelectorAll("section.obj")).toHaveLength(2);
+    expect(grid.textContent).not.toContain("fixed");
+    expect((screen.getByText("fixed").closest("section") as HTMLElement).style.position).toBe("absolute");
+  });
+
+  it("renders no grid when nothing uses auto placement", () => {
+    const { container } = render(<Stage state={withState({ objects: [obj("f", "card", { text: "x" })] })} send={noop} dispatch={noop} />);
+    expect(container.querySelector(".auto-grid")).toBeNull();
+  });
+
+  it("fades a removed object out before dropping it", () => {
+    vi.useFakeTimers();
+    const a = { ...obj("a", "card", { text: "bye" }), placement: "auto" as const };
+    const { container, rerender } = render(<Stage state={withState({ objects: [a] })} send={noop} dispatch={noop} />);
+    rerender(<Stage state={withState({ objects: [] })} send={noop} dispatch={noop} />);
+    expect(container.querySelector("section.obj.leaving")).toBeTruthy();
+    act(() => void vi.advanceTimersByTime(400));
+    expect(container.querySelector("section.obj")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("uses mood intensity for the ambient glow", () => {
+    const { container } = render(
+      <Stage state={withState({ mood: { accent: "#ffb454", intensity: 0.2 } })} send={noop} dispatch={noop} />,
+    );
+    const root = screen.getByTestId("stage");
+    expect(root.style.getPropertyValue("--intensity")).toBe("0.2");
+    expect(root.style.getPropertyValue("--accent")).toBe("#ffb454");
+    expect(Number((container.querySelector(".ambient") as HTMLElement).style.opacity)).toBeCloseTo(0.35 + 0.65 * 0.2, 2);
   });
 });
 
