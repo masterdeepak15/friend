@@ -67,6 +67,35 @@ describe("reduce", () => {
     expect(s.presence.pulse).toBe(first + 1);
   });
 
+  it("tracks voice availability from status and keeps it when status omits the field", () => {
+    expect(initialState.voice).toEqual({ mode: "idle", level: 0, available: false });
+    let s = reduce(initialState, { type: "status", busy: false, deviceOnline: true, voiceAvailable: true });
+    expect(s.voice.available).toBe(true);
+    s = reduce(s, { type: "status", busy: false, deviceOnline: true });
+    expect(s.voice.available).toBe(true);
+    s = reduce(s, { type: "status", busy: false, deviceOnline: true, voiceAvailable: false });
+    expect(s.voice.available).toBe(false);
+  });
+
+  it("applies local voice mode and level actions, clamping the level", () => {
+    let s = reduce(initialState, { type: "voice.mode", mode: "listening" });
+    expect(s.voice.mode).toBe("listening");
+    s = reduce(s, { type: "voice.level", level: 0.4 });
+    expect(s.voice.level).toBe(0.4);
+    s = reduce(s, { type: "voice.level", level: 7 });
+    expect(s.voice.level).toBe(1);
+    s = reduce(s, { type: "voice.level", level: Number.NaN });
+    expect(s.voice.level).toBe(0);
+    s = reduce(s, { type: "voice.mode", mode: "idle" });
+    expect(s.voice).toMatchObject({ mode: "idle", level: 0 });
+  });
+
+  it("shows what the owner said as a caption", () => {
+    const s = reduce(initialState, { type: "voice.heard", text: "open the garage" });
+    expect(s.captions).toBe("open the garage");
+    expect(reduce(s, { type: "caption.delta", text: "Opening." }).captions).toBe("Opening.");
+  });
+
   it("keeps amplitude within 0..1", () => {
     const s = reduce(initialState, { type: "caption.delta", text: "x".repeat(500) });
     expect(s.presence.amplitude).toBeLessThanOrEqual(1);
