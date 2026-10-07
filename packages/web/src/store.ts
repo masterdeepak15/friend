@@ -122,5 +122,9 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return { ...state, busy: m.busy, deviceOnline: m.deviceOnline };
     case "error":
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: "error", text: m.message }] };
+    case "voice.heard":
+    case "audio.chunk":
+    case "audio.stop":
+      return state; // handled outside the reducer (audio player); wired up with the voice state
   }
 }

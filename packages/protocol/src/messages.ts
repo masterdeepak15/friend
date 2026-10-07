@@ -18,7 +18,23 @@ export const ServerMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("approval.request") }).merge(PendingApproval),
   z.object({ type: z.literal("approval.resolved"), id: z.string() }),
   z.object({ type: z.literal("alert"), level: z.enum(["info", "warn", "error"]), text: z.string() }),
-  z.object({ type: z.literal("status"), busy: z.boolean(), deviceOnline: z.boolean(), message: z.string().optional() }),
+  z.object({
+    type: z.literal("status"),
+    busy: z.boolean(),
+    deviceOnline: z.boolean(),
+    voiceAvailable: z.boolean().optional(),
+    message: z.string().optional(),
+  }),
+  z.object({ type: z.literal("voice.heard"), text: z.string() }),
+  z.object({
+    type: z.literal("audio.chunk"),
+    id: z.string(),
+    seq: z.number().int().min(0),
+    last: z.boolean(),
+    mime: z.string(),
+    data: z.string(),
+  }),
+  z.object({ type: z.literal("audio.stop") }),
   z.object({ type: z.literal("snapshot"), stage: StageSnapshot, pendingApproval: PendingApproval.nullable().optional() }),
   z.object({ type: z.literal("error"), message: z.string() }),
 ]);
@@ -36,6 +52,7 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("chat.send"), text: z.string().min(1).max(8000) }),
   z.object({ type: z.literal("stage.event"), objectId: z.string(), event: z.string().max(64) }),
   ApprovalRespond,
+  z.object({ type: z.literal("voice.interrupt") }),
   z.object({ type: z.literal("ping") }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;
