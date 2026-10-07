@@ -31,3 +31,18 @@ Run `pnpm build && pnpm demo` and send five messages. Results 2026-10-08 on a 19
 | 5 Reset | back to the cyan sphere | PASS |
 
 Not checked by eye: phone width for the new objects (the test browser window could not be resized; the stacking logic is unit tested), and the thinking/speaking looks of the orb and ring.
+
+## Phase 5a (voice I/O) check
+
+Results 2026-10-08:
+
+| Check | How | Result |
+|---|---|---|
+| Installer works on a clean data folder | `FRIEND_HOME=<temp> friend voice setup` (venv, packages, models) | PASS, 55 s with cached downloads |
+| Engine starts with `friend start`, clients are told | log shows "Voice is ready"; browser WebSocket `status.voiceAvailable` is true | PASS |
+| Real round trip | Piper speaks a question, the gateway transcribes it, the agent answers, the reply is spoken and transcribes back to the agent's words | PASS (automated, `voice/real.test.ts`) |
+| Live route | recording posted from the browser: 200 with the real engine in about 0.8 s; 401 without a login | PASS |
+| Browser support | MediaRecorder with webm/opus, getUserMedia on localhost, WAV from the engine decodes | PASS |
+| Sidecar cleanup | engine exits when the app is killed | PASS |
+
+Not verified by a human: holding Space and speaking into a real microphone (the test browser has no microphone), hearing the reply through speakers, and the sphere reacting to the live level. Try it: `friend voice setup`, `friend start`, open the page, hold Space, speak.
