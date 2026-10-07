@@ -60,6 +60,23 @@ describe("login and sessions", () => {
     for (let i = 0; i < 5; i++) expect(await auth.verifyPin("000000", "3.3.3.3")).toBe(false);
     await expect(auth.verifyPin(owner.pin, "3.3.3.3")).rejects.toBeInstanceOf(LockoutError);
   });
+  it("limits a burst of simultaneous PIN guesses to the lockout threshold", async () => {
+    const results = await Promise.allSettled(Array.from({ length: 50 }, (_, i) => auth.verifyPin(String(100000 + i), "8.8.8.8")));
+    const evaluated = results.filter((r) => r.status === "fulfilled").length;
+    expect(evaluated).toBeLessThanOrEqual(5);
+    expect(audit.list(200).filter((r) => r.kind === "pin.fail").length).toBeLessThanOrEqual(5);
+  });
+  it("limits a burst of simultaneous login guesses the same way", async () => {
+    const results = await Promise.allSettled(Array.from({ length: 50 }, (_, i) => auth.login(`wrong password ${i}`, "8.8.4.4")));
+    expect(results.filter((r) => r.status === "rejected" && !(r.reason instanceof LockoutError)).length).toBeLessThanOrEqual(5);
+    expect(audit.list(200).filter((r) => r.kind === "login.fail").length).toBeLessThanOrEqual(5);
+  });
+  it("applies an account-wide limit across many source addresses", async () => {
+    for (let i = 0; i < 25; i++) await auth.login("wrong password", `10.0.0.${i}`).catch(() => {});
+    await expect(auth.login(owner.password, "10.9.9.9")).rejects.toBeInstanceOf(LockoutError);
+    now += 2 * 60 * 60 * 1000;
+    await expect(auth.login(owner.password, "10.9.9.9")).resolves.toBeTruthy();
+  });
   it("verifies the right PIN", async () => {
     expect(await auth.verifyPin(owner.pin, "4.4.4.4")).toBe(true);
   });
@@ -91,6 +108,15 @@ describe("device pairing", () => {
     const code = auth.createPairCode();
     now += 5 * 60 * 1000 + 1;
     expect(() => auth.redeemPairCode(code, "late")).toThrow();
+  });
+  it("lists paired devices and revokes one so its token stops working", () => {
+    const tok = auth.redeemPairCode(auth.createPairCode(), "old-laptop");
+    const list = auth.listDevices();
+    expect(list.map((d) => d.name)).toEqual(["old-laptop"]);
+    auth.revokeDevice(list[0]!.id);
+    expect(auth.resolveDevice(tok)).toBeNull();
+    expect(auth.listDevices()).toEqual([]);
+    expect(audit.list(10).some((r) => r.kind === "device.revoked")).toBe(true);
   });
   it("rejects unknown device tokens", () => {
     expect(auth.resolveDevice("bogus")).toBeNull();

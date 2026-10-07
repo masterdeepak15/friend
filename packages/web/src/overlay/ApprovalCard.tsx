@@ -22,9 +22,9 @@ export function ApprovalCard({ approval, send }: { approval: PendingApproval; se
         <span className={`tier tier-${approval.tier}`}>{approval.tier}</span>
         <span className="approval-title">Approval needed</span>
       </div>
-      <p className="approval-summary" data-testid="approval-summary">
+      <pre className="approval-summary" data-testid="approval-summary" style={{ whiteSpace: "pre-wrap" }}>
         {approval.summary}
-      </p>
+      </pre>
       {approval.needsPin && <PinPad pin={pin} onChange={setPin} />}
       <div className="approval-actions">
         <button type="button" style={touch} className="primary" disabled={!canApprove} onClick={() => respond("approve")}>

@@ -90,6 +90,45 @@ describe("friend config and status", () => {
   });
 });
 
+describe("friend rules and devices", () => {
+  const prepare = async () => {
+    await run(["setup"], makeIo(["correct horse battery", "123456", "Jarvis", workspace, ""]));
+    const { PolicyEngine } = await import("@friend/server");
+    const db = openDb(dataDir);
+    const policy = new PolicyEngine(db, loadConfig(dataDir));
+    const ruleId = policy.addRule("shell.run", { command: "git status" });
+    const auth = new Auth(db, new Audit(db));
+    const token = auth.redeemPairCode(auth.createPairCode(), "old-laptop");
+    const deviceId = auth.listDevices()[0]!.id;
+    db.close();
+    return { ruleId, deviceId, token };
+  };
+
+  it("lists and removes always-allow rules", async () => {
+    const { ruleId } = await prepare();
+    expect(await run(["rules", "list"], makeIo())).toBe(0);
+    expect(lines.join(" | ")).toContain("git status");
+    expect(await run(["rules", "remove", String(ruleId)], makeIo())).toBe(0);
+    lines = [];
+    await run(["rules", "list"], makeIo());
+    expect(lines.join(" | ")).not.toContain("git status");
+  });
+  it("lists and revokes paired devices", async () => {
+    const { deviceId, token } = await prepare();
+    await run(["devices", "list"], makeIo());
+    expect(lines.join(" | ")).toContain("old-laptop");
+    expect(await run(["devices", "revoke", String(deviceId)], makeIo())).toBe(0);
+    const db = openDb(dataDir);
+    expect(new Auth(db, new Audit(db)).resolveDevice(token)).toBeNull();
+    db.close();
+  });
+  it("rejects a missing or non-numeric id", async () => {
+    await prepare();
+    expect(await run(["rules", "remove", "abc"], makeIo())).toBe(1);
+    expect(await run(["devices", "revoke"], makeIo())).toBe(1);
+  });
+});
+
 describe("friend start and pair", () => {
   const boot = async () => {
     await run(["setup"], makeIo(["correct horse battery", "123456", "Jarvis", workspace, ""]));

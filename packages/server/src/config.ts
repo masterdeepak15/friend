@@ -8,6 +8,8 @@ export interface Config {
   publicUrl: string | null;
   trustProxy: boolean;
   allowedOrigins: string[];
+  /** Extra hostnames accepted in the Host header (besides localhost, IP literals and the publicUrl host). */
+  allowedHosts: string[];
   roots: string[];
   destructivePatterns: string[];
   model: string;
@@ -31,7 +33,14 @@ export const DEFAULT_DESTRUCTIVE_PATTERNS = [
   String.raw`\bchmod\b|\bchown\b`,
   String.raw`\bmkfs\b`,
   String.raw`\bdd\s+if=`,
-  String.raw`c:\\windows`,
+  String.raw`c:[\\/]+windows`,
+  String.raw`\$env:(windir|systemroot)|%(windir|systemroot)%`,
+  String.raw`\b(ri|rm|del|erase|rd|rmdir|remove-item)\b.*\s-r(e(c(u(r(se?)?)?)?)?)?\b`,
+  String.raw`\b(rd|rmdir)\b.*\/s`,
+  String.raw`\b(format-volume|clear-disk|initialize-disk|remove-partition)\b`,
+  String.raw`\[io\.(directory|file)\]::delete`,
+  String.raw`\s-(enc\w*|ec)\b`,
+  String.raw`\b(iex|invoke-expression)\b`,
 ];
 
 export function defaultDataDir(): string {
@@ -44,6 +53,7 @@ const defaults = (dataDir: string): Config => ({
   publicUrl: null,
   trustProxy: false,
   allowedOrigins: [],
+  allowedHosts: [],
   roots: [],
   destructivePatterns: DEFAULT_DESTRUCTIVE_PATTERNS,
   model: "claude-sonnet-5-5",
@@ -76,5 +86,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     return base;
   }
   const stored = JSON.parse(readFileSync(file, "utf8")) as Partial<Config>;
-  return { ...base, ...stored, dataDir };
+  // Built-in destructive patterns can only be extended, never dropped by an old or edited config file.
+  const destructivePatterns = [...new Set([...base.destructivePatterns, ...(stored.destructivePatterns ?? [])])];
+  return { ...base, ...stored, destructivePatterns, dataDir };
 }

@@ -2,8 +2,10 @@ import type { Db } from "../db";
 import { isSimpleCommand } from "./classify";
 
 export interface Matcher {
+  /** All arguments must equal these exactly (same keys, same values). */
   argEquals?: Record<string, unknown>;
-  commandPrefix?: string;
+  /** The shell command must equal this exactly and must be a simple command. */
+  command?: string;
 }
 export interface Rule {
   id: number;
@@ -42,15 +44,21 @@ export class RuleStore {
   }
 }
 
+const stable = (v: unknown): string =>
+  JSON.stringify(v, (_k, x) =>
+    x && typeof x === "object" && !Array.isArray(x)
+      ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : x,
+  );
+
 function matcherMatches(m: Matcher, args: Record<string, unknown>): boolean {
-  if (m.commandPrefix === undefined && m.argEquals === undefined) return false;
-  if (m.commandPrefix !== undefined) {
+  if (m.command === undefined && m.argEquals === undefined) return false;
+  if (m.command !== undefined) {
     const cmd = typeof args.command === "string" ? args.command.trim() : "";
-    if (!isSimpleCommand(cmd)) return false;
-    if (!(cmd === m.commandPrefix || cmd.startsWith(m.commandPrefix + " "))) return false;
+    if (!isSimpleCommand(cmd) || cmd !== m.command.trim()) return false;
+    const { command: _c, cwd, ...rest } = args;
+    if (Object.keys(rest).length > 0 || (cwd !== undefined && typeof cwd !== "string")) return false;
   }
-  if (m.argEquals) {
-    for (const [k, v] of Object.entries(m.argEquals)) if (args[k] !== v) return false;
-  }
+  if (m.argEquals && stable(m.argEquals) !== stable(args)) return false;
   return true;
 }

@@ -174,6 +174,18 @@ describe("POST /api/pair", () => {
   });
 });
 
+describe("websocket /device frame size", () => {
+  it("accepts a large tool result frame from a device (200 KB) without closing", async () => {
+    await post("/api/setup", owner);
+    const token = gwAuth.redeemPairCode(gwAuth.createPairCode(), "big");
+    const c = await open("/device", { authorization: `Bearer ${token}` });
+    c.ws.send(JSON.stringify({ type: "tool.result", id: "x", result: { output: "y".repeat(200 * 1024), truncated: false } }));
+    await wait(300);
+    expect(c.ws.readyState).toBe(WebSocket.OPEN);
+    c.ws.close();
+  });
+});
+
 describe("websocket /device", () => {
   it("refuses an invalid device token", async () => {
     const c = await open("/device", { authorization: "Bearer bogus" });

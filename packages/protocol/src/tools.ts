@@ -111,23 +111,34 @@ export const TOOL_DEFS: ToolDef[] = [
 
 const clip = (s: string, n = 300) => (s.length > n ? s.slice(0, n) + "…" : s);
 
-/** Human-readable summary built from the real arguments, used on approval cards. */
-export function describeCall(name: string, args: unknown): string {
+// Control, zero-width and bidirectional-override characters can hide what a command really says.
+// Newline and tab stay as they are; everything else invisible is shown as \u{hex}.
+const INVISIBLE = /[\u0000-\u0008\u000B\u000C\u000D-\u001F\u007F-\u009F​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
+const visible = (s: string) => s.replace(INVISIBLE, (c) => `\\u{${c.codePointAt(0)!.toString(16).toUpperCase()}}`);
+
+/**
+ * Human-readable summary built from the real arguments, used on approval cards.
+ * What the owner approves is never truncated: a shell command is shown in full.
+ */
+export function describeCall(name: string, args: unknown, device?: string): string {
   const a = (args ?? {}) as Record<string, unknown>;
+  const where = device ? ` on ${visible(device)}` : "";
   switch (name) {
     case "shell.run":
-      return `Run shell command: ${clip(String(a.command ?? ""))}${a.cwd ? ` (in ${String(a.cwd)})` : ""}`;
-    case "fs.write":
-      return `Write ${String(a.content ?? "").length} characters to ${String(a.path ?? "")}`;
+      return `Run shell command${where}: ${visible(String(a.command ?? ""))}${a.cwd ? ` (in ${visible(String(a.cwd))})` : ""}`;
+    case "fs.write": {
+      const content = String(a.content ?? "");
+      return `Write ${content.length} characters to ${visible(String(a.path ?? ""))}${where}. Content starts with:\n${visible(clip(content, 500))}`;
+    }
     case "fs.read":
-      return `Read file ${String(a.path ?? "")}`;
+      return `Read file ${visible(String(a.path ?? ""))}${where}`;
     case "fs.list":
-      return `List folder ${String(a.path ?? "")}`;
+      return `List folder ${visible(String(a.path ?? ""))}${where}`;
     case "system.info":
-      return "Read system information";
+      return `Read system information${where}`;
     case "process.list":
-      return "List running processes";
+      return `List running processes${where}`;
     default:
-      return `${name} ${clip(JSON.stringify(a), 200)}`;
+      return `${name} ${visible(clip(JSON.stringify(a), 200))}`;
   }
 }

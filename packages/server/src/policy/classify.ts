@@ -11,7 +11,11 @@ export function classifyShell(command: string, patterns: string[]): Tier {
   return "T2";
 }
 
-/** True when the command is a single simple command with no chaining, piping, substitution or redirection. */
+/**
+ * True when the command is a single plain command: no chaining, piping, redirection, variables,
+ * subexpressions, script blocks or comma lists. PowerShell evaluates `( )`, `@( )`, `{ }` and `$x`
+ * even inside the arguments of a native program, so all of them disqualify a command from rules.
+ */
 export function isSimpleCommand(command: string): boolean {
-  return !/[;&|`<>\n\r]|\$\(/.test(command);
+  return command.length > 0 && !/[;&|`<>\n\r(){}$,@]/.test(command);
 }

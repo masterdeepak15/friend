@@ -1,6 +1,7 @@
 import { configCommand } from "./commands/config";
 import { nodeCommand } from "./commands/node";
 import { pairCommand } from "./commands/pair";
+import { devicesCommand, rulesCommand } from "./commands/rules";
 import { setupCommand } from "./commands/setup";
 import { startCommand } from "./commands/start";
 import { statusCommand } from "./commands/status";
@@ -21,6 +22,8 @@ export const USAGE = `Usage: friend <command>
   pair                       print a one-time code to connect another PC
   node --url <ws-url> --code <code> [--roots a,b] [--name pc]
                              connect this PC to a Friend gateway
+  rules list|remove <id>     manage always-allow rules
+  devices list|revoke <id>   manage paired devices
   status                     show configuration
   config set <key> <value>   keys: apiKey, model, port, bind, publicUrl, roots, trustProxy, allowedOrigins`;
 
@@ -36,6 +39,10 @@ export async function run(argv: string[], io: IO): Promise<number> {
         return await pairCommand(io);
       case "node":
         return await nodeCommand(rest, io);
+      case "rules":
+        return await rulesCommand(rest, io);
+      case "devices":
+        return await devicesCommand(rest, io);
       case "status":
         return await statusCommand(io);
       case "config":

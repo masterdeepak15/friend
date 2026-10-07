@@ -52,7 +52,7 @@ beforeEach(async () => {
       provider,
       policy,
       approvals,
-      devices: { exec, hasOnline: () => true } as never,
+      devices: { exec, hasOnline: () => true, targetName: () => "work-pc" } as never,
       stage: new StageState(),
       db,
       audit,
@@ -89,6 +89,14 @@ describe("Agent.runTurn", () => {
     expect(exec).toHaveBeenCalledTimes(1);
   });
 
+  it("names the target device on the approval card and pins execution to it", async () => {
+    autoDecision = "approve";
+    const agent = build(new FakeProvider([[call("1", "shell.run", { command: "git status" }), done], [text("done"), done]]));
+    await agent.runTurn("status", ctx());
+    expect((emitted.find((m) => m.type === "approval.request") as any).summary).toContain("work-pc");
+    expect(exec.mock.calls[0]![3]).toMatchObject({ expectDevice: "work-pc" });
+  });
+
   it("returns a tool error to the model when the owner denies", async () => {
     autoDecision = "deny";
     const provider = new FakeProvider([[call("1", "shell.run", { command: "git status" }), done], [text("ok"), done]]);
@@ -122,6 +130,15 @@ describe("Agent.runTurn", () => {
     expect(types()).toContain("approval.request");
     expect((emitted.find((m) => m.type === "approval.request") as any).tier).toBe("T3");
     expect(exec).toHaveBeenCalledTimes(1); // only the read; the shell call was never approved
+  });
+
+  it("caps a huge tool result before it goes back to the model", async () => {
+    exec.mockResolvedValueOnce({ ok: true, output: "z".repeat(100_000), truncated: false });
+    const provider = new FakeProvider([[call("1", "fs.read", { path: "big.log" }), done], [text("ok"), done]]);
+    await build(provider).runTurn("read it", ctx());
+    const content = JSON.stringify(provider.calls[1]!.messages.at(-1));
+    expect(content.length).toBeLessThan(30_000);
+    expect(content).toMatch(/truncated/i);
   });
 
   it("stops after 20 steps and alerts", async () => {

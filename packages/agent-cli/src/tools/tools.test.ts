@@ -43,6 +43,23 @@ describe("resolveInRoots", () => {
   });
 });
 
+describe("dangling links", () => {
+  it("does not write through a dangling link that points outside the roots", async () => {
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), "friend-out-")));
+    const target = join(outside, "not-yet");
+    const link = join(root, "dangling");
+    try {
+      symlinkSync(target, link, "junction");
+    } catch {
+      return; // cannot create links on this machine
+    }
+    expect(resolveInRoots(join(link, "x.txt"), [root]).inside).toBe(false);
+    const r = await runTool("fs.write", { path: join(link, "x.txt"), content: "pwn" }, ctx);
+    expect(r.ok).toBe(false);
+    expect(existsSync(join(target, "x.txt"))).toBe(false);
+  });
+});
+
 describe("runTool", () => {
   it("lists a directory", async () => {
     writeFileSync(join(root, "a.txt"), "hi");

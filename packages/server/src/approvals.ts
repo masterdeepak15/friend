@@ -11,6 +11,8 @@ export interface ApprovalRequest {
   args: unknown;
   tier: Tier;
   needsPin: boolean;
+  /** Name of the device the call will run on, shown on the approval card. */
+  device?: string | null;
 }
 export interface ApprovalOutcome {
   approved: boolean;
@@ -42,7 +44,7 @@ export class Approvals {
     const info: PendingApproval = {
       id,
       tool: req.tool,
-      summary: describeCall(req.tool, req.args),
+      summary: describeCall(req.tool, req.args, req.device ?? undefined),
       tier: req.tier,
       needsPin: req.needsPin,
     };
@@ -103,7 +105,7 @@ export class Approvals {
     const args = (req.args ?? {}) as Record<string, unknown>;
     if (req.tool === "shell.run") {
       const cmd = typeof args.command === "string" ? args.command.trim() : "";
-      if (cmd && isSimpleCommand(cmd)) this.deps.policy.addRule(req.tool, { commandPrefix: cmd });
+      if (cmd && isSimpleCommand(cmd)) this.deps.policy.addRule(req.tool, { command: cmd });
       return;
     }
     this.deps.policy.addRule(req.tool, { argEquals: args });

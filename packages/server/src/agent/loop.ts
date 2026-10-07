@@ -13,12 +13,14 @@ import { loadHistory, repairDangling, saveMessage } from "./history";
 import { buildSystemPrompt } from "./prompt";
 
 export const MAX_STEPS = 20;
+/** Largest tool result sent back to the model; older, bigger results would otherwise swamp every later turn. */
+export const MAX_RESULT_CHARS = 24_000;
 
 export interface AgentDeps {
   provider: Provider;
   policy: PolicyEngine;
   approvals: Approvals;
-  devices: Pick<DeviceHub, "exec" | "hasOnline">;
+  devices: Pick<DeviceHub, "exec" | "hasOnline" | "targetName">;
   stage: StageState;
   db: Db;
   audit: Audit;
@@ -158,13 +160,14 @@ export class Agent {
 
     const decision = d.policy.decide({ tool: call.name, baseTier: tier, args, trust: ctx.trust, insideRoots });
     let approvedOutside = false;
+    const device = def.target === "device" ? d.devices.targetName() : null;
     if (decision === "deny") {
       d.audit.log("agent", "tool.denied", { tool: call.name, args: clipArgs(args), trust: ctx.trust });
       return fail("This action is not allowed.");
     }
     if (decision === "ask" || decision === "ask_with_pin") {
       const outcome = await d.approvals.request(
-        { tool: call.name, args, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin" },
+        { tool: call.name, args, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin", device },
         ctx.emit,
       );
       if (!outcome.approved) {
@@ -177,9 +180,14 @@ export class Agent {
     const result =
       def.target === "gateway"
         ? runStageTool(call.name, args, d.stage, ctx.emit)
-        : await d.devices.exec(call.name, args, call.name === "shell.run" ? 70_000 : 30_000, { approvedOutside });
+        : await d.devices.exec(call.name, args, call.name === "shell.run" ? 70_000 : 30_000, {
+            approvedOutside,
+            expectDevice: device ?? undefined,
+          });
     d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: result.ok });
     if (!result.ok) return fail(result.error);
-    return { text: result.truncated ? `${result.output}\n[output truncated]` : result.output, isError: false };
+    const capped = result.output.length > MAX_RESULT_CHARS;
+    const output = capped ? result.output.slice(0, MAX_RESULT_CHARS) : result.output;
+    return { text: result.truncated || capped ? `${output}\n[output truncated]` : output, isError: false };
   }
 }

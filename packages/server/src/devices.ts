@@ -10,7 +10,7 @@ interface Pending {
 }
 
 export class DeviceHub {
-  private sockets = new Map<number, WebSocket>();
+  private sockets = new Map<number, { ws: WebSocket; name: string }>();
   private pending = new Map<string, Pending>();
   private listeners = new Set<(online: boolean) => void>();
 
@@ -24,8 +24,8 @@ export class DeviceHub {
   }
 
   attach(device: Device, ws: WebSocket): void {
-    this.sockets.get(device.id)?.close(4000, "replaced");
-    this.sockets.set(device.id, ws);
+    this.sockets.get(device.id)?.ws.close(4000, "replaced");
+    this.sockets.set(device.id, { ws, name: device.name });
     ws.on("message", (data) => {
       let json: unknown;
       try {
@@ -44,7 +44,7 @@ export class DeviceHub {
       } else p.resolve({ ok: false, error: msg.data.error });
     });
     ws.on("close", () => {
-      if (this.sockets.get(device.id) === ws) this.sockets.delete(device.id);
+      if (this.sockets.get(device.id)?.ws === ws) this.sockets.delete(device.id);
       for (const [id, p] of this.pending) {
         if (p.deviceId !== device.id) continue;
         this.pending.delete(id);
@@ -62,10 +62,26 @@ export class DeviceHub {
     return this.sockets.size > 0;
   }
 
-  exec(tool: string, args: unknown, timeoutMs: number, opts: { approvedOutside?: boolean } = {}): Promise<ToolResult> {
-    const entry = [...this.sockets.entries()].at(-1);
-    if (!entry) return Promise.resolve({ ok: false, error: "no device online" });
-    const [deviceId, ws] = entry;
+  /** Name of the device a call would currently go to (the most recently connected one). */
+  targetName(): string | null {
+    return [...this.sockets.values()].at(-1)?.name ?? null;
+  }
+
+  exec(
+    tool: string,
+    args: unknown,
+    timeoutMs: number,
+    opts: { approvedOutside?: boolean; expectDevice?: string } = {},
+  ): Promise<ToolResult> {
+    const all = [...this.sockets.entries()];
+    const entry = opts.expectDevice ? all.filter(([, v]) => v.name === opts.expectDevice).at(-1) : all.at(-1);
+    if (!entry) {
+      return Promise.resolve({
+        ok: false,
+        error: opts.expectDevice ? `the approved device "${opts.expectDevice}" is no longer connected` : "no device online",
+      });
+    }
+    const [deviceId, { ws }] = entry;
     const id = randomUUID();
     return new Promise<ToolResult>((resolve) => {
       const timer = setTimeout(() => {

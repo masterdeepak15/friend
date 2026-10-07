@@ -118,7 +118,7 @@ button { cursor: pointer; }
 .approval-title { font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--warn); }
 .tier { font: 600 0.74rem var(--mono); padding: 2px 8px; border: 1px solid currentColor; }
 .tier-T2 { color: var(--warn); } .tier-T3 { color: var(--bad); }
-.approval-summary { font: 0.95rem/1.5 var(--mono); word-break: break-word; margin: 14px 0; padding: 10px 12px; background: rgba(255, 255, 255, 0.04); }
+.approval-summary { font: 0.95rem/1.5 var(--mono); word-break: break-all; max-height: 40vh; overflow: auto; margin: 14px 0; padding: 10px 12px; background: rgba(255, 255, 255, 0.04); }
 .approval-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .approval-actions button, .owner-menu button, .auth button {
   border: 1px solid var(--edge); background: transparent; padding: 0 16px; letter-spacing: 0.04em;

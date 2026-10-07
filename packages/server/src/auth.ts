@@ -41,9 +41,23 @@ export async function verifySecret(secret: string, stored: string): Promise<bool
 
 export class Auth {
   private limiter: RateLimiter;
+  /** Account-wide limits, so rotating source addresses does not multiply the guesses. */
+  private accountLimiter: RateLimiter;
 
   constructor(private db: Db, private audit: Audit, private clock: () => number = Date.now) {
     this.limiter = new RateLimiter(clock);
+    this.accountLimiter = new RateLimiter(clock, 20);
+  }
+
+  /** Check the locks and count the attempt immediately, before any await, so concurrent guesses cannot slip past. */
+  private begin(kind: "login" | "pin", ip: string): () => void {
+    const keys: [RateLimiter, string][] = [
+      [this.limiter, `${kind}:${ip}`],
+      [this.accountLimiter, `${kind}:*`],
+    ];
+    for (const [l, k] of keys) l.check(k);
+    for (const [l, k] of keys) l.fail(k);
+    return () => keys.forEach(([l, k]) => l.reset(k));
   }
 
   hasOwner(): boolean {
@@ -68,16 +82,14 @@ export class Auth {
   }
 
   async login(password: string, ip: string): Promise<{ token: string; expiresAt: number }> {
-    const key = `login:${ip}`;
-    this.limiter.check(key);
+    const succeeded = this.begin("login", ip);
     const row = this.db.prepare("select password_hash h from owner where id = 1").get() as { h: string } | undefined;
     const ok = row ? await verifySecret(password, row.h) : false;
     if (!ok) {
-      this.limiter.fail(key);
       this.audit.log("anonymous", "login.fail", { ip });
       throw new Error("Invalid credentials");
     }
-    this.limiter.reset(key);
+    succeeded();
     const token = randomBytes(32).toString("hex");
     const expiresAt = this.clock() + SESSION_TTL_MS;
     this.db
@@ -105,15 +117,11 @@ export class Auth {
   }
 
   async verifyPin(pin: string, ip: string): Promise<boolean> {
-    const key = `pin:${ip}`;
-    this.limiter.check(key);
+    const succeeded = this.begin("pin", ip);
     const row = this.db.prepare("select pin_hash h from owner where id = 1").get() as { h: string } | undefined;
     const ok = row ? await verifySecret(pin, row.h) : false;
-    if (ok) this.limiter.reset(key);
-    else {
-      this.limiter.fail(key);
-      this.audit.log("owner", "pin.fail", { ip });
-    }
+    if (ok) succeeded();
+    else this.audit.log("owner", "pin.fail", { ip });
     return ok;
   }
 
@@ -137,6 +145,20 @@ export class Auth {
     this.db.prepare("insert into devices (name, token_hash, last_seen) values (?, ?, ?)").run(deviceName, sha256(token), this.clock());
     this.audit.log("device", "pair.ok", { deviceName });
     return token;
+  }
+
+  listDevices(): { id: number; name: string; lastSeen: number | null }[] {
+    const rows = this.db.prepare("select id, name, last_seen from devices order by id").all() as {
+      id: number;
+      name: string;
+      last_seen: number | null;
+    }[];
+    return rows.map((r) => ({ id: r.id, name: r.name, lastSeen: r.last_seen }));
+  }
+
+  revokeDevice(id: number): void {
+    this.db.prepare("delete from devices where id = ?").run(id);
+    this.audit.log("owner", "device.revoked", { id });
   }
 
   resolveDevice(token: string): Device | null {

@@ -66,6 +66,22 @@ describe("DeviceHub", () => {
     expect(hub.hasOnline()).toBe(false);
     expect(await hub.exec("system.info", {}, 1000)).toEqual({ ok: false, error: "no device online" });
   });
+  it("reports the name of the device a call would go to", async () => {
+    expect(hub.targetName()).toBeNull();
+    const n = startNode();
+    await n.connected;
+    await until(() => hub.hasOnline());
+    expect(hub.targetName()).toBe("test-pc");
+  });
+  it("refuses to run on a different device than the one the owner approved", async () => {
+    const n = startNode();
+    await n.connected;
+    await until(() => hub.hasOnline());
+    const r = await hub.exec("system.info", {}, 2000, { expectDevice: "some-other-pc" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/some-other-pc/);
+    expect((await hub.exec("system.info", {}, 5000, { expectDevice: "test-pc" })).ok).toBe(true);
+  });
   it("routes a tool call to the node and returns its result", async () => {
     const n = startNode();
     await n.connected;

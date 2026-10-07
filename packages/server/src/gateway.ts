@@ -3,6 +3,7 @@ import fastifyStatic from "@fastify/static";
 import { ClientMsg, type ServerMsg } from "@friend/protocol";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { existsSync } from "node:fs";
+import { isIP } from "node:net";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
@@ -14,6 +15,7 @@ import type { Config } from "./config";
 
 export const COOKIE_NAME = "friend_session";
 export const MAX_FRAME_BYTES = 64 * 1024;
+export const MAX_DEVICE_FRAME_BYTES = 8 * 1024 * 1024;
 
 export interface ClientConn {
   send(m: ServerMsg): void;
@@ -33,6 +35,7 @@ export interface GatewayDeps {
 }
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+const LOOPBACK_NAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const SetupBody = z.object({
   password: z.string().min(1),
   pin: z.string().min(1),
@@ -50,8 +53,30 @@ function parseCookies(header: string | undefined): Record<string, string> {
 
 export function createGateway(deps: GatewayDeps) {
   const { config, auth, audit } = deps;
-  const app: FastifyInstance = Fastify({ trustProxy: config.trustProxy, logger: false, bodyLimit: 64 * 1024 });
+  // One trusted proxy hop: the address that proxy appended is used, never entries a client prepended.
+  const app: FastifyInstance = Fastify({ trustProxy: config.trustProxy ? 1 : false, logger: false, bodyLimit: 64 * 1024 });
   app.register(fastifyCookie);
+
+  const hostOf = (header: string | undefined): string => {
+    const h = (header ?? "").trim().toLowerCase();
+    if (h.startsWith("[")) return h.slice(0, h.indexOf("]") + 1); // [::1]:port
+    return h.split(":")[0] ?? "";
+  };
+  const publicHost = config.publicUrl ? new URL(config.publicUrl).hostname.toLowerCase() : null;
+  const extraHosts = new Set(config.allowedHosts.map((h) => h.toLowerCase()));
+  /** Blocks DNS rebinding: an attacker's domain can point at this PC but cannot be an IP literal or a configured name. */
+  const hostAllowed = (header: string | undefined): boolean => {
+    const h = hostOf(header);
+    if (!h) return false;
+    const bare = h.replace(/^\[|\]$/g, "");
+    return LOOPBACK_NAMES.has(h) || isIP(bare) !== 0 || h === publicHost || extraHosts.has(h);
+  };
+  app.addHook("onRequest", async (req, reply) => {
+    if (!hostAllowed(req.headers.host)) {
+      audit.log("anonymous", "host.refused", { host: String(req.headers.host).slice(0, 100) });
+      return reply.code(421).send({ error: "Unknown host" });
+    }
+  });
 
   const isSecure = (req: FastifyRequest) => req.protocol === "https";
 
@@ -60,7 +85,8 @@ export function createGateway(deps: GatewayDeps) {
   app.post("/api/setup", async (req, reply) => {
     const remote = req.socket.remoteAddress ?? "";
     const forwarded = req.headers["x-forwarded-for"] || req.headers["forwarded"] || req.headers["x-real-ip"];
-    if (auth.hasOwner() || !LOOPBACK.has(remote) || forwarded) {
+    // A reverse proxy on this PC makes remote visitors look like loopback, so the Host must also be a local name.
+    if (auth.hasOwner() || !LOOPBACK.has(remote) || forwarded || !LOOPBACK_NAMES.has(hostOf(req.headers.host))) {
       audit.log("anonymous", "setup.refused", { ip: remote });
       return reply.code(403).send({ error: "Setup is not available" });
     }
@@ -141,6 +167,8 @@ export function createGateway(deps: GatewayDeps) {
 
   // ---- WebSockets ----
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
+  // Devices send whole tool results (file contents, command output), which can be much larger than a chat frame.
+  const deviceWss = new WebSocketServer({ noServer: true, maxPayload: MAX_DEVICE_FRAME_BYTES });
 
   const originAllowed = (req: IncomingMessage): boolean => {
     const origin = req.headers.origin;
@@ -157,7 +185,8 @@ export function createGateway(deps: GatewayDeps) {
   };
 
   const clientIp = (req: IncomingMessage): string => {
-    const fwd = config.trustProxy ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "";
+    // The last entry is the one our own proxy appended; earlier entries are client-controlled.
+    const fwd = config.trustProxy ? String(req.headers["x-forwarded-for"] ?? "").split(",").at(-1)?.trim() : "";
     return fwd || req.socket.remoteAddress || "unknown";
   };
 
@@ -212,7 +241,12 @@ export function createGateway(deps: GatewayDeps) {
   app.server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const path = (req.url ?? "").split("?")[0];
     if (path !== "/ws" && path !== "/device") return socket.destroy();
-    wss.handleUpgrade(req, socket, head, (ws) => {
+    if (!hostAllowed(req.headers.host)) {
+      audit.log("anonymous", "host.refused", { host: String(req.headers.host).slice(0, 100) });
+      socket.write("HTTP/1.1 421 Misdirected Request\r\nConnection: close\r\n\r\n");
+      return socket.destroy();
+    }
+    (path === "/device" ? deviceWss : wss).handleUpgrade(req, socket, head, (ws) => {
       ws.on("error", () => {});
       if (path === "/ws") handleClient(ws, req);
       else handleDevice(ws, req);
@@ -227,8 +261,9 @@ export function createGateway(deps: GatewayDeps) {
       return { port: typeof addr === "object" && addr ? addr.port : config.port };
     },
     async close(): Promise<void> {
-      for (const c of wss.clients) c.terminate();
+      for (const c of [...wss.clients, ...deviceWss.clients]) c.terminate();
       wss.close();
+      deviceWss.close();
       await app.close();
     },
   };
