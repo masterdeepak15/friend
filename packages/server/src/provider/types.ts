@@ -19,7 +19,7 @@ export type ProviderEvent =
   | { type: "tool_call"; id: string; name: string; args: unknown }
   | { type: "usage"; input: number; output: number }
   | { type: "done" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; userFacing?: boolean };
 
 export interface StreamRequest {
   system: string;

@@ -95,6 +95,10 @@ export class Approvals {
     this.finish(msg.id, { approved: true }, msg.decision);
   }
 
+  denyAll(reason: string): void {
+    for (const id of [...this.entries.keys()]) this.finish(id, { approved: false, reason }, "deny");
+  }
+
   private addRule(req: ApprovalRequest): void {
     const args = (req.args ?? {}) as Record<string, unknown>;
     if (req.tool === "shell.run") {

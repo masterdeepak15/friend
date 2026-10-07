@@ -43,11 +43,17 @@ const clipArgs = (args: unknown): unknown =>
 
 export class Agent {
   private busy = false;
+  private abort: AbortController | null = null;
 
   constructor(private deps: AgentDeps) {}
 
   isBusy(): boolean {
     return this.busy;
+  }
+
+  /** Stop the running turn (used by emergency lock). */
+  cancel(): void {
+    this.abort?.abort();
   }
 
   async runTurn(text: string, ctx: TurnCtx): Promise<void> {
@@ -65,6 +71,7 @@ export class Agent {
     emit({ type: "status", busy: true, deviceOnline: d.devices.hasOnline() });
     stage({ cmd: "presence", state: "thinking" });
     const abort = new AbortController();
+    this.abort = abort;
     try {
       repairDangling(d.db);
       saveMessage(d.db, { role: "user", content: [{ type: "text", text }] });
@@ -75,6 +82,7 @@ export class Agent {
         let assistantText = "";
         const calls: ToolCall[] = [];
         let failed: string | null = null;
+        let userFacing = false;
         const system = buildSystemPrompt(d.assistantName(), d.stage.summary());
         for await (const ev of d.provider.stream({ system, messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
@@ -84,12 +92,21 @@ export class Agent {
           } else if (ev.type === "tool_call") calls.push({ id: ev.id, name: ev.name, args: ev.args });
           else if (ev.type === "error") {
             failed = ev.message;
+            userFacing = !!ev.userFacing;
             break;
           }
         }
+        if (abort.signal.aborted) return;
         if (failed !== null) {
           d.audit.log("agent", "provider.error", { message: failed });
-          emit({ type: "caption.delta", text: assistantText ? "\n\nSorry, I lost my connection to the model." : "Sorry, I could not reach the model just now." });
+          emit({
+            type: "caption.delta",
+            text: userFacing
+              ? failed
+              : assistantText
+                ? "\n\nSorry, I lost my connection to the model."
+                : "Sorry, I could not reach the model just now.",
+          });
           return;
         }
         const content: ContentBlock[] = [];
@@ -103,6 +120,7 @@ export class Agent {
         stage({ cmd: "presence", state: "thinking" });
         const results: ContentBlock[] = [];
         for (const c of calls) {
+          if (abort.signal.aborted) return;
           const r = await this.executeTool(c, ctx);
           results.push({ type: "tool_result", toolUseId: c.id, content: r.text, isError: r.isError });
         }
