@@ -32,6 +32,29 @@ export interface GatewayDeps {
   onClientConnect?: (session: Session, conn: ClientConn) => void | (() => void);
   onDeviceConnect: (device: Device, ws: WebSocket) => void;
   onLock?: () => void;
+  /** Whether speech is currently available (the voice sidecar is up). */
+  voiceAvailable?: () => boolean;
+  /** Handles one recorded utterance; resolves with what was heard ("" when nothing intelligible). */
+  onVoiceUtterance?: (session: Session, audio: Buffer, mime: string, ip: string) => Promise<{ text: string }>;
+}
+
+export const MAX_UTTERANCE_BYTES = 4 * 1024 * 1024;
+
+/** Allows `max` hits per key within a sliding window. */
+class SlidingWindow {
+  private hits = new Map<string, number[]>();
+  constructor(private max: number, private windowMs: number, private clock: () => number = Date.now) {}
+  allow(key: string): boolean {
+    const now = this.clock();
+    const recent = (this.hits.get(key) ?? []).filter((t) => now - t < this.windowMs);
+    if (recent.length >= this.max) {
+      this.hits.set(key, recent);
+      return false;
+    }
+    recent.push(now);
+    this.hits.set(key, recent);
+    return true;
+  }
 }
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
@@ -154,6 +177,36 @@ export function createGateway(deps: GatewayDeps) {
       return reply.code(400).send({ error: "Invalid or expired pairing code" });
     }
   });
+
+  // Recorded audio arrives as a raw body. Auth, rate limit and availability are checked in onRequest,
+  // i.e. before the body is read, so a rejected request costs no transcription work.
+  app.addContentTypeParser(/^audio\//, { parseAs: "buffer", bodyLimit: MAX_UTTERANCE_BYTES }, (_req, body, done) => done(null, body));
+  const utteranceWindow = new SlidingWindow(10, 10_000);
+  app.post(
+    "/api/voice/utterance",
+    {
+      bodyLimit: MAX_UTTERANCE_BYTES,
+      onRequest: async (req, reply) => {
+        const token = req.cookies[COOKIE_NAME];
+        const session = token ? auth.resolveSession(token) : null;
+        if (!session) return reply.code(401).send({ error: "Unauthorized" });
+        if (!utteranceWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+        if (!deps.onVoiceUtterance || !(deps.voiceAvailable?.() ?? false)) return reply.code(503).send({ error: "Voice is not available" });
+      },
+    },
+    async (req, reply) => {
+      const body = req.body;
+      if (!Buffer.isBuffer(body)) return reply.code(415).send({ error: "Send the recording as audio/*" });
+      if (body.length === 0) return reply.code(400).send({ error: "Empty recording" });
+      const session = auth.resolveSession(req.cookies[COOKIE_NAME]!)!;
+      try {
+        return await deps.onVoiceUtterance!(session, body, String(req.headers["content-type"] ?? "audio/webm"), req.ip);
+      } catch (e) {
+        audit.log("owner", "voice.utterance_failed", { message: (e as Error).message });
+        return reply.code(502).send({ error: (e as Error).message });
+      }
+    },
+  );
 
   app.post("/api/lock", async (req, reply) => {
     const token = req.cookies[COOKIE_NAME];

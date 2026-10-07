@@ -11,10 +11,14 @@ import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
+import type { VoiceService } from "./voice/service";
+import { Speaker } from "./voice/speaker";
 
 export interface AppOptions {
   dataDir: string;
   provider?: Provider;
+  /** Speech in and out; without it voice is simply unavailable. */
+  voice?: VoiceService;
   config?: Partial<Config>;
   webDir?: string;
   expireIntervalMs?: number;
@@ -60,14 +64,43 @@ export async function createApp(opts: AppOptions) {
   const broadcast = (m: ServerMsg) => {
     for (const c of clients) c.send(m);
   };
-  const statusMsg = (): ServerMsg => ({ type: "status", busy: agent.isBusy(), deviceOnline: devices.hasOnline() });
+  const voice = opts.voice;
+  const speaker = voice ? new Speaker(voice, audit, config.voice.ttsVoice) : null;
+  const voiceAvailable = () => !!voice && voice.available();
+  const statusMsg = (): ServerMsg => ({
+    type: "status",
+    busy: agent.isBusy(),
+    deviceOnline: devices.hasOnline(),
+    voiceAvailable: voiceAvailable(),
+  });
   devices.onChange(() => broadcast(statusMsg()));
+
+  /** Runs the turn for something the owner said, then speaks the reply. */
+  async function runVoiceTurn(text: string, ip: string): Promise<void> {
+    let reply = "";
+    const emit = (m: ServerMsg) => {
+      if (m.type === "caption.delta") reply += m.text;
+      broadcast(m);
+    };
+    await agent.runTurn(text, { trust: "owner", emit, ip });
+    if (speaker && reply.trim()) await speaker.speak(reply, broadcast);
+  }
 
   const gateway = createGateway({
     config,
     auth,
     audit,
     webDir: opts.webDir,
+    voiceAvailable,
+    onVoiceUtterance: async (_session, audio, mime, ip) => {
+      if (!voice) throw new Error("voice is not available");
+      const heard = (await voice.transcribe(audio, mime, config.voice.language)).text.trim();
+      // nothing intelligible (silence, noise, punctuation only): no turn, nothing shown
+      if (!/[\p{L}\p{N}]/u.test(heard)) return { text: "" };
+      broadcast({ type: "voice.heard", text: heard });
+      void runVoiceTurn(heard, ip).catch((e) => audit.log("system", "voice.turn_crash", { message: (e as Error).message }));
+      return { text: heard };
+    },
     onClientConnect: (_session, conn) => {
       clients.add(conn);
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
@@ -86,6 +119,9 @@ export async function createApp(opts: AppOptions) {
             .respond(msg, conn.ip)
             .catch((e) => audit.log("system", "approval.error", { message: (e as Error).message }));
           break;
+        case "voice.interrupt":
+          speaker?.interrupt(broadcast);
+          break;
         case "ping":
           conn.send(statusMsg());
           break;
@@ -100,6 +136,7 @@ export async function createApp(opts: AppOptions) {
     onDeviceConnect: (device, ws) => devices.attach(device, ws),
     onLock: () => {
       agent.cancel();
+      speaker?.interrupt(broadcast);
       approvals.denyAll("Emergency lock");
       for (const c of [...clients]) c.close(4401, "locked");
     },
@@ -118,6 +155,10 @@ export async function createApp(opts: AppOptions) {
     stage,
     agent,
     gateway,
+    /** Tell every client the voice sidecar went up or down. */
+    notifyStatus(): void {
+      broadcast(statusMsg());
+    },
     async start(): Promise<{ port: number }> {
       timer = setInterval(() => {
         for (const id of stage.expire()) broadcast({ type: "stage", command: { cmd: "hide", id } });

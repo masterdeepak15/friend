@@ -44,6 +44,12 @@ describe("loadConfig", () => {
     expect(cfg.roots).toEqual(["C:/work"]);
     expect(cfg.bind).toBe("127.0.0.1");
   });
+  it("has voice defaults and merges a partly edited voice section", () => {
+    const dir = tmp();
+    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "base", ttsVoice: "en_US-lessac-medium", language: null });
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ voice: { sttModel: "small", language: "hi" } }));
+    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "small", ttsVoice: "en_US-lessac-medium", language: "hi" });
+  });
   it("includes destructive shell patterns by default", () => {
     expect(loadConfig(tmp()).destructivePatterns.length).toBeGreaterThan(5);
   });

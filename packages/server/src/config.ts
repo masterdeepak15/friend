@@ -14,8 +14,21 @@ export interface Config {
   destructivePatterns: string[];
   model: string;
   apiKey: string | null;
+  voice: VoiceConfig;
   dataDir: string;
 }
+
+export interface VoiceConfig {
+  enabled: boolean;
+  /** faster-whisper model name (tiny, base, small, ...). */
+  sttModel: string;
+  /** Piper voice name. */
+  ttsVoice: string;
+  /** Force a spoken language (e.g. "hi"); null detects it automatically. */
+  language: string | null;
+}
+
+export const DEFAULT_VOICE: VoiceConfig = { enabled: true, sttModel: "base", ttsVoice: "en_US-lessac-medium", language: null };
 
 export const DEFAULT_DESTRUCTIVE_PATTERNS = [
   String.raw`\brm\s+(-[a-z]*r|-[a-z]*f)`,
@@ -58,6 +71,7 @@ const defaults = (dataDir: string): Config => ({
   destructivePatterns: DEFAULT_DESTRUCTIVE_PATTERNS,
   model: "claude-sonnet-5-5",
   apiKey: null,
+  voice: { ...DEFAULT_VOICE },
   dataDir,
 });
 
@@ -88,5 +102,5 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
   const stored = JSON.parse(readFileSync(file, "utf8")) as Partial<Config>;
   // Built-in destructive patterns can only be extended, never dropped by an old or edited config file.
   const destructivePatterns = [...new Set([...base.destructivePatterns, ...(stored.destructivePatterns ?? [])])];
-  return { ...base, ...stored, destructivePatterns, dataDir };
+  return { ...base, ...stored, destructivePatterns, voice: { ...DEFAULT_VOICE, ...stored.voice }, dataDir };
 }
