@@ -92,6 +92,8 @@ export function Stage({ state, send, dispatch }: StageProps) {
         pulse={state.presence.pulse}
         mode={corner ? "corner" : "full"}
         accent={state.mood.accent}
+        style={state.presence.style}
+        intensity={state.mood.intensity}
       />
       <div className={narrow ? "objects objects-stack" : "objects"} style={{ zIndex: 10 }}>
         {autos.length > 0 && <div className="auto-grid">{autos.map(renderObject)}</div>}

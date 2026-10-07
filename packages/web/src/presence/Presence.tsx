@@ -1,9 +1,8 @@
-import type { PresenceState } from "@friend/protocol";
+import type { PresenceState, PresenceStyle } from "@friend/protocol";
 import { useEffect, useRef } from "react";
-import { detectEnv, pickParticleCount } from "./capability";
+import { detectEnv } from "./capability";
 import type { PresenceHandle, PresenceMode } from "./core";
-import { Fallback2D } from "./fallback2d";
-import { ParticleSphere } from "./sphere";
+import { createPresence } from "./factory";
 
 export interface PresenceProps {
   state: PresenceState;
@@ -12,39 +11,37 @@ export interface PresenceProps {
   pulse?: number;
   mode: PresenceMode;
   accent?: string;
+  style?: PresenceStyle;
+  /** Mood intensity 0..1. */
+  intensity?: number;
 }
 
-function createHandle(host: HTMLElement, accent: string): PresenceHandle {
-  const env = detectEnv();
-  const count = pickParticleCount(env);
-  if (count > 0) {
-    try {
-      return new ParticleSphere(host, count, accent, env.reducedMotion);
-    } catch {
-      /* WebGL context creation failed: fall through to 2D */
-    }
-  }
-  return new Fallback2D(host, count || 8000, accent, env.reducedMotion);
-}
-
-export function Presence({ state, amplitude, pulse = 0, mode, accent = "#3fd8ff" }: PresenceProps) {
+export function Presence({ state, amplitude, pulse = 0, mode, accent = "#3fd8ff", style = "sphere", intensity = 0.6 }: PresenceProps) {
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<PresenceHandle | null>(null);
+  const latest = useRef({ state, amplitude, mode, accent, intensity });
+  latest.current = { state, amplitude, mode, accent, intensity };
 
+  // A style change disposes the old handle and builds a new one carrying over the current settings.
   useEffect(() => {
-    const h = createHandle(host.current!, accent);
+    const cur = latest.current;
+    const h = createPresence(style, host.current!, { accent: cur.accent, reducedMotion: detectEnv().reducedMotion });
+    h.setState(cur.state);
+    h.setAmplitude(cur.amplitude);
+    h.setIntensity(cur.intensity);
+    h.setMode(cur.mode);
     handle.current = h;
     return () => {
       h.dispose();
       handle.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [style]);
 
   useEffect(() => handle.current?.setState(state), [state]);
   useEffect(() => handle.current?.setAmplitude(amplitude), [amplitude, pulse]);
   useEffect(() => handle.current?.setMode(mode), [mode]);
   useEffect(() => handle.current?.setAccent(accent), [accent]);
+  useEffect(() => handle.current?.setIntensity(intensity), [intensity]);
 
-  return <div ref={host} data-presence data-mode={mode} className={`presence presence-${mode}`} aria-hidden="true" />;
+  return <div ref={host} data-presence data-mode={mode} data-style={style} className={`presence presence-${mode}`} aria-hidden="true" />;
 }

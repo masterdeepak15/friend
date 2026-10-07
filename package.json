@@ -7,8 +7,8 @@
   },
   "scripts": {
     "test": "vitest run",
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r --no-sort build",
+    "typecheck": "pnpm -r --no-sort typecheck",
     "friend": "tsx packages/agent-cli/src/bin.ts"
   },
   "devDependencies": {

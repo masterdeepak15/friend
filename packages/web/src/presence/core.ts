@@ -7,6 +7,8 @@ export interface PresenceHandle {
   setAmplitude(v: number): void;
   setMode(m: PresenceMode): void;
   setAccent(color: string): void;
+  /** Mood intensity 0..1; scales brightness. */
+  setIntensity(v: number): void;
   dispose(): void;
 }
 
@@ -37,6 +39,8 @@ const clamp01 = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n))
 export class PresenceCore {
   state: PresenceState = "idle";
   amplitudeTarget = 0;
+  /** Mood intensity; 0.6 is the default look. */
+  intensity = 0.6;
   private amp = 0;
   private cur: Params = { ...TARGETS.idle };
   private phase = 0;
@@ -55,6 +59,10 @@ export class PresenceCore {
     this.amplitudeTarget = clamp01(v);
   }
 
+  setIntensity(v: number): void {
+    this.intensity = clamp01(v);
+  }
+
   tick(dt: number): void {
     const target = TARGETS[this.state];
     const k = 1 - Math.exp(-dt * 3);
@@ -68,6 +76,7 @@ export class PresenceCore {
   uniforms(): PresenceUniforms {
     return {
       ...this.cur,
+      brightness: (this.cur.brightness * (0.5 + this.intensity)) / 1.1,
       speed: this.cur.speed * this.motion,
       rotate: this.cur.rotate * this.motion,
       amplitude: this.amp * (this.motion === 1 ? 1 : 0.5),

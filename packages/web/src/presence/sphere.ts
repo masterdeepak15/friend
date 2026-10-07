@@ -124,6 +124,9 @@ export class ParticleSphere implements PresenceHandle {
   setAccent(color: string): void {
     (this.material.uniforms.uColor!.value as Color).set(color);
   }
+  setIntensity(v: number): void {
+    this.core.setIntensity(v);
+  }
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.raf);

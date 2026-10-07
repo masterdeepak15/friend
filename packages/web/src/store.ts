@@ -2,6 +2,7 @@ import {
   ServerMsg,
   type PendingApproval,
   type PresenceState,
+  type PresenceStyle,
   type SceneMode,
   type StageObject,
 } from "@friend/protocol";
@@ -19,7 +20,7 @@ export interface StageViewState {
   objects: StageObject[];
   captions: string;
   captionDone: boolean;
-  presence: { state: PresenceState; style: string; amplitude: number; pulse: number };
+  presence: { state: PresenceState; style: PresenceStyle; amplitude: number; pulse: number };
   mood: { accent: string; intensity: number };
   approval: PendingApproval | null;
   alerts: Alert[];
