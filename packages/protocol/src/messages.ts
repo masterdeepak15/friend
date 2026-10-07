@@ -45,6 +45,7 @@ export const DeviceDown = z.object({
   id: z.string(),
   tool: z.string(),
   args: z.unknown(),
+  approvedOutside: z.boolean().optional(),
 });
 export type DeviceDown = z.infer<typeof DeviceDown>;
 
