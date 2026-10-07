@@ -1,0 +1,102 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "C:/Users/DEEPAK/AppData/Local/Programs/gortex/gortex.exe hook",
+            "statusMessage": "Watching for Gortex localization completion...",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__gortex__explore|mcp__gortex__search|mcp__gortex__read|mcp__gortex__relations|mcp__gortex__trace|mcp__gortex__analyze|mcp__plugin_gortex_gortex__explore|mcp__plugin_gortex_gortex__search|mcp__plugin_gortex_gortex__read|mcp__plugin_gortex_gortex__relations|mcp__plugin_gortex_gortex__trace|mcp__plugin_gortex_gortex__analyze"
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "C:/Users/DEEPAK/AppData/Local/Programs/gortex/gortex.exe hook",
+            "statusMessage": "Injecting Gortex orientation snapshot...",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "C:/Users/DEEPAK/AppData/Local/Programs/gortex/gortex.exe hook",
+            "statusMessage": "Enforcing Gortex graph access policy...",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "C:/Users/DEEPAK/AppData/Local/Programs/gortex/gortex.exe hook",
+            "statusMessage": "Loading Gortex graph orientation...",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "C:/Users/DEEPAK/AppData/Local/Programs/gortex/gortex.exe hook",
+            "statusMessage": "Running Gortex post-task diagnostics...",
+            "timeout": 5000,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "C:/Users/DEEPAK/AppData/Local/Programs/gortex/gortex.exe hook",
+            "statusMessage": "Starting an isolated Gortex subagent turn...",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "C:/Users/DEEPAK/AppData/Local/Programs/gortex/gortex.exe hook",
+            "statusMessage": "Clearing Gortex subagent turn state...",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "C:/Users/DEEPAK/AppData/Local/Programs/gortex/gortex.exe hook",
+            "statusMessage": "Surfacing relevant Gortex symbols...",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

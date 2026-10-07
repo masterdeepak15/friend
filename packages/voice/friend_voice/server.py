@@ -68,13 +68,24 @@ def make_server(engines: Engines, token: str, port: int = 0, max_body: int = 4_0
         def do_POST(self) -> None:  # noqa: N802
             # authenticate before reading any of the body
             if not self._authorized():
+                self._drain(64 * 1024)
                 return self._json(401, {"error": "unauthorized"}, close=True)
             url = urlparse(self.path)
             if url.path == "/stt":
                 return self._stt(parse_qs(url.query))
             if url.path == "/tts":
                 return self._tts()
+            self._drain(64 * 1024)
             self._json(404, {"error": "not found"}, close=True)
+
+        def _drain(self, limit: int) -> None:
+            """Discard up to `limit` bytes of the request body so the client sees our reply, not a reset."""
+            try:
+                n = min(int(self.headers.get("Content-Length", "0")), limit)
+            except ValueError:
+                return
+            if n > 0:
+                self.rfile.read(n)
 
         def _stt(self, query: dict) -> None:
             audio = self._read_body()
