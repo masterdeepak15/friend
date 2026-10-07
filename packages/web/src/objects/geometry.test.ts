@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arcPath, circleLayout, gaugeAngle, linePath, niceScale, scaleLinear } from "./geometry";
+import { arcPath, circleLayout, gaugeAngle, linePath, niceScale, scaleLinear, shortenSegment } from "./geometry";
 
 describe("niceScale", () => {
   it("rounds 0..97 to 0..100 with five round ticks", () => {
@@ -69,6 +69,26 @@ describe("gaugeAngle", () => {
   it("returns 0 for NaN or an empty range", () => {
     expect(gaugeAngle(Number.NaN, 0, 100)).toBe(0);
     expect(gaugeAngle(5, 10, 10)).toBe(0);
+  });
+});
+
+describe("shortenSegment", () => {
+  it("trims both ends of a segment by the given radii", () => {
+    const s = shortenSegment({ x: 0, y: 0 }, { x: 100, y: 0 }, 10, 20);
+    expect(s.from.x).toBeCloseTo(10, 5);
+    expect(s.to.x).toBeCloseTo(80, 5);
+    expect(s.from.y).toBeCloseTo(0, 5);
+  });
+  it("works along any direction", () => {
+    const s = shortenSegment({ x: 0, y: 0 }, { x: 30, y: 40 }, 5, 5);
+    expect(Math.hypot(s.from.x, s.from.y)).toBeCloseTo(5, 5);
+    expect(Math.hypot(30 - s.to.x, 40 - s.to.y)).toBeCloseTo(5, 5);
+  });
+  it("leaves coincident or too-close points unchanged instead of producing NaN", () => {
+    const same = shortenSegment({ x: 5, y: 5 }, { x: 5, y: 5 }, 10, 10);
+    expect(same.from).toEqual({ x: 5, y: 5 });
+    const close = shortenSegment({ x: 0, y: 0 }, { x: 4, y: 0 }, 10, 10);
+    expect(Number.isFinite(close.from.x) && Number.isFinite(close.to.x)).toBe(true);
   });
 });
 

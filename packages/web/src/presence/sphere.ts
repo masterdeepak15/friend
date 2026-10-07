@@ -28,6 +28,12 @@ export function fibonacciSphere(count: number): Float32Array {
   return out;
 }
 
+/** Point-size multiplier so a small (corner) sphere keeps the same density as a full-screen one. */
+export function pointScale(w: number, h: number): number {
+  const side = Math.min(w, h);
+  return Math.min(1.2, Math.max(0.3, (Number.isFinite(side) ? side : 0) / 900));
+}
+
 export class ParticleSphere implements PresenceHandle {
   private core: PresenceCore;
   private renderer: WebGLRenderer;
@@ -82,8 +88,10 @@ export class ParticleSphere implements PresenceHandle {
   private resize(): void {
     const w = Math.max(1, this.host.clientWidth);
     const h = Math.max(1, this.host.clientHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
+    this.material.uniforms.uPixel!.value = dpr * pointScale(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     // keep the whole sphere visible on tall (phone) screens

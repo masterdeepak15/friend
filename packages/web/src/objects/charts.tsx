@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { arcPath, circleLayout, gaugeAngle, linePath, niceScale, scaleLinear } from "./geometry";
+import { arcPath, circleLayout, gaugeAngle, linePath, niceScale, scaleLinear, shortenSegment } from "./geometry";
 
 type Props = Record<string, unknown>;
 
@@ -162,6 +162,7 @@ export function Timeline({ props }: { props: Props }) {
 
 const GW = 400;
 const GH = 300;
+const NODE_R = 12;
 
 export function Graph({ props }: { props: Props }) {
   const markerId = useId();
@@ -198,8 +199,7 @@ export function Graph({ props }: { props: Props }) {
           </marker>
         </defs>
         {edges.map((e, i) => {
-          const a = pos.get(e.from)!;
-          const b = pos.get(e.to)!;
+          const { from: a, to: b } = shortenSegment(pos.get(e.from)!, pos.get(e.to)!, NODE_R + 2, NODE_R + 5);
           const cx = (a.x + b.x) / 2 + (GW / 2 - (a.x + b.x) / 2) * 0.25;
           const cy = (a.y + b.y) / 2 + (GH / 2 - (a.y + b.y) / 2) * 0.25;
           return (
@@ -217,7 +217,7 @@ export function Graph({ props }: { props: Props }) {
           const p = pos.get(n.id)!;
           return (
             <g key={n.id}>
-              <circle className="node" cx={p.x} cy={p.y} r={12} />
+              <circle className="node" cx={p.x} cy={p.y} r={NODE_R} />
               <text className="node-label" x={p.x} y={p.y + 26} textAnchor="middle">
                 {clip(n.label, 18)}
               </text>

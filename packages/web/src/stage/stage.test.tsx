@@ -46,6 +46,13 @@ describe("placementToStyle", () => {
     expect(s.position).toBe("absolute");
     expect(String(s.left)).toMatch(/%$/);
   });
+  it("sizes top and bottom regions to their content (max height) and tall regions with a fixed height", () => {
+    const bottom = placementToStyle("bottom", desktop);
+    expect(bottom.height).toBeUndefined();
+    expect(String(bottom.maxHeight)).toMatch(/%$/);
+    const left = placementToStyle("left", desktop);
+    expect(String(left.height)).toMatch(/%$/);
+  });
   it("leaves auto placement to the grid in normal flow", () => {
     expect(placementToStyle("auto", desktop)).toEqual({ position: "relative" });
   });

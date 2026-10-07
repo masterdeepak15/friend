@@ -9,7 +9,8 @@
     "test": "vitest run",
     "build": "pnpm -r --no-sort build",
     "typecheck": "pnpm -r --no-sort typecheck",
-    "friend": "tsx packages/agent-cli/src/bin.ts"
+    "friend": "tsx packages/agent-cli/src/bin.ts",
+    "demo": "tsx scripts/demo.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

@@ -48,7 +48,9 @@ void main() {
   if (uAspect > 1.0) p.x *= uAspect; else p.y /= uAspect;
   float r = length(p);
   float ang = atan(p.y, p.x);
-  float swirl = fbm(vec2(ang * 1.5 + uPhase * 0.8, r * 3.0 - uPhase * 0.6) + uNoise * 4.0);
+  // use cos/sin of the angle (not the angle itself) so the noise has no seam where atan() wraps
+  vec2 q = vec2(cos(ang), sin(ang)) * 1.5;
+  float swirl = fbm(q + vec2(uPhase * 0.8, r * 3.0 - uPhase * 0.6) + uNoise * 4.0);
   float R = 0.55 * (1.0 - uTighten) + uAmp * 0.06 * sin(uPhase * 8.0);
   float edge = R + (swirl - 0.5) * (0.06 + uNoise * 0.5);
   float body = smoothstep(edge + 0.02, edge - 0.25, r);

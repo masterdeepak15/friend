@@ -5,6 +5,7 @@ import { PresenceCore } from "./core";
 import { createPresence } from "./factory";
 import { Presence } from "./Presence";
 import { RingPresence, ringBars } from "./ring";
+import { pointScale } from "./sphere";
 
 describe("ringBars", () => {
   it("returns one value per bar, all within 0..1", () => {
@@ -23,6 +24,18 @@ describe("ringBars", () => {
   it("copes with a zero count and non-finite input", () => {
     expect(ringBars(0, 0, 0, 0)).toEqual([]);
     for (const v of ringBars(8, Number.NaN, Number.POSITIVE_INFINITY, Number.NaN)) expect(Number.isFinite(v)).toBe(true);
+  });
+});
+
+describe("pointScale", () => {
+  it("keeps full-screen points at normal size and shrinks them with the canvas", () => {
+    expect(pointScale(1920, 900)).toBeCloseTo(1, 2);
+    expect(pointScale(150, 150)).toBeCloseTo(0.3, 2); // lower clamp
+    expect(pointScale(450, 450)).toBeCloseTo(0.5, 2);
+  });
+  it("caps very large canvases and survives zero sizes", () => {
+    expect(pointScale(5000, 4000)).toBeLessThanOrEqual(1.2);
+    expect(pointScale(0, 0)).toBeGreaterThan(0);
   });
 });
 
