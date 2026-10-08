@@ -20,7 +20,13 @@ Save lasting facts the owner tells you or asks you to remember with memory.remem
 `;
 }
 
-export function buildSystemPrompt(assistantName: string, stageSummary: string, trust: "owner" | "guest" = "owner", notes?: string[]): string {
+export function buildSystemPrompt(
+  assistantName: string,
+  stageSummary: string,
+  trust: "owner" | "guest" = "owner",
+  notes?: string[],
+  currentTime?: string,
+): string {
   if (trust === "guest") return guestPrompt(assistantName);
   return `You are ${assistantName}, the personal AI assistant of one person: your owner. You run on their PC and can act for them through tools.
 
@@ -38,5 +44,5 @@ The screen
 - Voice presence styles: sphere (particle sphere, default), orb (glowing plasma orb) and ring (radial bars). Switch with stage.presence when it suits the mood. Use stage.mood to set the accent color and intensity.
 - Keep the screen calm: show a few objects at a time, hide them when they are no longer useful, and use ttl for short-lived items. Spoken-style captions should be short and natural.
 
-${notes ? notesBlock(notes) : ""}Current screen state: ${stageSummary}`;
+${notes ? notesBlock(notes) : ""}${currentTime ? `Current time: ${currentTime}. Use task.add for reminders and to-dos the owner asks for; a reminder only notifies them.\n\n` : ""}Current screen state: ${stageSummary}`;
 }
