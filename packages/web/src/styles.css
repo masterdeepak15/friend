@@ -254,7 +254,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .settings-check { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 
 /* ---- slash command list above the message bar ---- */
-.command-bar { position: relative; }
 .slash-list {
   position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); margin: 0; padding: 4px; list-style: none;
   max-height: 40vh; overflow-y: auto; background: rgba(2, 12, 18, 0.96); border: 1px solid var(--edge);
