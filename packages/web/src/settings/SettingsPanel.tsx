@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
-import { DEFAULT_LOOK, diffSettings, httpSettingsApi, needsPin, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
+import { ORIGINAL_VOICE, VOICE_CHOICES, isCatalogVoice } from "@friend/protocol";
+import { DEFAULT_LOOK, diffSettings, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
 export type SettingsTab = "model" | "voice" | "look";
@@ -35,7 +36,7 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
  * Owner-opened panel: everything that can safely be changed from the screen, in tabs. Anything that could change what runs
  * or where words are sent needs the PIN (drawn by the client); how the screen looks does not.
  */
-export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "model" }: { api?: SettingsApi; onClose: () => void; initialTab?: SettingsTab }) {
+export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "model", preview = playVoicePreview }: { api?: SettingsApi; onClose: () => void; initialTab?: SettingsTab; preview?: (voice: string) => Promise<void> }) {
   const [saved, setSaved] = useState<SettingsView | null>(null);
   const [draft, setDraft] = useState<SettingsView | null>(null);
   const [tab, setTab] = useState<SettingsTab>(initialTab);
@@ -45,6 +46,8 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [hearing, setHearing] = useState(false);
+  const [hearNote, setHearNote] = useState<string | null>(null);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -106,7 +109,16 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       setDraft(structuredClone(r.settings));
       setApiKey("");
       setAsking(false);
-      setNote(r.restart.length ? `Saved. Restart Friend for: ${r.restart.map((k) => RESTART_LABEL[k] ?? k).join(", ")}.` : needsPin(patch) ? "Saved. It is in use now." : "Saved. Every open screen has changed.");
+      const newVoice = patch.voice && (patch.voice as Record<string, unknown>).ttsVoice !== undefined;
+      setNote(
+        r.restart.length
+          ? `Saved. Restart Friend for: ${r.restart.map((k) => RESTART_LABEL[k] ?? k).join(", ")}.`
+          : newVoice
+            ? "Saved. The new voice is loading; you will get a message when it is ready (the first time it downloads about 60 MB)."
+            : needsPin(patch)
+              ? "Saved. It is in use now."
+              : "Saved. Every open screen has changed.",
+      );
     } catch (e) {
       if (alive.current) setError((e as Error).message);
     } finally {
@@ -234,9 +246,58 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       <Field label="Spoken language" hint="Empty detects it automatically. For example en or hi.">
         <input value={draft.voice.language ?? ""} maxLength={10} onChange={(e) => set("voice", "language", e.target.value.trim() === "" ? null : e.target.value.trim())} />
       </Field>
-      <Field label="Speaking voice" hint="Needs a restart, and the voice must be set up first.">
-        <input value={draft.voice.ttsVoice} onChange={(e) => set("voice", "ttsVoice", e.target.value)} />
+      <Field label="Speaking voice" hint="Female or male. The first time a voice is used it downloads about 60 MB, then it works without internet.">
+        <select value={draft.voice.ttsVoice} onChange={(e) => set("voice", "ttsVoice", e.target.value)}>
+          <optgroup label="Female">
+            {VOICE_CHOICES.filter((v) => v.gender === "female").map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name} · {v.accent}
+                {v.note ? ` · ${v.note}` : ""}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Male">
+            {VOICE_CHOICES.filter((v) => v.gender === "male").map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name} · {v.accent}
+                {v.note ? ` · ${v.note}` : ""}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Original">
+            <option value={ORIGINAL_VOICE.id}>
+              {ORIGINAL_VOICE.name} · {ORIGINAL_VOICE.accent} · {ORIGINAL_VOICE.note}
+            </option>
+          </optgroup>
+          {!isCatalogVoice(draft.voice.ttsVoice) && (
+            <optgroup label="Other">
+              <option value={draft.voice.ttsVoice}>{draft.voice.ttsVoice}</option>
+            </optgroup>
+          )}
+        </select>
       </Field>
+      <div className="voice-hear">
+        <button
+          type="button"
+          style={touch}
+          disabled={hearing}
+          onClick={() => {
+            setHearing(true);
+            setHearNote(null);
+            preview(draft.voice.ttsVoice)
+              .then(() => alive.current && setHearNote("Playing…"))
+              .catch((e: Error) => alive.current && setHearNote(e.message))
+              .finally(() => alive.current && setHearing(false));
+          }}
+        >
+          {hearing ? "Loading the voice…" : "Hear it"}
+        </button>
+        {hearNote && (
+          <small className="auth-note" role="status">
+            {hearNote}
+          </small>
+        )}
+      </div>
       <Field label="Listening model" hint="tiny, base, small … Bigger is more accurate but slower. Needs a restart.">
         <input value={draft.voice.sttModel} onChange={(e) => set("voice", "sttModel", e.target.value)} />
       </Field>

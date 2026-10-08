@@ -158,6 +158,8 @@ export interface FakeVoiceOptions {
   available?: boolean;
   failTranscribe?: boolean;
   failSynthesize?: boolean;
+  /** Voices that cannot be loaded (for example not downloaded and no internet). */
+  failVoices?: string[];
 }
 
 /** Scripted voice for tests: no models, no process. */
@@ -165,6 +167,8 @@ export class FakeVoice implements VoiceService {
   transcribed: Buffer[] = [];
   embedded: Buffer[] = [];
   synthesized: string[] = [];
+  /** The voice asked for with each synthesized text (undefined: the default). */
+  voicesUsed: (string | undefined)[] = [];
   private i = 0;
   private e = 0;
 
@@ -196,9 +200,11 @@ export class FakeVoice implements VoiceService {
     return { embedding: fakeEmbedding(speaker, `enroll-${idx}`), seconds: 3 };
   }
 
-  async synthesize(text: string): Promise<Buffer> {
+  async synthesize(text: string, voice?: string): Promise<Buffer> {
     if (this.opts.failSynthesize) throw new Error("fake synthesis failure");
+    if (voice && this.opts.failVoices?.includes(voice)) throw new Error(`fake: the voice ${voice} cannot be loaded`);
     this.synthesized.push(text);
+    this.voicesUsed.push(voice);
     return Buffer.concat([Buffer.from("RIFF"), Buffer.from(text)]);
   }
 }

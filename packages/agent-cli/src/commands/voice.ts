@@ -1,4 +1,5 @@
-import { Audit, Auth, Voiceprint, loadConfig, openDb } from "@friend/server";
+import { ORIGINAL_VOICE, VOICE_CHOICES, resolveVoice, voiceLabel, type VoiceChoice } from "@friend/protocol";
+import { Audit, Auth, Voiceprint, loadConfig, openDb, saveConfig } from "@friend/server";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -83,7 +84,32 @@ async function findPython(run: Runner): Promise<{ cmd: string; args: string[] } 
   return null;
 }
 
-export async function voiceSetupCommand(io: IO, deps: VoiceSetupDeps = {}): Promise<number> {
+/** The list of voices to choose from, numbered, with the current one marked. */
+export function voiceMenu(current: string): string[] {
+  const line = (i: number, v: VoiceChoice) => `  ${String(i + 1).padStart(2)}  ${v.name.padEnd(9)} ${v.accent}${v.note ? `, ${v.note}` : ""}${v.id === current ? "   <- now" : ""}`;
+  const female = VOICE_CHOICES.map((v, i) => [i, v] as const).filter(([, v]) => v.gender === "female");
+  const male = VOICE_CHOICES.map((v, i) => [i, v] as const).filter(([, v]) => v.gender === "male");
+  return [
+    "Female voices",
+    ...female.map(([i, v]) => line(i, v)),
+    "Male voices",
+    ...male.map(([i, v]) => line(i, v)),
+    `The original voice (${ORIGINAL_VOICE.name}, ${ORIGINAL_VOICE.accent})${current === ORIGINAL_VOICE.id ? "   <- now" : ""}: type ${ORIGINAL_VOICE.name.toLowerCase()}`,
+  ];
+}
+
+/** Which voice the flags ask for, or null when they do not. Throws a sentence for a voice that does not exist. */
+function voiceFromFlags(args: string[]): string | null {
+  if (args.includes("--female")) return resolveVoice("female")!.id;
+  if (args.includes("--male")) return resolveVoice("male")!.id;
+  const i = args.indexOf("--voice");
+  if (i < 0) return null;
+  const r = resolveVoice(args[i + 1] ?? "");
+  if (!r) throw new Error(`"${args[i + 1] ?? ""}" is not a voice. Run: friend voice list`);
+  return r.id;
+}
+
+export async function voiceSetupCommand(io: IO, deps: VoiceSetupDeps = {}, args: string[] = []): Promise<number> {
   const run = deps.run ?? defaultRunner;
   const voiceDir = deps.voiceDir ?? findVoiceDir();
   const cfg = loadConfig(io.dataDir);
@@ -91,6 +117,32 @@ export async function voiceSetupCommand(io: IO, deps: VoiceSetupDeps = {}): Prom
   const onLine = (l: string) => io.out(`    ${l}`);
 
   io.out("Setting up local voice (speech to text and text to speech). This downloads about 250 MB once.");
+
+  // which voice speaks: a flag, or a short question (Enter keeps the current one)
+  let chosen: string | null;
+  try {
+    chosen = voiceFromFlags(args);
+  } catch (e) {
+    io.err((e as Error).message);
+    return 1;
+  }
+  if (!chosen) {
+    io.out("");
+    io.out("Choose the assistant's voice:");
+    for (const l of voiceMenu(cfg.voice.ttsVoice)) io.out(l);
+    for (let tries = 0; tries < 3 && !chosen; tries++) {
+      const answer = (await io.ask(`Voice (a number, "female" or "male"; Enter keeps ${voiceLabel(cfg.voice.ttsVoice)}): `)).trim();
+      if (!answer) break;
+      const r = resolveVoice(answer);
+      if (r) chosen = r.id;
+      else io.out(`"${answer}" is not on the list. Try a number from 1 to ${VOICE_CHOICES.length}, "female" or "male".`);
+    }
+  }
+  if (chosen && chosen !== cfg.voice.ttsVoice) {
+    cfg.voice.ttsVoice = chosen;
+    saveConfig(cfg);
+    io.out(`Voice: ${voiceLabel(chosen)}. You can change it any time in Settings (Voice tab) or with: friend voice setup`);
+  }
   const py = await findPython(run);
   if (!py) {
     io.err("Python 3.10 or newer is required. Install it from https://www.python.org/downloads/ and run this again.");
@@ -200,13 +252,19 @@ export async function voiceForgetCommand(io: IO): Promise<number> {
 export async function voiceCommand(args: string[], io: IO): Promise<number> {
   switch (args[0]) {
     case "setup":
-      return voiceSetupCommand(io);
+      return voiceSetupCommand(io, {}, args.slice(1));
+    case "list": {
+      const cfg = loadConfig(io.dataDir);
+      for (const l of voiceMenu(cfg.voice.ttsVoice)) io.out(l);
+      io.out("Choose one with: friend voice setup --voice <number or name>   (or --female / --male)");
+      return 0;
+    }
     case "status":
       return voiceStatusCommand(io);
     case "forget":
       return voiceForgetCommand(io);
     default:
-      io.err("Usage: friend voice setup | friend voice status | friend voice forget");
+      io.err("Usage: friend voice setup [--voice <name>|--female|--male] | friend voice list | friend voice status | friend voice forget");
       return 1;
   }
 }

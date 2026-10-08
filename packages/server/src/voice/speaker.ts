@@ -96,7 +96,8 @@ export class Speaker {
   private job = 0;
   private active = false;
 
-  constructor(private voice: VoiceService, private audit: Audit, private voiceName?: string) {}
+  /** `voiceName` may be a function, so a change of voice in the settings is used by the very next sentence. */
+  constructor(private voice: VoiceService, private audit: Audit, private voiceName?: string | (() => string | undefined)) {}
 
   /** Says a whole text, sentence by sentence. */
   async speak(text: string, emit: (m: ServerMsg) => void): Promise<void> {
@@ -133,7 +134,7 @@ export class Speaker {
         if (sentence === undefined) return; // the reply ended and everything was said
         let wav: Buffer;
         try {
-          wav = await this.voice.synthesize(sentence, this.voiceName);
+          wav = await this.voice.synthesize(sentence, typeof this.voiceName === "function" ? this.voiceName() : this.voiceName);
         } catch (e) {
           this.audit.log("voice", "voice.tts_failed", { message: (e as Error).message });
           continue;

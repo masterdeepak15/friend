@@ -1,5 +1,6 @@
 import type { ClientMsg, ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
+import { isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
 import { chatLines } from "./chatlog";
 import { McpHub } from "./connectors/hub";
@@ -108,6 +109,7 @@ export async function createApp(opts: AppOptions) {
   /** Validates, applies and saves a settings change, then tells the screens. Used by the settings screen and by the AI. */
   function commitSettings(patch: unknown, how: { actor: "owner" | "agent"; ip?: string; deferSwap?: boolean }): Applied {
     let applied: Applied;
+    let voiceBefore = config.voice.ttsVoice;
     try {
       // the same change on a fresh copy of what is saved, so only the owner's own edits reach the file
       const saved = loadConfig(opts.dataDir);
@@ -115,6 +117,7 @@ export async function createApp(opts: AppOptions) {
       if (!how.deferSwap && switchable && check.providerChanged && agent.isBusy()) {
         throw new HttpError(409, "Friend is busy with a request. Change the model when it is done.");
       }
+      voiceBefore = config.voice.ttsVoice;
       applied = applySettings(config, patch);
       saveConfig(saved);
     } catch (e) {
@@ -131,6 +134,7 @@ export async function createApp(opts: AppOptions) {
       if (how.deferSwap) agent.whenIdle(swap);
       else swap();
     }
+    if (applied.changed.includes("voice.ttsVoice")) void warmVoice(config.voice.ttsVoice, voiceBefore);
     if (applied.changed.some((k) => k === "view" || k.startsWith("look."))) {
       if (applied.changed.some((k) => k.startsWith("look."))) for (const command of stage.setLook(config.look)) broadcast({ type: "stage", command });
       broadcast(uiMsg());
@@ -138,6 +142,28 @@ export async function createApp(opts: AppOptions) {
     broadcast(statusMsg());
     return applied;
   }
+  /**
+   * A new speaking voice is loaded (and downloaded the first time, about 60 MB) in the background, so the first sentence in it
+   * does not have to wait. If it cannot be loaded the previous voice is put back, so Friend is never left silent.
+   */
+  async function warmVoice(wanted: string, previous: string): Promise<void> {
+    if (!voice || !voiceAvailable()) return; // the speech engine is not running: it loads the voice when it starts
+    broadcast({ type: "alert", level: "info", text: `Loading the voice ${voiceLabel(wanted)}. The first time it downloads about 60 MB.` });
+    try {
+      await voice.synthesize("Ready.", wanted);
+      broadcast({ type: "alert", level: "info", text: `The voice ${voiceLabel(wanted)} is ready.` });
+    } catch (e) {
+      audit.log("system", "voice.load_failed", { voice: wanted, message: (e as Error).message });
+      if (config.voice.ttsVoice === wanted) {
+        config.voice.ttsVoice = previous;
+        const saved = loadConfig(opts.dataDir);
+        saved.voice.ttsVoice = previous;
+        saveConfig(saved);
+      }
+      broadcast({ type: "alert", level: "warn", text: `Could not load the voice ${wanted} (it needs internet the first time). Using ${voiceLabel(previous)} again.` });
+    }
+  }
+
   const agentSettings: AgentSettings = {
     get: () => settingsView(config),
     setView: (view) => {
@@ -190,7 +216,7 @@ export async function createApp(opts: AppOptions) {
     broadcast({ type: "alert", level: "info", text: `${reason} Using the local model for now.` });
   };
   const voice = opts.voice;
-  const speaker = voice ? new Speaker(voice, audit, config.voice.ttsVoice) : null;
+  const speaker = voice ? new Speaker(voice, audit, () => config.voice.ttsVoice) : null;
   const voiceAvailable = () => !!voice && voice.available();
   // The owner's voiceprint: encrypted at rest, key in a private file next to the database.
   const voiceprint = voice ? new Voiceprint(db, loadOrCreateKey(join(opts.dataDir, "voice.key"))) : null;
@@ -390,6 +416,11 @@ export async function createApp(opts: AppOptions) {
 
   const gateway = createGateway({
     connectors: connectorsApi,
+    voicePreview: async (id) => {
+      if (!voice || !voiceAvailable()) throw new HttpError(503, "Voice is not available. Run: friend voice setup");
+      if (!isCatalogVoice(id) && id !== config.voice.ttsVoice) throw new HttpError(400, "That voice is not in the list.");
+      return voice.synthesize(`Hello, I am ${auth.assistantName()}. This is how I sound.`, id);
+    },
     config,
     auth,
     audit,

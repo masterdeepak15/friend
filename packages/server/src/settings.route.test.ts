@@ -103,8 +103,8 @@ describe("settings routes", () => {
 
   it("say which settings need a restart", async () => {
     const cookie = await boot();
-    const res = await put(cookie, { voice: { ttsVoice: "en_US-amy-medium" } });
-    expect(((await res.json()) as { restart: string[] }).restart).toEqual(["voice.ttsVoice"]);
+    const res = await put(cookie, { voice: { sttModel: "small", ttsVoice: "en_US-amy-medium" } });
+    expect(((await res.json()) as { restart: string[] }).restart).toEqual(["voice.sttModel"]); // the speaking voice is loaded live
   });
 
   it("record what changed in the audit log, never the values", async () => {

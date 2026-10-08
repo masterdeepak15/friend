@@ -115,7 +115,7 @@ export interface Applied {
 }
 
 const PROVIDER_KEYS = new Set(["provider", "model", "apiKey", "ollama", "claudeCode"]);
-const RESTART_VOICE = ["enabled", "ttsVoice", "sttModel"];
+const RESTART_VOICE = ["enabled", "sttModel"];
 
 /** Checks the patch against the current config and applies it in place. Nothing changes when it is refused. */
 export function applySettings(config: Config, raw: unknown): Applied {

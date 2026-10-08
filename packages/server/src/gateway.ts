@@ -45,6 +45,8 @@ export interface GatewayDeps {
   connectors?: ConnectorsApi;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
   settings?: SettingsApi;
+  /** Says a short sentence in the named voice and returns it as a WAV recording, so the owner can hear a voice before choosing it. */
+  voicePreview?: (voice: string) => Promise<Buffer>;
   /** What the conversation and schedule panels show; the routes answer 503 without it. */
   data?: DataApi;
   /** A picture arrived for a camera request: "unknown" when nobody is waiting for that id, "invalid" when it is not a JPEG. */
@@ -428,6 +430,30 @@ export function createGateway(deps: GatewayDeps) {
       if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
       audit.log("owner", "settings.failed", { message: (e as Error).message }); // raw detail stays in the audit log
       return reply.code(500).send({ error: "That did not work. Try again." });
+    }
+  });
+
+  // ---- hearing a voice before choosing it (owner session only) ----
+  const previewWindow = new SlidingWindow(12, 60_000);
+  app.post("/api/voice/preview", {
+    bodyLimit: 1024,
+    onRequest: async (req, reply) => {
+      const token = req.cookies[COOKIE_NAME];
+      const session = token ? auth.resolveSession(token) : null;
+      if (!session) return reply.code(401).send({ error: "Unauthorized" });
+      if (!previewWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+      if (!deps.voicePreview) return reply.code(503).send({ error: "Voice is not available" });
+    },
+  }, async (req, reply) => {
+    const body = z.object({ voice: z.string().min(1).max(80) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Choose a voice" });
+    try {
+      const wav = await deps.voicePreview!(body.data.voice);
+      return reply.type("audio/wav").send(wav);
+    } catch (e) {
+      if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+      audit.log("owner", "voice.preview_failed", { message: (e as Error).message });
+      return reply.code(502).send({ error: "Could not play that voice. The first time it needs internet." });
     }
   });
 

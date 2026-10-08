@@ -19,14 +19,14 @@ const view: SettingsView = {
   voice: { enabled: true, speakTyped: true, language: null, accept: 0.72, challenge: 0.58, ttsVoice: "en_US-lessac-medium", sttModel: "base" },
 };
 
-function setup(overrides: Partial<SettingsApi> = {}, start: SettingsView = view, tab: SettingsTab = "model") {
+function setup(overrides: Partial<SettingsApi> = {}, start: SettingsView = view, tab: SettingsTab = "model", preview: (voice: string) => Promise<void> = async () => {}) {
   const api: SettingsApi = {
     get: vi.fn(async () => start),
     save: vi.fn(async () => ({ settings: start, changed: true, restart: [] })),
     ...overrides,
   };
   const onClose = vi.fn();
-  render(<SettingsPanel api={api} onClose={onClose} initialTab={tab} />);
+  render(<SettingsPanel api={api} onClose={onClose} initialTab={tab} preview={preview} />);
   return { api, onClose };
 }
 const typePin = async (pin: string) => {
@@ -147,15 +147,78 @@ describe("the model tab", () => {
 });
 
 describe("the voice tab", () => {
-  it("tells which changes need a restart", async () => {
-    setup({ save: vi.fn(async () => ({ settings: view, changed: true, restart: ["voice.ttsVoice"] })) });
-    await openTab(/^Voice\s*Speaking/);
-    await userEvent.clear(screen.getByLabelText(/speaking voice/i));
-    await userEvent.type(screen.getByLabelText(/speaking voice/i), "en_US-amy-medium");
+  const voiceTab = () => openTab(/^Voice\s*Speaking/);
+
+  it("tells which changes need a restart (the listening model does, the speaking voice does not)", async () => {
+    setup({ save: vi.fn(async () => ({ settings: view, changed: true, restart: ["voice.sttModel"] })) });
+    await voiceTab();
+    await userEvent.clear(screen.getByLabelText(/listening model/i));
+    await userEvent.type(screen.getByLabelText(/listening model/i), "small");
     await userEvent.click(screen.getByRole("button", { name: /save/i }));
     await typePin("123456");
     await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    expect((await screen.findByText(/restart friend/i)).textContent).toMatch(/voice/i);
+    expect((await screen.findByText(/restart friend/i)).textContent).toMatch(/listening model/i);
+  });
+
+  it("offers female and male voices in groups, with the current one selected", async () => {
+    setup();
+    await voiceTab();
+    const select = screen.getByLabelText(/speaking voice/i) as HTMLSelectElement;
+    const groups = Array.from(select.querySelectorAll("optgroup")).map((g) => g.label);
+    expect(groups).toEqual(["Female", "Male", "Original"]);
+    const female = within(select.querySelector('optgroup[label="Female"]') as HTMLElement).getAllByRole("option").map((o) => o.textContent);
+    const male = within(select.querySelector('optgroup[label="Male"]') as HTMLElement).getAllByRole("option").map((o) => o.textContent);
+    expect(female.length).toBeGreaterThanOrEqual(5);
+    expect(male.length).toBeGreaterThanOrEqual(5);
+    expect(female[0]).toMatch(/Amy · American/);
+    expect(male[0]).toMatch(/Ryan · American/);
+    expect(select.value).toBe("en_US-lessac-medium");
+  });
+
+  it("saves a chosen voice (with the PIN) and says it is loading, not that a restart is needed", async () => {
+    const saved: SettingsView = { ...view, voice: { ...view.voice, ttsVoice: "en_US-amy-medium" } };
+    const { api } = setup({ save: vi.fn(async () => ({ settings: saved, changed: true, restart: [] })) });
+    await voiceTab();
+    await userEvent.selectOptions(screen.getByLabelText(/speaking voice/i), "en_US-amy-medium");
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    await typePin("123456");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith({ voice: { ttsVoice: "en_US-amy-medium" } }, "123456"));
+    const note = await screen.findByText(/new voice is loading/i);
+    expect(note.textContent).toMatch(/60 MB/);
+    expect(note.textContent).not.toMatch(/restart/i);
+  });
+
+  it("plays the voice that is chosen, before it is saved, and shows what happens", async () => {
+    const preview = vi.fn(async () => {});
+    const { api } = setup({}, view, "model", preview);
+    await voiceTab();
+    await userEvent.selectOptions(screen.getByLabelText(/speaking voice/i), "en_GB-jenny_dioco-medium");
+    await userEvent.click(screen.getByRole("button", { name: "Hear it" }));
+    await waitFor(() => expect(preview).toHaveBeenCalledWith("en_GB-jenny_dioco-medium"));
+    expect(await screen.findByText("Playing…")).toBeTruthy();
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("says why a voice could not be played, and can be tried again", async () => {
+    const preview = vi.fn(async () => {
+      throw new Error("Could not play that voice. The first time it needs internet.");
+    });
+    setup({}, view, "model", preview);
+    await voiceTab();
+    await userEvent.click(screen.getByRole("button", { name: "Hear it" }));
+    expect(await screen.findByText(/needs internet/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Hear it" })).toHaveProperty("disabled", false);
+  });
+
+  it("keeps a voice that is not in the list, so it is not lost when the settings are opened", async () => {
+    const custom: SettingsView = { ...view, voice: { ...view.voice, ttsVoice: "hi_IN-pratham-medium" } };
+    setup({}, custom);
+    await voiceTab();
+    const select = screen.getByLabelText(/speaking voice/i) as HTMLSelectElement;
+    expect(select.value).toBe("hi_IN-pratham-medium");
+    expect(select.querySelector('optgroup[label="Other"]')).toBeTruthy();
+    expect(screen.getByRole("button", { name: /save/i })).toHaveProperty("disabled", true); // nothing changed
   });
 });
 

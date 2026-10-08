@@ -71,6 +71,37 @@ export const httpSettingsApi: SettingsApi = {
   save: (settings, pin) => call<SaveResult>({ method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...(pin ? { pin } : {}), settings }) }),
 };
 
+/**
+ * Plays a short sentence in the named voice, so it can be heard before it is chosen. Resolves when playback has started and
+ * rejects with a sentence the owner can read (no speech engine, no internet the first time, and so on).
+ */
+export async function playVoicePreview(voice: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch("/api/voice/preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ voice }) });
+  } catch {
+    throw new Error("Could not reach Friend. Check the connection.");
+  }
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = ((await res.json()) as { error?: string }).error ?? "";
+    } catch {
+      /* no JSON body */
+    }
+    throw new Error(detail || `The request failed (${res.status}).`);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const audio = new Audio(url);
+  audio.addEventListener("ended", () => URL.revokeObjectURL(url), { once: true });
+  try {
+    await audio.play();
+  } catch {
+    URL.revokeObjectURL(url);
+    throw new Error("The browser blocked the sound. Click anywhere on the page, then try again.");
+  }
+}
+
 /** Only what the owner actually changed, in the shape the server accepts. `apiKey` is sent only when something was typed. */
 export function diffSettings(before: SettingsView, after: SettingsView, apiKey: string): Record<string, unknown> {
   const patch: Record<string, unknown> = {};

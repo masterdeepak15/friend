@@ -361,3 +361,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .captions-small { font-size: clamp(0.9rem, 2vw, 1.15rem); }
 .captions-medium { font-size: clamp(1.1rem, 2.6vw, 1.6rem); }
 .captions-large { font-size: clamp(1.4rem, 3.6vw, 2.3rem); }
+
+/* ---- hearing a voice before choosing it ---- */
+.voice-hear { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
