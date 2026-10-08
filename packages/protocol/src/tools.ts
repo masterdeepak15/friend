@@ -58,6 +58,18 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "device",
   },
   {
+    name: "code.run",
+    description:
+      "Run a program you wrote (python, node or shell) in a throwaway Docker container and get its output. The container has no network, cannot see the owner's files and is stopped after a time limit (default 10 s, at most 60 s). Use it to calculate, process data you put in the code, test an idea or build a result. The owner approves every run. Print what you want to see to stdout.",
+    input: z.object({
+      language: z.enum(["python", "node", "shell"]),
+      code: z.string().min(1).max(50000),
+      timeoutSec: z.number().int().min(1).max(60).optional(),
+    }),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
     name: "memory.remember",
     description:
       "Save a short note about the owner that you will see in future conversations (a name, a preference, an address, a fact they asked you to remember). One fact per note, under 500 characters. Never save passwords, PINs or keys.",
@@ -202,6 +214,8 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return `Read system information${where}`;
     case "process.list":
       return `List running processes${where}`;
+    case "code.run":
+      return `Run ${visible(String(a.language ?? "code"))} code in a throwaway sandbox (no network, no access to your files):\n${visible(String(a.code ?? ""))}`;
     case "memory.remember":
       return `Remember: ${visible(clip(String(a.text ?? ""), 500))}`;
     case "memory.search":

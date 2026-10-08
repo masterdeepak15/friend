@@ -4,6 +4,7 @@ import { Approvals } from "./approvals";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
+import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
 import { Tasks } from "./tasks";
@@ -41,6 +42,8 @@ export interface AppOptions {
   cameraTimeoutMs?: number;
   /** How often the heartbeat looks for reminders that have come due. */
   heartbeatMs?: number;
+  /** Where the agent's programs run. Defaults to throwaway Docker containers. */
+  codeBox?: Pick<CodeBox, "run">;
 }
 
 /** Used when no API key is configured: every turn ends with a setup notice on screen. */
@@ -87,6 +90,7 @@ export async function createApp(opts: AppOptions) {
     assistantName: () => auth.assistantName(),
     memory,
     tasks,
+    code: opts.codeBox ?? new CodeBox(),
     camera: {
       request: (emit, signal) => {
         audit.log("agent", "camera.requested", {});

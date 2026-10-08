@@ -57,6 +57,19 @@ Tell Friend "remember that my sister is Priya" and it keeps a short note. The 20
 - You control all of it: `friend memory list`, `friend memory forget <number>`, `friend memory clear` (asks for the PIN). You can also just say "forget note 7".
 - Notes are treated as **data about you, never as instructions**, so text inside a note (or text a web page tricked the agent into saving) cannot give the agent orders. Guests and unrecognized voices never see your notes. The agent is told never to save passwords, PINs or keys.
 
+## Running code safely (Docker)
+
+The agent can write a program (Python, Node or shell), run it, and read the result: calculations, data crunching, quick experiments. It needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) running; without it the tool says so and nothing runs. (Windows Sandbox is not needed, so Windows Home works.) The first use of each language downloads a small image (about 50 MB), so that one run needs internet; after that it works offline.
+
+Every run asks for your approval, and the card shows the **whole program**. Each run is its own throwaway container:
+
+- `--network none`: no internet and no DNS; it cannot send anything anywhere.
+- It sees none of your files: only its own code is mounted, read-only. The root filesystem is read-only; only a 64 MB scratch `/tmp` is writable.
+- Not root (user 65534), all capabilities dropped, `no-new-privileges`, 512 MB memory (no swap), 1 CPU, at most 128 processes.
+- A time limit (10 s by default, 60 s at most); after that the container is killed and removed. Output is cut at 20,000 characters.
+
+`pnpm test` includes a check against real containers that runs hostile code (network attempts, writes outside `/tmp`, memory hog, endless loop, fork bomb) and confirms each is stopped.
+
 ## Free-form pages (sandbox)
 
 When none of the standard objects fits, the agent can draw its own small page on the stage: a custom visualization, a calculator, a timer, a game. It is HTML, CSS and JavaScript written inline (up to 100,000 characters) and runs in an isolated frame:

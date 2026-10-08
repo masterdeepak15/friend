@@ -2,6 +2,7 @@ import type { ServerMsg, Tier, Trust } from "@friend/protocol";
 import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
+import type { CodeBox } from "../codebox";
 import type { Config } from "../config";
 import type { Db } from "../db";
 import type { Memory } from "../memory";
@@ -37,6 +38,8 @@ export interface AgentDeps {
   memory?: Memory;
   /** The owner's to-dos and reminders. Without it the task tools report they are unavailable. */
   tasks?: Tasks;
+  /** Runs programs in a throwaway container. Without it the code tool reports it is unavailable. */
+  code?: Pick<CodeBox, "run">;
 }
 
 export interface TurnCtx {
@@ -258,6 +261,7 @@ export class Agent {
       d.audit.log("agent", "tool.denied", { tool: call.name, args: clipArgs(args), trust: ctx.trust });
       return fail("This action is not allowed.");
     }
+    if (call.name === "code.run" && !d.code) return fail("Running code is not available.");
     if (call.name === "camera.snap") {
       // refuse before bothering the owner with a card for a picture that could not be used
       if (!d.camera) return fail("The camera is not available.");
@@ -275,6 +279,17 @@ export class Agent {
         return fail(`The owner did not approve this action (${outcome.reason ?? "denied"}).`);
       }
       approvedOutside = !insideRoots;
+    }
+
+    if (call.name === "code.run") {
+      const { language, code, timeoutSec } = args as { language: "python" | "node" | "shell"; code: string; timeoutSec?: number };
+      const r = await d.code!.run({ language, code, timeoutSec });
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { language, chars: code.length }, tier, ok: r.ok });
+      if (!r.ok) return fail(r.error);
+      const parts = [r.timedOut ? "Stopped: it ran past the time limit." : `exit code ${r.exitCode}`];
+      if (r.stdout) parts.push(`--- stdout ---\n${r.stdout}`);
+      if (r.stderr) parts.push(`--- stderr ---\n${r.stderr}`);
+      return { text: parts.join("\n"), isError: false };
     }
 
     if (call.name.startsWith("memory.") || call.name.startsWith("task.")) {
