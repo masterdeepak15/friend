@@ -4,7 +4,9 @@ import { Approvals } from "./approvals";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
+import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
+import { Tasks } from "./tasks";
 import { join } from "node:path";
 import { loadConfig, type Config } from "./config";
 import { openDb } from "./db";
@@ -37,6 +39,8 @@ export interface AppOptions {
   approvalTimeoutMs?: number;
   /** How long a camera request waits for the browser's picture. */
   cameraTimeoutMs?: number;
+  /** How often the heartbeat looks for reminders that have come due. */
+  heartbeatMs?: number;
 }
 
 /** Used when no API key is configured: every turn ends with a setup notice on screen. */
@@ -70,6 +74,7 @@ export async function createApp(opts: AppOptions) {
         : new MissingKeyProvider());
   const camera = new CameraBroker(opts.cameraTimeoutMs);
   const memory = new Memory(db);
+  const tasks = new Tasks(db);
   const agent = new Agent({
     provider,
     policy,
@@ -81,6 +86,7 @@ export async function createApp(opts: AppOptions) {
     config,
     assistantName: () => auth.assistantName(),
     memory,
+    tasks,
     camera: {
       request: (emit, signal) => {
         audit.log("agent", "camera.requested", {});
@@ -116,6 +122,30 @@ export async function createApp(opts: AppOptions) {
 
   /** Bumped by the emergency lock: anything that started before it must not start or speak after it. */
   let lockEpoch = 0;
+
+  // The heartbeat only notifies: an alert, a card on the screen and a spoken line. It never starts a turn or runs a tool.
+  const heartbeat = new Heartbeat({
+    tasks,
+    clients: () => clients.size,
+    busy: () => agent.isBusy(),
+    intervalMs: opts.heartbeatMs,
+    notify: (task) => {
+      const object = {
+        id: `reminder-${task.id}`,
+        type: "card" as const,
+        props: { title: "Reminder", text: task.title },
+        placement: "center" as const,
+        ttl: 90,
+        style: "alert" as const,
+      };
+      const show = { cmd: "show" as const, object };
+      stage.apply(show);
+      broadcast({ type: "stage", command: show });
+      broadcast({ type: "alert", level: "info", text: `Reminder: ${task.title}` });
+      audit.log("system", "task.fired", { id: task.id });
+      if (speaker) void speaker.speak(`Reminder: ${task.title}`, broadcast).catch(() => {});
+    },
+  });
 
   /** Checks the owner's PIN through the shared rate limit. */
   async function requirePin(pin: string, ip: string): Promise<void> {
@@ -363,11 +393,13 @@ export async function createApp(opts: AppOptions) {
     challenges,
     camera,
     memory,
+    tasks,
     /** Tell every client the voice sidecar went up or down. */
     notifyStatus(): void {
       broadcast(statusMsg());
     },
     async start(): Promise<{ port: number }> {
+      heartbeat.start();
       timer = setInterval(() => {
         for (const id of stage.expire()) broadcast({ type: "stage", command: { cmd: "hide", id } });
       }, opts.expireIntervalMs ?? 1000);
@@ -375,6 +407,7 @@ export async function createApp(opts: AppOptions) {
     },
     async stop(): Promise<void> {
       stopped = true;
+      heartbeat.stop();
       if (timer) clearInterval(timer);
       challenges.clear();
       camera.cancelAll(broadcast);
