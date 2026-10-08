@@ -1,0 +1,143 @@
+import { z } from "zod";
+import type { Config } from "./config";
+import { sanitizeVoice } from "./config";
+
+const word = /^[\w.:/\\-]+$/;
+const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
+
+/** Everything the owner may change from the screen. Network, folders and safety rules stay in the terminal on purpose. */
+export const SettingsPatch = z
+  .object({
+    provider: z.enum(["claude", "claude-code", "ollama"]),
+    model: modelName,
+    /** Empty means "leave the saved key alone". */
+    apiKey: z.string().trim().max(400),
+    ollama: z
+      .object({
+        url: z.string().trim().max(200),
+        model: z.string().trim().min(1).max(100),
+        vision: z.boolean(),
+        contextTokens: z.number().int().min(1024).max(131072),
+      })
+      .partial()
+      .strict(),
+    claudeCode: z
+      .object({
+        model: modelName,
+        command: z.string().trim().min(1).max(260).regex(word, "The command is one word or path without spaces"),
+        fallback: z.enum(["ollama", "none"]),
+      })
+      .partial()
+      .strict(),
+    voice: z
+      .object({
+        enabled: z.boolean(),
+        speakTyped: z.boolean(),
+        language: z.string().trim().max(10).regex(/^([a-z]{2,3}(-[A-Za-z]{2,4})?)?$/, "Use a language code such as en or hi, or leave it empty"),
+        accept: z.number().min(0).max(1),
+        challenge: z.number().min(0).max(1),
+        ttsVoice: z.string().trim().min(1).max(80).regex(/^[\w.-]+$/),
+        sttModel: z.string().trim().min(1).max(80).regex(/^[\w./-]+$/),
+      })
+      .partial()
+      .strict(),
+  })
+  .partial()
+  .strict();
+export type SettingsPatch = z.infer<typeof SettingsPatch>;
+
+export interface SettingsView {
+  provider: Config["provider"];
+  model: string;
+  /** The key itself is never sent to the screen. */
+  apiKeySet: boolean;
+  ollama: { url: string; model: string; vision: boolean; contextTokens: number };
+  claudeCode: Config["claudeCode"];
+  voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "ttsVoice" | "sttModel">;
+}
+
+export function settingsView(c: Config): SettingsView {
+  return {
+    provider: c.provider,
+    model: c.model,
+    apiKeySet: !!c.apiKey,
+    ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
+    claudeCode: { ...c.claudeCode },
+    voice: {
+      enabled: c.voice.enabled,
+      speakTyped: c.voice.speakTyped,
+      language: c.voice.language,
+      accept: c.voice.accept,
+      challenge: c.voice.challenge,
+      ttsVoice: c.voice.ttsVoice,
+      sttModel: c.voice.sttModel,
+    },
+  };
+}
+
+export class SettingsError extends Error {}
+
+export interface Applied {
+  /** Names of the settings that were given (never values: some are secrets). */
+  changed: string[];
+  /** The model backend has to be rebuilt. */
+  providerChanged: boolean;
+  /** Settings that only take effect after Friend restarts. */
+  restart: string[];
+}
+
+const PROVIDER_KEYS = new Set(["provider", "model", "apiKey", "ollama", "claudeCode"]);
+const RESTART_VOICE = ["enabled", "ttsVoice", "sttModel"];
+
+/** Checks the patch against the current config and applies it in place. Nothing changes when it is refused. */
+export function applySettings(config: Config, raw: unknown): Applied {
+  const parsed = SettingsPatch.safeParse(raw);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new SettingsError(issue ? `${issue.path.join(".") || "settings"}: ${issue.message}` : "Invalid settings");
+  }
+  const p = parsed.data;
+
+  const ollamaUrl = p.ollama?.url;
+  if (ollamaUrl !== undefined) {
+    let u: URL;
+    try {
+      u = new URL(ollamaUrl);
+    } catch {
+      throw new SettingsError("ollama.url: Expected a URL such as http://127.0.0.1:11434");
+    }
+    if (u.protocol !== "http:" && u.protocol !== "https:") throw new SettingsError("ollama.url: The URL must start with http:// or https://");
+    p.ollama!.url = u.origin;
+  }
+
+  const next = {
+    provider: p.provider ?? config.provider,
+    apiKey: p.apiKey ? p.apiKey : config.apiKey,
+    voice: sanitizeVoice({
+      ...config.voice,
+      ...(p.voice ?? {}),
+      language: p.voice && "language" in p.voice ? p.voice.language || null : config.voice.language,
+    } as Config["voice"]),
+  };
+  if (p.provider === "claude" && !next.apiKey) throw new SettingsError("Enter an API key to use Claude, or choose Claude Code or Ollama.");
+  if (p.voice && (p.voice.accept !== undefined || p.voice.challenge !== undefined)) {
+    const accept = p.voice.accept ?? config.voice.accept;
+    const challenge = p.voice.challenge ?? config.voice.challenge;
+    if (challenge > accept) throw new SettingsError("voice: The \"ask for PIN\" level cannot be above the \"it is me\" level.");
+  }
+
+  const restart = Object.keys(p.voice ?? {}).filter((k) => RESTART_VOICE.includes(k) && (p.voice as Record<string, unknown>)[k] !== (config.voice as unknown as Record<string, unknown>)[k]).map((k) => `voice.${k}`);
+
+  config.provider = next.provider;
+  if (p.model) config.model = p.model;
+  if (p.apiKey) config.apiKey = p.apiKey;
+  if (p.ollama) Object.assign(config.ollama, p.ollama);
+  if (p.claudeCode) Object.assign(config.claudeCode, p.claudeCode);
+  if (p.voice) {
+    const safe = next.voice;
+    for (const k of Object.keys(p.voice) as (keyof Config["voice"])[]) (config.voice as unknown as Record<string, unknown>)[k] = safe[k];
+  }
+
+  const changed = Object.entries(p).flatMap(([k, v]) => (v && typeof v === "object" ? Object.keys(v).map((f) => `${k}.${f}`) : [k]));
+  return { changed, providerChanged: changed.some((k) => PROVIDER_KEYS.has(k.split(".")[0]!)), restart };
+}

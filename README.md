@@ -36,6 +36,12 @@ pnpm friend claude status
 - Caveats: it uses your plan's limits; using a subscription this way is a grey area in Anthropic's terms, so treat it as experimental; if Friend answered through the fallback, Claude does not know about that exchange.
 - Opt-in live test against the real CLI: `FRIEND_LIVE_CLAUDE=1 pnpm exec vitest run packages/server/src/provider/claude-code/live.test.ts`.
 
+## On-screen status, clock and settings
+
+- **Status line (bottom-left):** always shows what Friend is doing in plain words: Ready, Listening, Understanding what you said, Thinking, Getting the weather for Pune, Creating a view, Running a command, Answering, Waiting for your approval, Reconnecting. It never shows command text or arguments.
+- **Clock (bottom-right):** a small date and time, so the screen is never empty.
+- **Settings (Esc, then Settings):** change the model provider (Claude subscription through Claude Code, Claude API key, or local Ollama), the model names, the fallback, the Ollama address, and the voice options without the terminal. A change is used straight away (no restart) except the speaking voice and listening model. Saving needs your PIN. The API key is write-only: it is never sent back to the screen. Network address, folders and safety rules are deliberately not in this screen; use `friend config set` for those.
+
 ## Voice (local, optional)
 
 ```bash

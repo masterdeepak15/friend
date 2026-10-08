@@ -13,7 +13,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Tasks } from "./tasks";
 import { join } from "node:path";
-import { loadConfig, type Config } from "./config";
+import { loadConfig, saveConfig, type Config } from "./config";
 import { openDb } from "./db";
 import { DeviceHub } from "./devices";
 import { createGateway, type ClientConn, type PluginsApi } from "./gateway";
@@ -21,6 +21,8 @@ import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import { ClaudeCodeProvider } from "./provider/claude-code/provider";
 import { FallbackProvider } from "./provider/fallback";
+import { SwitchableProvider } from "./provider/switchable";
+import { applySettings, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
@@ -80,21 +82,17 @@ export async function createApp(opts: AppOptions) {
   const approvals = new Approvals({ auth, policy, audit, db }, opts.approvalTimeoutMs);
   // told to the screen once the clients exist (below); Claude Code is skipped quietly until then
   let tellFallback: (reason: string) => void = () => {};
-  const provider: Provider =
-    opts.provider ??
-    (config.provider === "claude-code"
-      ? config.claudeCode.fallback === "ollama"
-        ? new FallbackProvider(
-            new ClaudeCodeProvider({ dataDir: opts.dataDir, model: config.claudeCode.model, command: config.claudeCode.command }),
-            new OllamaProvider(config.ollama),
-            (reason) => tellFallback(reason),
-          )
-        : new ClaudeCodeProvider({ dataDir: opts.dataDir, model: config.claudeCode.model, command: config.claudeCode.command })
-      : config.provider === "ollama"
-      ? new OllamaProvider(config.ollama)
-      : config.apiKey
-        ? new ClaudeProvider({ apiKey: config.apiKey, model: config.model })
-        : new MissingKeyProvider());
+  /** Builds the model backend from the current settings; called again when the owner changes them on screen. */
+  const makeProvider = (): Provider => {
+    if (config.provider === "claude-code") {
+      const cc = new ClaudeCodeProvider({ dataDir: opts.dataDir, model: config.claudeCode.model, command: config.claudeCode.command });
+      return config.claudeCode.fallback === "ollama" ? new FallbackProvider(cc, new OllamaProvider({ ...config.ollama }), (reason) => tellFallback(reason)) : cc;
+    }
+    if (config.provider === "ollama") return new OllamaProvider({ ...config.ollama });
+    return config.apiKey ? new ClaudeProvider({ apiKey: config.apiKey, model: config.model }) : new MissingKeyProvider();
+  };
+  const switchable = opts.provider ? null : new SwitchableProvider(makeProvider());
+  const provider: Provider = opts.provider ?? switchable!;
   const camera = new CameraBroker(opts.cameraTimeoutMs);
   const memory = new Memory(db);
   const tasks = new Tasks(db);
@@ -366,6 +364,32 @@ export async function createApp(opts: AppOptions) {
         }
       : undefined,
     plugins: pluginsApi,
+    settings: {
+      get: () => settingsView(config),
+      update: async (patch, pin, ip) => {
+        await requirePin(pin, ip);
+        const before = JSON.stringify(settingsView(config));
+        let applied: Applied;
+        try {
+          // the same change on a fresh copy of what is saved, so only the owner's own edits reach the file
+          const saved = loadConfig(opts.dataDir);
+          const check = applySettings(saved, patch);
+          if (switchable && check.providerChanged && agent.isBusy()) throw new HttpError(409, "Friend is busy with a request. Change the model when it is done.");
+          applied = applySettings(config, patch);
+          saveConfig(saved);
+        } catch (e) {
+          if (e instanceof SettingsError) throw new HttpError(400, e.message);
+          throw e;
+        }
+        audit.log("owner", "settings.changed", { changed: applied.changed, ip });
+        if (applied.providerChanged && switchable) {
+          const old = switchable.swap(makeProvider());
+          await old.close?.().catch(() => {});
+        }
+        broadcast(statusMsg());
+        return { settings: settingsView(config), changed: JSON.stringify(settingsView(config)) !== before, restart: applied.restart };
+      },
+    },
     onCameraFrame: (id, jpeg) => {
       const out = camera.deliver(id, jpeg);
       if (out === "ok") {
@@ -456,6 +480,8 @@ export async function createApp(opts: AppOptions) {
     devices,
     stage,
     agent,
+    /** The model backend in use right now (it can change when the owner edits settings). */
+    provider,
     gateway,
     voiceprint,
     challenges,

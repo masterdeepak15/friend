@@ -241,3 +241,14 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .clock { position: absolute; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); text-align: right; line-height: 1.15; color: var(--muted); font-family: var(--mono); pointer-events: none; }
 .clock b { display: block; font-size: 1.15rem; font-weight: 500; color: var(--ink); letter-spacing: 0.06em; }
 .clock span { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* ---- settings panel ---- */
+.settings { width: min(520px, calc(100% - 24px)); max-height: calc(100% - 24px); display: flex; flex-direction: column; }
+.settings-body { overflow-y: auto; display: grid; gap: 6px; padding-right: 4px; min-height: 0; }
+.settings-field { display: grid; gap: 3px; }
+.settings-field > span { font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.settings-field input:not([type="range"]):not([type="checkbox"]), .settings-field select {
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--edge); color: var(--ink); padding: 0 10px; min-height: 40px; font: inherit;
+}
+.settings-field select option { background: #06141c; }
+.settings-check { display: flex; align-items: center; gap: 10px; min-height: 40px; }

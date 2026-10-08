@@ -41,11 +41,20 @@ export interface GatewayDeps {
   voiceEnroll?: VoiceEnrollApi;
   /** Managing plugins from the owner's screen; the routes answer 503 without it. */
   plugins?: PluginsApi;
+  /** Changing settings from the owner's screen; the routes answer 503 without it. */
+  settings?: SettingsApi;
   /** A picture arrived for a camera request: "unknown" when nobody is waiting for that id, "invalid" when it is not a JPEG. */
   onCameraFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
 }
 
 export const MAX_CAMERA_FRAME_BYTES = 2 * 1024 * 1024;
+
+/** What the settings routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
+export interface SettingsApi {
+  get(): unknown;
+  /** Needs the owner's PIN: a setting can change which program runs or where the owner's words are sent. */
+  update(patch: unknown, pin: string, ip: string): Promise<unknown>;
+}
 
 /** What the plugin routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
 export interface PluginsApi {
@@ -317,6 +326,28 @@ export function createGateway(deps: GatewayDeps) {
       return { ok: true };
     } catch (e) {
       return pluginError(reply, e, "remove");
+    }
+  });
+
+  // ---- settings (owner session only) ----
+  const settingsWindow = new SlidingWindow(30, 60_000);
+  const settingsGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    const session = token ? auth.resolveSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "Unauthorized" });
+    if (!settingsWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+    if (!deps.settings) return reply.code(503).send({ error: "Settings are not available" });
+  };
+  app.get("/api/settings", { onRequest: settingsGuard }, async () => deps.settings!.get());
+  app.put("/api/settings", { onRequest: settingsGuard }, async (req, reply) => {
+    const body = z.object({ pin: z.string().min(1).max(32), settings: z.record(z.string(), z.unknown()) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN to save settings" });
+    try {
+      return await deps.settings!.update(body.data.settings, body.data.pin, req.ip);
+    } catch (e) {
+      if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+      audit.log("owner", "settings.failed", { message: (e as Error).message }); // raw detail stays in the audit log
+      return reply.code(500).send({ error: "That did not work. Try again." });
     }
   });
 
