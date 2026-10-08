@@ -364,3 +364,5 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ---- hearing a voice before choosing it ---- */
 .voice-hear { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.connector-command { margin: 0; padding: 8px 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--edge); font: 0.85rem var(--mono); overflow-x: auto; user-select: all; }

@@ -77,6 +77,12 @@ export interface ConnectorsApi {
   setEnabled(id: string, enabled: boolean, pin: string | undefined, ip: string): Promise<unknown>;
   reload(id: string): Promise<unknown>;
   remove(id: string): Promise<void>;
+  /** What a one-click connector needs and whether it is on this PC. Starts nothing and needs no PIN. */
+  quickCheck(preset: string): unknown;
+  /** Installs what it needs, in the background. Needs the PIN: it runs a program that changes this PC. */
+  quickInstall(preset: string, pin: string, ip: string): Promise<unknown>;
+  /** Adds the connector with its fixed command and connects it. Needs the PIN. */
+  quickConnect(preset: string, pin: string, ip: string): Promise<unknown>;
 }
 
 /** What the plugin routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -386,6 +392,24 @@ export function createGateway(deps: GatewayDeps) {
       return connectorError(reply, e, "add");
     }
   });
+  app.get<{ Params: { preset: string } }>("/api/connectors/quick/:preset", { onRequest: connectorGuard }, async (req, reply) => {
+    try {
+      return deps.connectors!.quickCheck(req.params.preset);
+    } catch (e) {
+      return connectorError(reply, e, "quick-check");
+    }
+  });
+  for (const action of ["install", "connect"] as const) {
+    app.post<{ Params: { preset: string } }>(`/api/connectors/quick/:preset/${action}`, { onRequest: connectorGuard }, async (req, reply) => {
+      const body = z.object({ pin: z.string().min(1).max(32) }).safeParse(req.body);
+      if (!body.success) return reply.code(400).send({ error: "Enter your PIN to continue" });
+      try {
+        return await (action === "install" ? deps.connectors!.quickInstall : deps.connectors!.quickConnect)(req.params.preset, body.data.pin, req.ip);
+      } catch (e) {
+        return connectorError(reply, e, `quick-${action}`);
+      }
+    });
+  }
   app.post<{ Params: { id: string } }>("/api/connectors/:id/enabled", { onRequest: connectorGuard }, async (req, reply) => {
     const body = z.object({ enabled: z.boolean(), pin: z.string().min(1).max(32).optional() }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "Invalid input" });

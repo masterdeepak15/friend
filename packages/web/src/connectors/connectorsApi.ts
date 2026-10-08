@@ -20,6 +20,8 @@ export interface Preset {
   connector: { id: string; name: string; kind: "stdio"; command: string; args: string[] };
   setup: string[];
   warning?: string;
+  /** One click: no form; Friend checks what it needs and connects it. */
+  quick?: boolean;
 }
 
 export interface ConnectorList {
@@ -32,7 +34,33 @@ export type NewConnector =
   | { id: string; name: string; kind: "stdio"; command: string; args: string[]; env: Record<string, string> }
   | { id: string; name: string; kind: "http"; url: string; headers: Record<string, string> };
 
+/** What a one-click connector needs, and whether it is on this PC. */
+export interface QuickCheck {
+  preset: string;
+  name: string;
+  ready: boolean;
+  message: string;
+  installCommand: string | null;
+  manualStep: string | null;
+  extensionFolder: string | null;
+}
+export interface QuickConnectResult {
+  ok: boolean;
+  connector: { id: string; name: string; status: string; error: string | null; tools: number } | null;
+  extension: "connected" | "off" | "unknown";
+  message: string;
+}
+export interface QuickInstallResult {
+  ok: boolean;
+  output: string;
+  extensionFolder: string | null;
+  message: string;
+}
+
 export interface ConnectorsApi {
+  quickCheck(preset: string): Promise<QuickCheck>;
+  quickInstall(preset: string, pin: string): Promise<QuickInstallResult>;
+  quickConnect(preset: string, pin: string): Promise<QuickConnectResult>;
   list(): Promise<ConnectorList>;
   add(connector: NewConnector, pin: string): Promise<ConnectorView>;
   setEnabled(id: string, enabled: boolean, pin?: string): Promise<ConnectorView>;
@@ -65,6 +93,9 @@ const json = (method: string, body?: unknown): RequestInit => ({
 
 export const httpConnectorsApi: ConnectorsApi = {
   list: () => call<ConnectorList>(""),
+  quickCheck: (preset) => call<QuickCheck>(`/quick/${encodeURIComponent(preset)}`),
+  quickInstall: (preset, pin) => call<QuickInstallResult>(`/quick/${encodeURIComponent(preset)}/install`, json("POST", { pin })),
+  quickConnect: (preset, pin) => call<QuickConnectResult>(`/quick/${encodeURIComponent(preset)}/connect`, json("POST", { pin })),
   add: (connector, pin) => call<ConnectorView>("", json("POST", { pin, connector })),
   setEnabled: (id, enabled, pin) => call<ConnectorView>(`/${encodeURIComponent(id)}/enabled`, json("POST", { enabled, ...(pin ? { pin } : {}) })),
   reload: (id) => call<ConnectorView>(`/${encodeURIComponent(id)}/reload`, json("POST", {})),

@@ -209,7 +209,7 @@ pnpm friend claude status
 
 A connector gives Friend the tools of an outside program or service through the MCP standard. Open **Esc, then Connectors** (or type `/connectors`). Ready-made entries:
 
-- **Chrome control**: your chrome-control extension. Friend starts `chrome-control-mcp` itself; install it once with `npm install -g chrome-control-mcp`, run `chrome-control-mcp setup` and load the extension (the panel lists the steps).
+- **Chrome control**: one click. Press **Connect**; Friend adds `npx -y chrome-control-mcp` for you (the same as `claude mcp add chrome-control -- npx -y chrome-control-mcp`) and starts it, asking only for your PIN. If it is not installed yet, Friend says so ("please install it first") and can install it in the background (`npx -y chrome-control-mcp setup`). The one step only you can do is loading the extension in Chrome (chrome://extensions, Developer mode, Load unpacked); Friend tells you whether the extension is connected.
 - **Gmail**: a community Gmail MCP server (`@gongrzhe/server-gmail-autoauth-mcp`). You create the Google OAuth credentials and sign in on Google's own page; **Friend never sees your Google password**. More mail and calendar connectors can be added the same way ("Something else": any program or any server by address).
 
 How it is kept safe:

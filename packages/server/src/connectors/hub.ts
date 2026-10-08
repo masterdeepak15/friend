@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
+import crossSpawn from "cross-spawn";
 import { createHash } from "node:crypto";
 import { ConnectorInput, ConnectorStore, describeTarget, hasSecrets, type ConnectorConfig } from "./store";
 
@@ -38,6 +39,8 @@ interface Tool {
 
 interface Live {
   client: Client;
+  /** The way to the program (its process id, when it is a program), to stop it for certain. */
+  transport?: { pid?: number | null };
   status: ConnectorStatus;
   error: string | null;
   tools: Tool[];
@@ -58,6 +61,23 @@ export function friendlyToolName(original: string, taken: Set<string>): string {
   for (let i = 2; taken.has(out); i++) out = `${n.slice(0, MAX_TOOL_PART - 3)}_${i}`;
   taken.add(out);
   return out;
+}
+
+/** Ends a program and everything it started. A program started through npx or a .cmd file has helpers that a plain stop leaves running. */
+function killTree(pid: number): void {
+  try {
+    if (process.platform === "win32") crossSpawn("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }).on("error", () => {});
+    else process.kill(pid, "SIGKILL");
+  } catch {
+    /* it was already gone */
+  }
+}
+
+/** Closes a connection without ever waiting on a program that will not stop. */
+async function stopLive(l: Live): Promise<void> {
+  const pid = l.transport?.pid ?? null;
+  await Promise.race([l.client.close().catch(() => {}), new Promise<void>((r) => setTimeout(r, 3000).unref?.())]);
+  if (pid) killTree(pid);
 }
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).slice(0, 400);
@@ -230,13 +250,14 @@ export class McpHub {
     entry.connecting = (async () => {
       try {
         const transport = this.transportFor(cfg, entry);
+        entry.transport = transport as { pid?: number | null };
         client.onclose = () => {
           if (this.live.get(id) === entry && entry.status === "ready") {
             entry.status = "error";
             entry.error = "The connection closed."; // the tool names stay known, so the next call can start it again
           }
         };
-        await Promise.race([client.connect(transport), sleepReject(this.opts.connectTimeoutMs ?? 30_000, "It did not answer in time.")]);
+        await Promise.race([client.connect(transport), sleepReject(this.opts.connectTimeoutMs ?? 60_000, "It did not answer in time.")]);
         await this.readTools(id, entry);
         client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
           try {
@@ -250,11 +271,7 @@ export class McpHub {
       } catch (e) {
         entry.status = "error";
         entry.error = `${messageOf(e)}${entry.stderr ? ` (${entry.stderr.trim().split("\n").slice(-2).join(" ").slice(0, 200)})` : ""}`;
-        try {
-          await client.close();
-        } catch {
-          /* already gone */
-        }
+        await stopLive(entry);
         throw new Error(entry.error);
       } finally {
         entry.connecting = undefined;
@@ -309,11 +326,7 @@ export class McpHub {
     this.forget(id);
     if (!l) return;
     l.client.onclose = undefined;
-    try {
-      await l.client.close();
-    } catch {
-      /* already closed */
-    }
+    await stopLive(l);
   }
 }
 

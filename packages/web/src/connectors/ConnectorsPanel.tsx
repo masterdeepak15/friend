@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
-import { httpConnectorsApi, parseEnv, parseHeaders, parseLines, type ConnectorList, type ConnectorView, type ConnectorsApi, type NewConnector, type Preset } from "./connectorsApi";
+import { httpConnectorsApi, parseEnv, parseHeaders, parseLines, type ConnectorList, type ConnectorView, type ConnectorsApi, type NewConnector, type Preset, type QuickCheck } from "./connectorsApi";
 
-type Page = { name: "list" } | { name: "form"; preset: Preset | null } | { name: "pin"; connector: NewConnector; preset: Preset | null } | { name: "switch-on"; id: string; label: string };
+type Page =
+  | { name: "list" }
+  | { name: "form"; preset: Preset | null }
+  | { name: "pin"; connector: NewConnector; preset: Preset | null }
+  | { name: "switch-on"; id: string; label: string }
+  | { name: "quick-check"; preset: Preset }
+  | { name: "quick-help"; preset: Preset; check: QuickCheck }
+  | { name: "quick-pin"; preset: Preset; mode: "install" | "connect"; check: QuickCheck }
+  | { name: "quick-done"; preset: Preset; ok: boolean; lines: string[] };
 
 const STATUS_TEXT: Record<ConnectorView["status"], string> = { off: "Off", connecting: "Connecting…", ready: "Ready", error: "Not working" };
 
@@ -74,6 +82,54 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose }: { api?: Co
     }
   };
 
+  /** One click: find out what the connector needs; if it is all there, go straight to the PIN, otherwise say what to install. */
+  const startQuick = async (preset: Preset) => {
+    setError(null);
+    setNotice(null);
+    setPage({ name: "quick-check", preset });
+    try {
+      const check = await api.quickCheck(preset.id);
+      if (!alive.current) return;
+      setPage(check.ready ? { name: "quick-pin", preset, mode: "connect", check } : { name: "quick-help", preset, check });
+    } catch (e) {
+      if (!alive.current) return;
+      setError((e as Error).message);
+      setPage({ name: "list" });
+    }
+  };
+
+  const confirmQuick = async () => {
+    if (page.name !== "quick-pin") return;
+    const { preset, mode } = page;
+    setError(null);
+    setBusy(true);
+    try {
+      const lines: string[] = [];
+      let ok = true;
+      if (mode === "install") {
+        const i = await api.quickInstall(preset.id, pin);
+        lines.push(i.message);
+        if (i.output && !i.ok) lines.push(i.output);
+        ok = i.ok;
+      }
+      if (ok) {
+        const c = await api.quickConnect(preset.id, pin);
+        lines.push(c.message);
+        ok = c.ok;
+      }
+      if (!alive.current) return;
+      setPage({ name: "quick-done", preset, ok, lines });
+      await refresh();
+    } catch (e) {
+      if (alive.current) setError((e as Error).message);
+    } finally {
+      if (alive.current) {
+        setBusy(false);
+        setPin("");
+      }
+    }
+  };
+
   const openForm = (preset: Preset | null) => {
     setError(null);
     setNotice(null);
@@ -127,6 +183,92 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose }: { api?: Co
       {error}
     </p>
   );
+
+  if (page.name === "quick-check") return frame(<p className="auth-note">Checking {page.preset.name}…</p>);
+
+  if (page.name === "quick-help") {
+    const { preset, check } = page;
+    return frame(
+      <>
+        <p className="auth-note connector-warning">{check.message}</p>
+        <p className="auth-note">Easiest: let Friend install it for you in the background. You will only need your PIN, and then one step in Chrome.</p>
+        <div className="approval-actions">
+          <button type="button" style={touch} className="primary" onClick={() => setPage({ name: "quick-pin", preset, mode: "install", check })}>
+            Set it up for me
+          </button>
+          <button type="button" style={touch} onClick={() => void startQuick(preset)}>
+            Check again
+          </button>
+          <button type="button" style={touch} onClick={() => setPage({ name: "list" })}>
+            Back
+          </button>
+        </div>
+        {check.installCommand && (
+          <>
+            <p className="auth-note">Or do it yourself: open a terminal and run</p>
+            <pre className="connector-command">{check.installCommand}</pre>
+          </>
+        )}
+        {check.manualStep && <p className="auth-note">{check.manualStep}</p>}
+      </>,
+    );
+  }
+
+  if (page.name === "quick-pin") {
+    const { preset, mode } = page;
+    const cmd = [preset.connector.command, ...preset.connector.args].join(" ");
+    return frame(
+      <>
+        <p className="auth-note">
+          {mode === "connect"
+            ? `Friend will add ${preset.name} for you and start it. It runs: ${cmd}`
+            : `Friend will install ${preset.name} for you in the background, then connect it. It runs: ${page.check.installCommand ?? ""}, without touching Claude's settings or Chrome's shortcuts. It copies a small helper and the Chrome extension into your home folder. This can take a minute.`}
+        </p>
+        <p className="auth-note">Enter your PIN to continue.</p>
+        <PinPad pin={pin} onChange={setPin} onSubmit={() => !busy && void confirmQuick()} />
+        {errorLine}
+        <div className="approval-actions">
+          <button type="button" style={touch} className="primary" disabled={busy || pin.length < 6} onClick={() => void confirmQuick()}>
+            {busy ? (mode === "install" ? "Installing… this can take a minute" : "Connecting…") : mode === "install" ? "Install and connect" : "Connect"}
+          </button>
+          <button
+            type="button"
+            style={touch}
+            disabled={busy}
+            onClick={() => {
+              setPin("");
+              setError(null);
+              setPage({ name: "list" });
+            }}
+          >
+            Back
+          </button>
+        </div>
+      </>,
+    );
+  }
+
+  if (page.name === "quick-done") {
+    return frame(
+      <>
+        {page.lines.map((l, i) => (
+          <p key={i} className={`auth-note${i === 0 && !page.ok ? " connector-warning" : ""}`}>
+            {l}
+          </p>
+        ))}
+        <div className="approval-actions">
+          <button type="button" style={touch} className="primary" onClick={() => setPage({ name: "list" })}>
+            Done
+          </button>
+          {!page.ok && (
+            <button type="button" style={touch} onClick={() => void startQuick(page.preset)}>
+              Try again
+            </button>
+          )}
+        </div>
+      </>,
+    );
+  }
 
   if (page.name === "pin" || page.name === "switch-on") {
     const text =
@@ -277,8 +419,8 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose }: { api?: Co
               <div className="auth-note">{p.description}</div>
             </div>
             <div className="plugin-actions">
-              <button type="button" style={touch} className="primary" disabled={(list?.connectors ?? []).some((c) => c.id === p.connector.id)} onClick={() => openForm(p)}>
-                Add
+              <button type="button" style={touch} className="primary" disabled={(list?.connectors ?? []).some((c) => c.id === p.connector.id)} onClick={() => (p.quick ? void startQuick(p) : openForm(p))}>
+                {p.quick ? "Connect" : "Add"}
               </button>
             </div>
           </li>

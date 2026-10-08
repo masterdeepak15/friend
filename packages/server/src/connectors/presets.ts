@@ -9,6 +9,8 @@ export interface Preset {
   setup: string[];
   /** Shown above the Add button. */
   warning?: string;
+  /** One click: no form, the fixed command, and Friend checks what it needs first. */
+  quick?: boolean;
 }
 
 export const PRESETS: Preset[] = [
@@ -16,11 +18,12 @@ export const PRESETS: Preset[] = [
     id: "chrome",
     name: "Chrome control",
     description: "Lets Friend open pages, read them, click and type in your own Chrome, through your chrome-control extension.",
-    connector: { id: "chrome", name: "Chrome control", kind: "stdio", command: "chrome-control-mcp", args: [] },
+    quick: true,
+    connector: { id: "chrome", name: "Chrome control", kind: "stdio", command: "npx", args: ["-y", "chrome-control-mcp"] },
     setup: [
-      "Install it once: npm install -g chrome-control-mcp",
-      "Run chrome-control-mcp setup, then load the extension it points to in chrome://extensions (Developer mode, Load unpacked).",
-      "Switch the extension on in Chrome. Friend starts the program itself when you add the connector.",
+      "Press Connect. Friend checks that Chrome control is installed and, if it is, adds it for you: it runs npx -y chrome-control-mcp, the same as claude mcp add chrome-control -- npx -y chrome-control-mcp.",
+      "If it is not installed yet, Friend says so and can install it for you in the background (npx -y chrome-control-mcp setup).",
+      "The one step nobody can do for you, because Chrome does not allow silent installs: load the extension in chrome://extensions (Developer mode, Load unpacked) and switch it on.",
     ],
     warning: "While the extension is on, Friend can act as you on any site it allows. Every action still asks for your approval; in the extension's popup you can limit it to certain sites.",
   },

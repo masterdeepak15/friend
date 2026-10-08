@@ -6,6 +6,8 @@ import { firstExistingDir } from "./assets";
 import { chatLines } from "./chatlog";
 import { McpHub } from "./connectors/hub";
 import { PRESETS } from "./connectors/presets";
+import { isQuickPreset, quickCheck, quickConnect, quickInstall, type QuickRunner } from "./connectors/quick";
+import { runCommand } from "./connectors/run";
 import { ConnectorStore } from "./connectors/store";
 import { Approvals } from "./approvals";
 import { Audit } from "./audit";
@@ -61,6 +63,8 @@ export interface AppOptions {
   codeBox?: Pick<CodeBox, "run">;
   /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
   pluginCatalogDir?: string;
+  /** The one-click connectors: how their install command is run and where the person's home folder is (tests). */
+  quick?: { run?: QuickRunner; home?: string };
   /** Where weather comes from. Defaults to Open-Meteo. */
   weather?: Pick<WeatherService, "get">;
 }
@@ -406,6 +410,24 @@ export async function createApp(opts: AppOptions) {
       } catch (e) {
         throw new HttpError(404, (e as Error).message);
       }
+    },
+    quickCheck: (preset) => {
+      const c = quickCheck(preset, { home: opts.quick?.home });
+      if (!c) throw new HttpError(404, "That is not a one-click connector.");
+      return c;
+    },
+    quickInstall: async (preset, pin, ip) => {
+      if (!isQuickPreset(preset)) throw new HttpError(404, "That is not a one-click connector.");
+      await requirePin(pin, ip);
+      audit.log("owner", "connector.quick_install", { preset, ip });
+      return quickInstall(preset, { hub, run: opts.quick?.run ?? runCommand, home: opts.quick?.home });
+    },
+    quickConnect: async (preset, pin, ip) => {
+      if (!isQuickPreset(preset)) throw new HttpError(404, "That is not a one-click connector.");
+      await requirePin(pin, ip);
+      const result = await quickConnect(preset, { hub, run: opts.quick?.run ?? runCommand, home: opts.quick?.home });
+      audit.log("owner", "connector.quick_connect", { preset, ok: result.ok, extension: result.extension, ip });
+      return result;
     },
     remove: async (id) => {
       try {
