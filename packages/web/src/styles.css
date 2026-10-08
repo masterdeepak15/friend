@@ -221,3 +221,23 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) {
   .obj, .presence { animation: none; transition: none; }
 }
+
+/* ---- always-on corner widgets: what Friend is doing, and the time ---- */
+.status-badge {
+  position: absolute; left: 12px; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 9px;
+  padding: 6px 12px; font: 500 0.78rem var(--mono); letter-spacing: 0.08em; color: var(--ink);
+  background: rgba(0, 0, 0, 0.55); border: 1px solid var(--edge); max-width: min(60vw, 360px);
+}
+.status-badge span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-badge i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.status-idle i { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.status-working i, .status-speaking i { background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: mic-pulse 1s ease-in-out infinite; }
+.status-listening i { background: var(--bad); box-shadow: 0 0 10px var(--bad); animation: mic-pulse 1s ease-in-out infinite; }
+.status-waiting { border-color: var(--warn); color: #ffd9a0; }
+.status-waiting i { background: var(--warn); box-shadow: 0 0 10px var(--warn); animation: mic-pulse 1s ease-in-out infinite; }
+.status-offline { border-color: var(--warn); color: var(--warn); }
+.status-offline i { background: var(--warn); }
+@media (prefers-reduced-motion: reduce) { .status-badge i { animation: none !important; } }
+.clock { position: absolute; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); text-align: right; line-height: 1.15; color: var(--muted); font-family: var(--mono); pointer-events: none; }
+.clock b { display: block; font-size: 1.15rem; font-weight: 500; color: var(--ink); letter-spacing: 0.06em; }
+.clock span { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }

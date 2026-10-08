@@ -6,6 +6,7 @@ import type { CodeBox } from "../codebox";
 import type { Plugins } from "../plugins";
 import { statsScene } from "../stats";
 import { weatherScene, weatherSummary, type WeatherService } from "../weather";
+import { toolLabel } from "./activity";
 import { detectIntents } from "./intents";
 import { promisesAction } from "./promise";
 import type { Config } from "../config";
@@ -98,6 +99,7 @@ export class Agent {
       emit({ type: "stage", command: cmd });
     };
     emit({ type: "status", busy: true, deviceOnline: d.devices.hasOnline() });
+    emit({ type: "activity", text: "Thinking" });
     stage({ cmd: "presence", state: "thinking" });
     const abort = new AbortController();
     this.abort = abort;
@@ -123,6 +125,7 @@ export class Agent {
           const callMsg: Msg = { role: "assistant", content: [{ type: "tool_use", id, name: auto.name, input: auto.args }] };
           messages.push(callMsg);
           keep(callMsg);
+          emit({ type: "activity", text: toolLabel(auto.name, auto.args) });
           const r = await this.executeTool({ id, name: auto.name, args: auto.args }, ctx, abort.signal);
           if (abort.signal.aborted) return;
           const resultMsg: Msg = { role: "tool", content: [{ type: "tool_result", toolUseId: id, content: r.text, isError: r.isError }] };
@@ -148,7 +151,10 @@ export class Agent {
         );
         for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: guest ? "guest" : "owner", messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
-            if (!assistantText) stage({ cmd: "presence", state: "speaking" });
+            if (!assistantText) {
+              stage({ cmd: "presence", state: "speaking" });
+              emit({ type: "activity", text: "Answering" });
+            }
             assistantText += ev.text;
             emit({ type: "caption.delta", text: ev.text });
           } else if (ev.type === "tool_call") calls.push({ id: ev.id, name: ev.name, args: ev.args });
@@ -188,10 +194,12 @@ export class Agent {
         }
 
         stage({ cmd: "presence", state: "thinking" });
+        emit({ type: "activity", text: "Thinking" });
         const results: ContentBlock[] = [];
         const pictures: ContentBlock[] = [];
         for (const c of calls) {
           if (abort.signal.aborted) return;
+          emit({ type: "activity", text: toolLabel(c.name, c.args) });
           const r = await this.executeTool(c, ctx, abort.signal);
           results.push({ type: "tool_result", toolUseId: c.id, content: r.text, isError: r.isError });
           if (r.image) pictures.push({ type: "image", mime: r.image.mime, data: r.image.data });
@@ -209,6 +217,7 @@ export class Agent {
       emit({ type: "caption.delta", text: "Sorry, something went wrong on my side." });
     } finally {
       emit({ type: "caption.end" });
+      emit({ type: "activity", text: null });
       stage({ cmd: "presence", state: "idle" });
       this.busy = false;
       emit({ type: "status", busy: false, deviceOnline: d.devices.hasOnline() });

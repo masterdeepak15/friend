@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ServerMsg } from "@friend/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { Approvals } from "../approvals";
 import { Audit } from "../audit";
@@ -32,7 +33,7 @@ async function agentWith(provider: FakeProvider) {
     assistantName: () => "Jarvis",
   });
 }
-const ctx = (trust: "owner" | "guest") => ({ trust, emit: () => {}, ip: "1.1.1.1" });
+const ctx = (trust: "owner" | "guest", emit: (m: ServerMsg) => void = () => {}) => ({ trust, emit, ip: "1.1.1.1" });
 const done = { type: "done" as const };
 
 describe("which conversation a request belongs to", () => {
@@ -52,5 +53,17 @@ describe("which conversation a request belongs to", () => {
     const p = new FakeProvider([[{ type: "tool_call", id: "1", name: "stage.clear", args: {} }, done], [done]]);
     await (await agentWith(p)).runTurn("clear", ctx("owner"));
     expect(p.calls.map((c) => c.session)).toEqual(["owner", "owner"]);
+  });
+});
+
+describe("telling the owner what Friend is doing", () => {
+  it("says it is thinking, names the tool it runs, and clears when the request ends", async () => {
+    const p = new FakeProvider([[{ type: "tool_call", id: "1", name: "stage.clear", args: {} }, done], [{ type: "text_delta", text: "Done." }, done]]);
+    const seen: (string | null)[] = [];
+    await (await agentWith(p)).runTurn("clear", ctx("owner", (m) => m.type === "activity" && seen.push(m.text)));
+    expect(seen[0]).toBe("Thinking");
+    expect(seen).toContain("Clearing the screen");
+    expect(seen).toContain("Answering");
+    expect(seen.at(-1)).toBeNull();
   });
 });

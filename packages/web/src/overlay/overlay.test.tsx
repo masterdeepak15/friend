@@ -107,13 +107,15 @@ describe("<Overlay>", () => {
   });
   it("shows a reconnecting badge and a device-offline hint", () => {
     render(<Overlay approval={null} alerts={[]} connection="closed" deviceOnline={false} voiceMode="idle" send={() => {}} dispatch={() => {}} />);
-    expect(screen.getByText(/reconnecting/i)).toBeTruthy();
+    expect(screen.getByText(/reconnecting/i)).toBeTruthy(); // once: the corner status
+    expect(screen.getByTestId("status-badge").textContent).toMatch(/reconnecting/i);
   });
-  it("renders nothing visible when everything is fine", () => {
+  it("shows only the status and the clock when everything is fine", () => {
     const { container } = render(
       <Overlay approval={null} alerts={[]} connection="open" deviceOnline voiceMode="idle" send={() => {}} dispatch={() => {}} />,
     );
-    expect(container.querySelector("[data-overlay]")?.children.length ?? 0).toBe(0);
+    // only the always-on corner widgets: the status and the clock
+    expect(container.querySelector("[data-overlay]")?.children.length).toBe(2);
   });
 });
 

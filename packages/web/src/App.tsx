@@ -40,6 +40,8 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         connection={state.connection}
         deviceOnline={state.deviceOnline}
         voiceMode={state.voice.mode}
+        busy={state.busy}
+        activity={state.activity}
         send={send}
         dispatch={dispatch}
       >

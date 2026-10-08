@@ -49,6 +49,8 @@ export interface StageViewState {
   alerts: Alert[];
   connection: Connection;
   busy: boolean;
+  /** What Friend says it is doing right now (null when nothing). */
+  activity: string | null;
   deviceOnline: boolean;
   voice: VoiceView;
   /** A borderline voice waiting for the owner's PIN. */
@@ -67,6 +69,7 @@ export const initialState: StageViewState = {
   alerts: [],
   connection: "connecting",
   busy: false,
+  activity: null,
   deviceOnline: false,
   voice: { mode: "idle", level: 0, available: false, enrolled: false },
   challenge: null,
@@ -174,10 +177,13 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return state.approval?.id === m.id ? { ...state, approval: null } : state;
     case "alert":
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: m.level, text: m.text }] };
+    case "activity":
+      return { ...state, activity: m.text };
     case "status":
       return {
         ...state,
         busy: m.busy,
+        activity: m.busy ? state.activity : null,
         deviceOnline: m.deviceOnline,
         voice: {
           ...state.voice,

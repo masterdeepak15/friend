@@ -18,6 +18,8 @@ export const ServerMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("approval.request") }).merge(PendingApproval),
   z.object({ type: z.literal("approval.resolved"), id: z.string() }),
   z.object({ type: z.literal("alert"), level: z.enum(["info", "warn", "error"]), text: z.string() }),
+  /** What Friend is doing right now, in plain words (null when nothing). Shown in the corner of the screen. */
+  z.object({ type: z.literal("activity"), text: z.string().max(80).nullable() }),
   z.object({
     type: z.literal("status"),
     busy: z.boolean(),
