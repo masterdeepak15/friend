@@ -4,6 +4,7 @@ import { Approvals } from "./approvals";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
+import { Memory } from "./memory";
 import { join } from "node:path";
 import { loadConfig, type Config } from "./config";
 import { openDb } from "./db";
@@ -68,6 +69,7 @@ export async function createApp(opts: AppOptions) {
         ? new ClaudeProvider({ apiKey: config.apiKey, model: config.model })
         : new MissingKeyProvider());
   const camera = new CameraBroker(opts.cameraTimeoutMs);
+  const memory = new Memory(db);
   const agent = new Agent({
     provider,
     policy,
@@ -78,6 +80,7 @@ export async function createApp(opts: AppOptions) {
     audit,
     config,
     assistantName: () => auth.assistantName(),
+    memory,
     camera: {
       request: (emit, signal) => {
         audit.log("agent", "camera.requested", {});
@@ -359,6 +362,7 @@ export async function createApp(opts: AppOptions) {
     voiceprint,
     challenges,
     camera,
+    memory,
     /** Tell every client the voice sidecar went up or down. */
     notifyStatus(): void {
       broadcast(statusMsg());

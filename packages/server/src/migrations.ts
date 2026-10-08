@@ -71,4 +71,15 @@ create table voiceprint (
 );
 `,
   },
+  {
+    id: 3,
+    sql: `
+create table memories (
+  id integer primary key autoincrement,
+  text text not null,
+  source text not null check (source in ('owner', 'agent')),
+  created_at integer not null
+);
+`,
+  },
 ];

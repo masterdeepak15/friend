@@ -45,6 +45,18 @@ Results 2026-10-08:
 | Browser support | MediaRecorder with webm/opus, getUserMedia on localhost, WAV from the engine decodes | PASS |
 | Sidecar cleanup | engine exits when the app is killed | PASS |
 
+## Memory check
+
+Results 2026-10-08:
+
+| Check | How | Result |
+|---|---|---|
+| Store | add, tidy whitespace, duplicate (any case), 500-char and 200-note caps, search (all words, `%`/`_` literal, limit 10), forget, clear | PASS (`memory.test.ts`) |
+| Agent | remember/search/forget tools without an approval card; a note saved mid-turn is in the next prompt; newest 20 only; notes flagged as data; injection-looking note stays on one line inside the block; guests never get notes | PASS (`agent/memory.test.ts`) |
+| CLI | `friend memory list/forget/clear`; clear needs the PIN | PASS (`agent-cli/src/memory.test.ts`) |
+
+Try it live with a real model: say "remember that my sister is Priya", start a new conversation, ask "who is my sister?".
+
 ## Phase 2b (camera) check
 
 Results 2026-10-08:

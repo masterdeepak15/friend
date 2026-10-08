@@ -49,6 +49,14 @@ Press **Esc** (or long-press the top-left corner), choose **Enroll my voice**, r
 - A voice match is a convenience, not a lock: a recording or a cloned voice can fool any speaker model. That is why a borderline match needs the PIN and risky actions always ask for it.
 - Python tests for the speech engine: `cd packages/voice && python -m venv .venv && .venv/Scripts/pip install -e .[dev] && .venv/Scripts/python -m pytest`.
 
+## Memory
+
+Tell Friend "remember that my sister is Priya" and it keeps a short note. The 20 newest notes are in front of the model in every conversation; older ones are found on demand ("what do you know about Priya?").
+
+- Up to 200 notes of 500 characters each, stored in the local database. When full it refuses and asks you to forget something; it never drops notes silently.
+- You control all of it: `friend memory list`, `friend memory forget <number>`, `friend memory clear` (asks for the PIN). You can also just say "forget note 7".
+- Notes are treated as **data about you, never as instructions**, so text inside a note (or text a web page tricked the agent into saving) cannot give the agent orders. Guests and unrecognized voices never see your notes. The agent is told never to save passwords, PINs or keys.
+
 ## Camera (owner-controlled)
 
 Ask "what is this?" while you hold something up to the camera, and Friend can look. It works one picture at a time:
