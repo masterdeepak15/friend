@@ -242,6 +242,7 @@ describe("challenge for a borderline voice", () => {
     await until(() => provider.calls.length === 1);
     expect(JSON.stringify(provider.calls[0]!.messages)).toContain("turn the lights off");
     expect(provider.calls[0]!.tools.length).toBeGreaterThan(0); // confirmed: it runs as the owner
+    await until(() => c.of("voice.challenge.end").length === 1);
     expect(c.of("voice.challenge.end")).toEqual([{ type: "voice.challenge.end", id }]);
   });
 

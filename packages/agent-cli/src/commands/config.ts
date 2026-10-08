@@ -10,6 +10,11 @@ const nonEmpty = (v: string) => {
   if (!v.trim()) throw new Error("Value must not be empty");
   return v.trim();
 };
+const unit = (v: string) => {
+  const n = Number(v);
+  if (v.trim() === "" || !Number.isFinite(n) || n < 0 || n > 1) throw new Error("Expected a number between 0 and 1");
+  return n;
+};
 const httpUrl = (v: string) => {
   let u: URL;
   try {
@@ -47,6 +52,8 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
     sttModel: nonEmpty,
     ttsVoice: nonEmpty,
     language: (v) => (v.trim() === "" ? null : v.trim()),
+    accept: unit,
+    challenge: unit,
   },
   ollama: {
     url: httpUrl,

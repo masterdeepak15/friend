@@ -90,12 +90,14 @@ export async function createApp(opts: AppOptions) {
     broadcast({ type: "voice.challenge.end", id });
     broadcast({ type: "alert", level: "info", text: "The voice request timed out and was dropped." });
   });
+  let stopped = false;
   const statusMsg = (): ServerMsg => ({
     type: "status",
     busy: agent.isBusy(),
     deviceOnline: devices.hasOnline(),
     voiceAvailable: voiceAvailable(),
-    voiceEnrolled: voiceprint?.exists() ?? false,
+    // sockets can still close while the app shuts down, after the database is gone
+    voiceEnrolled: !stopped && (voiceprint?.exists() ?? false),
   });
   devices.onChange(() => broadcast(statusMsg()));
 
@@ -340,6 +342,7 @@ export async function createApp(opts: AppOptions) {
       return gateway.listen();
     },
     async stop(): Promise<void> {
+      stopped = true;
       if (timer) clearInterval(timer);
       challenges.clear();
       agent.cancel();

@@ -138,7 +138,7 @@ describe("voice settings in friend config", () => {
     expect(await set("voice.sttModel", "small")).toBe(0);
     expect(await set("voice.ttsVoice", "hi_IN-pratham-medium")).toBe(0);
     expect(await set("voice.language", "hi")).toBe(0);
-    expect(loadConfig(dataDir).voice).toEqual({ enabled: false, sttModel: "small", ttsVoice: "hi_IN-pratham-medium", language: "hi" });
+    expect(loadConfig(dataDir).voice).toEqual({ enabled: false, sttModel: "small", ttsVoice: "hi_IN-pratham-medium", language: "hi", accept: 0.72, challenge: 0.58 });
     expect(await set("voice.language", "")).toBe(0);
     expect(loadConfig(dataDir).voice.language).toBeNull();
   });
