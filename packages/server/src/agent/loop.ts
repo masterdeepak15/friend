@@ -1,8 +1,9 @@
-import type { ServerMsg, Tier, Trust } from "@friend/protocol";
+import type { ServerMsg, Tier, ToolDef, Trust } from "@friend/protocol";
 import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
 import type { CodeBox } from "../codebox";
+import type { Plugins } from "../plugins";
 import type { Config } from "../config";
 import type { Db } from "../db";
 import type { Memory } from "../memory";
@@ -40,6 +41,8 @@ export interface AgentDeps {
   tasks?: Tasks;
   /** Runs programs in a throwaway container. Without it the code tool reports it is unavailable. */
   code?: Pick<CodeBox, "run">;
+  /** Installed plugins: their skills go into the prompt and their tools join the tool list. */
+  plugins?: Plugins;
 }
 
 export interface TurnCtx {
@@ -98,7 +101,8 @@ export class Agent {
       const userMsg: Msg = { role: "user", content: [{ type: "text", text }] };
       keep(userMsg);
       const messages: Msg[] = guest ? [userMsg] : loadHistory(d.db);
-      const tools = ctx.trust === "owner" ? toolSpecs() : [];
+      const pluginTools = (d.plugins?.toolDefs() ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+      const tools = ctx.trust === "owner" ? [...toolSpecs(), ...pluginTools] : [];
 
       for (let step = 0; step < MAX_STEPS; step++) {
         let assistantText = "";
@@ -107,7 +111,7 @@ export class Agent {
         let userFacing = false;
         // read fresh each step, so a note saved earlier in this turn is visible right away; guests never see notes
         const notes = !guest && d.memory ? d.memory.recent(NOTES_IN_PROMPT).map((m) => `#${m.id} ${m.text}`) : undefined;
-        const system = buildSystemPrompt(d.assistantName(), d.stage.summary(), guest ? "guest" : "owner", notes, localIso(new Date(d.tasks?.now() ?? Date.now())));
+        const system = buildSystemPrompt(d.assistantName(), d.stage.summary(), guest ? "guest" : "owner", notes, localIso(new Date(d.tasks?.now() ?? Date.now())), guest ? undefined : d.plugins?.skills());
         for await (const ev of d.provider.stream({ system, messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
             if (!assistantText) stage({ cmd: "presence", state: "speaking" });
@@ -243,7 +247,11 @@ export class Agent {
   ): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string } }> {
     const d = this.deps;
     const fail = (error: string) => ({ text: `Error: ${error}`, isError: true });
-    const def = getToolDef(call.name);
+    const plugin = call.name.startsWith("plugin.") ? d.plugins?.tool(call.name) : undefined;
+    // every plugin tool needs the owner's approval, whatever the plugin says about itself
+    const def: ToolDef | undefined = plugin
+      ? { name: plugin.name, description: plugin.description, input: plugin.input, baseTier: "T2", target: "gateway" }
+      : getToolDef(call.name);
     if (!def) return fail(`Unknown tool: ${call.name}`);
     const parsed = def.input.safeParse(call.args ?? {});
     if (!parsed.success) return fail(`Invalid arguments for ${call.name}: ${parsed.error.message}`);
@@ -261,7 +269,7 @@ export class Agent {
       d.audit.log("agent", "tool.denied", { tool: call.name, args: clipArgs(args), trust: ctx.trust });
       return fail("This action is not allowed.");
     }
-    if (call.name === "code.run" && !d.code) return fail("Running code is not available.");
+    if ((call.name === "code.run" || plugin) && !d.code) return fail("Running code is not available.");
     if (call.name === "camera.snap") {
       // refuse before bothering the owner with a card for a picture that could not be used
       if (!d.camera) return fail("The camera is not available.");
@@ -290,6 +298,23 @@ export class Agent {
       if (r.stdout) parts.push(`--- stdout ---\n${r.stdout}`);
       if (r.stderr) parts.push(`--- stderr ---\n${r.stderr}`);
       return { text: parts.join("\n"), isError: false };
+    }
+
+    if (plugin) {
+      // the plugin's program runs in the same throwaway container as code.run; its arguments arrive as /work/args.json
+      const r = await d.code!.run({ language: plugin.language, code: plugin.code, timeoutSec: 20, files: { "args.json": JSON.stringify(args) } });
+      d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: r.ok && !r.timedOut && r.exitCode === 0 });
+      if (!r.ok) return fail(r.error);
+      if (r.timedOut) return fail("The plugin tool ran past its time limit.");
+      if (r.exitCode !== 0) return fail(`The plugin tool failed (exit code ${r.exitCode}).${r.stderr ? `\n${r.stderr}` : ""}`);
+      return { text: r.stdout || "(no output)", isError: false };
+    }
+
+    if (call.name === "skill.use") {
+      const text = d.plugins?.skillText(String(args.plugin), String(args.name));
+      if (!text) return fail("No such skill.");
+      d.audit.log("agent", "skill.use", { plugin: args.plugin, name: args.name });
+      return { text, isError: false };
     }
 
     if (call.name.startsWith("memory.") || call.name.startsWith("task.")) {

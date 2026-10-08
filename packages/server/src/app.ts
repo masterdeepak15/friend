@@ -7,6 +7,7 @@ import { CameraBroker } from "./camera";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
+import { Plugins } from "./plugins";
 import { Tasks } from "./tasks";
 import { join } from "node:path";
 import { loadConfig, type Config } from "./config";
@@ -78,6 +79,7 @@ export async function createApp(opts: AppOptions) {
   const camera = new CameraBroker(opts.cameraTimeoutMs);
   const memory = new Memory(db);
   const tasks = new Tasks(db);
+  const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
   const agent = new Agent({
     provider,
     policy,
@@ -90,6 +92,7 @@ export async function createApp(opts: AppOptions) {
     assistantName: () => auth.assistantName(),
     memory,
     tasks,
+    plugins,
     code: opts.codeBox ?? new CodeBox(),
     camera: {
       request: (emit, signal) => {
@@ -398,6 +401,7 @@ export async function createApp(opts: AppOptions) {
     camera,
     memory,
     tasks,
+    plugins,
     /** Tell every client the voice sidecar went up or down. */
     notifyStatus(): void {
       broadcast(statusMsg());
