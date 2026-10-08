@@ -6,6 +6,7 @@ import { Audit } from "./audit";
 import { Auth } from "./auth";
 import { loadConfig } from "./config";
 import { openDb } from "./db";
+import { HttpError } from "./http-error";
 import { createGateway } from "./gateway";
 
 let gw: ReturnType<typeof createGateway>;
@@ -94,9 +95,31 @@ describe("POST /api/voice/utterance", () => {
     expect(calls).toHaveLength(10);
   });
 
-  it("maps a handler failure to 502 with a short message", async () => {
+  it("maps an HttpError from the handler to its own status and message", async () => {
     result = async () => {
-      throw new Error("the voice sidecar timed out");
+      throw new HttpError(409, "Friend is busy with the last request.");
+    };
+    const res = await utter("AUDIO", { cookie: await cookie() });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toMatch(/busy/);
+    result = async () => {
+      throw new HttpError(401, "Session ended");
+    };
+    expect((await utter("AUDIO", { cookie: await cookie() })).status).toBe(401);
+  });
+
+  it("does not leak internal error text for unexpected failures", async () => {
+    result = async () => {
+      throw new Error("ENOENT: C:\\Users\\x\\.friend\\voice\\models\\secret.onnx");
+    };
+    const res = await utter("AUDIO", { cookie: await cookie() });
+    expect(res.status).toBe(502);
+    expect(JSON.stringify(await res.json())).not.toMatch(/Users|secret|onnx/);
+  });
+
+  it("passes on a safe message from a deliberate 502", async () => {
+    result = async () => {
+      throw new HttpError(502, "the voice sidecar timed out");
     };
     const res = await utter("AUDIO", { cookie: await cookie() });
     expect(res.status).toBe(502);

@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -61,9 +61,15 @@ describe("HttpVoiceService", () => {
     expect(JSON.parse(seen[0]!.body.toString())).toEqual({ text: "Good evening", voice: "en_US-lessac-medium" });
   });
 
-  it("rejects with the sidecar's error message on a non-200 reply", async () => {
-    handler = (_q, res) => res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ error: "model exploded" }));
-    await expect(service().transcribe(Buffer.from("A"), "audio/webm")).rejects.toThrow(/model exploded/);
+  it("includes the sidecar's message for client errors but hides internal detail on server errors", async () => {
+    handler = (_q, res) => res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ error: "recording longer than 90 seconds" }));
+    await expect(service().transcribe(Buffer.from("A"), "audio/webm")).rejects.toThrow(/longer than 90 seconds/);
+    // a 500 can carry Python paths and stack text: it is not passed on
+    handler = (_q, res) =>
+      res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ error: "FileNotFoundError: C:\\Users\\x\\models\\secret.onnx" }));
+    const err = await service().transcribe(Buffer.from("A"), "audio/webm").catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/500/);
+    expect((err as Error).message).not.toMatch(/Users|secret|onnx/);
     handler = (_q, res) => res.writeHead(401).end("{}");
     await expect(service().synthesize("x")).rejects.toThrow(/401/);
   });
@@ -144,6 +150,31 @@ describe("SidecarProcess", () => {
     const p = await start();
     expect(p.running()).toBe(true);
     expect(p.baseUrl()).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  });
+
+  it("hands the secret over through the environment, never on the command line", async () => {
+    const out = join(dir(), "seen.json");
+    const code = `
+      const http = require("http"); const fs = require("fs");
+      fs.writeFileSync(process.env.FRIEND_TEST_OUT, JSON.stringify({ argv: process.argv.slice(2), token: process.env.FRIEND_VOICE_TOKEN }));
+      const s = http.createServer((q, r) => r.end("{}"));
+      s.listen(0, "127.0.0.1", () => console.log(JSON.stringify({ ready: true, port: s.address().port })));
+      process.stdin.resume(); process.stdin.on("end", () => process.exit(0));`;
+    const file = join(dir(), "env-sidecar.cjs");
+    writeFileSync(file, code);
+    const p = new SidecarProcess({
+      command: process.execPath,
+      args: [file, "--some-flag"],
+      token: "very-secret-value",
+      readyTimeoutMs: 5000,
+      env: { ...process.env, FRIEND_TEST_OUT: out },
+    });
+    live.push(p);
+    await p.start();
+    const seen = JSON.parse(readFileSync(out, "utf8")) as { argv: string[]; token: string };
+    expect(seen.token).toBe("very-secret-value");
+    expect(seen.argv.join(" ")).not.toContain("very-secret-value");
+    expect(seen.argv).toContain("--some-flag");
   });
 
   it("stops the process by closing its stdin", async () => {

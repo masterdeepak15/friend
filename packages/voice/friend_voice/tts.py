@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 from pathlib import Path
 from typing import Optional
@@ -9,8 +10,19 @@ from typing import Optional
 from .engines import wav_bytes
 
 
+_VOICE_NAME = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+
+
+def check_voice_name(name: str) -> str:
+    """A voice name becomes part of a file path, so only plain names (letters, digits, - and _) are allowed."""
+    if not isinstance(name, str) or not _VOICE_NAME.fullmatch(name):
+        raise ValueError("invalid voice name: use letters, digits, '-' and '_' only")
+    return name
+
+
 def ensure_voice(voice: str, download_dir: Path) -> Path:
     """Return the path to a voice's .onnx model, downloading it first if it is missing."""
+    check_voice_name(voice)
     model = download_dir / f"{voice}.onnx"
     if not model.exists():
         from piper.download_voices import download_voice
@@ -37,7 +49,7 @@ class PiperTTS:
             return self._voices[name]
 
     def synthesize(self, text: str, voice: Optional[str]) -> bytes:
-        v = self._voice(voice or self._default)
+        v = self._voice(check_voice_name(voice or self._default))
         pcm = bytearray()
         rate = 22050
         for chunk in v.synthesize(text):

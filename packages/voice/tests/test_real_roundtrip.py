@@ -56,6 +56,23 @@ def test_silence_yields_an_empty_transcript_not_an_error(engines):
     assert out["text"].strip() == ""
 
 
+def test_a_recording_longer_than_the_limit_is_refused_before_transcribing(engines):
+    from friend_voice.engines import wav_bytes
+
+    started = __import__("time").time()
+    with pytest.raises(ValueError, match="longer"):
+        engines.stt.transcribe(wav_bytes(b"\x00\x00" * 16000 * 100, 16000), None)  # 100 s of silence
+    assert __import__("time").time() - started < 10  # refused while decoding, not after transcribing it all
+
+
+def test_a_container_without_audio_is_a_value_error(engines):
+    # a valid WAV header with no samples at all
+    from friend_voice.engines import wav_bytes
+
+    out = engines.stt.transcribe(wav_bytes(b"", 16000), None)
+    assert out["text"] == ""
+
+
 def test_garbage_audio_raises_instead_of_hanging(engines):
     with pytest.raises(Exception):
         engines.stt.transcribe(b"this is definitely not audio", None)

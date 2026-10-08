@@ -37,6 +37,8 @@ class FakeSTT:
     def transcribe(self, audio: bytes, language: Optional[str]) -> dict:
         if audio.startswith(b"FAIL"):
             raise RuntimeError("fake stt failure")
+        if audio.startswith(b"LONG"):
+            raise ValueError("recording longer than 90 seconds")
         text = audio[5:].decode("utf-8", "replace") if audio.startswith(b"TEXT:") else "hello from the fake engine"
         return {"text": text, "language": language or "en", "duration": round(len(audio) / 32000, 3)}
 

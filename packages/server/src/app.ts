@@ -11,7 +11,8 @@ import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
-import type { VoiceService } from "./voice/service";
+import { HttpError } from "./http-error";
+import { VoiceError, type VoiceService } from "./voice/service";
 import { Speaker } from "./voice/speaker";
 
 export interface AppOptions {
@@ -75,14 +76,18 @@ export async function createApp(opts: AppOptions) {
   });
   devices.onChange(() => broadcast(statusMsg()));
 
+  /** Bumped by the emergency lock: anything that started before it must not start or speak after it. */
+  let lockEpoch = 0;
+
   /** Runs the turn for something the owner said, then speaks the reply. */
-  async function runVoiceTurn(text: string, ip: string): Promise<void> {
+  async function runVoiceTurn(text: string, ip: string, epoch: number): Promise<void> {
     let reply = "";
     const emit = (m: ServerMsg) => {
       if (m.type === "caption.delta") reply += m.text;
       broadcast(m);
     };
     await agent.runTurn(text, { trust: "owner", emit, ip });
+    if (epoch !== lockEpoch) return; // locked while the agent was working: stay silent
     if (speaker && reply.trim()) await speaker.speak(reply, broadcast);
   }
 
@@ -92,13 +97,24 @@ export async function createApp(opts: AppOptions) {
     audit,
     webDir: opts.webDir,
     voiceAvailable,
-    onVoiceUtterance: async (_session, audio, mime, ip) => {
-      if (!voice) throw new Error("voice is not available");
-      const heard = (await voice.transcribe(audio, mime, config.voice.language)).text.trim();
+    onVoiceUtterance: async (session, audio, mime, ip) => {
+      if (!voice) throw new HttpError(503, "Voice is not available");
+      if (agent.isBusy()) throw new HttpError(409, "Friend is busy with the last request. Try again in a moment.");
+      const epoch = lockEpoch;
+      let heard: string;
+      try {
+        heard = (await voice.transcribe(audio, mime, config.voice.language)).text.trim();
+      } catch (e) {
+        // our own voice errors carry no internal detail and can be shown; anything else stays in the audit log
+        if (e instanceof VoiceError) throw new HttpError(502, e.message);
+        throw e;
+      }
+      // the session may have been locked or logged out while the recording was being transcribed
+      if (epoch !== lockEpoch || !auth.sessionActive(session.id)) throw new HttpError(401, "Session ended");
       // nothing intelligible (silence, noise, punctuation only): no turn, nothing shown
       if (!/[\p{L}\p{N}]/u.test(heard)) return { text: "" };
       broadcast({ type: "voice.heard", text: heard });
-      void runVoiceTurn(heard, ip).catch((e) => audit.log("system", "voice.turn_crash", { message: (e as Error).message }));
+      void runVoiceTurn(heard, ip, epoch).catch((e) => audit.log("system", "voice.turn_crash", { message: (e as Error).message }));
       return { text: heard };
     },
     onClientConnect: (_session, conn) => {
@@ -135,6 +151,7 @@ export async function createApp(opts: AppOptions) {
     },
     onDeviceConnect: (device, ws) => devices.attach(device, ws),
     onLock: () => {
+      lockEpoch++;
       agent.cancel();
       speaker?.interrupt(broadcast);
       approvals.denyAll("Emergency lock");

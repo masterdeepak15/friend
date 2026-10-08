@@ -30,6 +30,7 @@ Hold **Space** (or long-press the screen) and speak; release to send. Friend ans
 
 - Everything runs on your PC: speech to text with faster-whisper, text to speech with Piper. Recordings are never stored or sent anywhere else.
 - Needs Python 3.10 or newer. `friend voice status` shows the state; `friend config set voice.sttModel small` (or `voice.language hi`, `voice.ttsVoice <piper voice>`, `voice.enabled false`) changes it, then run `friend voice setup` again for new models.
+- Recordings are limited to 90 seconds and 4 MB. While Friend is busy with a request, a new recording is refused (409) instead of being dropped silently. Emergency lock also cancels a recording that is still being transcribed.
 - The browser needs microphone permission and a secure origin (localhost, or HTTPS through your domain).
 - **Until speaker verification (next phase), anyone who can press Space on a logged-in browser speaks as you.** The PIN still guards risky actions.
 - Python tests for the speech engine: `cd packages/voice && python -m venv .venv && .venv/Scripts/pip install -e .[dev] && .venv/Scripts/python -m pytest`.

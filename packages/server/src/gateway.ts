@@ -12,6 +12,7 @@ import type { Audit } from "./audit";
 import { LockoutError, type Auth, type Device, type Session } from "./auth";
 import { RateLimiter } from "./ratelimit";
 import type { Config } from "./config";
+import { HttpError } from "./http-error";
 
 export const COOKIE_NAME = "friend_session";
 export const MAX_FRAME_BYTES = 64 * 1024;
@@ -40,12 +41,14 @@ export interface GatewayDeps {
 
 export const MAX_UTTERANCE_BYTES = 4 * 1024 * 1024;
 
-/** Allows `max` hits per key within a sliding window. */
-class SlidingWindow {
+/** Allows `max` hits per key within a sliding window. Keys that have gone quiet are forgotten. */
+export class SlidingWindow {
   private hits = new Map<string, number[]>();
   constructor(private max: number, private windowMs: number, private clock: () => number = Date.now) {}
+
   allow(key: string): boolean {
     const now = this.clock();
+    if (this.hits.size > 256) this.prune(now);
     const recent = (this.hits.get(key) ?? []).filter((t) => now - t < this.windowMs);
     if (recent.length >= this.max) {
       this.hits.set(key, recent);
@@ -54,6 +57,16 @@ class SlidingWindow {
     recent.push(now);
     this.hits.set(key, recent);
     return true;
+  }
+
+  size(): number {
+    return this.hits.size;
+  }
+
+  private prune(now: number): void {
+    for (const [key, times] of this.hits) {
+      if (times.every((t) => now - t >= this.windowMs)) this.hits.delete(key);
+    }
   }
 }
 
@@ -198,12 +211,16 @@ export function createGateway(deps: GatewayDeps) {
       const body = req.body;
       if (!Buffer.isBuffer(body)) return reply.code(415).send({ error: "Send the recording as audio/*" });
       if (body.length === 0) return reply.code(400).send({ error: "Empty recording" });
-      const session = auth.resolveSession(req.cookies[COOKIE_NAME]!)!;
+      // the session may have ended (emergency lock, logout) since onRequest: never run a turn for a dead session
+      const token = req.cookies[COOKIE_NAME];
+      const session = token ? auth.resolveSession(token) : null;
+      if (!session) return reply.code(401).send({ error: "Unauthorized" });
       try {
         return await deps.onVoiceUtterance!(session, body, String(req.headers["content-type"] ?? "audio/webm"), req.ip);
       } catch (e) {
-        audit.log("owner", "voice.utterance_failed", { message: (e as Error).message });
-        return reply.code(502).send({ error: (e as Error).message });
+        if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+        audit.log("owner", "voice.utterance_failed", { message: (e as Error).message }); // raw detail stays in the audit log
+        return reply.code(502).send({ error: "Speech recognition failed. Try again." });
       }
     },
   );

@@ -9,15 +9,19 @@ from typing import Tuple
 from urllib.parse import parse_qs, urlparse
 
 from .engines import Engines
+from .tts import check_voice_name
 
 MAX_TTS_CHARS = 2000
 
 
-def make_server(engines: Engines, token: str, port: int = 0, max_body: int = 4_000_000) -> Tuple[ThreadingHTTPServer, int]:
+def make_server(
+    engines: Engines, token: str, port: int = 0, max_body: int = 4_000_000, io_timeout: float = 30
+) -> Tuple[ThreadingHTTPServer, int]:
     """Create (but do not start) a server bound to 127.0.0.1. Returns (server, actual_port)."""
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+        timeout = io_timeout  # a client that stalls mid-request is dropped instead of holding a thread forever
 
         def log_message(self, *args) -> None:  # keep stdout clean for the ready line
             pass
@@ -42,6 +46,10 @@ def make_server(engines: Engines, token: str, port: int = 0, max_body: int = 4_0
 
         def _read_body(self) -> bytes | None:
             """Read the request body, or answer with an error and return None."""
+            if self.headers.get("Content-Length") is None:
+                # chunked or length-less bodies are not supported; close so unread bytes cannot confuse the next request
+                self._json(411, {"error": "Content-Length is required"}, close=True)
+                return None
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -94,6 +102,8 @@ def make_server(engines: Engines, token: str, port: int = 0, max_body: int = 4_0
             language = (query.get("language") or [None])[0]
             try:
                 self._json(200, engines.stt.transcribe(audio, language))
+            except ValueError as e:  # bad input (e.g. a recording that is too long): the caller's problem
+                self._json(400, {"error": str(e)})
             except Exception as e:  # engine failures are reported, never crash the server
                 self._json(500, {"error": str(e)})
 
@@ -111,8 +121,15 @@ def make_server(engines: Engines, token: str, port: int = 0, max_body: int = 4_0
                 return self._json(400, {"error": "text must be a non-empty string"})
             if len(text) > MAX_TTS_CHARS:
                 return self._json(413, {"error": f"text longer than {MAX_TTS_CHARS} characters"})
+            if voice is not None:
+                try:
+                    check_voice_name(voice)
+                except ValueError as e:
+                    return self._json(400, {"error": str(e)})
             try:
                 self._send(200, engines.tts.synthesize(text, voice), "audio/wav")
+            except ValueError as e:
+                self._json(400, {"error": str(e)})
             except Exception as e:
                 self._json(500, {"error": str(e)})
 

@@ -11,3 +11,4 @@ export type { VoiceService } from "./voice/service";
 export { SidecarProcess } from "./voice/sidecar";
 export { DEFAULT_VOICE } from "./config";
 export type { VoiceConfig } from "./config";
+export { VoiceError } from "./voice/service";

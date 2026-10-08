@@ -4,7 +4,7 @@ import { createInterface } from "node:readline";
 export interface SidecarOptions {
   command: string;
   args: string[];
-  /** Shared secret; appended to the arguments as `--token <token>`. */
+  /** Shared secret; passed to the process as the FRIEND_VOICE_TOKEN environment variable. */
   token: string;
   readyTimeoutMs?: number;
   restartDelayMs?: number;
@@ -50,9 +50,10 @@ export class SidecarProcess {
         settled = true;
         reject(new Error(message));
       };
-      const child = spawn(this.opts.command, [...this.opts.args, "--token", this.opts.token], {
+      // The secret goes in the environment, not on the command line (other users can read command lines).
+      const child = spawn(this.opts.command, this.opts.args, {
         cwd: this.opts.cwd,
-        env: this.opts.env ?? process.env,
+        env: { ...(this.opts.env ?? process.env), FRIEND_VOICE_TOKEN: this.opts.token },
         windowsHide: true,
         stdio: ["pipe", "pipe", "pipe"],
       });

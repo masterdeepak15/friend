@@ -1,3 +1,6 @@
+/** A voice failure whose message is safe to show the owner (it never carries paths or internal detail). */
+export class VoiceError extends Error {}
+
 export interface VoiceService {
   /** True when speech can currently be transcribed and synthesized. */
   available(): boolean;
@@ -54,7 +57,7 @@ export class HttpVoiceService implements VoiceService {
 
   private async request(path: string, init: RequestInit): Promise<Response> {
     const base = this.opts.baseUrl();
-    if (!base) throw new Error("the voice sidecar is not running");
+    if (!base) throw new VoiceError("the voice sidecar is not running");
     let res: Response;
     try {
       res = await fetch(base + path, {
@@ -63,9 +66,9 @@ export class HttpVoiceService implements VoiceService {
         signal: AbortSignal.timeout(this.opts.timeoutMs ?? 60_000),
       });
     } catch (e) {
-      if ((e as Error).name === "TimeoutError") throw new Error("the voice sidecar timed out");
+      if ((e as Error).name === "TimeoutError") throw new VoiceError("the voice sidecar timed out");
       this.healthy = false;
-      throw new Error(`could not reach the voice sidecar: ${(e as Error).message}`);
+      throw new VoiceError("could not reach the voice sidecar");
     }
     this.healthy = true;
     if (!res.ok) {
@@ -75,7 +78,8 @@ export class HttpVoiceService implements VoiceService {
       } catch {
         /* no JSON body */
       }
-      throw new Error(`voice sidecar error (${res.status})${detail ? `: ${detail}` : ""}`);
+      // a 4xx message is ours and safe (e.g. "recording longer than 90 seconds"); 5xx text may hold paths, so it is dropped
+      throw new VoiceError(`voice sidecar error (${res.status})${detail && res.status < 500 ? `: ${detail}` : ""}`);
     }
     return res;
   }
