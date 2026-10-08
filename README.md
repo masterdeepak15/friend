@@ -185,6 +185,26 @@ Ask "what is this?" while you hold something up to the camera, and Friend can lo
 - Approval cards and the PIN pad are drawn by the client, never by the agent.
 - Everything the agent does is written to the audit log.
 
+## Another port, and other devices on your network
+
+By default Friend is reachable only on this PC, at http://127.0.0.1:8787.
+
+```bash
+pnpm friend lan                 # shows how it is set up and the addresses
+pnpm friend lan on              # also reachable from phones and other PCs on your network
+pnpm friend lan on --port 9100  # the same, on another port
+pnpm friend lan port 9100       # change only the port
+pnpm friend lan off             # this PC only again
+```
+
+Restart `friend start` afterwards. It then prints the addresses, for example `Also on your network: http://192.168.1.20:9100`; open that on the other device and sign in. Things to know:
+
+- Anyone on the network can open the sign-in page. The password and PIN still guard everything, so use a strong password. Creating the owner account is only possible on this PC.
+- The connection is plain http, so other people on the network could read it. Use it on a network you trust, or put Friend behind HTTPS (`publicUrl`, below).
+- **Browsers allow the microphone and camera only on localhost or HTTPS.** Over plain http on another device you can type and read, but voice and camera need HTTPS.
+- Windows asks once whether to let Node.js through the firewall: allow it on *Private* networks.
+- To open it by a name (`http://my-pc:9100`) add the name: `friend config set allowedHosts my-pc`.
+
 ## Using your own domain later
 
 Run Friend behind a reverse proxy (for example Caddy) and set:

@@ -41,6 +41,15 @@ Noted as the owner sent them. Nothing here is built yet; each item has a first p
 - DONE: /help list; MCP connectors (stdio and http) with PIN to add/switch on, approval on every call, secrets kept private; AI tools connectors.* and plugins.* (create, reload, enable, disable, remove); presets for Chrome control and Gmail.
 - Later: more presets (Google Calendar, Outlook, Slack…); per-tool permissions (mark a connector's read-only tools as allowed without asking); OAuth inside Friend instead of per-server login; show connector tools by name in a panel; tool-count limits for small local models.
 
+## 8. TO CHECK LATER: the bottom corners (owner's note, 2026-10-08)
+- The message bar ("Talk to me") sits at the bottom centre. The owner thinks the status line (bottom-left) and the clock (bottom-right) now hide behind it. Not investigated yet, to be looked at together.
+- First guesses: on a narrow window the bar is almost full width (min(640px, 100% - 24px)) and covers both corners; the corner orb and the status line also compete for the bottom-left; the movable widgets may be saved at a position under the bar.
+- Idea if confirmed: lift the two widgets above the bar while it is open (or put the bar above them), and keep the three from overlapping at any width.
+
+## 9. LAN and port (DONE)
+- `friend lan on|off|port N`, startup prints the network addresses, `bind` is validated, real test through the PC's network address.
+- Later: a Network section in the settings screen (needs the PIN and a restart note); HTTPS for the microphone on other devices; pairing a phone by QR code.
+
 ## Suggested order
 1. PIN with keyboard, and the slash-command bar (both small, both useful at once; the commands become the base for items 2 and 4).
 2. Screen model + design rules for the AI, with the placement validator (item 3).

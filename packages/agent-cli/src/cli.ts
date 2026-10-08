@@ -4,6 +4,7 @@ import { pairCommand } from "./commands/pair";
 import { devicesCommand, rulesCommand } from "./commands/rules";
 import { memoryCommand } from "./commands/memory";
 import { pluginCommand } from "./commands/plugin";
+import { lanCommand } from "./commands/lan";
 import { ollamaCommand } from "./commands/ollama";
 import { claudeCommand } from "./commands/claude";
 import { voiceCommand } from "./commands/voice";
@@ -28,6 +29,7 @@ export const USAGE = `Usage: friend <command>
   node --url <ws-url> --code <code> [--roots a,b] [--name pc]
                              connect this PC to a Friend gateway
   ollama setup|status        use a local model through Ollama (no API key needed)
+  lan status|on|off|port N   let other devices on your network open Friend, or change the port (restart to apply)
   claude setup|status        use your Claude subscription through Claude Code (no API key needed)
   voice setup|status|forget  install or check local speech (hold Space to talk); forget deletes your saved voice
   memory list|forget <n>|clear  see and delete the notes Friend keeps about you
@@ -53,6 +55,8 @@ export async function run(argv: string[], io: IO): Promise<number> {
         return await voiceCommand(rest, io);
       case "ollama":
         return await ollamaCommand(rest, io);
+      case "lan":
+        return await lanCommand(rest, io);
       case "claude":
         return await claudeCommand(rest, io);
       case "memory":

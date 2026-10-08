@@ -1,4 +1,5 @@
 import { loadConfig, saveConfig, type Config } from "@friend/server";
+import { isIP } from "node:net";
 import type { IO } from "../cli";
 
 const list = (v: string) => v.split(",").map((s) => s.trim()).filter(Boolean);
@@ -29,7 +30,11 @@ const httpUrl = (v: string) => {
 const PARSERS: Record<string, (v: string) => unknown> = {
   apiKey: (v) => v,
   model: (v) => v,
-  bind: (v) => v,
+  bind: (v) => {
+    const t = v.trim();
+    if (t !== "localhost" && isIP(t) === 0) throw new Error("bind must be an IP address such as 127.0.0.1 (this PC only) or 0.0.0.0 (also your network), or localhost. Easier: friend lan on");
+    return t;
+  },
   publicUrl: (v) => (v === "" ? null : v),
   port: (v) => {
     const n = Number(v);

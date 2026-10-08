@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IO } from "../cli";
 import { startDeviceNode, type DeviceNode } from "../node";
+import { urlsFor } from "./lan";
 import { QUIET_ENV, findVoiceDir, readMarker, voicePaths } from "./voice";
 
 export interface RunningFriend {
@@ -80,7 +81,9 @@ export async function startFriend(opts: StartOptions): Promise<RunningFriend> {
     token,
     roots: app.config.roots,
   });
-  opts.out(`Friend is running at http://127.0.0.1:${port}`);
+  const urls = urlsFor(app.config.bind, port);
+  opts.out(`Friend is running at ${urls.local}`);
+  for (const n of urls.network) opts.out(`Also on your network: ${n}`);
   if (!app.auth.hasOwner()) opts.out("No owner yet. Run: friend setup");
 
   // The speech engine loads its models in the background; clients are told when voice goes up or down.
