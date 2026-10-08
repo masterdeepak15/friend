@@ -53,6 +53,7 @@ const io: IO = {
   out: (s) => console.log(s),
   err: (s) => console.error(s),
   ask: (q, opts) => (opts?.hidden ? askHidden(q) : askVisible(q)),
+  interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
 };
 
 run(process.argv.slice(2), io).then((code) => {

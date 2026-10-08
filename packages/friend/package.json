@@ -1,0 +1,32 @@
+{
+  "name": "friend-assistant",
+  "version": "0.1.0",
+  "description": "A self-hosted personal AI assistant for your own PC: a full-screen stage, voice, tools with your approval, and your Claude subscription or a local model.",
+  "keywords": ["ai", "assistant", "jarvis", "voice", "claude", "ollama", "mcp", "self-hosted"],
+  "license": "UNLICENSED",
+  "author": "masterdeepak15",
+  "repository": { "type": "git", "url": "git+https://github.com/masterdeepak15/friend.git" },
+  "type": "module",
+  "bin": { "friend": "bin/friend.js" },
+  "files": ["bin", "dist", "README.md"],
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "bundle": "node scripts/bundle.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/static": "^10.1.5",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "better-sqlite3": "^13.0.3",
+    "cross-spawn": "^7.0.6",
+    "fastify": "^5.12.5",
+    "undici": "^8.11.2",
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

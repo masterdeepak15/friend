@@ -1,4 +1,5 @@
 export { createApp } from "./app";
+export { firstExistingDir } from "./assets";
 export type { AppOptions } from "./app";
 export { Audit } from "./audit";
 export { Voiceprint } from "./voice/voiceprint";

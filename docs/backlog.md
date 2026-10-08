@@ -53,6 +53,10 @@ Noted as the owner sent them. Nothing here is built yet; each item has a first p
 - `friend lan on|off|port N`, startup prints the network addresses, `bind` is validated, real test through the PC's network address.
 - Later: a Network section in the settings screen (needs the PIN and a restart note); HTTPS for the microphone on other devices; pairing a phone by QR code.
 
+## 10. npm install and the setup wizard (DONE; owner's message of 2026-10-08)
+- DONE: `npm install -g friend-assistant` then `friend onboard` (10 steps, resumable, installs prerequisites one by one after asking), `friend doctor`, bundled package (program, web app, plugins, Python voice code).
+- Later: a one-line installer script for Windows/macOS/Linux that installs Node.js too; a background service so Friend starts with the PC (`friend service install`); `friend update` that checks npm for a newer version; signed releases; a check for the C++ build tools when the native part has to be compiled.
+
 ## Suggested order
 1. PIN with keyboard, and the slash-command bar (both small, both useful at once; the commands become the base for items 2 and 4).
 2. Screen model + design rules for the AI, with the placement validator (item 3).

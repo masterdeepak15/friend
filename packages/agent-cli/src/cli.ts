@@ -4,7 +4,9 @@ import { pairCommand } from "./commands/pair";
 import { devicesCommand, rulesCommand } from "./commands/rules";
 import { memoryCommand } from "./commands/memory";
 import { pluginCommand } from "./commands/plugin";
+import { doctorCommand } from "./commands/doctor";
 import { lanCommand } from "./commands/lan";
+import { onboardCommand } from "./commands/onboard";
 import { ollamaCommand } from "./commands/ollama";
 import { claudeCommand } from "./commands/claude";
 import { voiceCommand } from "./commands/voice";
@@ -12,17 +14,24 @@ import { setupCommand } from "./commands/setup";
 import { startCommand } from "./commands/start";
 import { statusCommand } from "./commands/status";
 
+/** Filled in when the program is bundled for npm. */
+declare const __FRIEND_VERSION__: string | undefined;
+
 export interface IO {
   dataDir: string;
   out(line: string): void;
   err(line: string): void;
   ask(question: string, opts?: { hidden?: boolean }): Promise<string>;
+  /** False when there is no terminal to talk to (input is piped). Unset counts as a terminal. */
+  interactive?: boolean;
   /** Resolves when the process should stop (Ctrl+C). Defaults to waiting for a signal. */
   waitForExit?(): Promise<void>;
 }
 
 export const USAGE = `Usage: friend <command>
 
+  onboard                    guided setup, step by step: checks this PC, installs what is missing, asks what you want
+  doctor                     check what this PC has and what is missing (changes nothing)
   setup                      create the owner account (password, PIN, assistant name)
   start                      run the gateway and a local device node
   pair                       print a one-time code to connect another PC
@@ -55,6 +64,15 @@ export async function run(argv: string[], io: IO): Promise<number> {
         return await voiceCommand(rest, io);
       case "ollama":
         return await ollamaCommand(rest, io);
+      case "onboard":
+        return await onboardCommand(rest, io);
+      case "doctor":
+        return await doctorCommand(io);
+      case "version":
+      case "--version":
+      case "-v":
+        io.out(typeof __FRIEND_VERSION__ === "string" ? __FRIEND_VERSION__ : "development");
+        return 0;
       case "lan":
         return await lanCommand(rest, io);
       case "claude":

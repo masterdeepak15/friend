@@ -4,7 +4,32 @@ A self-hosted personal AI assistant. It runs on your PC, talks to you from any s
 
 Phase 1: secure login, agent loop with Claude, CLI device node, approvals with PIN, and a minimal stage with a particle-sphere presence. Phase 2a: chart, gauge, timeline and graph objects, automatic layout, fade-out, orb and ring voice styles and mood intensity. Phase 5a: local voice. Hold Space and speak; Friend answers aloud. Phase 5b: only your voice commands it. Phase 2b: the agent can look through your camera, one approved picture at a time. Also built: memory (notes it keeps about you), tasks and reminders with a heartbeat, free-form pages in an isolated frame, a Docker code sandbox, and a plugin store. Models: Claude, or a local model through Ollama. See `docs/superpowers/specs` and `docs/superpowers/plans`.
 
-## Quick start (development)
+## Install (npm)
+
+Needs only **Node.js 20 or newer**. Everything else is checked, and offered, by the setup wizard.
+
+```bash
+npm install -g friend-assistant
+friend onboard
+```
+
+(or without installing: `npx friend-assistant onboard`)
+
+`friend onboard` is a guided setup, one step at a time. Press Enter to take the suggestion at any question; run it again and it carries on where it stopped.
+
+1. **Welcome**: what is about to happen.
+2. **What you want to use**: pick any of: Claude through your subscription (Claude Code), Claude with an API key, a model on this PC (Ollama), voice, safe code running (Docker).
+3. **What this PC needs**: it checks Node.js, plus only what your choices need: Python (voice), Docker, Ollama, Claude Code, and whether the port is free. For each missing one it shows the exact command (`winget` on Windows, `brew` on a Mac, `apt` on Linux, `npm` for Claude Code), asks **before** installing, runs it one by one with the output visible, and checks again. If a program was installed but this terminal cannot see it yet, it tells you to open a new terminal and run `friend onboard` again.
+4. **Your account**: password and PIN (each typed twice) and the assistant's name.
+5. **How Friend thinks**: signs in to Claude if needed (`claude auth login`), asks for an API key, or downloads the local model, and sets the safety net (the local model behind Claude).
+6. **Voice**: a female or male voice, then the speech models (about 250 MB).
+7. **Your workspace folder**, 8. **Who can open Friend** (only this PC, or your network, and the port), 9. **How it looks** (a theme), 10. **Finish**: a summary, and it can start Friend and open the browser.
+
+Handy options: `friend onboard --no-install` (never installs anything, only tells you what to do), `--yes` (take every suggestion), `--redo <step>` (run one step again, for example `--redo look`), `--reset` (start from the beginning). `friend doctor` shows what this PC has and how to fix what is missing, and changes nothing. Progress is kept in `onboarding.json` in the data folder; it never contains a password, PIN or key.
+
+If `npm install` fails on `better-sqlite3` (it builds a small native part when no ready-made one fits your system), install the compiler tools it names (on Windows: the "Desktop development with C++" part of Visual Studio Build Tools) and run it again.
+
+## Quick start (from the source code)
 
 ```bash
 pnpm install

@@ -5,3 +5,4 @@ dist
 .env
 .voice-smoke
 .vitest
+packages/friend/README.md

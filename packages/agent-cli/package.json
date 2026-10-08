@@ -10,9 +10,11 @@
   "dependencies": {
     "@friend/protocol": "workspace:*",
     "@friend/server": "workspace:*",
+    "cross-spawn": "^7.0.6",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
     "@types/node": "^26.6.4",
     "@types/ws": "^8.18.2",
     "tsx": "^4.23.15"

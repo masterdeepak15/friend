@@ -1,5 +1,5 @@
 import { ORIGINAL_VOICE, VOICE_CHOICES, resolveVoice, voiceLabel, type VoiceChoice } from "@friend/protocol";
-import { Audit, Auth, Voiceprint, loadConfig, openDb, saveConfig } from "@friend/server";
+import { Audit, Auth, Voiceprint, loadConfig, openDb, saveConfig, firstExistingDir } from "@friend/server";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -46,7 +46,8 @@ export function readMarker(dataDir: string): VoiceMarker | null {
 }
 
 export function findVoiceDir(): string {
-  return process.env.FRIEND_VOICE_DIR ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../../voice");
+  const here = dirname(fileURLToPath(import.meta.url));
+  return firstExistingDir([process.env.FRIEND_VOICE_DIR, resolve(here, "voice"), resolve(here, "../../../voice")], "friend_voice") ?? resolve(here, "voice");
 }
 
 /** Keeps Python output readable: no Hugging Face symlink warning, UTF-8 everywhere. */
@@ -69,7 +70,7 @@ export const defaultRunner: Runner = (cmd, args, opts) =>
 
 const tail = (s: string, n = 8) => s.trim().split(/\r?\n/).slice(-n).join("\n");
 
-async function findPython(run: Runner): Promise<{ cmd: string; args: string[] } | null> {
+export async function findPython(run: Runner): Promise<{ cmd: string; args: string[] } | null> {
   const candidates: [string, string[]][] = [
     ...(process.env.FRIEND_PYTHON ? ([[process.env.FRIEND_PYTHON, []]] as [string, string[]][]) : []),
     ["python", []],

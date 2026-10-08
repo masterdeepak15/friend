@@ -3,5 +3,6 @@ export * from "./tiers";
 export * from "./stage";
 export * from "./layout";
 export * from "./voices";
+export * from "./themes";
 export * from "./messages";
 export * from "./tools";

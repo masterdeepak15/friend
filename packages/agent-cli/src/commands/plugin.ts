@@ -1,4 +1,4 @@
-import { Plugins, inspectPlugin, openDb } from "@friend/server";
+import { Plugins, inspectPlugin, openDb, firstExistingDir } from "@friend/server";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,8 @@ export interface PluginDeps {
 }
 
 function defaultCatalog(): string {
-  return process.env.FRIEND_PLUGIN_CATALOG ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../../../plugins");
+  const here = dirname(fileURLToPath(import.meta.url));
+  return firstExistingDir([process.env.FRIEND_PLUGIN_CATALOG, resolve(here, "plugins"), resolve(here, "../../../../plugins")]) ?? resolve(here, "plugins");
 }
 
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

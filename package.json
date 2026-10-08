@@ -10,7 +10,8 @@
     "build": "pnpm -r --no-sort build",
     "typecheck": "pnpm -r --no-sort typecheck",
     "friend": "tsx packages/agent-cli/src/bin.ts",
-    "demo": "tsx scripts/demo.ts"
+    "demo": "tsx scripts/demo.ts",
+    "package": "pnpm build && pnpm --filter friend-assistant bundle"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

@@ -2,6 +2,7 @@ import type { ClientMsg, ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
 import { isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
+import { firstExistingDir } from "./assets";
 import { chatLines } from "./chatlog";
 import { McpHub } from "./connectors/hub";
 import { PRESETS } from "./connectors/presets";
@@ -337,7 +338,9 @@ export async function createApp(opts: AppOptions) {
     await runVoiceTurn(held.text, conn.ip, epoch);
   }
 
-  const catalogDir = opts.pluginCatalogDir ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../..", "plugins");
+  const here = dirname(fileURLToPath(import.meta.url));
+  // next to the program when installed from npm, in the repository when run from source
+  const catalogDir = opts.pluginCatalogDir ?? firstExistingDir([process.env.FRIEND_PLUGIN_CATALOG, resolve(here, "plugins"), resolve(here, "../../..", "plugins")]) ?? resolve(here, "plugins");
   const pluginsApi: PluginsApi = {
     list: () => {
       const installed = plugins.list();

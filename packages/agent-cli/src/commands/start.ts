@@ -84,7 +84,7 @@ export async function startFriend(opts: StartOptions): Promise<RunningFriend> {
   const urls = urlsFor(app.config.bind, port);
   opts.out(`Friend is running at ${urls.local}`);
   for (const n of urls.network) opts.out(`Also on your network: ${n}`);
-  if (!app.auth.hasOwner()) opts.out("No owner yet. Run: friend setup");
+  if (!app.auth.hasOwner()) opts.out("No owner yet. Run: friend onboard (guided), or friend setup (just the account)");
 
   // The speech engine loads its models in the background; clients are told when voice goes up or down.
   const voiceAvailable = () => voice?.available() ?? false;
