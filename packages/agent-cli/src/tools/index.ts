@@ -27,7 +27,7 @@ export async function runTool(name: string, args: unknown, ctx: ToolCtx): Promis
       case "fs.write":
         return fsWrite({ path: a.path!, content: a.content! }, ctx);
       case "system.info":
-        return systemInfo();
+        return await systemInfo();
       case "process.list":
         return await processList(ctx);
       case "shell.run":

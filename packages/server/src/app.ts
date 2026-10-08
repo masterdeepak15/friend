@@ -8,6 +8,7 @@ import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
+import { WeatherService } from "./weather";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Tasks } from "./tasks";
@@ -49,6 +50,8 @@ export interface AppOptions {
   codeBox?: Pick<CodeBox, "run">;
   /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
   pluginCatalogDir?: string;
+  /** Where weather comes from. Defaults to Open-Meteo. */
+  weather?: Pick<WeatherService, "get">;
 }
 
 /** Used when no API key is configured: every turn ends with a setup notice on screen. */
@@ -97,6 +100,7 @@ export async function createApp(opts: AppOptions) {
     memory,
     tasks,
     plugins,
+    weather: opts.weather ?? new WeatherService(),
     code: opts.codeBox ?? new CodeBox(),
     camera: {
       request: (emit, signal) => {
