@@ -65,8 +65,11 @@ describe("clear data requests are answered with the real tools before the model 
     await build(p).runTurn("Show me the weather in Pune and also my computer stats on the screen.", ctx());
     expect(getWeather).toHaveBeenCalledWith("Pune");
     expect(exec).toHaveBeenCalledWith("system.info", {}, expect.anything(), expect.anything());
-    expect(ids().some((i) => i.startsWith("weather-"))).toBe(false); // the stats scene came last and replaced the forecast
-    expect(ids().every((i) => i.startsWith("stats-"))).toBe(true);
+    // both sets of pictures are on the screen together: the second scene does not wipe out the first
+    expect(ids()).toEqual([
+      "stats-cpu", "stats-cpuinfo", "stats-disk", "stats-memory", "stats-uptime",
+      "weather-hours", "weather-humidity", "weather-now", "weather-wind",
+    ]);
     expect(p.calls).toHaveLength(1); // one short model call, not a chain of them
     const m = p.calls[0]!.messages;
     expect(m.map((x) => x.role)).toEqual(["user", "assistant", "tool", "assistant", "tool"]);
@@ -90,6 +93,14 @@ describe("clear data requests are answered with the real tools before the model 
     await build(p).runTurn("What is the weather in Pune?", ctx());
     expect(ids()).toEqual(["weather-hours", "weather-humidity", "weather-now", "weather-wind"]);
     expect(p.calls).toHaveLength(1);
+  });
+
+  it("starts each new request with a clean screen, so old pictures do not pile up", async () => {
+    const agent = build(new FakeProvider([[text("one"), done], [text("two"), done]]));
+    await agent.runTurn("weather in Pune", ctx());
+    expect(ids().every((i) => i.startsWith("weather-"))).toBe(true);
+    await agent.runTurn("my computer stats", ctx());
+    expect(ids().every((i) => i.startsWith("stats-"))).toBe(true); // the forecast from the last request is gone
   });
 
   it("keeps the calls in the saved conversation, so later turns see what happened", async () => {

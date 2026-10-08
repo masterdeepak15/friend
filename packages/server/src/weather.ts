@@ -60,7 +60,7 @@ class Failure extends Error {}
 export class WeatherService {
   constructor(
     private fetchFn: typeof fetch = fetch,
-    private timeoutMs = 8000,
+    private timeoutMs = 12_000, // generous: the PC may be busy with a local model
   ) {}
 
   async get(city: string): Promise<WeatherResult> {

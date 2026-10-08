@@ -70,6 +70,7 @@ const clipArgs = (args: unknown): unknown =>
 
 export class Agent {
   private busy = false;
+  private scenesThisTurn = 0;
   private abort: AbortController | null = null;
 
   constructor(private deps: AgentDeps) {}
@@ -91,6 +92,7 @@ export class Agent {
       return;
     }
     this.busy = true;
+    this.scenesThisTurn = 0;
     const stage = (cmd: Parameters<StageState["apply"]>[0]) => {
       d.stage.apply(cmd);
       emit({ type: "stage", command: cmd });
@@ -400,9 +402,13 @@ export class Agent {
     return { text, isError: false };
   }
 
-  /** Puts a ready-made set of pictures on the screen, replacing what was there so they always fit. */
+  /**
+   * Puts a ready-made set of pictures on the screen. The first one in a request replaces what was there so it always
+   * fits; later ones in the same request are added next to it (weather and stats asked for together stay together).
+   */
   private showScene(commands: StageCommand[], emit: (m: ServerMsg) => void): void {
-    for (const cmd of [{ cmd: "clear" } as StageCommand, ...commands]) {
+    const first = this.scenesThisTurn++ === 0;
+    for (const cmd of first ? [{ cmd: "clear" } as StageCommand, ...commands] : commands) {
       if (this.deps.stage.apply(cmd).ok) emit({ type: "stage", command: cmd });
     }
   }
