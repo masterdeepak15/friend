@@ -2,7 +2,7 @@
 
 A self-hosted personal AI assistant. It runs on your PC, talks to you from any screen over WebSocket, uses tools on your machine with risk-based approvals, and controls a full-screen sci-fi "stage" itself.
 
-Phase 1: secure login, agent loop with Claude, CLI device node, approvals with PIN, and a minimal stage with a particle-sphere presence. Phase 2a: chart, gauge, timeline and graph objects, automatic layout, fade-out, orb and ring voice styles and mood intensity. Phase 5a: local voice. Hold Space and speak; Friend answers aloud. Voice, camera, memory, heartbeat, taskboard and the plugin store come in later phases. See `docs/superpowers/specs` and `docs/superpowers/plans`.
+Phase 1: secure login, agent loop with Claude, CLI device node, approvals with PIN, and a minimal stage with a particle-sphere presence. Phase 2a: chart, gauge, timeline and graph objects, automatic layout, fade-out, orb and ring voice styles and mood intensity. Phase 5a: local voice. Hold Space and speak; Friend answers aloud. Phase 5b: only your voice commands it. Phase 2b: the agent can look through your camera, one approved picture at a time. Voice, camera, memory, heartbeat, taskboard and the plugin store come in later phases. See `docs/superpowers/specs` and `docs/superpowers/plans`.
 
 ## Quick start (development)
 
@@ -48,6 +48,20 @@ Press **Esc** (or long-press the top-left corner), choose **Enroll my voice**, r
 - Emergency lock drops any pending challenge and any enrollment in progress.
 - A voice match is a convenience, not a lock: a recording or a cloned voice can fool any speaker model. That is why a borderline match needs the PIN and risky actions always ask for it.
 - Python tests for the speech engine: `cd packages/voice && python -m venv .venv && .venv/Scripts/pip install -e .[dev] && .venv/Scripts/python -m pytest`.
+
+## Camera (owner-controlled)
+
+Ask "what is this?" while you hold something up to the camera, and Friend can look. It works one picture at a time:
+
+1. The camera is **off** until you turn it on: press **Esc**, choose **Camera: off** (it becomes **Camera: on**). The switch is not remembered; a reload turns it off again.
+2. When the agent wants to look it calls `camera.snap`, and an approval card appears: "Take one picture with the camera and show it to the AI model". There is no "Always allow" for the camera.
+3. After you approve, the browser opens the camera, takes one frame (JPEG, longest side 1024 px), closes the camera and uploads the frame. While the camera is open a red **Camera on** badge with a small live preview shows in the corner; the agent cannot hide it.
+
+- The picture is shown to the model for that turn only. It is never written to disk, never saved in the conversation history (history keeps "[camera picture, not kept]"), and the audit log records only its size. Guests can never use the camera.
+- Emergency lock, logout, switching the camera off, or closing the page cancels a pending request and releases the camera.
+- **With Claude as the provider the picture is sent to Anthropic's API.** With Ollama it stays on your PC, but only a vision model can use it: `ollama pull llava` (or another vision model), then `friend config set ollama.model llava` and `friend config set ollama.vision true`. Note a vision model may not support tools, so Claude is the practical choice today. Without vision the tool says so before it asks you.
+- Like the microphone, the camera needs `localhost` or HTTPS.
+- Text inside a picture is treated as data, never as instructions.
 
 ## Safety model
 

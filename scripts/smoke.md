@@ -45,6 +45,22 @@ Results 2026-10-08:
 | Browser support | MediaRecorder with webm/opus, getUserMedia on localhost, WAV from the engine decodes | PASS |
 | Sidecar cleanup | engine exits when the app is killed | PASS |
 
+## Phase 2b (camera) check
+
+Results 2026-10-08:
+
+| Check | How | Result |
+|---|---|---|
+| Round trip | scripted vision model calls `camera.snap`; the owner approves; a JPEG is uploaded; the next model call carries the image block | PASS (`camera.route.test.ts`) |
+| Picture is never kept | database messages and audit log searched for the picture's bytes; only the stub and a byte count are there | PASS |
+| Failure paths | browser denial reasons, timeout, late/duplicate/non-JPEG/oversize uploads, rate limit, no session, emergency lock, second tab | PASS |
+| Policy | no standing rule can skip the card; "Always allow" is neither shown nor honored; a model without vision is refused before any card; guests cannot call it | PASS |
+| Providers | Claude image block after the tool results; Ollama `images` on a following user message only when `ollama.vision` is true | PASS (`provider/images.test.ts`) |
+| Browser | controller releases the camera on success, failure, cancel (even while the camera is still opening) and dispose; switch off answers 'off' without opening it; indicator only while open | PASS (jsdom) |
+| Production build | `pnpm build` | PASS |
+
+Not verified by a human: a real webcam (the dev machine's camera was deliberately not switched on during testing) and a real vision model. Try it: `friend start`, open the page, press Esc and set Camera: on, then ask "what am I holding?".
+
 ## Phase 5b (speaker verification) check
 
 Results 2026-10-08:
