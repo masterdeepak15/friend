@@ -100,3 +100,15 @@ describe("plugin routes", () => {
     expect(codes).toContain(429);
   });
 });
+
+describe("plugin reload route", () => {
+  it("needs a session, and reads the plugins again for the owner", async () => {
+    const cookie = await boot();
+    expect((await api(null, "POST", "/reload", {})).status).toBe(401);
+    const res = await api(cookie, "POST", "/reload", {});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ installed: [], catalog: expect.any(Array) });
+    const rows = app.db.prepare("select kind from audit_log where kind = 'plugin.reloaded'").all();
+    expect(rows).toHaveLength(1);
+  });
+});

@@ -85,6 +85,8 @@ export interface PluginsApi {
   /** Switching on needs the PIN; switching off does not. */
   setEnabled(id: string, enabled: boolean, pin: string | undefined, ip: string): Promise<void>;
   remove(id: string): void;
+  /** Reads every plugin from disk again and checks it (after a plugin was changed by hand or written by the AI). */
+  reload(): void;
 }
 
 /** What the enrollment routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -339,6 +341,14 @@ export function createGateway(deps: GatewayDeps) {
       return { ok: true };
     } catch (e) {
       return pluginError(reply, e, "enable");
+    }
+  });
+  app.post("/api/plugins/reload", { onRequest: pluginGuard }, async (_req, reply) => {
+    try {
+      deps.plugins!.reload();
+      return deps.plugins!.list();
+    } catch (e) {
+      return pluginError(reply, e, "reload");
     }
   });
   app.delete<{ Params: { id: string } }>("/api/plugins/:id", { onRequest: pluginGuard }, async (req, reply) => {

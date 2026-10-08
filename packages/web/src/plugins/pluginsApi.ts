@@ -31,6 +31,8 @@ export interface PluginsApi {
   install(id: string, pin: string): Promise<void>;
   setEnabled(id: string, enabled: boolean, pin?: string): Promise<void>;
   remove(id: string): Promise<void>;
+  /** Reads every plugin from disk again. */
+  reload(): Promise<void>;
 }
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -67,5 +69,8 @@ export const httpPluginsApi: PluginsApi = {
   },
   remove: async (id) => {
     await call(`/${encodeURIComponent(id)}`, json("DELETE"));
+  },
+  reload: async () => {
+    await call("/reload", json("POST", {}));
   },
 };

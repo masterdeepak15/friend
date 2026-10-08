@@ -327,6 +327,10 @@ export async function createApp(opts: AppOptions) {
       plugins.setEnabled(id, enabled);
       audit.log("owner", enabled ? "plugin.enabled" : "plugin.disabled", { id, ip });
     },
+    reload: () => {
+      plugins.reload();
+      audit.log("owner", "plugin.reloaded", {});
+    },
     remove: (id) => {
       if (!isPluginId(id) || !plugins.remove(id)) throw new HttpError(404, "There is no such plugin.");
       audit.log("owner", "plugin.removed", { id });

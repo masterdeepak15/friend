@@ -147,6 +147,9 @@ export function PluginsPanel({ api = httpPluginsApi, onClose }: { api?: PluginsA
             ))}
           </ul>
           <div className="approval-actions">
+            <button type="button" style={touch} disabled={busy} onClick={() => void run(() => api.reload())}>
+              Reload plugins
+            </button>
             <button type="button" style={touch} onClick={onClose}>
               Close
             </button>

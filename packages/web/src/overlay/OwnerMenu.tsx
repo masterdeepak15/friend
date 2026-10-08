@@ -18,6 +18,8 @@ export interface OwnerMenuProps {
   onPlugins?: () => void;
   /** Opens the settings panel. */
   onSettings?: () => void;
+  /** Opens the connectors panel. */
+  onConnectors?: () => void;
   /** The conversation and schedule panels, and the view they belong to. */
   chatOn?: boolean;
   onToggleChat?: () => void;
@@ -28,7 +30,7 @@ export interface OwnerMenuProps {
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, cameraOn, onToggleCamera, onPlugins, onSettings, chatOn, onToggleChat, tasksOn, onToggleTasks, view, onView }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, view, onView }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -103,6 +105,18 @@ export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, vo
               }}
             >
               Settings
+            </button>
+          )}
+          {onConnectors && (
+            <button
+              type="button"
+              style={touch}
+              onClick={() => {
+                setOpen(false);
+                onConnectors();
+              }}
+            >
+              Connectors
             </button>
           )}
           {onPlugins && (

@@ -37,6 +37,10 @@ Noted as the owner sent them. Nothing here is built yet; each item has a first p
 - The same commands appear as the option buttons (item 4) and in the Esc menu, so there is one list behind all three.
 - Anything that needs the PIN (like /model) still asks for it. The AI can offer commands but a slash command is always typed or clicked by the owner.
 
+## 7. Connectors, AI-made plugins, /help (DONE; owner's message of 2026-10-08)
+- DONE: /help list; MCP connectors (stdio and http) with PIN to add/switch on, approval on every call, secrets kept private; AI tools connectors.* and plugins.* (create, reload, enable, disable, remove); presets for Chrome control and Gmail.
+- Later: more presets (Google Calendar, Outlook, Slack…); per-tool permissions (mark a connector's read-only tools as allowed without asking); OAuth inside Friend instead of per-server login; show connector tools by name in a panel; tool-count limits for small local models.
+
 ## Suggested order
 1. PIN with keyboard, and the slash-command bar (both small, both useful at once; the commands become the base for items 2 and 4).
 2. Screen model + design rules for the AI, with the placement validator (item 3).

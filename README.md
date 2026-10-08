@@ -36,6 +36,31 @@ pnpm friend claude status
 - Caveats: it uses your plan's limits; using a subscription this way is a grey area in Anthropic's terms, so treat it as experimental; if Friend answered through the fallback, Claude does not know about that exchange.
 - Opt-in live test against the real CLI: `FRIEND_LIVE_CLAUDE=1 pnpm exec vitest run packages/server/src/provider/claude-code/live.test.ts`.
 
+## Connectors (Gmail, Chrome control, any MCP service)
+
+A connector gives Friend the tools of an outside program or service through the MCP standard. Open **Esc, then Connectors** (or type `/connectors`). Ready-made entries:
+
+- **Chrome control**: your chrome-control extension. Friend starts `chrome-control-mcp` itself; install it once with `npm install -g chrome-control-mcp`, run `chrome-control-mcp setup` and load the extension (the panel lists the steps).
+- **Gmail**: a community Gmail MCP server (`@gongrzhe/server-gmail-autoauth-mcp`). You create the Google OAuth credentials and sign in on Google's own page; **Friend never sees your Google password**. More mail and calendar connectors can be added the same way ("Something else": any program or any server by address).
+
+How it is kept safe:
+- **Adding or switching one on needs your PIN**, and the screen shows exactly which program will start (no shell is ever used) or which address it will reach. Plain `http://` is only allowed for a server on this PC.
+- **Every call to a connector's tool asks for your approval** (the usual card; "Always allow" works for the ones you trust). Tools appear to the AI as `mcp.<connector>.<tool>`.
+- **Secrets** (tokens, keys) are typed on the screen only. They are saved in `connectors.json` next to the database (readable only by you) and are never shown again, never put in the AI's context, never in the audit log. The AI cannot supply or change secrets.
+- **What comes back is data, not orders.** The AI is told that email, web pages and documents from a connector are untrusted and that it must never send or delete anything unless you asked for exactly that.
+- A connector that stops working shows why; it is started again on the next use. Friend does not wait for connectors when it starts.
+- Turning one off removes its tools at once. Removing deletes its saved secrets.
+
+**The AI can manage connectors too.** Ask it to "connect X", "switch Gmail off", "reload Chrome control" or "remove it". Adding or switching on shows the same PIN card with the exact program; turning off and reloading need nothing; removing asks. Opt-in live check of the real chrome-control: `FRIEND_LIVE_CHROME=1 pnpm exec vitest run packages/server/src/connectors/live.test.ts`.
+
+## The AI writes its own skills and plugins
+
+When it notices something you repeat, the AI may suggest a **skill** (instructions it loads later) or a **plugin tool** (a small python, node or shell program that runs in the code sandbox: no network, no access to your files, approval on every call). If you agree it calls `plugins.create`: the approval card shows **everything it wrote, untruncated**, and needs your PIN. It is then checked like any plugin, switched on and loaded straight away (`plugins.reload` re-reads everything; the Plugins panel has a **Reload plugins** button too). Creating the same id again installs a newer version. The AI can also list, switch off or on, and delete plugins.
+
+## Commands
+
+`/help` opens the list of every command with what it does.
+
 ## On-screen status, clock and settings
 
 - **Status line (bottom-left):** always shows what Friend is doing in plain words: Ready, Listening, Understanding what you said, Thinking, Getting the weather for Pune, Creating a view, Running a command, Answering, Waiting for your approval, Reconnecting. It never shows command text or arguments.

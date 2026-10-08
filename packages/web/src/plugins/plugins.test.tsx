@@ -31,6 +31,7 @@ function setup(list: Partial<PluginList> = {}, overrides: Partial<PluginsApi> = 
     install: vi.fn(async () => {}),
     setEnabled: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
+    reload: vi.fn(async () => {}),
     ...overrides,
   };
   const onClose = vi.fn();
@@ -139,5 +140,14 @@ describe("<OwnerMenu> plugins entry", () => {
     await userEvent.keyboard("{Escape}");
     await userEvent.click(screen.getByRole("button", { name: /plugins/i }));
     expect(onPlugins).toHaveBeenCalled();
+  });
+});
+
+describe("reloading plugins", () => {
+  it("has a button that reads them all again and shows the result", async () => {
+    const { api } = setup();
+    await userEvent.click(await screen.findByRole("button", { name: "Reload plugins" }));
+    await waitFor(() => expect(api.reload).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/Rubber duck/)).toBeTruthy();
   });
 });

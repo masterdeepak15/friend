@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LoginScreen } from "./auth/LoginScreen";
 import { SetupScreen } from "./auth/SetupScreen";
+import { ConnectorsPanel } from "./connectors/ConnectorsPanel";
 import { buildSlash } from "./input/appCommands";
 import type { SlashCommand } from "./input/commands";
 import { HelpPanel } from "./input/HelpPanel";
@@ -29,6 +30,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [enrolling, setEnrolling] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [help, setHelp] = useState<SlashCommand[] | null>(null);
   const panels = usePanels(state.view);
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
@@ -67,6 +69,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
       buildSlash({
         notify: (text) => dispatch({ type: "alert.add", level: "info", text }),
         openSettings: () => setSettingsOpen(true),
+        openConnectors: () => setConnectorsOpen(true),
         openPlugins: () => setManagingPlugins(true),
         openVoice: state.voice.available ? () => setEnrolling(true) : null,
         muted,
@@ -120,6 +123,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
         {managingPlugins && <PluginsPanel onClose={() => setManagingPlugins(false)} />}
         {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+        {connectorsOpen && <ConnectorsPanel onClose={() => setConnectorsOpen(false)} />}
         {help && <HelpPanel commands={help} onClose={() => setHelp(null)} />}
       </Overlay>
       <OwnerMenu
@@ -131,6 +135,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         onEnroll={() => setEnrolling(true)}
         onPlugins={() => setManagingPlugins(true)}
         onSettings={() => setSettingsOpen(true)}
+        onConnectors={() => setConnectorsOpen(true)}
         cameraOn={state.camera.enabled}
         onToggleCamera={() => dispatch({ type: "camera.enable", value: !state.camera.enabled })}
         chatOn={panels.show.chat}

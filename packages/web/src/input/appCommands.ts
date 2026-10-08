@@ -5,6 +5,8 @@ export interface CommandDeps {
   notify: (text: string) => void;
   openSettings: () => void;
   openPlugins: () => void;
+  /** Opens the connectors panel (Gmail, Chrome control, …). */
+  openConnectors: () => void;
   /** Null when speech is not available on this PC. */
   openVoice: (() => void) | null;
   muted: boolean;
@@ -32,7 +34,8 @@ export interface CommandDeps {
 export function buildCommands(d: CommandDeps): SlashCommand[] {
   const list: SlashCommand[] = [
     { name: "settings", description: "Open the settings (model, voice, …)", run: d.openSettings },
-    { name: "plugins", description: "Add, switch or remove plugins", run: d.openPlugins },
+    { name: "plugins", description: "Add, switch or remove plugins (skills and tools)", run: d.openPlugins },
+    { name: "connectors", description: "Connect Gmail, Chrome control or any MCP service; switch or remove them", run: d.openConnectors },
     {
       name: "voice",
       description: "Teach Friend your voice",
