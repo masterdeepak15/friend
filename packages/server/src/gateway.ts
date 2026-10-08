@@ -41,6 +41,8 @@ export interface GatewayDeps {
   voiceEnroll?: VoiceEnrollApi;
   /** Managing plugins from the owner's screen; the routes answer 503 without it. */
   plugins?: PluginsApi;
+  /** Managing connectors from the owner's screen; the routes answer 503 without it. */
+  connectors?: ConnectorsApi;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
   settings?: SettingsApi;
   /** What the conversation and schedule panels show; the routes answer 503 without it. */
@@ -62,6 +64,17 @@ export interface SettingsApi {
 export interface DataApi {
   history(): unknown;
   tasks(): unknown;
+}
+
+/** What the connector routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
+export interface ConnectorsApi {
+  list(): unknown;
+  /** Adds a connector and switches it on. Needs the owner's PIN: it starts a program or reaches a service. */
+  add(input: unknown, pin: string, ip: string): Promise<unknown>;
+  /** Switching on needs the PIN; switching off does not. */
+  setEnabled(id: string, enabled: boolean, pin: string | undefined, ip: string): Promise<unknown>;
+  reload(id: string): Promise<unknown>;
+  remove(id: string): Promise<void>;
 }
 
 /** What the plugin routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -334,6 +347,55 @@ export function createGateway(deps: GatewayDeps) {
       return { ok: true };
     } catch (e) {
       return pluginError(reply, e, "remove");
+    }
+  });
+
+  // ---- connectors (owner session only) ----
+  const connectorWindow = new SlidingWindow(30, 60_000);
+  const connectorGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    const session = token ? auth.resolveSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "Unauthorized" });
+    if (!connectorWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+    if (!deps.connectors) return reply.code(503).send({ error: "Connectors are not available" });
+  };
+  const connectorError = (reply: FastifyReply, e: unknown, what: string) => {
+    if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+    audit.log("owner", "connector.failed", { what, message: (e as Error).message }); // raw detail stays in the audit log
+    return reply.code(500).send({ error: "That did not work. Try again." });
+  };
+  app.get("/api/connectors", { onRequest: connectorGuard }, async () => deps.connectors!.list());
+  app.post("/api/connectors", { onRequest: connectorGuard }, async (req, reply) => {
+    const body = z.object({ pin: z.string().min(1).max(32), connector: z.record(z.string(), z.unknown()) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Fill in the connector and enter your PIN" });
+    try {
+      return await deps.connectors!.add(body.data.connector, body.data.pin, req.ip);
+    } catch (e) {
+      return connectorError(reply, e, "add");
+    }
+  });
+  app.post<{ Params: { id: string } }>("/api/connectors/:id/enabled", { onRequest: connectorGuard }, async (req, reply) => {
+    const body = z.object({ enabled: z.boolean(), pin: z.string().min(1).max(32).optional() }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Invalid input" });
+    try {
+      return await deps.connectors!.setEnabled(req.params.id, body.data.enabled, body.data.pin, req.ip);
+    } catch (e) {
+      return connectorError(reply, e, "enable");
+    }
+  });
+  app.post<{ Params: { id: string } }>("/api/connectors/:id/reload", { onRequest: connectorGuard }, async (req, reply) => {
+    try {
+      return await deps.connectors!.reload(req.params.id);
+    } catch (e) {
+      return connectorError(reply, e, "reload");
+    }
+  });
+  app.delete<{ Params: { id: string } }>("/api/connectors/:id", { onRequest: connectorGuard }, async (req, reply) => {
+    try {
+      await deps.connectors!.remove(req.params.id);
+      return { ok: true };
+    } catch (e) {
+      return connectorError(reply, e, "remove");
     }
   });
 

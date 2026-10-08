@@ -173,6 +173,117 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "connectors.list",
+    description: "List the owner's connectors (outside programs and services you can use through their tools, such as Gmail or Chrome control) with whether each works and how many tools it gives you. Their tools are named mcp.<connector>.<tool> and appear in your tool list when the connector is on.",
+    input: z.object({}),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "connectors.add",
+    description:
+      "Add a connector and switch it on, only when the owner asks for it. kind \"stdio\" starts a program on their PC (command plus args, no shell); kind \"http\" connects to a server by url. The owner approves with their PIN after seeing exactly what will run. You cannot give it secrets (tokens, passwords): if one is needed, tell the owner to add the connector on the settings screen (Esc, then Connectors).",
+    input: z.object({
+      id: z.string().min(1).max(16),
+      name: z.string().min(1).max(60),
+      kind: z.enum(["stdio", "http"]),
+      command: z.string().max(260).optional(),
+      args: z.array(z.string().max(500)).max(20).optional(),
+      url: z.string().max(2000).optional(),
+    }),
+    baseTier: "T3",
+    target: "gateway",
+  },
+  {
+    name: "connectors.enable",
+    description: "Switch a connector on (it starts the program or connects). The owner approves with their PIN.",
+    input: z.object({ id: z.string().min(1).max(16) }),
+    baseTier: "T3",
+    target: "gateway",
+  },
+  {
+    name: "connectors.disable",
+    description: "Switch a connector off; its tools disappear from your list.",
+    input: z.object({ id: z.string().min(1).max(16) }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "connectors.reload",
+    description: "Connect a connector again and read its tool list again (after it was updated, or when it stopped working).",
+    input: z.object({ id: z.string().min(1).max(16) }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "connectors.remove",
+    description: "Remove a connector completely. The owner approves.",
+    input: z.object({ id: z.string().min(1).max(16) }),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
+    name: "plugins.list",
+    description: "List the installed plugins (skills and tools) with whether each is on and valid.",
+    input: z.object({}),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "plugins.create",
+    description:
+      "Write a new plugin (or a new version of one of yours) and switch it on. Use it when you see a task the owner repeats and a skill or small tool would help, and the owner agrees. A skill is instructions for you to load later (name, description, text). A tool is a small program (python, node or shell) that runs in the code sandbox with no network and no access to the owner's files, receives its arguments as /work/args.json and prints its result; every call asks the owner for approval. The owner approves the creation with their PIN after reading everything you wrote. Names: lowercase letters, digits and single hyphens. If it is refused for a mistake, fix it and try again.",
+    input: z.object({
+      id: z.string().min(1).max(40),
+      name: z.string().min(1).max(80),
+      description: z.string().max(500).optional(),
+      skills: z.array(z.object({ name: z.string().min(1).max(40), description: z.string().min(1).max(300), text: z.string().min(1).max(20000) })).max(10).optional(),
+      tools: z
+        .array(
+          z.object({
+            name: z.string().min(1).max(40),
+            description: z.string().min(1).max(500),
+            language: z.enum(["python", "node", "shell"]),
+            code: z.string().min(1).max(50000),
+            parameters: z.record(z.string(), z.object({ type: z.enum(["string", "number", "integer", "boolean"]), description: z.string().max(300).optional(), enum: z.array(z.string().max(100)).max(50).optional() })).optional(),
+            required: z.array(z.string()).optional(),
+          }),
+        )
+        .max(10)
+        .optional(),
+    }),
+    baseTier: "T3",
+    target: "gateway",
+  },
+  {
+    name: "plugins.reload",
+    description: "Read all installed plugins again from disk and check them (use it after plugins.create if something looks missing, or when the owner changed a plugin by hand). Skills and tools are available right away afterwards.",
+    input: z.object({}),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "plugins.enable",
+    description: "Switch an installed plugin on. The owner approves with their PIN.",
+    input: z.object({ id: z.string().min(1).max(40) }),
+    baseTier: "T3",
+    target: "gateway",
+  },
+  {
+    name: "plugins.disable",
+    description: "Switch an installed plugin off.",
+    input: z.object({ id: z.string().min(1).max(40) }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "plugins.remove",
+    description: "Delete an installed plugin. The owner approves.",
+    input: z.object({ id: z.string().min(1).max(40) }),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
     name: "stage.scene",
     description: "Switch the full-screen scene mode: ambient, conversation, focus or multi.",
     input: z.object({ mode: SceneMode }),
@@ -279,6 +390,42 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return `Change settings: ${visible(clip(JSON.stringify(a.settings ?? {}), 400))}`;
     case "view.set":
       return `Change the view to ${visible(String(a.view ?? ""))}`;
+    case "connectors.list":
+      return "List the connectors";
+    case "connectors.add": {
+      const what =
+        a.kind === "http"
+          ? `connect to ${visible(String(a.url ?? ""))}`
+          : `start this program on your PC (no shell): ${visible([a.command, ...(Array.isArray(a.args) ? a.args : [])].map(String).join(" "))}`;
+      return `Add the connector "${visible(String(a.name ?? ""))}" (${visible(String(a.id ?? ""))}) and switch it on. It will ${what}`;
+    }
+    case "connectors.enable":
+      return `Switch on the connector ${visible(String(a.id ?? ""))}`;
+    case "connectors.disable":
+      return `Switch off the connector ${visible(String(a.id ?? ""))}`;
+    case "connectors.reload":
+      return `Connect the connector ${visible(String(a.id ?? ""))} again`;
+    case "connectors.remove":
+      return `Remove the connector ${visible(String(a.id ?? ""))}`;
+    case "plugins.list":
+      return "List the plugins";
+    case "plugins.create": {
+      const skills = (Array.isArray(a.skills) ? a.skills : []) as Record<string, unknown>[];
+      const tools = (Array.isArray(a.tools) ? a.tools : []) as Record<string, unknown>[];
+      const parts = [`Create the plugin "${visible(String(a.name ?? ""))}" (${visible(String(a.id ?? ""))}) and switch it on. Read all of it:`];
+      for (const sk of skills) parts.push(`\nSKILL ${visible(String(sk.name ?? ""))}: ${visible(String(sk.description ?? ""))}\n${visible(String(sk.text ?? ""))}`);
+      for (const t of tools) parts.push(`\nTOOL ${visible(String(t.name ?? ""))} (${visible(String(t.language ?? ""))}, runs in the sandbox, asks you every time): ${visible(String(t.description ?? ""))}\n${visible(String(t.code ?? ""))}`);
+      if (!skills.length && !tools.length) parts.push("\n(no skills and no tools)");
+      return parts.join("\n");
+    }
+    case "plugins.reload":
+      return "Read the plugins again";
+    case "plugins.enable":
+      return `Switch on the plugin ${visible(String(a.id ?? ""))}`;
+    case "plugins.disable":
+      return `Switch off the plugin ${visible(String(a.id ?? ""))}`;
+    case "plugins.remove":
+      return `Delete the plugin ${visible(String(a.id ?? ""))}`;
     case "camera.snap":
       return "Take one picture with the camera and show it to the AI model";
     default:

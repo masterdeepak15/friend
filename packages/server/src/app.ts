@@ -1,6 +1,10 @@
 import type { ClientMsg, ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
+import { makeAdmin } from "./admin";
 import { chatLines } from "./chatlog";
+import { McpHub } from "./connectors/hub";
+import { PRESETS } from "./connectors/presets";
+import { ConnectorStore } from "./connectors/store";
 import { Approvals } from "./approvals";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
@@ -17,7 +21,7 @@ import { join } from "node:path";
 import { loadConfig, saveConfig, type Config } from "./config";
 import { openDb } from "./db";
 import { DeviceHub } from "./devices";
-import { createGateway, type ClientConn, type PluginsApi } from "./gateway";
+import { createGateway, type ClientConn, type ConnectorsApi, type PluginsApi } from "./gateway";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import { ClaudeCodeProvider } from "./provider/claude-code/provider";
@@ -98,6 +102,8 @@ export async function createApp(opts: AppOptions) {
   const memory = new Memory(db);
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
+  const hub = new McpHub(new ConnectorStore(opts.dataDir));
+  const admin = makeAdmin({ hub, plugins, dataDir: opts.dataDir, audit: (what, detail) => audit.log("agent", what, detail) });
   /** Validates, applies and saves a settings change, then tells the screens. Used by the settings screen and by the AI. */
   function commitSettings(patch: unknown, how: { actor: "owner" | "agent"; ip?: string; deferSwap?: boolean }): Applied {
     let applied: Applied;
@@ -143,6 +149,8 @@ export async function createApp(opts: AppOptions) {
 
   const agent = new Agent({
     settings: agentSettings,
+    mcp: hub,
+    admin,
     provider,
     policy,
     approvals,
@@ -325,7 +333,50 @@ export async function createApp(opts: AppOptions) {
     },
   };
 
+  const connectorsApi: ConnectorsApi = {
+    list: () => ({ connectors: hub.list(), presets: PRESETS }),
+    add: async (input, pin, ip) => {
+      await requirePin(pin, ip);
+      try {
+        const v = await hub.add(input);
+        audit.log("owner", "connector.added", { id: v.id, kind: v.kind, status: v.status, ip });
+        return v;
+      } catch (e) {
+        throw new HttpError(400, (e as Error).message);
+      }
+    },
+    setEnabled: async (id, enabled, pin, ip) => {
+      if (enabled) {
+        if (!pin) throw new HttpError(400, "Enter your PIN to switch a connector on.");
+        await requirePin(pin, ip);
+      }
+      try {
+        const v = await hub.setEnabled(id, enabled);
+        audit.log("owner", enabled ? "connector.enabled" : "connector.disabled", { id, ip });
+        return v;
+      } catch (e) {
+        throw new HttpError(404, (e as Error).message);
+      }
+    },
+    reload: async (id) => {
+      try {
+        return await hub.reload(id);
+      } catch (e) {
+        throw new HttpError(404, (e as Error).message);
+      }
+    },
+    remove: async (id) => {
+      try {
+        await hub.remove(id);
+        audit.log("owner", "connector.removed", { id });
+      } catch (e) {
+        throw new HttpError(404, (e as Error).message);
+      }
+    },
+  };
+
   const gateway = createGateway({
+    connectors: connectorsApi,
     config,
     auth,
     audit,
@@ -536,6 +587,7 @@ export async function createApp(opts: AppOptions) {
     },
     async start(): Promise<{ port: number }> {
       heartbeat.start();
+      hub.startAll(); // connectors that were on come back in the background; Friend does not wait for them
       timer = setInterval(() => {
         for (const id of stage.expire()) broadcast({ type: "stage", command: { cmd: "hide", id } });
       }, opts.expireIntervalMs ?? 1000);
@@ -551,6 +603,7 @@ export async function createApp(opts: AppOptions) {
       approvals.denyAll("Shutting down");
       await gateway.close();
       await provider.close?.().catch(() => {});
+      await hub.close().catch(() => {});
       db.close();
     },
   };

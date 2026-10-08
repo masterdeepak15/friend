@@ -16,7 +16,9 @@ import { localIso, type Tasks } from "../tasks";
 import type { DeviceHub } from "../devices";
 import { classifyShell } from "../policy/classify";
 import type { PolicyEngine } from "../policy/engine";
-import type { ContentBlock, Msg, Provider } from "../provider/types";
+import type { AdminApi } from "../admin";
+import type { ContentBlock, Msg, Provider, ToolSpec } from "../provider/types";
+import { z } from "zod";
 import { runStageTool, type StageState } from "../stage";
 import { getToolDef, lexicalInsideRoots, pathArg, toolSpecs } from "../tools/registry";
 import { loadHistory, repairDangling, saveMessage } from "./history";
@@ -54,6 +56,18 @@ export interface AgentDeps {
   weather?: Pick<WeatherService, "get">;
   /** Reading and changing the owner's settings. Without it the settings tools report they are unavailable. */
   settings?: AgentSettings;
+  /** The tools of the owner's connectors (Gmail, Chrome control, …). Without it there are none. */
+  mcp?: McpApi;
+  /** Managing connectors and plugins for the AI. Without it those tools report they are unavailable. */
+  admin?: AdminApi;
+}
+
+export interface McpApi {
+  toolSpecs(): ToolSpec[];
+  has(name: string): boolean;
+  call(name: string, args: unknown, signal: AbortSignal): Promise<{ text: string; isError: boolean }>;
+  /** One line about which connectors exist and whether they work, for the model's context. */
+  summary(): string;
 }
 
 export interface AgentSettings {
@@ -131,7 +145,7 @@ export class Agent {
       keep(userMsg);
       const messages: Msg[] = guest ? [userMsg] : loadHistory(d.db);
       const pluginTools = (d.plugins?.toolDefs() ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
-      const tools = ctx.trust === "owner" ? [...toolSpecs(), ...pluginTools] : [];
+      const tools = ctx.trust === "owner" ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])] : [];
       let nudged = false;
 
       // Clear requests for real data (weather in a named city, the computer's stats) are answered with the real tools
@@ -165,6 +179,7 @@ export class Agent {
           notes,
           localIso(new Date(d.tasks?.now() ?? Date.now())),
           guest ? undefined : d.plugins?.skills(),
+          guest ? undefined : d.mcp?.summary(),
         );
         for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: guest ? "guest" : "owner", messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
@@ -324,9 +339,13 @@ export class Agent {
     const fail = (error: string) => ({ text: `Error: ${error}`, isError: true });
     const plugin = call.name.startsWith("plugin.") ? d.plugins?.tool(call.name) : undefined;
     // every plugin tool needs the owner's approval, whatever the plugin says about itself
+    // a connector's tool is asked about every time (T2), whatever the connector says about itself
+    const mcpTool = !plugin && (d.mcp?.has(call.name) ?? false);
     const def: ToolDef | undefined = plugin
       ? { name: plugin.name, description: plugin.description, input: plugin.input, baseTier: "T2", target: "gateway" }
-      : getToolDef(call.name);
+      : mcpTool
+        ? { name: call.name, description: "", input: z.record(z.string(), z.unknown()), baseTier: "T2", target: "gateway" }
+        : getToolDef(call.name);
     if (!def) return fail(`Unknown tool: ${call.name}`);
     const parsed = def.input.safeParse(call.args ?? {});
     if (!parsed.success) return fail(`Invalid arguments for ${call.name}: ${parsed.error.message}`);
@@ -362,6 +381,26 @@ export class Agent {
         return fail(`The owner did not approve this action (${outcome.reason ?? "denied"}).`);
       }
       approvedOutside = !insideRoots;
+    }
+
+    if (mcpTool) {
+      const r = await d.mcp!.call(call.name, args, signal);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: !r.isError });
+      const capped = r.text.length > MAX_RESULT_CHARS;
+      const text = capped ? `${r.text.slice(0, MAX_RESULT_CHARS)}\n[output truncated]` : r.text;
+      return r.isError ? fail(text) : { text, isError: false };
+    }
+
+    if (call.name.startsWith("connectors.") || call.name.startsWith("plugins.")) {
+      if (!d.admin) return fail("Managing connectors and plugins is not available.");
+      try {
+        const text = await d.admin.run(call.name, args);
+        d.audit.log("agent", "tool.call", { tool: call.name, args: { id: args.id }, tier, ok: true });
+        return { text, isError: false };
+      } catch (e) {
+        d.audit.log("agent", "tool.call", { tool: call.name, args: { id: args.id }, tier, ok: false });
+        return fail((e as Error).message);
+      }
     }
 
     if (call.name === "code.run") {
