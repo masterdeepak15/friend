@@ -23,9 +23,19 @@ export const ServerMsg = z.discriminatedUnion("type", [
     busy: z.boolean(),
     deviceOnline: z.boolean(),
     voiceAvailable: z.boolean().optional(),
+    /** Whether the owner's voice has been enrolled for speaker recognition. */
+    voiceEnrolled: z.boolean().optional(),
     message: z.string().optional(),
   }),
-  z.object({ type: z.literal("voice.heard"), text: z.string() }),
+  z.object({
+    type: z.literal("voice.heard"),
+    text: z.string(),
+    /** owner: the voice matched; guest: it did not; unverified: no voice is enrolled yet. */
+    trust: z.enum(["owner", "guest", "unverified"]).optional(),
+  }),
+  /** A borderline voice: nothing runs until the owner confirms with the PIN. */
+  z.object({ type: z.literal("voice.challenge"), id: z.string(), text: z.string() }),
+  z.object({ type: z.literal("voice.challenge.end"), id: z.string() }),
   z.object({
     type: z.literal("audio.chunk"),
     id: z.string(),
@@ -53,6 +63,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stage.event"), objectId: z.string(), event: z.string().max(64) }),
   ApprovalRespond,
   z.object({ type: z.literal("voice.interrupt") }),
+  z.object({ type: z.literal("voice.confirm"), id: z.string(), pin: z.string().max(32) }),
+  z.object({ type: z.literal("voice.cancel"), id: z.string() }),
   z.object({ type: z.literal("ping") }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;

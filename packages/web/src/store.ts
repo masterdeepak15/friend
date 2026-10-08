@@ -22,6 +22,13 @@ export interface VoiceView {
   /** Live microphone or playback loudness, 0..1. */
   level: number;
   available: boolean;
+  /** The owner's voice has been enrolled, so strangers are recognized. */
+  enrolled: boolean;
+}
+
+export interface VoiceChallenge {
+  id: string;
+  text: string;
 }
 
 export interface StageViewState {
@@ -37,6 +44,8 @@ export interface StageViewState {
   busy: boolean;
   deviceOnline: boolean;
   voice: VoiceView;
+  /** A borderline voice waiting for the owner's PIN. */
+  challenge: VoiceChallenge | null;
 }
 
 export const initialState: StageViewState = {
@@ -51,7 +60,8 @@ export const initialState: StageViewState = {
   connection: "connecting",
   busy: false,
   deviceOnline: false,
-  voice: { mode: "idle", level: 0, available: false },
+  voice: { mode: "idle", level: 0, available: false, enrolled: false },
+  challenge: null,
 };
 
 export type LocalAction =
@@ -59,6 +69,7 @@ export type LocalAction =
   | { type: "alert.dismiss"; id: number }
   | { type: "object.dismiss"; id: string }
   | { type: "alert.add"; level: "info" | "warn" | "error"; text: string }
+  | { type: "challenge.dismiss"; id: string }
   | { type: "voice.mode"; mode: VoiceMode }
   | { type: "voice.level"; level: number };
 
@@ -97,6 +108,9 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     if (local.type === "conn") return { ...state, connection: local.value };
     if (local.type === "alert.add") {
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: local.level, text: local.text }] };
+    }
+    if (local.type === "challenge.dismiss") {
+      return state.challenge?.id === local.id ? { ...state, challenge: null } : state;
     }
     if (local.type === "voice.mode") {
       return { ...state, voice: { ...state.voice, mode: local.mode, level: local.mode === "idle" ? 0 : state.voice.level } };
@@ -147,12 +161,20 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
         ...state,
         busy: m.busy,
         deviceOnline: m.deviceOnline,
-        voice: m.voiceAvailable === undefined ? state.voice : { ...state.voice, available: m.voiceAvailable },
+        voice: {
+          ...state.voice,
+          available: m.voiceAvailable ?? state.voice.available,
+          enrolled: m.voiceEnrolled ?? state.voice.enrolled,
+        },
       };
     case "error":
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: "error", text: m.message }] };
     case "voice.heard":
-      return { ...state, captions: m.text, captionDone: true };
+      return { ...state, captions: m.trust === "guest" ? `Guest: ${m.text}` : m.text, captionDone: true };
+    case "voice.challenge":
+      return { ...state, challenge: { id: m.id, text: m.text } };
+    case "voice.challenge.end":
+      return state.challenge?.id === m.id ? { ...state, challenge: null } : state;
     case "audio.chunk":
     case "audio.stop":
       return state; // handled by the audio player, outside the reducer

@@ -68,7 +68,7 @@ describe("reduce", () => {
   });
 
   it("tracks voice availability from status and keeps it when status omits the field", () => {
-    expect(initialState.voice).toEqual({ mode: "idle", level: 0, available: false });
+    expect(initialState.voice).toEqual({ mode: "idle", level: 0, available: false, enrolled: false });
     let s = reduce(initialState, { type: "status", busy: false, deviceOnline: true, voiceAvailable: true });
     expect(s.voice.available).toBe(true);
     s = reduce(s, { type: "status", busy: false, deviceOnline: true });
@@ -94,6 +94,34 @@ describe("reduce", () => {
     expect(s.voice.level).toBe(0);
     s = reduce(s, { type: "voice.mode", mode: "idle" });
     expect(s.voice).toMatchObject({ mode: "idle", level: 0 });
+  });
+
+  it("tracks whether a voice is enrolled from status and keeps it when status omits the field", () => {
+    let s = reduce(initialState, { type: "status", busy: false, deviceOnline: true, voiceEnrolled: true });
+    expect(s.voice.enrolled).toBe(true);
+    s = reduce(s, { type: "status", busy: false, deviceOnline: true });
+    expect(s.voice.enrolled).toBe(true);
+    s = reduce(s, { type: "status", busy: false, deviceOnline: true, voiceEnrolled: false });
+    expect(s.voice.enrolled).toBe(false);
+  });
+
+  it("labels what an unrecognized voice said as a guest", () => {
+    expect(reduce(initialState, { type: "voice.heard", text: "open it", trust: "guest" }).captions).toBe("Guest: open it");
+    expect(reduce(initialState, { type: "voice.heard", text: "open it", trust: "owner" }).captions).toBe("open it");
+    expect(reduce(initialState, { type: "voice.heard", text: "open it", trust: "unverified" }).captions).toBe("open it");
+  });
+
+  it("holds a pending voice challenge until it ends, is dismissed, or is replaced", () => {
+    expect(initialState.challenge).toBeNull();
+    let s = reduce(initialState, { type: "voice.challenge", id: "c1", text: "open the garage" });
+    expect(s.challenge).toEqual({ id: "c1", text: "open the garage" });
+    s = reduce(s, { type: "voice.challenge.end", id: "other" });
+    expect(s.challenge?.id).toBe("c1");
+    s = reduce(s, { type: "voice.challenge", id: "c2", text: "second" });
+    expect(s.challenge?.id).toBe("c2");
+    expect(reduce(s, { type: "voice.challenge.end", id: "c2" }).challenge).toBeNull();
+    expect(reduce(s, { type: "challenge.dismiss", id: "c2" }).challenge).toBeNull();
+    expect(reduce(s, { type: "challenge.dismiss", id: "old" }).challenge?.id).toBe("c2");
   });
 
   it("shows what the owner said as a caption", () => {

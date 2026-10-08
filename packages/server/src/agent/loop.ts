@@ -74,10 +74,16 @@ export class Agent {
     stage({ cmd: "presence", state: "thinking" });
     const abort = new AbortController();
     this.abort = abort;
+    // An unverified speaker gets an isolated conversation: no owner history in, nothing stored out.
+    const guest = ctx.trust === "guest";
+    const keep = (m: Msg) => {
+      if (!guest) saveMessage(d.db, m);
+    };
     try {
-      repairDangling(d.db);
-      saveMessage(d.db, { role: "user", content: [{ type: "text", text }] });
-      const messages: Msg[] = loadHistory(d.db);
+      if (!guest) repairDangling(d.db);
+      const userMsg: Msg = { role: "user", content: [{ type: "text", text }] };
+      keep(userMsg);
+      const messages: Msg[] = guest ? [userMsg] : loadHistory(d.db);
       const tools = ctx.trust === "owner" ? toolSpecs() : [];
 
       for (let step = 0; step < MAX_STEPS; step++) {
@@ -85,7 +91,7 @@ export class Agent {
         const calls: ToolCall[] = [];
         let failed: string | null = null;
         let userFacing = false;
-        const system = buildSystemPrompt(d.assistantName(), d.stage.summary());
+        const system = buildSystemPrompt(d.assistantName(), d.stage.summary(), guest ? "guest" : "owner");
         for await (const ev of d.provider.stream({ system, messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
             if (!assistantText) stage({ cmd: "presence", state: "speaking" });
@@ -116,7 +122,7 @@ export class Agent {
         for (const c of calls) content.push({ type: "tool_use", id: c.id, name: c.name, input: c.args });
         const assistantMsg: Msg = { role: "assistant", content };
         messages.push(assistantMsg);
-        if (content.length) saveMessage(d.db, assistantMsg);
+        if (content.length) keep(assistantMsg);
         if (calls.length === 0) return;
 
         stage({ cmd: "presence", state: "thinking" });
@@ -128,7 +134,7 @@ export class Agent {
         }
         const toolMsg: Msg = { role: "tool", content: results };
         messages.push(toolMsg);
-        saveMessage(d.db, toolMsg);
+        keep(toolMsg);
         if (step === MAX_STEPS - 1) {
           emit({ type: "alert", level: "warn", text: `Stopped after ${MAX_STEPS} steps without finishing.` });
         }

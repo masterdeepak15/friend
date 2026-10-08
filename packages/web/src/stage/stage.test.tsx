@@ -157,7 +157,7 @@ describe("auto layout, exit animation and mood", () => {
 describe("voice on the stage", () => {
   const noop = () => {};
   const presence = (c: HTMLElement) => c.querySelector("[data-presence]") as HTMLElement;
-  const voice = (mode: StageViewState["voice"]["mode"], level = 0.6): StageViewState["voice"] => ({ mode, level, available: true });
+  const voice = (mode: StageViewState["voice"]["mode"], level = 0.6): StageViewState["voice"] => ({ mode, level, available: true, enrolled: true });
 
   it("shows listening and the microphone level while the owner talks", () => {
     const { container } = render(<Stage state={withState({ voice: voice("listening", 0.6) })} send={noop} dispatch={noop} />);
