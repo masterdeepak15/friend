@@ -29,6 +29,150 @@ Handy options: `friend onboard --no-install` (never installs anything, only tell
 
 If `npm install` fails on `better-sqlite3` (it builds a small native part when no ready-made one fits your system), install the compiler tools it names (on Windows: the "Desktop development with C++" part of Visual Studio Build Tools) and run it again.
 
+## Command reference
+
+Every command starts with `friend`. If you run Friend from the source code, write `pnpm friend ...` instead. `friend` on its own prints the short list. Most things can also be done inside the app (press Esc, then Settings), and a few have their own commands there (see "Commands inside the app" below).
+
+### Set up and check
+
+| Command | What it does | Use it when |
+|---|---|---|
+| `friend onboard` | The guided setup in ten steps: asks what you want to use, checks this PC, offers to install what is missing (asking first), creates your account, then the model, voice, workspace, network and look. | The first time, or to finish something you skipped. It is safe to run again: it carries on where it stopped. |
+| `friend onboard --no-install` | The same, but never installs anything; it only tells you what to install. | You manage software yourself, or this is a work PC. |
+| `friend onboard --yes` | Takes every suggestion without asking (passwords and keys are still asked). | You want the defaults quickly. |
+| `friend onboard --redo <step>` | Runs one step again. Steps: welcome, features, prereqs, account, model, voice, workspace, network, look, finish. | You want to change one thing, for example `friend onboard --redo look` or `--redo network`. |
+| `friend onboard --reset` | Forgets what the wizard has done so far and starts over. Your account and settings stay. | The wizard's memory of its steps is wrong. |
+| `friend doctor` | Shows what this PC has (Node.js, Python, Docker, Ollama, Claude Code, the port) and the exact command to fix what is missing. Changes nothing. | Something does not work, or before asking for help. |
+| `friend setup` | Only creates the owner account: password, PIN, assistant name, workspace folder, API key, voice. | You want the plain version without the wizard. |
+| `friend status` | Prints the saved settings: data folder, owner, address, public URL, workspace, model, whether an API key is set. | A quick look at how Friend is set up. |
+| `friend version` | Prints the version. | Reporting a problem, or checking an update. |
+
+### Run Friend and other PCs
+
+| Command | What it does | Use it when |
+|---|---|---|
+| `friend start` | Starts Friend: the web app, the assistant, the speech engine if installed, and your connectors. Prints the address (and your network address when that is on). Ctrl+C stops it. | Every day. Open the address in a browser and sign in. |
+| `friend pair` | Prints a one-time pairing code, valid for 5 minutes, and the command to run on the other PC. | You want Friend to also work on a second PC. |
+| `friend node --url ws://HOST:8787/device --code CODE` | Run on the other PC: connects it to your Friend. Add `--roots C:/work,D:/files` for the folders it may use freely and `--name laptop` to name it. | The second step after `friend pair`. |
+| `friend devices list` | Lists the paired PCs and when each was last seen. | Checking what is connected. |
+| `friend devices revoke <id>` | Cuts a paired PC off at once. | A PC is lost, sold or no longer yours. |
+
+### Choose the model
+
+| Command | What it does | Use it when |
+|---|---|---|
+| `friend claude status` | Shows whether Claude Code is installed and signed in, and the model and fallback in use. | Checking the Claude subscription route. |
+| `friend claude setup` | Checks that Claude Code is installed and signed in, and tells you what to fix. | You have a Claude plan and want to use it. |
+| `friend claude setup --use` | The same, and switches Friend to your Claude subscription (restart `friend start`). | You want Friend to answer through your plan, with no API key. |
+| `friend ollama status` | Shows whether Ollama is running, which models are installed, and which one Friend uses. | Checking the local model. |
+| `friend ollama setup [model]` | Starts Ollama if needed (in Docker when it is not installed), then downloads the model (default qwen2.5:7b). | You want a free, private model on this PC. |
+| `friend ollama setup [model] --use` | The same, and switches Friend to it. | Make the local model the main one. |
+| `friend config set provider claude` | Chooses the model by hand: `claude` (API key), `claude-code` (your subscription) or `ollama` (this PC). | You prefer a command to the Settings screen. |
+| `friend config set apiKey <key>` | Saves an Anthropic API key. | You use the API route. |
+
+### Voice
+
+| Command | What it does | Use it when |
+|---|---|---|
+| `friend voice setup` | Installs speech (a private Python environment, Whisper for listening, Piper for speaking), asks which voice you want (female or male) and downloads about 250 MB. | You want to talk to Friend and hear it. |
+| `friend voice setup --female` | The same without the question: the first female voice (Amy). `--male` gives Ryan. | You know which kind you want. |
+| `friend voice setup --voice jenny` | The same with a voice by name or by its number in the list (`--voice 4`), or any other Piper voice name such as `hi_IN-pratham-medium`. | You want a specific voice. |
+| `friend voice list` | Shows the twelve voices (six female, six male), numbered, with the current one marked. | Choosing a voice. |
+| `friend voice status` | Shows whether speech is installed, which models it uses, and whether your own voice is enrolled. | Voice does not work, or you want to check. |
+| `friend voice forget` | Deletes your saved voice (asks for your PIN). Afterwards every voice is treated as yours until you enrol again. | You want to re-enrol, or switch recognition off. |
+
+### Network and port
+
+| Command | What it does | Use it when |
+|---|---|---|
+| `friend lan` (or `friend lan status`) | Shows what Friend listens on and the addresses to open. | Checking, or finding the address for your phone. |
+| `friend lan on` | Lets other devices on your network open Friend. Prints the addresses and the things to know (plain http, no microphone on other devices, firewall prompt). | Using Friend from a phone or another PC. |
+| `friend lan on --port 9100` | The same on another port. | Port 8787 is taken. |
+| `friend lan port 9100` | Changes only the port. | Another program uses 8787. |
+| `friend lan off` | Back to this PC only. | Closing it again. |
+
+Restart `friend start` after any of these.
+
+### Your data and what Friend may do
+
+| Command | What it does | Use it when |
+|---|---|---|
+| `friend memory list` | Lists the notes Friend keeps about you, numbered. | Seeing what it remembers. |
+| `friend memory forget <number>` | Deletes one note. | A note is wrong or private. |
+| `friend memory clear` | Deletes all notes (asks for your PIN). | Starting fresh. |
+| `friend rules list` | Lists the "always allow" rules you created by choosing *Always allow* on an approval card. | Reviewing what Friend may do without asking. |
+| `friend rules remove <id>` | Removes a rule, so Friend asks again. | You trust something less now. |
+
+### Plugins
+
+| Command | What it does | Use it when |
+|---|---|---|
+| `friend plugin catalog` | Lists the plugins that come with Friend. | Looking for something to add. |
+| `friend plugin list` | Lists the installed plugins and whether each is on. | Checking what is installed. |
+| `friend plugin install <name or folder>` | Shows exactly what a plugin contains and asks before installing (add `--yes` to skip the question). A folder path installs your own plugin. | Adding a skill or a sandboxed tool. |
+| `friend plugin enable <id>` and `friend plugin disable <id>` | Switches a plugin on or off without removing it. | Pausing a plugin. |
+| `friend plugin remove <id>` | Deletes a plugin. | You no longer want it. |
+
+Connectors (Gmail, Chrome control, any MCP service) are managed inside the app, not on the command line: Esc, then Connectors, or `/connectors`.
+
+### Settings by command
+
+`friend config set <key> <value>` changes one setting; `friend config keys` prints the list with a line about each. Anything on the Settings screen can be changed there instead, with the same effect. The keys:
+
+| Key | What it is |
+|---|---|
+| `provider` | Which model answers: `claude` (API key), `claude-code` (your subscription) or `ollama` (this PC). |
+| `apiKey`, `model` | The Anthropic API key and the Claude model used with it. |
+| `claudeCode.model`, `claudeCode.command`, `claudeCode.fallback` | The subscription route: model (`sonnet`, `haiku`, `opus`), the command that starts Claude Code, and `ollama` or `none` for what to use when Claude is unavailable. |
+| `ollama.url`, `ollama.model`, `ollama.vision`, `ollama.contextTokens` | The local model: server address, model name, whether it can see pictures, and how much it remembers at once. |
+| `voice.enabled`, `voice.sttModel`, `voice.ttsVoice`, `voice.language`, `voice.speakTyped`, `voice.accept`, `voice.challenge` | Speech on or off, the listening model, the speaking voice, a forced language, speaking typed replies, and the two thresholds for recognising your voice. |
+| `bind`, `port` | Where Friend listens (easier: `friend lan`). |
+| `publicUrl`, `allowedOrigins`, `allowedHosts`, `trustProxy` | For running behind your own domain or reverse proxy (see "Using your own domain later"). |
+| `roots` | The workspace folders Friend may use freely, separated by commas. |
+
+Example: `friend config set voice.speakTyped false` keeps typed messages silent.
+
+### Environment variables
+
+| Variable | Meaning |
+|---|---|
+| `FRIEND_HOME` | The folder where Friend keeps its data (default: `.friend` in your home folder). Use another folder to keep a separate test copy. |
+| `FRIEND_ANTHROPIC_KEY` | An API key to use when none is saved. |
+| `FRIEND_PYTHON` | The Python program to use for voice, if the usual ones are not the right version. |
+| `FRIEND_WEB_DIR`, `FRIEND_PLUGIN_CATALOG`, `FRIEND_VOICE_DIR` | Where the web app, the bundled plugins and the Python voice code are, for unusual installs. |
+| `FRIEND_DEMO_PORT` | The port `pnpm demo` listens on (default 8788). |
+
+### From the source code
+
+| Command | What it does |
+|---|---|
+| `pnpm friend ...` | Runs any command above from the repository. |
+| `pnpm demo` | A scripted demo with no network and no key; open the printed address. |
+| `pnpm test`, `pnpm typecheck`, `pnpm build` | The checks and the web build. |
+| `pnpm package` | Builds the npm package in `packages/friend` (then `npm publish` from there). |
+
+### Commands inside the app
+
+Type `/` in the message bar for a list that narrows as you type; they run on the screen and never go to the AI. `/help` opens the same list with a line about each.
+
+| Command | What it does |
+|---|---|
+| `/settings` | Opens the settings. |
+| `/look` | Opens the settings on the voice presence tab (themes, colour, size, captions). |
+| `/view minimal`, `/view companion`, `/view workspace` | Chooses how much is on the screen besides the AI's pictures. |
+| `/chat`, `/tasks` | Shows or hides the conversation and the schedule (add `on` or `off`). |
+| `/layout reset` | Puts every panel back where it started. |
+| `/connectors` | Opens the connectors (Gmail, Chrome control, any MCP service). |
+| `/plugins` | Opens the plugins. |
+| `/voice` | Opens voice enrolment. |
+| `/camera on`, `/camera off` | Switches the camera. It only takes a picture when you approve. |
+| `/mute`, `/unmute` | Hides or shows everything on the stage. |
+| `/clear` | Takes everything off the screen. |
+| `/status` | Says what Friend is doing right now. |
+| `/logout` | Signs out on this screen. |
+| `/lock` | Emergency lock: ends every session and stops the agent. |
+| `/help` | Lists the commands. |
+
 ## Quick start (from the source code)
 
 ```bash

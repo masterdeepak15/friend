@@ -6,7 +6,7 @@ export async function statusCommand(io: IO): Promise<number> {
   const cfg = loadConfig(io.dataDir);
   const db = openDb(io.dataDir);
   const auth = new Auth(db, new Audit(db));
-  const owner = auth.hasOwner() ? `yes (${auth.assistantName()})` : "no, run: friend setup";
+  const owner = auth.hasOwner() ? `yes (${auth.assistantName()})` : "no, run: friend onboard";
   db.close();
   io.out(`Data folder:  ${cfg.dataDir}`);
   io.out(`Owner set up: ${owner}`);

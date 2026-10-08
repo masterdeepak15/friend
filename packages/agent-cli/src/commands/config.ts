@@ -84,12 +84,46 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
   },
 };
 
+/** What every setting does, in one line. `friend config keys` prints this; the README has the same list. */
+export const KEY_HELP: Record<string, string> = {
+  apiKey: "Anthropic API key, used when the model is \"claude\"",
+  model: "Claude model name, used with the API key",
+  provider: "which model answers: claude (API key), claude-code (your Claude subscription) or ollama (on this PC)",
+  bind: "address Friend listens on: 127.0.0.1 is this PC only, 0.0.0.0 is your whole network (easier: friend lan on)",
+  port: "the web port (easier: friend lan port N)",
+  publicUrl: "the address people use when Friend is behind your own domain, or empty",
+  roots: "folders Friend may read and write freely, separated by commas",
+  allowedOrigins: "extra web addresses allowed to connect, separated by commas",
+  allowedHosts: "extra host names that may reach Friend (for example my-pc), separated by commas",
+  trustProxy: "true when Friend sits behind your own reverse proxy",
+  "voice.enabled": "true or false: use speech at all",
+  "voice.sttModel": "listening model: tiny, base, small, … (bigger is more accurate and slower)",
+  "voice.ttsVoice": "speaking voice (easier: friend voice setup, or Settings)",
+  "voice.language": "force a spoken language such as en or hi, or empty to detect it",
+  "voice.speakTyped": "true or false: also speak the replies to typed messages",
+  "voice.accept": "0 to 1: a voice at or above this match is you",
+  "voice.challenge": "0 to 1: a voice between this and accept must be confirmed with your PIN",
+  "ollama.url": "address of the Ollama server, for example http://127.0.0.1:11434",
+  "ollama.model": "the local model, for example qwen2.5:7b",
+  "ollama.vision": "true or false: the local model can look at pictures",
+  "ollama.contextTokens": "how much the local model remembers at once (1024 to 131072)",
+  "claudeCode.model": "model for your Claude subscription: sonnet, haiku, opus or a full name",
+  "claudeCode.command": "the command that starts Claude Code, if it is not on the PATH",
+  "claudeCode.fallback": "ollama or none: what to use when Claude is unavailable",
+};
+
 const allKeys = () => [...Object.keys(PARSERS), ...Object.entries(GROUPS).flatMap(([g, f]) => Object.keys(f).map((k) => `${g}.${k}`))];
+
+export const configKeys = (): string[] => allKeys();
 
 export async function configCommand(args: string[], io: IO): Promise<number> {
   const [sub, key, ...valueParts] = args;
+  if (sub === "keys") {
+    for (const k of allKeys()) io.out(`${k.padEnd(24)} ${KEY_HELP[k] ?? ""}`);
+    return 0;
+  }
   if (sub !== "set" || !key) {
-    io.err("Usage: friend config set <key> <value>");
+    io.err("Usage: friend config set <key> <value> | friend config keys");
     return 1;
   }
   const value = valueParts.join(" ");

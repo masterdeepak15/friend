@@ -40,13 +40,16 @@ export const USAGE = `Usage: friend <command>
   ollama setup|status        use a local model through Ollama (no API key needed)
   lan status|on|off|port N   let other devices on your network open Friend, or change the port (restart to apply)
   claude setup|status        use your Claude subscription through Claude Code (no API key needed)
-  voice setup|status|forget  install or check local speech (hold Space to talk); forget deletes your saved voice
+  voice setup|list|status|forget  install local speech and choose a female or male voice; check it; forget deletes your saved voice
   memory list|forget <n>|clear  see and delete the notes Friend keeps about you
   plugin catalog|list|install|enable|disable|remove  add skills and sandboxed tools
   rules list|remove <id>     manage always-allow rules
   devices list|revoke <id>   manage paired devices
   status                     show configuration
-  config set <key> <value>   keys: apiKey, model, port, bind, publicUrl, roots, trustProxy, allowedOrigins`;
+  config set <key> <value>   change a setting; "friend config keys" lists them all
+  version                    print the version
+
+Start here: friend onboard`;
 
 export async function run(argv: string[], io: IO): Promise<number> {
   const [cmd, ...rest] = argv;
