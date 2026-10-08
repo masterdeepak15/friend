@@ -167,6 +167,8 @@ button { cursor: pointer; }
   width: min(460px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; padding: 20px;
   background: rgba(2, 12, 18, 0.92); border-color: var(--warn); box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.55), 0 0 30px rgba(255, 180, 84, 0.25);
 }
+.challenge, .enroll { border-color: var(--accent); box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.55), 0 0 30px rgba(63, 216, 255, 0.25); }
+.challenge .approval-title, .enroll .approval-title { color: var(--accent); }
 .approval-head { display: flex; align-items: center; gap: 10px; }
 .approval-title { font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--warn); }
 .tier { font: 600 0.74rem var(--mono); padding: 2px 8px; border: 1px solid currentColor; }
