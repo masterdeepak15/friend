@@ -45,6 +45,10 @@ export const ServerMsg = z.discriminatedUnion("type", [
     data: z.string(),
   }),
   z.object({ type: z.literal("audio.stop") }),
+  /** The owner approved a look through the camera: take one picture and upload it. */
+  z.object({ type: z.literal("camera.request"), id: z.string() }),
+  /** Stop: the request was answered elsewhere, timed out, or the emergency lock fired. */
+  z.object({ type: z.literal("camera.cancel"), id: z.string() }),
   z.object({ type: z.literal("snapshot"), stage: StageSnapshot, pendingApproval: PendingApproval.nullable().optional() }),
   z.object({ type: z.literal("error"), message: z.string() }),
 ]);
@@ -65,6 +69,7 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("voice.interrupt") }),
   z.object({ type: z.literal("voice.confirm"), id: z.string(), pin: z.string().max(32) }),
   z.object({ type: z.literal("voice.cancel"), id: z.string() }),
+  z.object({ type: z.literal("camera.denied"), id: z.string(), reason: z.enum(["off", "no-camera", "permission", "busy"]) }),
   z.object({ type: z.literal("ping") }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;
