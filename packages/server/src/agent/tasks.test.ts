@@ -141,7 +141,9 @@ describe("the clock in the prompt", () => {
   it("tells the owner's turns what time it is, with an offset, so 'at 5pm' can be turned into a time", async () => {
     const p = new FakeProvider([[text("ok"), done]]);
     await build(p).runTurn("hi", ctx());
-    expect(p.calls[0]!.system).toMatch(/Current time: \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d/);
+    // the clock changes every request, so it travels in the context, not in the cacheable system text
+    expect(p.calls[0]!.context).toMatch(/Current time: \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d/);
+    expect(p.calls[0]!.system).not.toContain("Current time:");
   });
   it("is left out of the guest prompt", () => {
     expect(buildSystemPrompt("Jarvis", "empty", "guest")).not.toContain("Current time");

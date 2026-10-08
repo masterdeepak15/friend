@@ -15,7 +15,7 @@ import type { ContentBlock, Msg, Provider } from "../provider/types";
 import { runStageTool, type StageState } from "../stage";
 import { getToolDef, lexicalInsideRoots, pathArg, toolSpecs } from "../tools/registry";
 import { loadHistory, repairDangling, saveMessage } from "./history";
-import { buildSystemPrompt } from "./prompt";
+import { promptParts } from "./prompt";
 
 export const MAX_STEPS = 20;
 /** How many of the newest notes go into every prompt; older ones are found with memory.search. */
@@ -111,8 +111,15 @@ export class Agent {
         let userFacing = false;
         // read fresh each step, so a note saved earlier in this turn is visible right away; guests never see notes
         const notes = !guest && d.memory ? d.memory.recent(NOTES_IN_PROMPT).map((m) => `#${m.id} ${m.text}`) : undefined;
-        const system = buildSystemPrompt(d.assistantName(), d.stage.summary(), guest ? "guest" : "owner", notes, localIso(new Date(d.tasks?.now() ?? Date.now())), guest ? undefined : d.plugins?.skills());
-        for await (const ev of d.provider.stream({ system, messages, tools, signal: abort.signal })) {
+        const { system, context } = promptParts(
+          d.assistantName(),
+          d.stage.summary(),
+          guest ? "guest" : "owner",
+          notes,
+          localIso(new Date(d.tasks?.now() ?? Date.now())),
+          guest ? undefined : d.plugins?.skills(),
+        );
+        for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
             if (!assistantText) stage({ cmd: "presence", state: "speaking" });
             assistantText += ev.text;

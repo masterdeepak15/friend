@@ -49,6 +49,15 @@ function toAnthropicMessages(messages: Msg[]): unknown[] {
   });
 }
 
+/** The per-request context goes at the very end: as the last block of the last user message (tool results come first). */
+function withContext(messages: unknown[], context: string | undefined): unknown[] {
+  if (!context) return messages;
+  const last = messages.at(-1) as { role: string; content: unknown[] } | undefined;
+  const block = { type: "text", text: context };
+  if (last && last.role === "user") return [...messages.slice(0, -1), { ...last, content: [...last.content, block] }];
+  return [...messages, { role: "user", content: [block] }];
+}
+
 export class ClaudeProvider implements Provider {
   id = "claude";
   readonly vision = true;
@@ -76,7 +85,7 @@ export class ClaudeProvider implements Provider {
           max_tokens: this.maxTokens,
           system: req.system,
           stream: true,
-          messages: toAnthropicMessages(req.messages),
+          messages: withContext(toAnthropicMessages(req.messages), req.context),
           tools: req.tools.map((t) => ({ name: encodeName(t.name), description: t.description, input_schema: t.inputSchema })),
         },
         { signal: req.signal },

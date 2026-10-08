@@ -77,7 +77,11 @@ export class OllamaProvider implements Provider {
     const body = {
       model,
       stream: true,
-      messages: toOllamaMessages(req.system, req.messages, this.vision),
+      messages: [
+        ...toOllamaMessages(req.system, req.messages, this.vision),
+        // last of all, so every message before it is identical between requests and Ollama can reuse its cache of them
+        ...(req.context ? [{ role: "user" as const, content: req.context }] : []),
+      ],
       ...(req.tools.length
         ? {
             tools: req.tools.map((t) => ({
