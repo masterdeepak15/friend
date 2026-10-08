@@ -40,7 +40,7 @@ button { cursor: pointer; }
 .presence { position: absolute; z-index: 1; transition: inset 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), width 0.7s, height 0.7s, opacity 0.5s; }
 .presence-full { inset: 0; }
 .presence-corner {
-  left: max(10px, env(safe-area-inset-left)); bottom: max(10px, env(safe-area-inset-bottom));
+  left: max(10px, env(safe-area-inset-left)); bottom: max(52px, calc(env(safe-area-inset-bottom) + 42px)); /* above the status line */
   width: clamp(96px, 16vw, 190px); height: clamp(96px, 16vw, 190px);
 }
 

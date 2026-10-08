@@ -1,0 +1,101 @@
+import { REGION_NAMES, REGIONS, clampToSafe, overlap, rectOf, type Placement, type Rect, type RegionName, type StageObject } from "@friend/protocol";
+
+/** More than this much of the smaller box covered counts as sitting on top of it. */
+const CONFLICT = 0.25;
+
+/** Which spot to try next when the one asked for is taken; wide things first to the sides, then the strips. */
+const FALLBACKS: RegionName[] = ["right", "left", "center", "bottom", "top"];
+
+const label = (p: Placement): string => (typeof p === "string" ? p : "a custom box");
+
+/** Auto objects flow in a grid that fills the middle of the screen, so they take that part. */
+const boxOf = (o: StageObject): Rect | null => (o.placement === "auto" ? REGIONS.center : rectOf(o.placement));
+
+function whoIsIn(box: Rect, others: StageObject[], except: string): StageObject | undefined {
+  return others.find((o) => {
+    if (o.id === except) return false;
+    const b = boxOf(o);
+    return !!b && overlap(box, b) > CONFLICT;
+  });
+}
+
+export interface Placed {
+  object: StageObject;
+  /** What was changed and why, in words the model can learn from; absent when the object went where it asked. */
+  note?: string;
+}
+
+/**
+ * Keeps one object from landing on top of another or on the always-visible parts of the screen. A box that sticks out is
+ * moved inside the safe area; a spot that is taken is swapped for a free one (or "auto"). Nothing is ever refused.
+ */
+export function placeObject(object: StageObject, onScreen: StageObject[]): Placed {
+  let placement = object.placement;
+  const notes: string[] = [];
+
+  if (typeof placement === "object") {
+    const want: Rect = [placement.x * 100, placement.y * 100, placement.w * 100, placement.h * 100];
+    const fit = clampToSafe(want);
+    if (fit.some((v, i) => Math.abs(v - want[i]!) > 0.01)) {
+      placement = { x: fit[0] / 100, y: fit[1] / 100, w: fit[2] / 100, h: fit[3] / 100 };
+      notes.push("moved inside the safe area (the top strip, the captions at the bottom, the status line and the clock stay free)");
+    }
+  }
+
+  const box = placement === "auto" ? null : rectOf(placement);
+  if (box) {
+    const blocker = whoIsIn(box, onScreen, object.id);
+    if (blocker) {
+      const free = FALLBACKS.find((r) => r !== placement && !whoIsIn(REGIONS[r], onScreen, object.id));
+      const was = label(object.placement);
+      placement = free ?? "auto";
+      notes.push(`put at ${placement} instead of ${was} because "${blocker.id}" (${blocker.type}) is there`);
+    }
+  }
+
+  if (placement === object.placement) return { object };
+  return { object: { ...object, placement }, note: `Placement changed: ${notes.join("; ")}.` };
+}
+
+/** Names the named regions that something occupies, and the ones left free. */
+export function regionUse(objects: StageObject[]): { used: Map<RegionName, StageObject[]>; free: RegionName[] } {
+  const used = new Map<RegionName, StageObject[]>();
+  for (const name of REGION_NAMES) {
+    const hits = objects.filter((o) => {
+      const b = boxOf(o);
+      return !!b && overlap(REGIONS[name], b) > CONFLICT;
+    });
+    if (hits.length) used.set(name, hits);
+  }
+  return { used, free: REGION_NAMES.filter((n) => !used.has(n)) };
+}
+
+/**
+ * What the model is told about the screen with every request: what is on it and where, how long each thing will stay,
+ * and which spots are free. The fixed parts of the screen are in the system prompt's layout guide.
+ */
+export function describeScreen(
+  scene: string,
+  presence: string,
+  entries: { object: StageObject; expiresAt: number | null }[],
+  now: number,
+): string {
+  if (entries.length === 0) return `scene=${scene}; presence=${presence}; the stage is empty (all of it is free)`;
+  const items = entries.map(({ object: o, expiresAt }) => {
+    const where = typeof o.placement === "string" ? o.placement : "custom box";
+    const life = expiresAt === null ? "stays" : `leaves in ${Math.max(0, Math.round((expiresAt - now) / 1000))}s`;
+    return `${o.id} (${o.type}, ${where}, ${life})`;
+  });
+  const { free } = regionUse(entries.map((e) => e.object));
+  return `scene=${scene}; presence=${presence}; on screen: ${items.join("; ")}; free regions: ${free.join(", ") || "none, replace something first"}`;
+}
+
+/** The design guide for the system prompt: the fixed parts of the screen, where things go, and what lives how long. */
+export const LAYOUT_GUIDE = `Screen layout (follow this when you decide where things go)
+- Always on screen, never yours to cover or move: the voice presence (middle of the screen; a small round shape in the bottom-left corner during "focus" and "multi" scenes), the live captions at the bottom, a status line in the bottom-left, a small clock in the bottom-right, and the owner's notices along the top edge. Use the middle of the screen for what the owner asked to see.
+- Regions for placement: "center" (the main thing), "left" and "right" (two things side by side), "top" and "bottom" (wide banners: a timeline, a short note). They overlap in places: center overlaps left and right, top and bottom overlap center. Use "auto" for three or more objects: they flow in a tidy grid. Avoid custom boxes; if you must, stay between 2% and 98% across and 10% to 78% down.
+- Compose, do not pile up. One answer is one picture or a small set: one object, "center"; two, "left" and "right" (the chart on the left, its numbers on the right); three to six, "auto" with scene "multi". Give the biggest or most important object the most room. A sandbox page or a big chart takes the whole stage: use scene "focus" and "center".
+- Check "on screen" and "free regions" in each request before you place anything. Update an object (same id) instead of adding a copy. If the new answer replaces the old one, hide the old objects or use stage.clear first. If you place something on top of something else, the system moves it and tells you; use that to choose better next time.
+- Lifetimes: things the owner asked to see stay until they dismiss them or you replace them. Passing information (a reminder, a progress note, a one-off confirmation) gets a ttl of 15 to 60 seconds. Never leave stale objects: remove what no longer matters when the topic changes.
+- Pick the object by the data: one number gauge or stat, a few numbers side by side stat, a trend chart, items with details table, a to-do or schedule list or timeline, relationships graph, a short note card, anything else a sandbox page. Keep text short; the pictures carry the answer and your voice adds one or two sentences.
+- Schedules and to-dos: get them with the task tools (never guess), show them as a timeline (times) or list (to-dos) on the right, and keep them until the owner dismisses them.`;

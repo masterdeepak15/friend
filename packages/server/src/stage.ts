@@ -8,6 +8,8 @@ import {
   type ToolResult,
 } from "@friend/protocol";
 
+import { describeScreen, placeObject } from "./agent/layout";
+
 const MAX_OBJECTS = 12;
 /** Largest page the agent may draw in a sandbox object. */
 export const MAX_SANDBOX_HTML = 100_000;
@@ -93,11 +95,9 @@ export class StageState {
     };
   }
 
-  /** One-line summary for the system prompt. */
-  summary(): string {
-    const s = this.snapshot();
-    const ids = s.objects.map((o) => `${o.id}(${o.type})`).join(", ") || "nothing";
-    return `scene=${s.scene}; on screen: ${ids}; presence=${s.presence.state}`;
+  /** What the model is told about the screen with each request: what is where, how long it stays, and what is free. */
+  summary(now: number = Date.now()): string {
+    return describeScreen(this.scene, this.presence.state, [...this.objects.values()].map((e) => ({ object: e.obj, expiresAt: e.expiresAt })), now);
   }
 }
 
@@ -113,8 +113,16 @@ export function runStageTool(
   if (!input.success) return { ok: false, error: `Invalid arguments for ${name}: ${input.error.message}` };
   const cmd = StageCommand.safeParse({ cmd: name.slice("stage.".length), ...(input.data as object) });
   if (!cmd.success) return { ok: false, error: `Invalid stage command: ${cmd.error.message}` };
-  const applied = stage.apply(cmd.data);
+  let command = cmd.data;
+  let note: string | undefined;
+  if (command.cmd === "show") {
+    // never let a new object land on top of another one or on the always-visible parts of the screen
+    const placed = placeObject(command.object, stage.snapshot().objects);
+    command = { cmd: "show", object: placed.object };
+    note = placed.note;
+  }
+  const applied = stage.apply(command);
   if (!applied.ok) return { ok: false, error: applied.error };
-  emit({ type: "stage", command: cmd.data });
-  return { ok: true, output: "ok", truncated: false };
+  emit({ type: "stage", command });
+  return { ok: true, output: note ? `ok. ${note}` : "ok", truncated: false };
 }

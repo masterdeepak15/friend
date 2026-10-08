@@ -99,8 +99,8 @@ describe("what the model is sent", () => {
     await agent.runTurn("anything else?", ctx);
     expect(p.calls).toHaveLength(3);
     // the screen changed between the first and second call, and the clock between the second and third
-    expect(p.calls[0]!.context).toContain("on screen: nothing");
-    expect(p.calls[1]!.context).toContain("a(card)");
+    expect(p.calls[0]!.context).toContain("the stage is empty");
+    expect(p.calls[1]!.context).toContain("a (card");
     expect(p.calls[1]!.context).not.toBe(p.calls[2]!.context);
     for (const c of p.calls.slice(1)) {
       expect(c.system).toBe(p.calls[0]!.system);

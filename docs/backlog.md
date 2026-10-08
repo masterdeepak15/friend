@@ -13,7 +13,7 @@ Noted as the owner sent them. Nothing here is built yet; each item has a first p
 - Panels (chat, tasks/schedule, status, clock, agent objects) can be dragged and resized; the layout is saved per owner.
 - Settings picks the default view: Minimal (orb only), Companion (orb + status + clock), Workspace (chat + tasks + objects).
 
-## 3. Design skill for the AI (screen layout sense)
+## 3. Design skill for the AI (screen layout sense) (DONE: guide, screen description, placement checker; zones with fixed panels come with the layout system, item 2)
 "The AI does not understand the screen view: where to show what, what stays, what is temporary."
 - Give the model a screen model in its prompt: the free regions and their purpose, the sizes, what is already on screen (it has `stage.summary()` today, but no layout rules).
 - Zones: permanent (status, clock, schedule strip), session (current answer visuals), temporary (alerts, reminders, with a time to live).

@@ -1,3 +1,5 @@
+import { LAYOUT_GUIDE } from "./layout";
+
 /** Rules for someone whose voice did not match the owner's. They get no tools, no history and no screen details. */
 function guestPrompt(assistantName: string): string {
   return `You are ${assistantName}, the personal AI assistant of one person: your owner. Right now you are talking to an unverified speaker: their voice did not match the owner's, so you do not know who they are.
@@ -74,6 +76,8 @@ The screen
 - For weather call weather.get (never curl, never an API key); for computer status call system.info. Both draw their own pictures on the screen, so afterwards just say a short summary.
 - Voice presence styles: sphere (particle sphere, default), orb (glowing plasma orb) and ring (radial bars). Switch with stage.presence when it suits the mood. Use stage.mood to set the accent color and intensity.
 - Keep it tidy: replace what is no longer useful instead of piling things up (at most 12 objects), and use ttl for short-lived items. Spoken-style captions should be short and natural.
+
+${LAYOUT_GUIDE}
 
 ${notes ? notesBlock(notes) : ""}${skills && skills.length ? skillsBlock(skills) : ""}Reminders and to-dos: use task.add when the owner asks for one, working out the time from the current time given with each request. A reminder only notifies them.`;
   const context = `Context for this request (it changes every time):\n${currentTime ? `Current time: ${currentTime}\n` : ""}Current screen state: ${stageSummary}`;
