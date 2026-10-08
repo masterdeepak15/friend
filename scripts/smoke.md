@@ -45,6 +45,19 @@ Results 2026-10-08:
 | Browser support | MediaRecorder with webm/opus, getUserMedia on localhost, WAV from the engine decodes | PASS |
 | Sidecar cleanup | engine exits when the app is killed | PASS |
 
+## Plugins check
+
+Results 2026-10-08:
+
+| Check | How | Result |
+|---|---|---|
+| Store | install, upgrade keeps on/off, enable/disable, remove, no half-installs; strict validation (ids, names, duplicates, counts, path escapes, links, sizes, tool input); broken plugins switched off with a reason | PASS (`plugins.test.ts`) |
+| Agent | tools offered with their schema only while on; always T2 with an approval card; arguments reach the sandbox as `/work/args.json`; bad arguments refused before any card; failures reported; skills in the prompt as plugin text; `skill.use`; nothing for guests | PASS (`agent/plugins.test.ts`) |
+| Bundled catalog | all three validate; unit-converter converts correctly in a real container (km/mi, C/F, lb/kg, gal/ml) and refuses mismatched units and temperatures below absolute zero | PASS (`plugins.catalog.test.ts`) |
+| CLI | catalog, list, install (confirmation, `--yes`, upgrade, invalid), enable/disable/remove | PASS (`agent-cli/src/plugin.test.ts`) |
+| Routes and panel | session, PIN rules, catalog-only installs, path tricks, rate limit; panel flows | PASS (`plugins.route.test.ts`, `web/src/plugins`) |
+| Real Chrome | owner menu → Plugins → install Unit converter with the PIN → listed with Turn off / Remove | PASS |
+
 ## Code sandbox (Docker) check
 
 Results 2026-10-08:

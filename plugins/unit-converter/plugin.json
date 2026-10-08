@@ -1,0 +1,20 @@
+{
+  "id": "unit-converter",
+  "name": "Unit converter",
+  "version": "1.0.0",
+  "description": "Converts lengths, masses, volumes and temperatures exactly, instead of guessing.",
+  "tools": [
+    {
+      "name": "convert",
+      "description": "Convert a number between units. Lengths: mm cm m km in ft yd mi. Masses: mg g kg oz lb. Volumes: ml l cup qt gal. Temperatures: c f k.",
+      "language": "python",
+      "file": "tools/convert.py",
+      "input": {
+        "value": { "type": "number", "description": "The number to convert" },
+        "from": { "type": "string", "description": "Unit to convert from, for example km" },
+        "to": { "type": "string", "description": "Unit to convert to, for example mi" }
+      },
+      "required": ["value", "from", "to"]
+    }
+  ]
+}

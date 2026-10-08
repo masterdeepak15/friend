@@ -1,0 +1,13 @@
+{
+  "id": "rubber-duck",
+  "name": "Rubber duck",
+  "version": "1.0.0",
+  "description": "Helps the owner debug a problem by asking questions one at a time.",
+  "skills": [
+    {
+      "name": "duck",
+      "description": "Guide the owner through debugging a problem step by step with questions, instead of guessing",
+      "file": "skills/duck.md"
+    }
+  ]
+}

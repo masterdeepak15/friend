@@ -5,6 +5,7 @@ import { OwnerMenu } from "./overlay/OwnerMenu";
 import { Overlay } from "./overlay/Overlay";
 import { Stage } from "./stage/Stage";
 import { useFriend } from "./useFriend";
+import { PluginsPanel } from "./plugins/PluginsPanel";
 import { EnrollmentFlow } from "./voice/EnrollmentFlow";
 import { useVoiceKeys } from "./voice/keys";
 
@@ -15,6 +16,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   useVoiceKeys(voice);
   const [muted, setMuted] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
+  const [managingPlugins, setManagingPlugins] = useState(false);
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
 
   // Once per visit, when speech works but nobody's voice is enrolled yet, say how to turn recognition on.
@@ -40,6 +42,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         dispatch={dispatch}
       >
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
+        {managingPlugins && <PluginsPanel onClose={() => setManagingPlugins(false)} />}
       </Overlay>
       <OwnerMenu
         muted={muted}
@@ -48,6 +51,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         voiceAvailable={state.voice.available}
         voiceEnrolled={state.voice.enrolled}
         onEnroll={() => setEnrolling(true)}
+        onPlugins={() => setManagingPlugins(true)}
         cameraOn={state.camera.enabled}
         onToggleCamera={() => dispatch({ type: "camera.enable", value: !state.camera.enabled })}
       />

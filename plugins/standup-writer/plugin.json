@@ -1,0 +1,13 @@
+{
+  "id": "standup-writer",
+  "name": "Stand-up writer",
+  "version": "1.0.0",
+  "description": "Turns rough notes into a short, clear stand-up update.",
+  "skills": [
+    {
+      "name": "standup",
+      "description": "Write a short stand-up update (done, next, blocked) from the owner's rough notes",
+      "file": "skills/standup.md"
+    }
+  ]
+}

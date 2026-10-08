@@ -12,10 +12,12 @@ export interface OwnerMenuProps {
   /** The camera switch. The camera stays off until the owner turns it on here. */
   cameraOn?: boolean;
   onToggleCamera?: () => void;
+  /** Opens the plugins panel. */
+  onPlugins?: () => void;
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, cameraOn, onToggleCamera }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, cameraOn, onToggleCamera, onPlugins }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -63,6 +65,18 @@ export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, vo
           {onToggleCamera && (
             <button type="button" style={touch} aria-pressed={!!cameraOn} onClick={onToggleCamera}>
               {cameraOn ? "Camera: on" : "Camera: off"}
+            </button>
+          )}
+          {onPlugins && (
+            <button
+              type="button"
+              style={touch}
+              onClick={() => {
+                setOpen(false);
+                onPlugins();
+              }}
+            >
+              Plugins
             </button>
           )}
           {voiceAvailable && onEnroll && (

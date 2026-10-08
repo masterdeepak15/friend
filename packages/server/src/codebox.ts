@@ -6,6 +6,8 @@ import { join } from "node:path";
 
 export const MAX_CODE_CHARS = 50_000;
 export const MAX_OUTPUT_CHARS = 20_000;
+const MAX_EXTRA_FILES = 10;
+const MAX_EXTRA_FILE_CHARS = 200_000;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_TIMEOUT_MS = 60_000;
 
@@ -64,9 +66,16 @@ const clip = (s: string) => (s.length > MAX_OUTPUT_CHARS ? `${s.slice(0, MAX_OUT
 export class CodeBox {
   constructor(private docker: DockerExec = spawnDocker) {}
 
-  async run(input: { language: Language; code: string; timeoutSec?: number }): Promise<RunResult> {
+  async run(input: { language: Language; code: string; timeoutSec?: number; files?: Record<string, string> }): Promise<RunResult> {
     if (!input.code.trim()) return { ok: false, error: "There is no code to run." };
     if (input.code.length > MAX_CODE_CHARS) return { ok: false, error: `The code is too long (the limit is ${MAX_CODE_CHARS} characters).` };
+    const extra = Object.entries(input.files ?? {});
+    if (extra.length > MAX_EXTRA_FILES) return { ok: false, error: "Too many files for the sandbox." };
+    // plain names only: nothing can be written outside the code folder or replace the program itself
+    if (extra.some(([n]) => !/^[A-Za-z0-9_.-]{1,64}$/.test(n) || n.startsWith("..") || Object.values(SETUP).some((s) => s.file === n))) {
+      return { ok: false, error: "That file name is not allowed in the sandbox." };
+    }
+    if (extra.reduce((sum, [, body]) => sum + body.length, 0) > MAX_EXTRA_FILE_CHARS) return { ok: false, error: "The sandbox files are too large." };
     const setup = SETUP[input.language];
     const timeoutMs = input.timeoutSec && input.timeoutSec > 0 ? Math.min(input.timeoutSec * 1000, MAX_TIMEOUT_MS) : DEFAULT_TIMEOUT_MS;
 
@@ -76,6 +85,10 @@ export class CodeBox {
       writeFileSync(file, input.code);
       chmodSync(dir, 0o755); // the container's unprivileged user must be able to read it
       chmodSync(file, 0o644);
+      for (const [name, body] of extra) {
+        writeFileSync(join(dir, name), body);
+        chmodSync(join(dir, name), 0o644);
+      }
       const args = [
         "run", "--rm",
         "--name", `friend-run-${randomUUID()}`,
