@@ -78,7 +78,11 @@ async function playTurn(steps, turn) {
       step.calls.forEach((c, i) => blocks.push({ type: "tool_use", id: `toolu_${turn}_${n + i}`, name: `mcp__friend__${c.tool}`, input: c.args ?? {} }));
       emit({ type: "assistant", message: { content: blocks } });
       const client = await bridge();
-      const results = await Promise.all(step.calls.map((c) => client.callTool({ name: c.tool, arguments: c.args ?? {} })));
+      // the real Claude Code runs a message's tool calls one after the other (step.serial), so the second call only
+      // reaches the bridge once the first has been answered
+      const results = step.serial
+        ? await step.calls.reduce(async (acc, c) => [...(await acc), await client.callTool({ name: c.tool, arguments: c.args ?? {} })], Promise.resolve([]))
+        : await Promise.all(step.calls.map((c) => client.callTool({ name: c.tool, arguments: c.args ?? {} })));
       log({ mcpResults: results.map((r) => ({ isError: r.isError ?? false, content: r.content })) });
       emit({ type: "user", message: { content: results.map((r, i) => ({ type: "tool_result", tool_use_id: `toolu_${turn}_${n + i}`, content: r.content, is_error: r.isError ?? false })) } });
       n += step.calls.length;

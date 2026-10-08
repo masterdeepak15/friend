@@ -81,6 +81,7 @@ interface Conv {
   draining: Promise<void> | null;
 }
 
+const MORE_CALLS_MS = 1500; // at most this long after the first call, for calls Claude announced but that have not arrived
 const GRACE_MS = 250; // after the expected tool calls have arrived: wait a moment for any more in the same step
 const DRAIN_MS = 15_000;
 
@@ -174,23 +175,32 @@ export class ClaudeCodeProvider implements Provider {
     const startup = Math.max(idle, this.opts.startupTimeoutMs ?? 30_000);
     let expected = 0;
     let turnText = "";
+    let firstCallAt = 0;
     for (;;) {
       const haveCalls = collected.length > 0 && (expected === 0 || collected.length >= expected);
+      // Claude Code runs a message's tool calls one after the other, so a second call may only arrive once the first
+      // has been answered: never wait long for calls that are announced but not here yet, hand over what has arrived.
+      const wait = haveCalls
+        ? GRACE_MS
+        : collected.length > 0
+          ? Math.max(GRACE_MS, MORE_CALLS_MS - (this.now() - firstCallAt))
+          : conv.gotEvent ? idle : startup;
       // a Claude that has not made a sound yet is still starting up, which takes a while
-      const item = await conv.inbox.next(haveCalls ? GRACE_MS : conv.gotEvent ? idle : startup, req.signal);
+      const item = await conv.inbox.next(wait, req.signal);
 
       if (item === "abort") {
         this.abandonStep(conv, collected);
         return "ok";
       }
       if (item === "timeout") {
-        if (haveCalls) return yield* this.flushCalls(conv, collected);
+        if (collected.length > 0) return yield* this.flushCalls(conv, collected);
         conv.proc?.kill();
         conv.proc = null;
         yield { type: "error", userFacing: true, message: "Claude Code did not answer in time. Try again." };
         return "ok";
       }
       if (item.kind === "call") {
+        if (collected.length === 0) firstCallAt = this.now();
         collected.push(item.call);
         continue;
       }

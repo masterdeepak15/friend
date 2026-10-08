@@ -150,6 +150,22 @@ describe("tools: Claude asks, Friend runs them with its usual approvals, Claude 
     expect(texts).toEqual(["A-RESULT", "B-RESULT"]); // the script asked for a first, then b
   });
 
+  it("does not wait for a second call that Claude only sends after the first is answered (it runs them one by one)", async () => {
+    const p = setup([[{ serial: true, calls: [{ tool: "fs__list", args: { path: "a" } }, { tool: "fs__list", args: { path: "b" } }] }, { text: "Both shown." }]]);
+    const t0 = Date.now();
+    const s1 = await run(p, req([text("both")]));
+    expect(Date.now() - t0).toBeLessThan(4000); // not the idle timeout
+    const [c1] = calls(s1);
+    expect(calls(s1)).toHaveLength(1);
+    expect(c1!.args).toEqual({ path: "a" });
+    const m1: Msg[] = [text("both"), called(c1!.id, "fs.list", { path: "a" }), { role: "tool", content: [result(c1!.id, "A")] }];
+    const s2 = await run(p, req(m1));
+    const [c2] = calls(s2);
+    expect(c2!.args).toEqual({ path: "b" }); // the second call comes as the next step
+    const s3 = await run(p, req([...m1, called(c2!.id, "fs.list", { path: "b" }), { role: "tool", content: [result(c2!.id, "B")] }]));
+    expect(textOf(s3)).toBe("Both shown.");
+  });
+
   it("can chain several tool steps in one request", async () => {
     const p = setup([[{ calls: [{ tool: "fs__list", args: { path: "1" } }] }, { calls: [{ tool: "fs__list", args: { path: "2" } }] }, { text: "Both done." }]]);
     const s1 = await run(p, req([text("go")]));
