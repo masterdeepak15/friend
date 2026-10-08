@@ -197,8 +197,11 @@ describe("POST /api/camera/frame/:id", () => {
     const c = await Client.connect(cookie);
     const id = await askAndApprove(c);
     const big = Buffer.concat([JPEG, Buffer.alloc(2 * 1024 * 1024)]);
-    expect((await upload(cookie, id, big)).status).toBe(413);
-    expect(app.camera.pendingId()).toBe(id);
+    // the server may answer 413 or drop the connection while the oversize body is still being sent
+    const outcome = await upload(cookie, id, big).then((r) => r.status, () => "connection dropped");
+    expect([413, "connection dropped"]).toContain(outcome);
+    expect(app.camera.pendingId()).toBe(id); // the request is still waiting for a proper picture
+    expect((await upload(cookie, id)).status).toBe(200);
   });
 
   it("ignores a picture that arrives after the request timed out", async () => {
