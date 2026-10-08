@@ -39,7 +39,11 @@ export interface GatewayDeps {
   onVoiceUtterance?: (session: Session, audio: Buffer, mime: string, ip: string) => Promise<{ text: string }>;
   /** Teaching Friend the owner's voice; the routes answer 503 without it. */
   voiceEnroll?: VoiceEnrollApi;
+  /** A picture arrived for a camera request: "unknown" when nobody is waiting for that id, "invalid" when it is not a JPEG. */
+  onCameraFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
 }
+
+export const MAX_CAMERA_FRAME_BYTES = 2 * 1024 * 1024;
 
 /** What the enrollment routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
 export interface VoiceEnrollApi {
@@ -233,6 +237,31 @@ export function createGateway(deps: GatewayDeps) {
         audit.log("owner", "voice.utterance_failed", { message: (e as Error).message }); // raw detail stays in the audit log
         return reply.code(502).send({ error: "Speech recognition failed. Try again." });
       }
+    },
+  );
+
+  // ---- camera pictures: uploaded over HTTP because the WebSocket frame limit protects chat ----
+  app.addContentTypeParser("image/jpeg", { parseAs: "buffer", bodyLimit: MAX_CAMERA_FRAME_BYTES }, (_req, body, done) => done(null, body));
+  const cameraWindow = new SlidingWindow(10, 10_000);
+  app.post<{ Params: { id: string } }>(
+    "/api/camera/frame/:id",
+    {
+      bodyLimit: MAX_CAMERA_FRAME_BYTES,
+      onRequest: async (req, reply) => {
+        const token = req.cookies[COOKIE_NAME];
+        const session = token ? auth.resolveSession(token) : null;
+        if (!session) return reply.code(401).send({ error: "Unauthorized" });
+        if (!cameraWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+        if (!deps.onCameraFrame) return reply.code(503).send({ error: "Camera is not available" });
+      },
+    },
+    async (req, reply) => {
+      const body = req.body;
+      if (!Buffer.isBuffer(body)) return reply.code(415).send({ error: "Send the picture as image/jpeg" });
+      const out = deps.onCameraFrame!(req.params.id, body);
+      if (out === "unknown") return reply.code(404).send({ error: "Nobody is waiting for that picture" });
+      if (out === "invalid") return reply.code(400).send({ error: "That is not a JPEG picture" });
+      return { ok: true };
     },
   );
 
