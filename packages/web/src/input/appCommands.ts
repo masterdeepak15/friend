@@ -17,6 +17,13 @@ export interface CommandDeps {
   statusLine: () => string;
   /** Ends the session on the server ("logout") or locks everything ("lock"), then returns to the sign-in screen. */
   endSession: (how: "logout" | "lock") => void;
+  /** Whether a side panel or corner widget is showing, and showing/hiding it. */
+  panelOn: (id: "chat" | "tasks" | "status" | "clock") => boolean;
+  setPanel: (id: "chat" | "tasks" | "status" | "clock", on: boolean) => void;
+  view: "minimal" | "companion" | "workspace";
+  setView: (view: "minimal" | "companion" | "workspace") => void;
+  /** Puts every panel back where it starts. */
+  resetLayout: () => void;
 }
 
 /** The commands the owner can type in the message bar. Each one runs here and never reaches the AI. */
@@ -46,6 +53,30 @@ export function buildCommands(d: CommandDeps): SlashCommand[] {
       run: () => d.setMuted(true),
     },
     { name: "unmute", description: "Show the stage again", run: () => d.setMuted(false) },
+    ...(["chat", "tasks"] as const).map((id): SlashCommand => ({
+      name: id === "tasks" ? "tasks" : "chat",
+      usage: "on|off",
+      description: id === "chat" ? "Show or hide the conversation" : "Show or hide the schedule and to-dos",
+      run: (a) => {
+        if (a && a !== "on" && a !== "off") return d.notify(`Use /${id === "tasks" ? "tasks" : "chat"} on or off.`);
+        d.setPanel(id, a ? a === "on" : !d.panelOn(id));
+      },
+    })),
+    {
+      name: "view",
+      usage: "minimal|companion|workspace",
+      description: "Choose how much is on the screen besides the AI's pictures",
+      run: (a) => {
+        if (a === "minimal" || a === "companion" || a === "workspace") return d.setView(a);
+        d.notify(a ? "Use /view minimal, companion or workspace." : `The view is ${d.view}. Use /view minimal, companion or workspace.`);
+      },
+    },
+    {
+      name: "layout",
+      usage: "reset",
+      description: "Put every panel back where it started",
+      run: (a) => (a === "reset" ? d.resetLayout() : d.notify("Drag a panel by its title to move it. /layout reset puts them all back.")),
+    },
     { name: "clear", description: "Take everything off the screen", run: d.clearScreen },
     { name: "status", description: "What Friend is doing right now", run: () => d.notify(d.statusLine()) },
     { name: "logout", description: "Sign out", run: () => d.endSession("logout") },

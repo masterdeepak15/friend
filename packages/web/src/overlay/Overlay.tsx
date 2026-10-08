@@ -25,16 +25,19 @@ export interface OverlayProps {
   busy?: boolean;
   /** What it is doing, in plain words. */
   activity?: string | null;
+  /** The corner widgets the chosen view shows (both on by default). */
+  showStatus?: boolean;
+  showClock?: boolean;
   send: (m: ClientMsg) => void;
   dispatch: (a: LocalAction) => void;
 }
 
 /** Layer 4: always above whatever the agent has put on the stage. */
-export function Overlay({ approval, challenge, cameraStream, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, send, dispatch }: OverlayProps) {
+export function Overlay({ approval, challenge, cameraStream, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, showStatus = true, showClock = true, send, dispatch }: OverlayProps) {
   return (
     <div data-overlay className="overlay" style={{ position: "fixed", inset: 0, zIndex: 1000, pointerEvents: "none" }}>
-      <StatusBadge connection={connection} deviceOnline={deviceOnline} approval={approval} voiceMode={voiceMode} busy={busy} activity={activity} />
-      <Clock />
+      {showStatus && <StatusBadge connection={connection} deviceOnline={deviceOnline} approval={approval} voiceMode={voiceMode} busy={busy} activity={activity} />}
+      {showClock && <Clock />}
       <MicIndicator mode={voiceMode} />
       {cameraStream && <CameraIndicator stream={cameraStream} />}
       <AlertToast alerts={alerts} dispatch={dispatch} />

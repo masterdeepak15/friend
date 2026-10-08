@@ -1,4 +1,5 @@
 import type { PendingApproval } from "@friend/protocol";
+import { Movable } from "../layout/Movable";
 import type { Connection, VoiceMode } from "../store";
 
 export interface StatusInput {
@@ -28,9 +29,11 @@ export function describeStatus(s: StatusInput): { kind: StatusKind; text: string
 export function StatusBadge(props: StatusInput) {
   const { kind, text } = describeStatus(props);
   return (
-    <div className={`status-badge status-${kind}`} role="status" aria-live="polite" data-testid="status-badge">
+    <Movable id="status" label="Status line" wholeBox testId="status-badge" className={`status-badge status-${kind}`}>
       <i aria-hidden="true" />
-      <span>{text}</span>
-    </div>
+      <span role="status" aria-live="polite">
+        {text}
+      </span>
+    </Movable>
   );
 }

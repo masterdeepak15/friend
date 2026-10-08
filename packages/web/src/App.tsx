@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LoginScreen } from "./auth/LoginScreen";
 import { SetupScreen } from "./auth/SetupScreen";
+import { buildSlash } from "./input/appCommands";
+import { ChatPanel } from "./layout/ChatPanel";
+import { resetPositions, usePanels } from "./layout/prefs";
+import { TasksPanel } from "./layout/TasksPanel";
 import { OwnerMenu } from "./overlay/OwnerMenu";
 import { Overlay } from "./overlay/Overlay";
+import { describeStatus } from "./overlay/StatusBadge";
+import { PluginsPanel } from "./plugins/PluginsPanel";
+import { httpSettingsApi } from "./settings/settingsApi";
+import { SettingsPanel } from "./settings/SettingsPanel";
 import { Stage } from "./stage/Stage";
 import { useFriend } from "./useFriend";
-import { PluginsPanel } from "./plugins/PluginsPanel";
-import { SettingsPanel } from "./settings/SettingsPanel";
-import { buildSlash } from "./input/appCommands";
-import { describeStatus } from "./overlay/StatusBadge";
 import { EnrollmentFlow } from "./voice/EnrollmentFlow";
 import { useVoiceKeys } from "./voice/keys";
 import { useAudioUnlock } from "./voice/unlock";
@@ -23,6 +27,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [enrolling, setEnrolling] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const panels = usePanels(state.view);
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
 
   // Once per visit, when speech works but nobody's voice is enrolled yet, say how to turn recognition on.
@@ -32,6 +37,27 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     reminded.current = true;
     dispatch({ type: "alert.add", level: "info", text: "Voice recognition is not set up. Press Esc, then Enroll my voice." });
   }, [state.voice.available, state.voice.enrolled, dispatch]);
+
+  // The earlier conversation, loaded once the connection is up, for the chat panel.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || state.connection !== "open") return;
+    seeded.current = true;
+    fetch("/api/history")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((lines) => dispatch({ type: "chat.seed", lines }))
+      .catch(() => {});
+  }, [state.connection, dispatch]);
+
+  // Tell the AI which panels are open so it keeps its pictures out of their way.
+  useEffect(() => {
+    if (state.connection !== "open") return;
+    send({ type: "ui.panels", open: [...(panels.show.chat ? (["chat"] as const) : []), ...(panels.show.tasks ? (["tasks"] as const) : [])] });
+  }, [state.connection, panels.show.chat, panels.show.tasks, send]);
+
+  const setView = (view: "minimal" | "companion" | "workspace") => {
+    httpSettingsApi.save({ view }).catch((e: Error) => dispatch({ type: "alert.add", level: "warn", text: e.message }));
+  };
 
   const slash = useMemo(
     () =>
@@ -54,8 +80,17 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
             .catch(() => {})
             .finally(onSignedOut);
         },
+        panelOn: (id) => panels.show[id],
+        setPanel: (id, on) => panels.toggle(id, on),
+        view: state.view,
+        setView,
+        resetLayout: () => {
+          resetPositions();
+          window.location.reload(); // panels read their saved place when they open
+        },
       }),
-    [dispatch, send, muted, onSignedOut, state.voice.available, state.voice.mode, state.camera.enabled, state.objects, state.connection, state.deviceOnline, state.approval, state.busy, state.activity],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dispatch, send, muted, onSignedOut, panels.show, panels.toggle, state.view, state.voice.available, state.voice.mode, state.camera.enabled, state.objects, state.connection, state.deviceOnline, state.approval, state.busy, state.activity],
   );
 
   return (
@@ -71,9 +106,13 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         voiceMode={state.voice.mode}
         busy={state.busy}
         activity={state.activity}
+        showStatus={panels.show.status}
+        showClock={panels.show.clock}
         send={send}
         dispatch={dispatch}
       >
+        {panels.show.chat && <ChatPanel lines={state.chat} live={state.chatLive} onSend={(text) => send({ type: "chat.send", text })} onClose={() => panels.toggle("chat", false)} />}
+        {panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
         {managingPlugins && <PluginsPanel onClose={() => setManagingPlugins(false)} />}
         {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
@@ -89,6 +128,12 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         onSettings={() => setSettingsOpen(true)}
         cameraOn={state.camera.enabled}
         onToggleCamera={() => dispatch({ type: "camera.enable", value: !state.camera.enabled })}
+        chatOn={panels.show.chat}
+        onToggleChat={() => panels.toggle("chat")}
+        tasksOn={panels.show.tasks}
+        onToggleTasks={() => panels.toggle("tasks")}
+        view={state.view}
+        onView={setView}
       />
     </>
   );

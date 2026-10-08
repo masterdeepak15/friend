@@ -5,6 +5,7 @@ export interface SettingsView {
   model: string;
   /** The key itself is never sent to the screen. */
   apiKeySet: boolean;
+  view: "minimal" | "companion" | "workspace";
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   claudeCode: { model: string; command: string; fallback: "ollama" | "none" };
   voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; ttsVoice: string; sttModel: string };
@@ -19,7 +20,8 @@ export interface SaveResult {
 
 export interface SettingsApi {
   get(): Promise<SettingsView>;
-  save(settings: Record<string, unknown>, pin: string): Promise<SaveResult>;
+  /** The PIN is needed for everything except the view. */
+  save(settings: Record<string, unknown>, pin?: string): Promise<SaveResult>;
 }
 
 async function call<T>(init: RequestInit = {}): Promise<T> {
@@ -43,7 +45,7 @@ async function call<T>(init: RequestInit = {}): Promise<T> {
 
 export const httpSettingsApi: SettingsApi = {
   get: () => call<SettingsView>(),
-  save: (settings, pin) => call<SaveResult>({ method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin, settings }) }),
+  save: (settings, pin) => call<SaveResult>({ method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...(pin ? { pin } : {}), settings }) }),
 };
 
 /** Only what the owner actually changed, in the shape the server accepts. `apiKey` is sent only when something was typed. */
@@ -51,6 +53,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   const patch: Record<string, unknown> = {};
   if (after.provider !== before.provider) patch.provider = after.provider;
   if (after.model !== before.model) patch.model = after.model;
+  if (after.view !== before.view) patch.view = after.view;
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
   for (const group of ["ollama", "claudeCode", "voice"] as const) {
     const changed: Record<string, unknown> = {};

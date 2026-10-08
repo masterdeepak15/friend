@@ -67,3 +67,21 @@ describe("telling the owner what Friend is doing", () => {
     expect(seen.at(-1)).toBeNull();
   });
 });
+
+describe("showing the conversation on every open screen", () => {
+  it("announces what the owner said, once, before anything else", async () => {
+    const p = new FakeProvider([[{ type: "text_delta", text: "Hi." }, done]]);
+    const seen: ServerMsg[] = [];
+    await (await agentWith(p)).runTurn("hello there", ctx("owner", (m) => seen.push(m)));
+    const lines = seen.filter((m) => m.type === "chat.user");
+    expect(lines).toEqual([{ type: "chat.user", text: "hello there" }]);
+    expect(seen.findIndex((m) => m.type === "chat.user")).toBeLessThan(seen.findIndex((m) => m.type === "caption.delta"));
+  });
+
+  it("never announces a guest's words as part of the owner's conversation", async () => {
+    const p = new FakeProvider([[done]]);
+    const seen: ServerMsg[] = [];
+    await (await agentWith(p)).runTurn("who are you", ctx("guest", (m) => seen.push(m)));
+    expect(seen.some((m) => m.type === "chat.user")).toBe(false);
+  });
+});

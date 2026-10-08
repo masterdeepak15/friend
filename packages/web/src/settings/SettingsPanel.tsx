@@ -136,6 +136,15 @@ export function SettingsPanel({ api = httpSettingsApi, onClose }: { api?: Settin
         <span className="approval-title">Settings</span>
       </div>
       <div className="settings-body">
+        <h4 className="plugins-heading">Screen</h4>
+        <Field label="View" hint="Minimal: only the voice presence. Companion: plus a status line and a clock. Workspace: also the chat and the schedule. Drag any panel to move it.">
+          <select value={draft.view} onChange={(e) => setDraft({ ...draft, view: e.target.value as SettingsView["view"] })}>
+            <option value="minimal">Minimal</option>
+            <option value="companion">Companion</option>
+            <option value="workspace">Workspace</option>
+          </select>
+        </Field>
+
         <h4 className="plugins-heading">Where Friend thinks</h4>
         <Field label="Model provider" hint={provider.note}>
           <select value={draft.provider} onChange={(e) => setDraft({ ...draft, provider: e.target.value as ProviderName })}>

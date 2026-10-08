@@ -19,6 +19,20 @@ function whoIsIn(box: Rect, others: StageObject[], except: string): StageObject 
   });
 }
 
+export type PanelName = "chat" | "tasks";
+
+/** Where the owner's side panels sit by default (they can drag them, but this is what the AI plans around). */
+export const PANEL_RECTS: Record<PanelName, Rect> = { chat: [70, 12, 28, 62], tasks: [2, 12, 26, 40] };
+const PANEL_TEXT: Record<PanelName, string> = { chat: "the chat panel (right edge)", tasks: "the schedule panel (upper left)" };
+
+/** The panels the owner has open, as objects that nothing may be placed on. */
+function panelObjects(panels: PanelName[]): StageObject[] {
+  return panels.map((p) => {
+    const [x, y, w, h] = PANEL_RECTS[p];
+    return { id: PANEL_TEXT[p], type: "card", props: {}, placement: { x: x / 100, y: y / 100, w: w / 100, h: h / 100 } };
+  });
+}
+
 export interface Placed {
   object: StageObject;
   /** What was changed and why, in words the model can learn from; absent when the object went where it asked. */
@@ -29,7 +43,8 @@ export interface Placed {
  * Keeps one object from landing on top of another or on the always-visible parts of the screen. A box that sticks out is
  * moved inside the safe area; a spot that is taken is swapped for a free one (or "auto"). Nothing is ever refused.
  */
-export function placeObject(object: StageObject, onScreen: StageObject[]): Placed {
+export function placeObject(object: StageObject, shown: StageObject[], panels: PanelName[] = []): Placed {
+  const onScreen = [...shown, ...panelObjects(panels)];
   let placement = object.placement;
   const notes: string[] = [];
 
@@ -49,7 +64,7 @@ export function placeObject(object: StageObject, onScreen: StageObject[]): Place
       const free = FALLBACKS.find((r) => r !== placement && !whoIsIn(REGIONS[r], onScreen, object.id));
       const was = label(object.placement);
       placement = free ?? "auto";
-      notes.push(`put at ${placement} instead of ${was} because "${blocker.id}" (${blocker.type}) is there`);
+      notes.push(`put at ${placement} instead of ${was} because ${blocker.type === "card" && blocker.id.startsWith("the ") ? blocker.id : `"${blocker.id}" (${blocker.type})`} is there`);
     }
   }
 
@@ -79,15 +94,21 @@ export function describeScreen(
   presence: string,
   entries: { object: StageObject; expiresAt: number | null }[],
   now: number,
+  panels: PanelName[] = [],
 ): string {
-  if (entries.length === 0) return `scene=${scene}; presence=${presence}; the stage is empty (all of it is free)`;
+  const open = panels.length ? `; the owner has open: ${panels.map((p) => PANEL_TEXT[p]).join(", ")}, so keep clear of them` : "";
+  const taken = panelObjects(panels);
+  if (entries.length === 0) {
+    const { free } = regionUse(taken);
+    return `scene=${scene}; presence=${presence}; the stage is empty${open}; free regions: ${free.join(", ") || "none"}`;
+  }
   const items = entries.map(({ object: o, expiresAt }) => {
     const where = typeof o.placement === "string" ? o.placement : "custom box";
     const life = expiresAt === null ? "stays" : `leaves in ${Math.max(0, Math.round((expiresAt - now) / 1000))}s`;
     return `${o.id} (${o.type}, ${where}, ${life})`;
   });
-  const { free } = regionUse(entries.map((e) => e.object));
-  return `scene=${scene}; presence=${presence}; on screen: ${items.join("; ")}; free regions: ${free.join(", ") || "none, replace something first"}`;
+  const { free } = regionUse([...entries.map((e) => e.object), ...taken]);
+  return `scene=${scene}; presence=${presence}; on screen: ${items.join("; ")}${open}; free regions: ${free.join(", ") || "none, replace something first"}`;
 }
 
 /** The design guide for the system prompt: the fixed parts of the screen, where things go, and what lives how long. */
@@ -98,4 +119,5 @@ export const LAYOUT_GUIDE = `Screen layout (follow this when you decide where th
 - Check "on screen" and "free regions" in each request before you place anything. Update an object (same id) instead of adding a copy. If the new answer replaces the old one, hide the old objects or use stage.clear first. If you place something on top of something else, the system moves it and tells you; use that to choose better next time.
 - Lifetimes: things the owner asked to see stay until they dismiss them or you replace them. Passing information (a reminder, a progress note, a one-off confirmation) gets a ttl of 15 to 60 seconds. Never leave stale objects: remove what no longer matters when the topic changes.
 - Pick the object by the data: one number gauge or stat, a few numbers side by side stat, a trend chart, items with details table, a to-do or schedule list or timeline, relationships graph, a short note card, anything else a sandbox page. Keep text short; the pictures carry the answer and your voice adds one or two sentences.
+- The owner can open a chat panel (right edge) and a schedule panel (upper left); the request's screen description lists them when open. Keep your pictures out of their way and do not repeat what they already show. The owner arranges the corner widgets and panels themselves; never try to move them. Change what the screen shows with view.set only when the owner asks for a cleaner or fuller screen.
 - Schedules and to-dos: get them with the task tools (never guess), show them as a timeline (times) or list (to-dos) on the right, and keep them until the owner dismisses them.`;

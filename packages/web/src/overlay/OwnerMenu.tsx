@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { touch } from "./touch";
 
+const NEXT_VIEW = { minimal: "companion", companion: "workspace", workspace: "minimal" } as const;
+
 export interface OwnerMenuProps {
   muted: boolean;
   onToggleMute: () => void;
@@ -16,10 +18,17 @@ export interface OwnerMenuProps {
   onPlugins?: () => void;
   /** Opens the settings panel. */
   onSettings?: () => void;
+  /** The conversation and schedule panels, and the view they belong to. */
+  chatOn?: boolean;
+  onToggleChat?: () => void;
+  tasksOn?: boolean;
+  onToggleTasks?: () => void;
+  view?: "minimal" | "companion" | "workspace";
+  onView?: (view: "minimal" | "companion" | "workspace") => void;
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, cameraOn, onToggleCamera, onPlugins, onSettings }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, cameraOn, onToggleCamera, onPlugins, onSettings, chatOn, onToggleChat, tasksOn, onToggleTasks, view, onView }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -67,6 +76,21 @@ export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, vo
           {onToggleCamera && (
             <button type="button" style={touch} aria-pressed={!!cameraOn} onClick={onToggleCamera}>
               {cameraOn ? "Camera: on" : "Camera: off"}
+            </button>
+          )}
+          {onToggleChat && (
+            <button type="button" style={touch} aria-pressed={!!chatOn} onClick={onToggleChat}>
+              {chatOn ? "Chat: on" : "Chat: off"}
+            </button>
+          )}
+          {onToggleTasks && (
+            <button type="button" style={touch} aria-pressed={!!tasksOn} onClick={onToggleTasks}>
+              {tasksOn ? "Schedule: on" : "Schedule: off"}
+            </button>
+          )}
+          {view && onView && (
+            <button type="button" style={touch} onClick={() => onView(NEXT_VIEW[view])}>
+              {`View: ${view}`}
             </button>
           )}
           {onSettings && (

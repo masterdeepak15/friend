@@ -109,3 +109,24 @@ describe("the design guide", () => {
     expect(buildSystemPrompt("Jarvis", "scene=conversation", "guest")).not.toContain("Screen layout");
   });
 });
+
+describe("the owner's open panels", () => {
+  it("count as taken: nothing is placed on them", () => {
+    const r = placeObject(obj("chart", "right", "chart"), [], ["chat"]);
+    expect(r.object.placement).not.toBe("right");
+    expect(r.note).toContain("the chat panel (right edge)");
+    const left = placeObject(obj("n", "left"), [], ["tasks"]);
+    expect(left.object.placement).not.toBe("left");
+    expect(left.note).toMatch(/schedule panel/);
+  });
+  it("leave the other side free", () => {
+    expect(placeObject(obj("c", "left"), [], ["chat"]).note).toBeUndefined();
+  });
+  it("are named in what the AI is told, and take their regions off the free list", () => {
+    const text = describeScreen("conversation", "idle", [], 0, ["chat", "tasks"]);
+    expect(text).toContain("the chat panel (right edge)");
+    expect(text).toContain("the schedule panel (upper left)");
+    expect(text).not.toMatch(/free regions: [a-z, ]*(left|right)/);
+    expect(describeScreen("conversation", "idle", [], 0, [])).toMatch(/free regions: .*left.*right/);
+  });
+});

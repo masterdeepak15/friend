@@ -20,6 +20,11 @@ function deps(over: Partial<CommandDeps> = {}): CommandDeps {
     clearScreen: vi.fn(),
     statusLine: () => "Ready",
     endSession: vi.fn(),
+    panelOn: () => false,
+    setPanel: vi.fn(),
+    view: "companion",
+    setView: vi.fn(),
+    resetLayout: vi.fn(),
     ...over,
   };
 }
@@ -88,6 +93,48 @@ describe("the commands", () => {
     for (const c of cmds) expect(help).toContain(`/${c.name}`);
     runSlash(cmds, "/nope", d.notify);
     expect(d.notify).toHaveBeenLastCalledWith(expect.stringMatching(/no command \/nope/i));
+  });
+});
+
+describe("panel, view and layout commands", () => {
+  it("/chat and /tasks switch the panels on, off, or the other way round", () => {
+    const d = deps({ panelOn: (id) => id === "tasks" });
+    const cmds = buildCommands(d);
+    runSlash(cmds, "/chat", d.notify);
+    runSlash(cmds, "/chat off", d.notify);
+    runSlash(cmds, "/tasks", d.notify);
+    runSlash(cmds, "/tasks on", d.notify);
+    expect((d.setPanel as ReturnType<typeof vi.fn>).mock.calls).toEqual([["chat", true], ["chat", false], ["tasks", false], ["tasks", true]]);
+    runSlash(cmds, "/chat maybe", d.notify);
+    expect(d.setPanel).toHaveBeenCalledTimes(4);
+    expect(d.notify).toHaveBeenCalledWith(expect.stringMatching(/\/chat on or off/));
+  });
+
+  it("/view sets the view, or says which one is on", () => {
+    const d = deps({ view: "minimal" });
+    const cmds = buildCommands(d);
+    runSlash(cmds, "/view workspace", d.notify);
+    expect(d.setView).toHaveBeenCalledWith("workspace");
+    runSlash(cmds, "/view", d.notify);
+    expect(d.notify).toHaveBeenLastCalledWith(expect.stringMatching(/view is minimal/));
+    runSlash(cmds, "/view huge", d.notify);
+    expect(d.setView).toHaveBeenCalledTimes(1);
+  });
+
+  it("/layout reset puts the panels back, anything else explains", () => {
+    const d = deps();
+    const cmds = buildCommands(d);
+    runSlash(cmds, "/layout reset", d.notify);
+    expect(d.resetLayout).toHaveBeenCalled();
+    runSlash(cmds, "/layout", d.notify);
+    expect(d.notify).toHaveBeenLastCalledWith(expect.stringMatching(/Drag a panel/));
+  });
+
+  it("/help names them all", () => {
+    const d = deps();
+    runSlash(buildCommands(d), "/help", d.notify);
+    const help = (d.notify as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
+    for (const n of ["/chat", "/tasks", "/view", "/layout"]) expect(help).toContain(n);
   });
 });
 

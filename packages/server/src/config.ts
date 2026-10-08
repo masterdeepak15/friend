@@ -1,4 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import type { ViewPreset } from "@friend/protocol";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +20,8 @@ export interface Config {
   ollama: OllamaConfig;
   claudeCode: ClaudeCodeConfig;
   voice: VoiceConfig;
+  /** What the screen shows besides the AI's pictures: minimal, companion (status line and clock) or workspace (also chat and schedule). */
+  view: ViewPreset;
   dataDir: string;
 }
 
@@ -139,6 +142,7 @@ const defaults = (dataDir: string): Config => ({
   ollama: { ...DEFAULT_OLLAMA },
   claudeCode: { ...DEFAULT_CLAUDE_CODE },
   voice: { ...DEFAULT_VOICE },
+  view: "companion",
   dataDir,
 });
 
@@ -176,6 +180,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     ollama: { ...DEFAULT_OLLAMA, ...stored.ollama },
     claudeCode: sanitizeClaudeCode(stored.claudeCode),
     voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
+    view: stored.view === "minimal" || stored.view === "workspace" ? stored.view : "companion",
     dataDir,
   };
 }

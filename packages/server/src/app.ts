@@ -1,5 +1,6 @@
 import type { ClientMsg, ServerMsg } from "@friend/protocol";
-import { Agent } from "./agent/loop";
+import { Agent, type AgentSettings } from "./agent/loop";
+import { chatLines } from "./chatlog";
 import { Approvals } from "./approvals";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
@@ -22,7 +23,7 @@ import { ClaudeProvider } from "./provider/claude";
 import { ClaudeCodeProvider } from "./provider/claude-code/provider";
 import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
-import { applySettings, settingsView, SettingsError, type Applied } from "./settings";
+import { applySettings, refuseForAgent, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
@@ -97,7 +98,51 @@ export async function createApp(opts: AppOptions) {
   const memory = new Memory(db);
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
+  /** Validates, applies and saves a settings change, then tells the screens. Used by the settings screen and by the AI. */
+  function commitSettings(patch: unknown, how: { actor: "owner" | "agent"; ip?: string; deferSwap?: boolean }): Applied {
+    let applied: Applied;
+    try {
+      // the same change on a fresh copy of what is saved, so only the owner's own edits reach the file
+      const saved = loadConfig(opts.dataDir);
+      const check = applySettings(saved, patch);
+      if (!how.deferSwap && switchable && check.providerChanged && agent.isBusy()) {
+        throw new HttpError(409, "Friend is busy with a request. Change the model when it is done.");
+      }
+      applied = applySettings(config, patch);
+      saveConfig(saved);
+    } catch (e) {
+      if (e instanceof SettingsError) throw new HttpError(400, e.message);
+      throw e;
+    }
+    audit.log(how.actor, "settings.changed", { changed: applied.changed, ...(how.ip ? { ip: how.ip } : {}) });
+    if (applied.providerChanged && switchable) {
+      const swap = () => {
+        const old = switchable.swap(makeProvider());
+        void old.close?.().catch(() => {});
+      };
+      // the AI is answering through the current backend right now, so its own change waits until the reply is done
+      if (how.deferSwap) agent.whenIdle(swap);
+      else swap();
+    }
+    if (applied.changed.includes("view")) broadcast({ type: "ui", view: config.view });
+    broadcast(statusMsg());
+    return applied;
+  }
+  const agentSettings: AgentSettings = {
+    get: () => settingsView(config),
+    setView: (view) => {
+      commitSettings({ view }, { actor: "agent" });
+      return `The view is now ${view}.`;
+    },
+    set: async (patch) => {
+      refuseForAgent(patch);
+      const applied = commitSettings(patch, { actor: "agent", deferSwap: true });
+      return applied.providerChanged ? "Saved. The new model is used from the next reply." : "Saved.";
+    },
+  };
+
   const agent = new Agent({
+    settings: agentSettings,
     provider,
     policy,
     approvals,
@@ -367,28 +412,20 @@ export async function createApp(opts: AppOptions) {
     settings: {
       get: () => settingsView(config),
       update: async (patch, pin, ip) => {
-        await requirePin(pin, ip);
+        // only the view needs no PIN: it changes what is shown and nothing else
+        const viewOnly = !!patch && typeof patch === "object" && Object.keys(patch).length > 0 && Object.keys(patch).every((k) => k === "view");
+        if (!viewOnly) {
+          if (!pin) throw new HttpError(400, "Enter your PIN to save settings");
+          await requirePin(pin, ip);
+        }
         const before = JSON.stringify(settingsView(config));
-        let applied: Applied;
-        try {
-          // the same change on a fresh copy of what is saved, so only the owner's own edits reach the file
-          const saved = loadConfig(opts.dataDir);
-          const check = applySettings(saved, patch);
-          if (switchable && check.providerChanged && agent.isBusy()) throw new HttpError(409, "Friend is busy with a request. Change the model when it is done.");
-          applied = applySettings(config, patch);
-          saveConfig(saved);
-        } catch (e) {
-          if (e instanceof SettingsError) throw new HttpError(400, e.message);
-          throw e;
-        }
-        audit.log("owner", "settings.changed", { changed: applied.changed, ip });
-        if (applied.providerChanged && switchable) {
-          const old = switchable.swap(makeProvider());
-          await old.close?.().catch(() => {});
-        }
-        broadcast(statusMsg());
+        const applied = commitSettings(patch, { actor: "owner", ip });
         return { settings: settingsView(config), changed: JSON.stringify(settingsView(config)) !== before, restart: applied.restart };
       },
+    },
+    data: {
+      history: () => chatLines(db),
+      tasks: () => tasks.list(),
     },
     onCameraFrame: (id, jpeg) => {
       const out = camera.deliver(id, jpeg);
@@ -404,6 +441,7 @@ export async function createApp(opts: AppOptions) {
       clients.add(conn);
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
       conn.send(statusMsg());
+      conn.send({ type: "ui", view: config.view });
       const pending = challenges.current();
       if (pending) conn.send({ type: "voice.challenge", id: pending.id, text: pending.text });
       return () => clients.delete(conn);
@@ -442,6 +480,9 @@ export async function createApp(opts: AppOptions) {
             audit.log("owner", "voice.challenge_cancelled", { ip: conn.ip });
             broadcast({ type: "voice.challenge.end", id: msg.id });
           }
+          break;
+        case "ui.panels":
+          stage.setPanels(msg.open);
           break;
         case "ping":
           conn.send(statusMsg());

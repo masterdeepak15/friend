@@ -1,4 +1,5 @@
 import { z, type ZodTypeAny } from "zod";
+import { ViewPreset } from "./messages";
 import { PresenceState, PresenceStyle, SceneMode, StageObject } from "./stage";
 import type { Tier } from "./tiers";
 
@@ -150,6 +151,28 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "settings.get",
+    description: "Read the owner's current settings (model provider and model names, fallback, Ollama address, voice options, the view). The API key is never included.",
+    input: z.object({}),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "settings.set",
+    description:
+      "Change the owner's settings, only when the owner asks. The owner approves with their PIN. Fields (all optional): provider (claude-code = their Claude subscription, claude = API key, ollama = local), model, ollama {url, model, vision, contextTokens}, claudeCode {model, fallback: ollama|none}, voice {speakTyped, language, accept, challenge}. The API key and the Claude Code command cannot be changed by you. A change of provider takes effect after your current reply.",
+    input: z.object({ settings: z.record(z.string(), z.unknown()) }),
+    baseTier: "T3",
+    target: "gateway",
+  },
+  {
+    name: "view.set",
+    description: "Change what the owner's screen shows besides your pictures: minimal (only the voice presence), companion (plus a status line and a clock) or workspace (plus the chat and the schedule panels). Use it when the owner asks for a cleaner or fuller screen.",
+    input: z.object({ view: ViewPreset }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
     name: "stage.scene",
     description: "Switch the full-screen scene mode: ambient, conversation, focus or multi.",
     input: z.object({ mode: SceneMode }),
@@ -250,6 +273,12 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return `Mark task #${visible(String(a.id ?? ""))} done`;
     case "task.remove":
       return `Remove task #${visible(String(a.id ?? ""))}`;
+    case "settings.get":
+      return "Read the settings";
+    case "settings.set":
+      return `Change settings: ${visible(clip(JSON.stringify(a.settings ?? {}), 400))}`;
+    case "view.set":
+      return `Change the view to ${visible(String(a.view ?? ""))}`;
     case "camera.snap":
       return "Take one picture with the camera and show it to the AI model";
     default:

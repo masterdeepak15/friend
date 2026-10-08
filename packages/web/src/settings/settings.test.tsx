@@ -11,6 +11,7 @@ const view: SettingsView = {
   provider: "claude-code",
   model: "claude-sonnet-5-5",
   apiKeySet: false,
+  view: "companion",
   ollama: { url: "http://127.0.0.1:11434", model: "qwen2.5:7b", vision: false, contextTokens: 8192 },
   claudeCode: { model: "sonnet", command: "claude", fallback: "ollama" },
   voice: { enabled: true, speakTyped: true, language: null, accept: 0.72, challenge: 0.58, ttsVoice: "en_US-lessac-medium", sttModel: "base" },
@@ -39,6 +40,15 @@ describe("<SettingsPanel>", () => {
     await userEvent.selectOptions(screen.getByLabelText(/model provider/i), "claude");
     expect(screen.getByLabelText(/^api key/i)).toBeTruthy();
     expect(screen.queryByLabelText(/claude code command/i)).toBeNull();
+  });
+
+  it("lets the owner choose the view and sends just that", async () => {
+    const { api } = setup();
+    await userEvent.selectOptions(await screen.findByLabelText(/^view/i), "workspace");
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    await typePin("123456");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith({ view: "workspace" }, "123456"));
   });
 
   it("cannot be saved until something changes", async () => {

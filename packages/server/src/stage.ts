@@ -8,7 +8,7 @@ import {
   type ToolResult,
 } from "@friend/protocol";
 
-import { describeScreen, placeObject } from "./agent/layout";
+import { describeScreen, placeObject, type PanelName } from "./agent/layout";
 
 const MAX_OBJECTS = 12;
 /** Largest page the agent may draw in a sandbox object. */
@@ -97,7 +97,18 @@ export class StageState {
 
   /** What the model is told about the screen with each request: what is where, how long it stays, and what is free. */
   summary(now: number = Date.now()): string {
-    return describeScreen(this.scene, this.presence.state, [...this.objects.values()].map((e) => ({ object: e.obj, expiresAt: e.expiresAt })), now);
+    return describeScreen(this.scene, this.presence.state, [...this.objects.values()].map((e) => ({ object: e.obj, expiresAt: e.expiresAt })), now, this.panels);
+  }
+
+  private panels: PanelName[] = [];
+
+  /** The side panels the owner has open right now; objects are kept out of their way. */
+  setPanels(open: readonly string[]): void {
+    this.panels = (["chat", "tasks"] as const).filter((p) => open.includes(p));
+  }
+
+  openPanels(): PanelName[] {
+    return [...this.panels];
   }
 }
 
@@ -117,7 +128,7 @@ export function runStageTool(
   let note: string | undefined;
   if (command.cmd === "show") {
     // never let a new object land on top of another one or on the always-visible parts of the screen
-    const placed = placeObject(command.object, stage.snapshot().objects);
+    const placed = placeObject(command.object, stage.snapshot().objects, stage.openPanels());
     command = { cmd: "show", object: placed.object };
     note = placed.note;
   }

@@ -1,3 +1,4 @@
+import { ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
 import { sanitizeVoice } from "./config";
@@ -12,6 +13,7 @@ export const SettingsPatch = z
     model: modelName,
     /** Empty means "leave the saved key alone". */
     apiKey: z.string().trim().max(400),
+    view: ViewPreset,
     ollama: z
       .object({
         url: z.string().trim().max(200),
@@ -51,6 +53,7 @@ export interface SettingsView {
   model: string;
   /** The key itself is never sent to the screen. */
   apiKeySet: boolean;
+  view: Config["view"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   claudeCode: Config["claudeCode"];
   voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "ttsVoice" | "sttModel">;
@@ -61,6 +64,7 @@ export function settingsView(c: Config): SettingsView {
     provider: c.provider,
     model: c.model,
     apiKeySet: !!c.apiKey,
+    view: c.view,
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
     claudeCode: { ...c.claudeCode },
     voice: {
@@ -76,6 +80,14 @@ export function settingsView(c: Config): SettingsView {
 }
 
 export class SettingsError extends Error {}
+
+/** What the AI may not change even with the owner's PIN: the key, and the program that gets started. Those stay on the screen. */
+export function refuseForAgent(raw: unknown): void {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const cc = (r.claudeCode && typeof r.claudeCode === "object" ? r.claudeCode : {}) as Record<string, unknown>;
+  if ("apiKey" in r) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
+  if ("command" in cc) throw new SettingsError("The Claude Code command can only be changed by the owner on the settings screen.");
+}
 
 export interface Applied {
   /** Names of the settings that were given (never values: some are secrets). */
@@ -129,6 +141,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
   const restart = Object.keys(p.voice ?? {}).filter((k) => RESTART_VOICE.includes(k) && (p.voice as Record<string, unknown>)[k] !== (config.voice as unknown as Record<string, unknown>)[k]).map((k) => `voice.${k}`);
 
   config.provider = next.provider;
+  if (p.view) config.view = p.view;
   if (p.model) config.model = p.model;
   if (p.apiKey) config.apiKey = p.apiKey;
   if (p.ollama) Object.assign(config.ollama, p.ollama);

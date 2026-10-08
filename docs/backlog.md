@@ -2,12 +2,12 @@
 
 Noted as the owner sent them. Nothing here is built yet; each item has a first proposal to decide on.
 
-## 1. The AI can change settings itself
+## 1. The AI can change settings itself (DONE: settings.get, settings.set with PIN approval, view.set)
 "Settings screen can also be controlled by our AI."
 - Proposal: a `settings.get` tool (free) and a `settings.set` tool that goes through the same `applySettings` validation as the screen.
 - Safety: always asks for approval with the PIN (it can change which program runs and where words go); the API key and the Claude Code command stay screen-only; never allowed for guests.
 
-## 2. Chat window, shown on request, arrangeable
+## 2. Chat window, shown on request, arrangeable (DONE: chat panel, draggable panels, three views chosen in Settings, /view /chat /layout)
 "If the user wants to see what we chat. Arrange things by drag and drop. Pick the view in settings."
 - A chat/history panel (typed and spoken turns, tool steps in plain words), hidden by default, opened by a button or "show our chat".
 - Panels (chat, tasks/schedule, status, clock, agent objects) can be dragged and resized; the layout is saved per owner.
@@ -20,7 +20,7 @@ Noted as the owner sent them. Nothing here is built yet; each item has a first p
 - Rules as a plugin-style "design skill": one hero object per answer, max N objects, charts left/centre, details right, remove what is stale, never cover the orb or the corner widgets, prefer pictures to text.
 - Server side: placement validator that refuses overlap with permanent zones and picks a free slot (the existing "auto" placement can be extended).
 
-## 4. Tasks and schedule always reachable
+## 4. Tasks and schedule always reachable (DONE: schedule panel, Esc menu buttons, /tasks)
 "User wants to see the scheduled tasks."
 - A small schedule strip/panel (next reminders and open tasks), opened by an option button, by Esc menu, or by voice ("what is scheduled?").
 - Option buttons: a row of quick actions the user can click or say (Tasks, Chat, Weather, Stats, Settings), hidden or shown from Settings, also reachable from the Esc menu.

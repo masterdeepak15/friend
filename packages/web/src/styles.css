@@ -264,3 +264,38 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .slash-list b { font: 600 0.9rem var(--mono); color: var(--accent); }
 .slash-list i { font: 0.78rem var(--mono); color: var(--warn); font-style: normal; }
 .slash-list span { font-size: 0.82rem; color: var(--muted); }
+
+/* ---- movable panels: chat and schedule, plus the status line and clock ---- */
+.movable { position: absolute; }
+.movable[data-panel="status"], .movable[data-panel="clock"] { cursor: grab; touch-action: none; pointer-events: auto; }
+.movable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel {
+  display: flex; flex-direction: column; width: clamp(260px, 28vw, 420px); min-width: 220px; min-height: 140px; max-height: 80vh;
+  padding: 0; resize: both; overflow: hidden;
+}
+.panel-chat { height: 62vh; }
+.panel-tasks { width: clamp(240px, 26vw, 360px); height: 40vh; }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; cursor: grab; touch-action: none;
+  border-bottom: 1px solid var(--edge); user-select: none;
+}
+.panel-head .obj-close { position: static; }
+.chat-lines { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px; display: grid; gap: 8px; align-content: start; }
+.chat-line { margin: 0; padding: 7px 10px; max-width: 92%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.9rem; }
+.chat-user { justify-self: end; background: color-mix(in srgb, var(--accent) 18%, transparent); border: 1px solid var(--edge); }
+.chat-assistant { justify-self: start; background: rgba(255, 255, 255, 0.05); }
+.chat-form { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--edge); }
+.chat-form input { flex: 1; min-width: 0; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--edge); color: var(--ink); padding: 0 10px; min-height: 40px; font: inherit; }
+.chat-form button { border: 1px solid var(--edge); background: transparent; color: var(--ink); padding: 0 14px; min-height: 40px; }
+.task-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px; }
+.task-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.task-list li { display: grid; gap: 2px; padding: 8px 10px; background: rgba(255, 255, 255, 0.04); border-left: 3px solid var(--accent); }
+.task-list li.overdue { border-left-color: var(--bad); }
+.task-title { font-size: 0.95rem; overflow-wrap: anywhere; }
+.task-due { font: 0.75rem var(--mono); color: var(--muted); }
+.task-list li.overdue .task-due { color: var(--bad); }
+@media (max-width: 600px) {
+  .panel { width: calc(100% - 24px); left: 12px !important; resize: none; }
+  .panel-chat { top: auto !important; bottom: 56px; height: 52vh; }
+  .panel-tasks { top: 56px !important; height: 30vh; }
+}

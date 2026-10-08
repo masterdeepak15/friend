@@ -81,8 +81,12 @@ print([p for p in ("/mnt/c", "/c", "/Users", "/host_mnt", "/var/run/docker.sock"
     const r = await box.run({ language: "python", code: "while True: pass", timeoutSec: 2 });
     expect(r).toMatchObject({ ok: true, timedOut: true });
     expect(Date.now() - started).toBeLessThan(20_000);
-    await new Promise((res) => setTimeout(res, 1500));
-    const left = execFileSync("docker", ["ps", "-a", "--filter", "name=friend-run-", "--format", "{{.Names}}"], { encoding: "utf8" }).trim();
+    // removal is asynchronous and slower on a busy machine: wait for it (up to 15 s) instead of for a fixed moment
+    let left = "x";
+    for (let i = 0; i < 30 && left !== ""; i++) {
+      await new Promise((res) => setTimeout(res, 500));
+      left = execFileSync("docker", ["ps", "-a", "--filter", "name=friend-run-", "--format", "{{.Names}}"], { encoding: "utf8" }).trim();
+    }
     expect(left).toBe("");
   }, 60_000);
 

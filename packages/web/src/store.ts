@@ -5,6 +5,7 @@ import {
   type PresenceStyle,
   type SceneMode,
   type StageObject,
+  type ViewPreset,
 } from "@friend/protocol";
 
 export type Connection = "connecting" | "open" | "closed" | "unauthorized";
@@ -48,6 +49,12 @@ export interface StageViewState {
   approval: PendingApproval | null;
   alerts: Alert[];
   connection: Connection;
+  /** The conversation so far, oldest first (what was said or typed, and what Friend answered). */
+  chat: ChatLine[];
+  /** The last chat line is an answer that is still being written. */
+  chatLive: boolean;
+  /** What the owner wants on the screen besides the AI's pictures. */
+  view: ViewPreset;
   busy: boolean;
   /** What Friend says it is doing right now (null when nothing). */
   activity: string | null;
@@ -68,6 +75,9 @@ export const initialState: StageViewState = {
   approval: null,
   alerts: [],
   connection: "connecting",
+  chat: [],
+  chatLive: false,
+  view: "companion",
   busy: false,
   activity: null,
   deviceOnline: false,
@@ -76,7 +86,16 @@ export const initialState: StageViewState = {
   camera: { enabled: false, stream: null },
 };
 
+export interface ChatLine {
+  role: "user" | "assistant";
+  text: string;
+}
+
+const MAX_CHAT_LINES = 200;
+const capChat = (lines: ChatLine[]) => (lines.length > MAX_CHAT_LINES ? lines.slice(-MAX_CHAT_LINES) : lines);
+
 export type LocalAction =
+  | { type: "chat.seed"; lines: ChatLine[] }
   | { type: "conn"; value: Connection }
   | { type: "alert.dismiss"; id: number }
   | { type: "object.dismiss"; id: string }
@@ -121,6 +140,11 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
   const local = input as LocalAction | null;
   if (local && typeof local === "object") {
     if (local.type === "conn") return { ...state, connection: local.value };
+    if (local.type === "chat.seed") {
+      // earlier conversation, loaded once when the screen opens; lines that arrived live meanwhile stay after it
+      const lines = Array.isArray(local.lines) ? local.lines : [];
+      return state.chat.length === 0 ? { ...state, chat: capChat(lines) } : { ...state, chat: capChat([...lines, ...state.chat]) };
+    }
     if (local.type === "alert.add") {
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: local.level, text: local.text }] };
     }
@@ -158,17 +182,28 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       };
     case "stage":
       return applyStage(state, m.command);
+    case "chat.user":
+      return { ...state, chat: capChat([...state.chat, { role: "user", text: m.text }]), chatLive: false };
+    case "ui":
+      return { ...state, view: m.view };
     case "caption.delta": {
       const fresh = state.captionDone;
+      const last = state.chat.at(-1);
+      const chat =
+        state.chatLive && last?.role === "assistant"
+          ? [...state.chat.slice(0, -1), { role: "assistant" as const, text: last.text + m.text }]
+          : capChat([...state.chat, { role: "assistant" as const, text: m.text }]);
       return {
         ...state,
+        chat,
+        chatLive: true,
         captions: (fresh ? "" : state.captions) + m.text,
         captionDone: false,
         presence: { ...state.presence, amplitude: clamp01(0.3 + m.text.length * 0.04), pulse: state.presence.pulse + 1 },
       };
     }
     case "caption.end":
-      return { ...state, captionDone: true, presence: { ...state.presence, amplitude: 0 } };
+      return { ...state, chatLive: false, captionDone: true, presence: { ...state.presence, amplitude: 0 } };
     case "approval.request": {
       const { type: _t, ...approval } = m;
       return { ...state, approval };

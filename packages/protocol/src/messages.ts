@@ -2,6 +2,10 @@ import { z } from "zod";
 import { StageCommand, StageSnapshot } from "./stage";
 import { Tier } from "./tiers";
 
+/** How much the owner wants on the screen besides the AI's own pictures. */
+export const ViewPreset = z.enum(["minimal", "companion", "workspace"]);
+export type ViewPreset = z.infer<typeof ViewPreset>;
+
 export const PendingApproval = z.object({
   id: z.string(),
   tool: z.string(),
@@ -19,6 +23,10 @@ export const ServerMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("approval.resolved"), id: z.string() }),
   z.object({ type: z.literal("alert"), level: z.enum(["info", "warn", "error"]), text: z.string() }),
   /** What Friend is doing right now, in plain words (null when nothing). Shown in the corner of the screen. */
+  /** What the owner just said or typed, so every open screen can show the conversation. */
+  z.object({ type: z.literal("chat.user"), text: z.string() }),
+  /** The owner's chosen view (sent on connect and whenever it changes). */
+  z.object({ type: z.literal("ui"), view: ViewPreset }),
   z.object({ type: z.literal("activity"), text: z.string().max(80).nullable() }),
   z.object({
     type: z.literal("status"),
@@ -72,6 +80,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("voice.confirm"), id: z.string(), pin: z.string().max(32) }),
   z.object({ type: z.literal("voice.cancel"), id: z.string() }),
   z.object({ type: z.literal("camera.denied"), id: z.string(), reason: z.enum(["off", "no-camera", "permission", "busy"]) }),
+  /** Which side panels the owner has open, so the AI keeps its pictures out of their way. */
+  z.object({ type: z.literal("ui.panels"), open: z.array(z.enum(["chat", "tasks"])).max(2) }),
   z.object({ type: z.literal("ping") }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;

@@ -1,4 +1,4 @@
-import type { ServerMsg, StageCommand, Tier, ToolDef, Trust } from "@friend/protocol";
+import type { ServerMsg, StageCommand, Tier, ToolDef, Trust, ViewPreset } from "@friend/protocol";
 import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
@@ -52,6 +52,15 @@ export interface AgentDeps {
   plugins?: Plugins;
   /** Live weather. Without it the weather tool reports it is unavailable. */
   weather?: Pick<WeatherService, "get">;
+  /** Reading and changing the owner's settings. Without it the settings tools report they are unavailable. */
+  settings?: AgentSettings;
+}
+
+export interface AgentSettings {
+  get(): unknown;
+  /** Applies a change the owner has just approved with the PIN; resolves with what to tell the model. */
+  set(patch: unknown): Promise<string>;
+  setView(view: ViewPreset): string;
 }
 
 export interface TurnCtx {
@@ -73,6 +82,13 @@ export class Agent {
   private busy = false;
   private scenesThisTurn = 0;
   private abort: AbortController | null = null;
+  private idleJobs: (() => void)[] = [];
+
+  /** Runs `job` as soon as no request is being answered (right away when idle). */
+  whenIdle(job: () => void): void {
+    if (this.busy) this.idleJobs.push(job);
+    else job();
+  }
 
   constructor(private deps: AgentDeps) {}
 
@@ -99,6 +115,7 @@ export class Agent {
       emit({ type: "stage", command: cmd });
     };
     emit({ type: "status", busy: true, deviceOnline: d.devices.hasOnline() });
+    if (ctx.trust !== "guest") emit({ type: "chat.user", text }); // every open screen can show the conversation
     emit({ type: "activity", text: "Thinking" });
     stage({ cmd: "presence", state: "thinking" });
     const abort = new AbortController();
@@ -221,6 +238,13 @@ export class Agent {
       stage({ cmd: "presence", state: "idle" });
       this.busy = false;
       emit({ type: "status", busy: false, deviceOnline: d.devices.hasOnline() });
+      for (const job of this.idleJobs.splice(0)) {
+        try {
+          job();
+        } catch (e) {
+          d.audit.log("system", "agent.idle_job_failed", { message: (e as Error).message });
+        }
+      }
     }
   }
 
@@ -375,6 +399,23 @@ export class Agent {
       if (!text) return fail("No such skill.");
       d.audit.log("agent", "skill.use", { plugin: args.plugin, name: args.name });
       return { text, isError: false };
+    }
+
+    if (call.name === "settings.get" || call.name === "settings.set" || call.name === "view.set") {
+      if (!d.settings) return fail("Settings are not available.");
+      try {
+        const text =
+          call.name === "settings.get"
+            ? JSON.stringify(d.settings.get())
+            : call.name === "view.set"
+              ? d.settings.setView(args.view as ViewPreset)
+              : await d.settings.set(args.settings);
+        d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "settings.set" ? { fields: Object.keys((args.settings ?? {}) as object) } : clipArgs(args), tier, ok: true });
+        return { text, isError: false };
+      } catch (e) {
+        d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: false });
+        return fail((e as Error).message);
+      }
     }
 
     if (call.name.startsWith("memory.") || call.name.startsWith("task.")) {
