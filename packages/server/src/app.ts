@@ -19,6 +19,8 @@ import { DeviceHub } from "./devices";
 import { createGateway, type ClientConn, type PluginsApi } from "./gateway";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
+import { ClaudeCodeProvider } from "./provider/claude-code/provider";
+import { FallbackProvider } from "./provider/fallback";
 import { OllamaProvider } from "./provider/ollama";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
@@ -76,9 +78,19 @@ export async function createApp(opts: AppOptions) {
   const devices = new DeviceHub();
   const stage = new StageState();
   const approvals = new Approvals({ auth, policy, audit, db }, opts.approvalTimeoutMs);
-  const provider =
+  // told to the screen once the clients exist (below); Claude Code is skipped quietly until then
+  let tellFallback: (reason: string) => void = () => {};
+  const provider: Provider =
     opts.provider ??
-    (config.provider === "ollama"
+    (config.provider === "claude-code"
+      ? config.claudeCode.fallback === "ollama"
+        ? new FallbackProvider(
+            new ClaudeCodeProvider({ dataDir: opts.dataDir, model: config.claudeCode.model, command: config.claudeCode.command }),
+            new OllamaProvider(config.ollama),
+            (reason) => tellFallback(reason),
+          )
+        : new ClaudeCodeProvider({ dataDir: opts.dataDir, model: config.claudeCode.model, command: config.claudeCode.command })
+      : config.provider === "ollama"
       ? new OllamaProvider(config.ollama)
       : config.apiKey
         ? new ClaudeProvider({ apiKey: config.apiKey, model: config.model })
@@ -113,6 +125,10 @@ export async function createApp(opts: AppOptions) {
   const clients = new Set<ClientConn>();
   const broadcast = (m: ServerMsg) => {
     for (const c of clients) c.send(m);
+  };
+  tellFallback = (reason) => {
+    audit.log("system", "provider.fallback", { reason: reason.slice(0, 300) });
+    broadcast({ type: "alert", level: "info", text: `${reason} Using the local model for now.` });
   };
   const voice = opts.voice;
   const speaker = voice ? new Speaker(voice, audit, config.voice.ttsVoice) : null;
@@ -467,6 +483,7 @@ export async function createApp(opts: AppOptions) {
       agent.cancel();
       approvals.denyAll("Shutting down");
       await gateway.close();
+      await provider.close?.().catch(() => {});
       db.close();
     },
   };

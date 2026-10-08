@@ -146,7 +146,7 @@ export class Agent {
           localIso(new Date(d.tasks?.now() ?? Date.now())),
           guest ? undefined : d.plugins?.skills(),
         );
-        for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), messages, tools, signal: abort.signal })) {
+        for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: guest ? "guest" : "owner", messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
             if (!assistantText) stage({ cmd: "presence", state: "speaking" });
             assistantText += ev.text;

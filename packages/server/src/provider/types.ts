@@ -28,6 +28,8 @@ export interface StreamRequest {
   system: string;
   /** What changes every request (the clock, the screen). Providers send it as the very last message. */
   context?: string;
+  /** Whose conversation this is. A provider that keeps a session of its own must keep guests out of the owner's. */
+  session?: "owner" | "guest";
   messages: Msg[];
   tools: ToolSpec[];
   signal: AbortSignal;
@@ -38,4 +40,6 @@ export interface Provider {
   /** Whether the model can look at pictures. Absent means no. */
   readonly vision?: boolean;
   stream(req: StreamRequest): AsyncIterable<ProviderEvent>;
+  /** Releases anything the provider keeps running (a background process, a local server). */
+  close?(): Promise<void>;
 }

@@ -17,11 +17,39 @@ export interface Config {
   /** Which model backend answers: Claude (needs an API key) or a local Ollama server. */
   provider: ProviderName;
   ollama: OllamaConfig;
+  claudeCode: ClaudeCodeConfig;
   voice: VoiceConfig;
   dataDir: string;
 }
 
-export type ProviderName = "claude" | "ollama";
+export type ProviderName = "claude" | "ollama" | "claude-code";
+
+/** Using the Claude Code program (and so a Claude subscription) as the model, with no API key. */
+export interface ClaudeCodeConfig {
+  /** A model alias or name for `claude --model`, such as sonnet, haiku or claude-sonnet-5-5. */
+  model: string;
+  /** The command that starts Claude Code. */
+  command: string;
+  /** Where to turn when Claude Code cannot answer (not signed in, plan limit reached): the local Ollama model, or nowhere. */
+  fallback: "ollama" | "none";
+}
+
+export const DEFAULT_CLAUDE_CODE: ClaudeCodeConfig = { model: "sonnet", command: "claude", fallback: "ollama" };
+
+/** A model or command is one word: anything with spaces could smuggle extra arguments, so such values are cut or replaced. */
+export function sanitizeClaudeCode(raw: unknown): ClaudeCodeConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const word = (v: unknown, fallback: string, allowSpaces = false) => {
+    if (typeof v !== "string" || !v.trim()) return fallback;
+    const first = v.trim().split(/\s+/)[0]!;
+    return allowSpaces ? v.trim() : /^[\w.:/\\-]+$/.test(first) ? first : fallback;
+  };
+  return {
+    model: word(r.model, DEFAULT_CLAUDE_CODE.model),
+    command: word(r.command, DEFAULT_CLAUDE_CODE.command),
+    fallback: r.fallback === "none" ? "none" : "ollama",
+  };
+}
 
 export interface OllamaConfig {
   url: string;
@@ -109,6 +137,7 @@ const defaults = (dataDir: string): Config => ({
   apiKey: null,
   provider: "claude",
   ollama: { ...DEFAULT_OLLAMA },
+  claudeCode: { ...DEFAULT_CLAUDE_CODE },
   voice: { ...DEFAULT_VOICE },
   dataDir,
 });
@@ -145,6 +174,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     ...stored,
     destructivePatterns,
     ollama: { ...DEFAULT_OLLAMA, ...stored.ollama },
+    claudeCode: sanitizeClaudeCode(stored.claudeCode),
     voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
     dataDir,
   };
