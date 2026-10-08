@@ -19,6 +19,23 @@ Preview the whole look with no API key and no network: `pnpm build && pnpm demo`
 
 Other commands: `friend rules list|remove <id>`, `friend devices list|revoke <id>`, `friend status`, `friend config set <key> <value>`, `friend pair` (code to connect another PC), `friend node --url <ws-url> --code <code>`.
 
+## Use your Claude subscription (Claude Code)
+
+Instead of an API key you can let Friend think through the Claude Code app you already have signed in with your Claude plan. To the rest of Friend it is just another model: same tools, same approvals, same screen. Nothing else changes.
+
+```bash
+claude                          # once: sign in with your Claude account (if you have not already)
+pnpm friend claude setup --use  # checks it works and switches Friend over; restart `friend start`
+pnpm friend claude status
+```
+
+- One Claude Code process stays running, so replies start in about a second after the first message (a fresh start takes 3 to 9 seconds). Friend's conversation is remembered across restarts.
+- Claude Code has no tools of its own here. Friend's tools reach it through a private local bridge (127.0.0.1, random token), and every call still goes through Friend's own approval and PIN rules and audit log.
+- Unrecognized voices (guests) get a separate, tool-less, nothing-saved session.
+- If your plan's usage limit runs out, Claude Code is signed out or missing, Friend answers with the local Ollama model and tells you once on screen (`friend config set claudeCode.fallback none` to see errors instead). Other settings: `claudeCode.model` (default sonnet), `claudeCode.command`.
+- Caveats: it uses your plan's limits; using a subscription this way is a grey area in Anthropic's terms, so treat it as experimental; if Friend answered through the fallback, Claude does not know about that exchange.
+- Opt-in live test against the real CLI: `FRIEND_LIVE_CLAUDE=1 pnpm exec vitest run packages/server/src/provider/claude-code/live.test.ts`.
+
 ## Voice (local, optional)
 
 ```bash

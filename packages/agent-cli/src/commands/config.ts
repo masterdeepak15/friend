@@ -37,7 +37,7 @@ const PARSERS: Record<string, (v: string) => unknown> = {
     return n;
   },
   provider: (v) => {
-    if (v !== "claude" && v !== "ollama") throw new Error("Provider must be claude or ollama");
+    if (v !== "claude" && v !== "ollama" && v !== "claude-code") throw new Error("Provider must be claude, ollama or claude-code");
     return v;
   },
   roots: list,
@@ -55,6 +55,17 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
     speakTyped: bool,
     accept: unit,
     challenge: unit,
+  },
+  claudeCode: {
+    model: (v) => {
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(v.trim())) throw new Error("Expected a model name such as sonnet, haiku or claude-sonnet-5-5");
+      return v.trim();
+    },
+    command: nonEmpty,
+    fallback: (v) => {
+      if (v !== "ollama" && v !== "none") throw new Error("Fallback must be ollama or none");
+      return v;
+    },
   },
   ollama: {
     url: httpUrl,
@@ -88,7 +99,7 @@ export async function configCommand(args: string[], io: IO): Promise<number> {
       io.err(`Unknown setting "${key}". Settings: ${allKeys().join(", ")}`);
       return 1;
     }
-    (cfg[group as "voice" | "ollama"] as unknown as Record<string, unknown>)[field] = parse(value);
+    (cfg[group as "voice" | "ollama" | "claudeCode"] as unknown as Record<string, unknown>)[field] = parse(value);
   } else {
     const parse = PARSERS[key];
     if (!parse) {

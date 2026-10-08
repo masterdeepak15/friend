@@ -27,7 +27,12 @@ async function client(token = bridge.token): Promise<Client> {
 }
 const post = (headers: Record<string, string> = {}, method = "POST") =>
   fetch(bridge.url, { method, headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers }, body: method === "POST" ? JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) : undefined });
-const tick = () => new Promise((r) => setTimeout(r, 20));
+/** Waits for the next call to reach the bridge (or 20 ms, for tests that expect none), however loaded the machine is. */
+const tick = async () => {
+  const seen = calls.length;
+  for (let i = 0; i < 200 && calls.length === seen; i++) await new Promise((r) => setTimeout(r, 10));
+  await new Promise((r) => setTimeout(r, 5));
+};
 
 describe("names", () => {
   it("turn dots into double underscores for Claude and back again", () => {
