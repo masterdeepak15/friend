@@ -84,7 +84,7 @@ describe("the view", () => {
         }
       });
     });
-    expect(first.find((m) => (m as { type: string }).type === "ui")).toEqual({ type: "ui", view: "companion" });
+    expect(first.find((m) => (m as { type: string }).type === "ui")).toMatchObject({ type: "ui", view: "companion", look: { ambient: true, captions: true } });
   });
 
   it("is kept in the config, and a bad value falls back to companion", async () => {
@@ -111,7 +111,7 @@ describe("the view", () => {
     expect(loadConfig(dir).view).toBe("workspace");
     expect(app.config.view).toBe("workspace");
     await new Promise((r) => setTimeout(r, 100));
-    expect(got).toContainEqual({ type: "ui", view: "workspace" });
+    expect(got).toContainEqual(expect.objectContaining({ type: "ui", view: "workspace" }));
     expect((await put({ view: "huge" })).status).toBe(400);
     expect((await put({ view: "minimal", claudeCode: { model: "haiku" } })).status).toBe(400); // mixed with another setting: PIN needed
     expect((await put({ view: "minimal", claudeCode: { model: "haiku" } }, owner.pin)).status).toBe(200);

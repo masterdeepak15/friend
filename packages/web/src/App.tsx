@@ -22,14 +22,14 @@ import { useAudioUnlock } from "./voice/unlock";
 
 type Phase = "loading" | "setup" | "login" | "stage";
 
-function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
+export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const { state, send, dispatch, voice } = useFriend(onSignedOut);
   useVoiceKeys(voice);
   useAudioUnlock(voice);
   const [muted, setMuted] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState<null | "model" | "look">(null);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [help, setHelp] = useState<SlashCommand[] | null>(null);
   const panels = usePanels(state.view);
@@ -60,6 +60,14 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     send({ type: "ui.panels", open: [...(panels.show.chat ? (["chat"] as const) : []), ...(panels.show.tasks ? (["tasks"] as const) : [])] });
   }, [state.connection, panels.show.chat, panels.show.tasks, send]);
 
+  // Minimal hides the status line and the clock on purpose; say so once, so it never looks like a bug.
+  const toldMinimal = useRef(false);
+  useEffect(() => {
+    if (!state.viewKnown || state.view !== "minimal" || toldMinimal.current) return;
+    toldMinimal.current = true;
+    dispatch({ type: "alert.add", level: "info", text: "The view is Minimal, so the status line and clock are hidden. Press Esc, then View, to bring them back." });
+  }, [state.viewKnown, state.view, dispatch]);
+
   const setView = (view: "minimal" | "companion" | "workspace") => {
     httpSettingsApi.save({ view }).catch((e: Error) => dispatch({ type: "alert.add", level: "warn", text: e.message }));
   };
@@ -68,7 +76,8 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     () =>
       buildSlash({
         notify: (text) => dispatch({ type: "alert.add", level: "info", text }),
-        openSettings: () => setSettingsOpen(true),
+        openSettings: () => setSettingsOpen("model"),
+        openLook: () => setSettingsOpen("look"),
         openConnectors: () => setConnectorsOpen(true),
         openPlugins: () => setManagingPlugins(true),
         openVoice: state.voice.available ? () => setEnrolling(true) : null,
@@ -113,16 +122,16 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         voiceMode={state.voice.mode}
         busy={state.busy}
         activity={state.activity}
-        showStatus={panels.show.status}
-        showClock={panels.show.clock}
+        showStatus={state.viewKnown && panels.show.status}
+        showClock={state.viewKnown && panels.show.clock}
         send={send}
         dispatch={dispatch}
       >
-        {panels.show.chat && <ChatPanel lines={state.chat} live={state.chatLive} onSend={(text) => send({ type: "chat.send", text })} onClose={() => panels.toggle("chat", false)} />}
-        {panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
+        {state.viewKnown && panels.show.chat && <ChatPanel lines={state.chat} live={state.chatLive} onSend={(text) => send({ type: "chat.send", text })} onClose={() => panels.toggle("chat", false)} />}
+        {state.viewKnown && panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
         {managingPlugins && <PluginsPanel onClose={() => setManagingPlugins(false)} />}
-        {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+        {settingsOpen && <SettingsPanel initialTab={settingsOpen} onClose={() => setSettingsOpen(null)} />}
         {connectorsOpen && <ConnectorsPanel onClose={() => setConnectorsOpen(false)} />}
         {help && <HelpPanel commands={help} onClose={() => setHelp(null)} />}
       </Overlay>
@@ -134,7 +143,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         voiceEnrolled={state.voice.enrolled}
         onEnroll={() => setEnrolling(true)}
         onPlugins={() => setManagingPlugins(true)}
-        onSettings={() => setSettingsOpen(true)}
+        onSettings={() => setSettingsOpen("model")}
         onConnectors={() => setConnectorsOpen(true)}
         cameraOn={state.camera.enabled}
         onToggleCamera={() => dispatch({ type: "camera.enable", value: !state.camera.enabled })}

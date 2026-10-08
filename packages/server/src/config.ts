@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import type { ViewPreset } from "@friend/protocol";
+import type { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -22,6 +22,7 @@ export interface Config {
   voice: VoiceConfig;
   /** What the screen shows besides the AI's pictures: minimal, companion (status line and clock) or workspace (also chat and schedule). */
   view: ViewPreset;
+  look: LookConfig;
   dataDir: string;
 }
 
@@ -51,6 +52,45 @@ export function sanitizeClaudeCode(raw: unknown): ClaudeCodeConfig {
     model: word(r.model, DEFAULT_CLAUDE_CODE.model),
     command: word(r.command, DEFAULT_CLAUDE_CODE.command),
     fallback: r.fallback === "none" ? "none" : "ollama",
+  };
+}
+
+/** How the owner wants the voice presence to look. Saved here so every screen shows the same. */
+export interface LookConfig {
+  style: PresenceStyle;
+  /** #rrggbb */
+  accent: string;
+  /** Brightness 0..1. */
+  intensity: number;
+  /** Size in the middle of the screen, 0.5..1.5. */
+  size: number;
+  /** How strongly it follows the voice, 0..1. */
+  reactivity: number;
+  ambient: boolean;
+  captions: boolean;
+  captionSize: "small" | "medium" | "large";
+  /** The AI may change the style, colour and brightness to suit a topic (stage.mood, stage.presence). */
+  aiMayChange: boolean;
+}
+
+export const DEFAULT_LOOK: LookConfig = { style: "sphere", accent: "#3fd8ff", intensity: 0.6, size: 1, reactivity: 0.7, ambient: true, captions: true, captionSize: "medium", aiMayChange: true };
+
+const num = (v: unknown, lo: number, hi: number, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
+
+/** Anything odd in an edited config falls back to the default for that one value. */
+export function sanitizeLook(raw: unknown): LookConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const d = DEFAULT_LOOK;
+  return {
+    style: r.style === "orb" || r.style === "ring" || r.style === "sphere" ? r.style : d.style,
+    accent: typeof r.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(r.accent) ? r.accent.toLowerCase() : d.accent,
+    intensity: num(r.intensity, 0, 1, d.intensity),
+    size: num(r.size, 0.5, 1.5, d.size),
+    reactivity: num(r.reactivity, 0, 1, d.reactivity),
+    ambient: typeof r.ambient === "boolean" ? r.ambient : d.ambient,
+    captions: typeof r.captions === "boolean" ? r.captions : d.captions,
+    captionSize: r.captionSize === "small" || r.captionSize === "large" || r.captionSize === "medium" ? r.captionSize : d.captionSize,
+    aiMayChange: typeof r.aiMayChange === "boolean" ? r.aiMayChange : d.aiMayChange,
   };
 }
 
@@ -143,6 +183,7 @@ const defaults = (dataDir: string): Config => ({
   claudeCode: { ...DEFAULT_CLAUDE_CODE },
   voice: { ...DEFAULT_VOICE },
   view: "companion",
+  look: { ...DEFAULT_LOOK },
   dataDir,
 });
 
@@ -181,6 +222,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     claudeCode: sanitizeClaudeCode(stored.claudeCode),
     voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
     view: stored.view === "minimal" || stored.view === "workspace" ? stored.view : "companion",
+    look: sanitizeLook(stored.look),
     dataDir,
   };
 }

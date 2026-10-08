@@ -166,6 +166,23 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "look.set",
+    description:
+      "Change how the voice presence looks, only when the owner asks (\"make it purple\", \"bigger\", \"use the ring\"). Fields, all optional: style (sphere, orb, ring), accent (a colour as #rrggbb), intensity (0..1, how bright), size (0.5..1.5), reactivity (0..1, how strongly it follows the voice), ambient (soft glow behind everything), captions (show the live words), captionSize (small, medium, large). The change is saved and kept. This is not for matching the mood of a topic: that is stage.mood.",
+    input: z.object({
+      style: PresenceStyle.optional(),
+      accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      intensity: z.number().min(0).max(1).optional(),
+      size: z.number().min(0.5).max(1.5).optional(),
+      reactivity: z.number().min(0).max(1).optional(),
+      ambient: z.boolean().optional(),
+      captions: z.boolean().optional(),
+      captionSize: z.enum(["small", "medium", "large"]).optional(),
+    }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
     name: "view.set",
     description: "Change what the owner's screen shows besides your pictures: minimal (only the voice presence), companion (plus a status line and a clock) or workspace (plus the chat and the schedule panels). Use it when the owner asks for a cleaner or fuller screen.",
     input: z.object({ view: ViewPreset }),
@@ -388,6 +405,8 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return "Read the settings";
     case "settings.set":
       return `Change settings: ${visible(clip(JSON.stringify(a.settings ?? {}), 400))}`;
+    case "look.set":
+      return `Change the look: ${visible(clip(JSON.stringify(a), 300))}`;
     case "view.set":
       return `Change the view to ${visible(String(a.view ?? ""))}`;
     case "connectors.list":

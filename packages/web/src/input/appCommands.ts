@@ -7,6 +7,8 @@ export interface CommandDeps {
   openPlugins: () => void;
   /** Opens the connectors panel (Gmail, Chrome control, …). */
   openConnectors: () => void;
+  /** Opens the settings on the voice presence tab. */
+  openLook: () => void;
   /** Null when speech is not available on this PC. */
   openVoice: (() => void) | null;
   muted: boolean;
@@ -35,6 +37,7 @@ export function buildCommands(d: CommandDeps): SlashCommand[] {
   const list: SlashCommand[] = [
     { name: "settings", description: "Open the settings (model, voice, …)", run: d.openSettings },
     { name: "plugins", description: "Add, switch or remove plugins (skills and tools)", run: d.openPlugins },
+    { name: "look", description: "Choose how the voice presence looks: theme, colour, size, captions", run: d.openLook },
     { name: "connectors", description: "Connect Gmail, Chrome control or any MCP service; switch or remove them", run: d.openConnectors },
     {
       name: "voice",

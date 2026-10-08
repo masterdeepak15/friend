@@ -75,6 +75,8 @@ export interface AgentSettings {
   /** Applies a change the owner has just approved with the PIN; resolves with what to tell the model. */
   set(patch: unknown): Promise<string>;
   setView(view: ViewPreset): string;
+  /** Changes how the presence looks (the owner asked for it). */
+  setLook(look: Record<string, unknown>): string;
 }
 
 export interface TurnCtx {
@@ -440,7 +442,7 @@ export class Agent {
       return { text, isError: false };
     }
 
-    if (call.name === "settings.get" || call.name === "settings.set" || call.name === "view.set") {
+    if (call.name === "settings.get" || call.name === "settings.set" || call.name === "view.set" || call.name === "look.set") {
       if (!d.settings) return fail("Settings are not available.");
       try {
         const text =
@@ -448,7 +450,9 @@ export class Agent {
             ? JSON.stringify(d.settings.get())
             : call.name === "view.set"
               ? d.settings.setView(args.view as ViewPreset)
-              : await d.settings.set(args.settings);
+              : call.name === "look.set"
+                ? d.settings.setLook(args)
+                : await d.settings.set(args.settings);
         d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "settings.set" ? { fields: Object.keys((args.settings ?? {}) as object) } : clipArgs(args), tier, ok: true });
         return { text, isError: false };
       } catch (e) {

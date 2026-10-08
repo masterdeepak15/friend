@@ -25,6 +25,7 @@ function build(opts: { approve?: boolean; withSettings?: boolean; provider?: Fak
     get: vi.fn(() => ({ provider: "claude-code" })),
     set: vi.fn(async () => "Saved."),
     setView: vi.fn((v) => `The view is now ${v}.`),
+    setLook: vi.fn(() => "The look is updated and saved."),
   };
   const provider = opts.provider ?? new FakeProvider([[call("settings.set", { settings: { claudeCode: { model: "haiku" } } }), done], [done]]);
   const agent = new Agent({

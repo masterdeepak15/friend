@@ -6,10 +6,33 @@ export interface SettingsView {
   /** The key itself is never sent to the screen. */
   apiKeySet: boolean;
   view: "minimal" | "companion" | "workspace";
+  look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   claudeCode: { model: string; command: string; fallback: "ollama" | "none" };
   voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; ttsVoice: string; sttModel: string };
 }
+
+export type PresenceStyleName = "sphere" | "orb" | "ring";
+
+/** How the owner wants the voice presence and captions to look. */
+export interface Look {
+  style: PresenceStyleName;
+  /** #rrggbb */
+  accent: string;
+  intensity: number;
+  size: number;
+  reactivity: number;
+  ambient: boolean;
+  captions: boolean;
+  captionSize: "small" | "medium" | "large";
+  aiMayChange: boolean;
+}
+
+export const DEFAULT_LOOK: Look = { style: "sphere", accent: "#3fd8ff", intensity: 0.6, size: 1, reactivity: 0.7, ambient: true, captions: true, captionSize: "medium", aiMayChange: true };
+
+/** Changes that only affect how the screen looks, which need no PIN. */
+export const COSMETIC = new Set(["view", "look"]);
+export const needsPin = (patch: Record<string, unknown>): boolean => Object.keys(patch).some((k) => !COSMETIC.has(k));
 
 export interface SaveResult {
   settings: SettingsView;
@@ -55,7 +78,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if (after.model !== before.model) patch.model = after.model;
   if (after.view !== before.view) patch.view = after.view;
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
-  for (const group of ["ollama", "claudeCode", "voice"] as const) {
+  for (const group of ["ollama", "claudeCode", "voice", "look"] as const) {
     const changed: Record<string, unknown> = {};
     for (const k of Object.keys(after[group]) as string[]) {
       const a = (after[group] as Record<string, unknown>)[k];

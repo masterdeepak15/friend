@@ -2,6 +2,7 @@ import type { ClientMsg } from "@friend/protocol";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { CommandBar } from "../input/CommandBar";
 import type { Slash } from "../input/commands";
+import { reactivityFactor } from "../presence/reactivity";
 import { CATALOG } from "../objects/objects";
 import { Presence } from "../presence/Presence";
 import type { LocalAction, StageViewState } from "../store";
@@ -54,7 +55,8 @@ export function Stage({ state, send, dispatch, voice, slash }: StageProps) {
   const style = { "--accent": state.mood.accent, "--intensity": state.mood.intensity } as React.CSSProperties;
   const mode = state.voice.mode;
   const presenceState = mode === "listening" ? "listening" : mode === "speaking" ? "speaking" : mode === "transcribing" ? "thinking" : state.presence.state;
-  const presenceAmplitude = mode === "listening" || mode === "speaking" ? state.voice.level : state.presence.amplitude;
+  const reactivity = reactivityFactor(state.look.reactivity); // 1 at the default, so nothing changes until the owner asks
+  const presenceAmplitude = Math.min(1, (mode === "listening" || mode === "speaking" ? state.voice.level : state.presence.amplitude) * reactivity);
   const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; down: boolean; talking: boolean; id: number | null }>({
     timer: null,
     down: false,
@@ -141,7 +143,7 @@ export function Stage({ state, send, dispatch, voice, slash }: StageProps) {
       onPointerCancel={(e) => endPress(e, true)}
       onContextMenu={(e) => voice && e.preventDefault()}
     >
-      <div className="ambient" aria-hidden="true" style={{ opacity: 0.35 + 0.65 * state.mood.intensity }} />
+      {state.look.ambient && <div className="ambient" aria-hidden="true" style={{ opacity: 0.35 + 0.65 * state.mood.intensity }} />}
       <Presence
         state={presenceState}
         amplitude={presenceAmplitude}
@@ -150,13 +152,14 @@ export function Stage({ state, send, dispatch, voice, slash }: StageProps) {
         accent={state.mood.accent}
         style={state.presence.style}
         intensity={state.mood.intensity}
+        scale={state.look.size}
       />
       <div className={narrow ? "objects objects-stack" : "objects"} style={{ zIndex: 10 }}>
         {autos.length > 0 && <div className="auto-grid">{autos.map(renderObject)}</div>}
         {fixed.map(renderObject)}
       </div>
-      {state.captions && (
-        <p className={`captions${state.captionDone ? " done" : ""}`} aria-live="polite">
+      {state.look.captions && state.captions && (
+        <p className={`captions captions-${state.look.captionSize}${state.captionDone ? " done" : ""}`} aria-live="polite">
           {state.captions}
         </p>
       )}

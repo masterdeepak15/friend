@@ -9,6 +9,7 @@ import {
 } from "@friend/protocol";
 
 import { describeScreen, placeObject, type PanelName } from "./agent/layout";
+import type { LookConfig } from "./config";
 
 const MAX_OBJECTS = 12;
 /** Largest page the agent may draw in a sandbox object. */
@@ -101,6 +102,24 @@ export class StageState {
   }
 
   private panels: PanelName[] = [];
+  private locked = false;
+
+  /** Takes the owner's chosen style, colour and brightness as the current look; returns the commands that tell the screens. */
+  setLook(look: LookConfig): StageCommand[] {
+    this.presence.style = look.style;
+    this.mood.accent = look.accent;
+    this.mood.intensity = look.intensity;
+    this.locked = !look.aiMayChange;
+    return [
+      { cmd: "presence", style: look.style },
+      { cmd: "mood", accent: look.accent, intensity: look.intensity },
+    ];
+  }
+
+  /** The owner fixed the look: the AI may not change the style, colour or brightness. */
+  looksLocked(): boolean {
+    return this.locked;
+  }
 
   /** The side panels the owner has open right now; objects are kept out of their way. */
   setPanels(open: readonly string[]): void {
@@ -126,6 +145,16 @@ export function runStageTool(
   if (!cmd.success) return { ok: false, error: `Invalid stage command: ${cmd.error.message}` };
   let command = cmd.data;
   let note: string | undefined;
+  if (stage.looksLocked()) {
+    const fixed = "ok. The owner has fixed the look of the presence (style, colour and brightness), so that part was not changed.";
+    if (command.cmd === "mood" && (command.accent !== undefined || command.intensity !== undefined)) return { ok: true, output: fixed, truncated: false };
+    if (command.cmd === "presence" && command.style !== undefined) {
+      const { style: _kept, ...rest } = command;
+      if (rest.state === undefined) return { ok: true, output: fixed, truncated: false };
+      command = rest;
+      note = fixed;
+    }
+  }
   if (command.cmd === "show") {
     // never let a new object land on top of another one or on the always-visible parts of the screen
     const placed = placeObject(command.object, stage.snapshot().objects, stage.openPanels());

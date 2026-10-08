@@ -14,6 +14,7 @@ function deps(over: Partial<CommandDeps> = {}): CommandDeps {
     openSettings: vi.fn(),
     openPlugins: vi.fn(),
     openConnectors: vi.fn(),
+    openLook: vi.fn(),
     openVoice: vi.fn(),
     muted: false,
     setMuted: vi.fn(),

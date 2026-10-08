@@ -27,7 +27,7 @@ import { ClaudeProvider } from "./provider/claude";
 import { ClaudeCodeProvider } from "./provider/claude-code/provider";
 import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
-import { applySettings, refuseForAgent, settingsView, SettingsError, type Applied } from "./settings";
+import { applySettings, clientLook, COSMETIC_KEYS, refuseForAgent, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
@@ -84,6 +84,7 @@ export async function createApp(opts: AppOptions) {
   const policy = new PolicyEngine(db, config);
   const devices = new DeviceHub();
   const stage = new StageState();
+  stage.setLook(config.look); // the owner's own style, colour and brightness are where every screen starts
   const approvals = new Approvals({ auth, policy, audit, db }, opts.approvalTimeoutMs);
   // told to the screen once the clients exist (below); Claude Code is skipped quietly until then
   let tellFallback: (reason: string) => void = () => {};
@@ -130,7 +131,10 @@ export async function createApp(opts: AppOptions) {
       if (how.deferSwap) agent.whenIdle(swap);
       else swap();
     }
-    if (applied.changed.includes("view")) broadcast({ type: "ui", view: config.view });
+    if (applied.changed.some((k) => k === "view" || k.startsWith("look."))) {
+      if (applied.changed.some((k) => k.startsWith("look."))) for (const command of stage.setLook(config.look)) broadcast({ type: "stage", command });
+      broadcast(uiMsg());
+    }
     broadcast(statusMsg());
     return applied;
   }
@@ -139,6 +143,10 @@ export async function createApp(opts: AppOptions) {
     setView: (view) => {
       commitSettings({ view }, { actor: "agent" });
       return `The view is now ${view}.`;
+    },
+    setLook: (look) => {
+      commitSettings({ look }, { actor: "agent" });
+      return "The look is updated and saved.";
     },
     set: async (patch) => {
       refuseForAgent(patch);
@@ -192,6 +200,7 @@ export async function createApp(opts: AppOptions) {
     broadcast({ type: "alert", level: "info", text: "The voice request timed out and was dropped." });
   });
   let stopped = false;
+  const uiMsg = (): ServerMsg => ({ type: "ui", view: config.view, look: clientLook(config.look) });
   const statusMsg = (): ServerMsg => ({
     type: "status",
     busy: agent.isBusy(),
@@ -467,9 +476,9 @@ export async function createApp(opts: AppOptions) {
     settings: {
       get: () => settingsView(config),
       update: async (patch, pin, ip) => {
-        // only the view needs no PIN: it changes what is shown and nothing else
-        const viewOnly = !!patch && typeof patch === "object" && Object.keys(patch).length > 0 && Object.keys(patch).every((k) => k === "view");
-        if (!viewOnly) {
+        // how the screen looks needs no PIN: it changes what is shown and nothing else
+        const looksOnly = !!patch && typeof patch === "object" && Object.keys(patch).length > 0 && Object.keys(patch).every((k) => COSMETIC_KEYS.has(k));
+        if (!looksOnly) {
           if (!pin) throw new HttpError(400, "Enter your PIN to save settings");
           await requirePin(pin, ip);
         }
@@ -496,7 +505,7 @@ export async function createApp(opts: AppOptions) {
       clients.add(conn);
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
       conn.send(statusMsg());
-      conn.send({ type: "ui", view: config.view });
+      conn.send(uiMsg());
       const pending = challenges.current();
       if (pending) conn.send({ type: "voice.challenge", id: pending.id, text: pending.text });
       return () => clients.delete(conn);

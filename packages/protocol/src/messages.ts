@@ -6,6 +6,19 @@ import { Tier } from "./tiers";
 export const ViewPreset = z.enum(["minimal", "companion", "workspace"]);
 export type ViewPreset = z.infer<typeof ViewPreset>;
 
+/** How the owner wants the voice presence and captions to look on the screen (style, colour and glow travel as stage state). */
+export const ClientLook = z.object({
+  /** Size of the presence in the middle of the screen, 0.5 (small) to 1.5 (large). */
+  size: z.number().min(0.5).max(1.5),
+  /** How strongly it reacts to voice, 0 (barely) to 1 (a lot). */
+  reactivity: z.number().min(0).max(1),
+  /** The soft glow behind everything. */
+  ambient: z.boolean(),
+  captions: z.boolean(),
+  captionSize: z.enum(["small", "medium", "large"]),
+});
+export type ClientLook = z.infer<typeof ClientLook>;
+
 export const PendingApproval = z.object({
   id: z.string(),
   tool: z.string(),
@@ -26,7 +39,7 @@ export const ServerMsg = z.discriminatedUnion("type", [
   /** What the owner just said or typed, so every open screen can show the conversation. */
   z.object({ type: z.literal("chat.user"), text: z.string() }),
   /** The owner's chosen view (sent on connect and whenever it changes). */
-  z.object({ type: z.literal("ui"), view: ViewPreset }),
+  z.object({ type: z.literal("ui"), view: ViewPreset, look: ClientLook.optional() }),
   z.object({ type: z.literal("activity"), text: z.string().max(80).nullable() }),
   z.object({
     type: z.literal("status"),

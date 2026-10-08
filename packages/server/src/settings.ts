@@ -1,7 +1,7 @@
-import { ViewPreset } from "@friend/protocol";
+import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
-import { sanitizeVoice } from "./config";
+import { sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
 const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
@@ -14,6 +14,20 @@ export const SettingsPatch = z
     /** Empty means "leave the saved key alone". */
     apiKey: z.string().trim().max(400),
     view: ViewPreset,
+    look: z
+      .object({
+        style: PresenceStyle,
+        accent: z.string().regex(/^#[0-9a-fA-F]{6}$/, "A colour like #3fd8ff"),
+        intensity: z.number().min(0).max(1),
+        size: z.number().min(0.5).max(1.5),
+        reactivity: z.number().min(0).max(1),
+        ambient: z.boolean(),
+        captions: z.boolean(),
+        captionSize: z.enum(["small", "medium", "large"]),
+        aiMayChange: z.boolean(),
+      })
+      .partial()
+      .strict(),
     ollama: z
       .object({
         url: z.string().trim().max(200),
@@ -54,6 +68,7 @@ export interface SettingsView {
   /** The key itself is never sent to the screen. */
   apiKeySet: boolean;
   view: Config["view"];
+  look: Config["look"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   claudeCode: Config["claudeCode"];
   voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "ttsVoice" | "sttModel">;
@@ -65,6 +80,7 @@ export function settingsView(c: Config): SettingsView {
     model: c.model,
     apiKeySet: !!c.apiKey,
     view: c.view,
+    look: { ...c.look },
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
     claudeCode: { ...c.claudeCode },
     voice: {
@@ -142,6 +158,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
 
   config.provider = next.provider;
   if (p.view) config.view = p.view;
+  if (p.look) config.look = sanitizeLook({ ...config.look, ...p.look });
   if (p.model) config.model = p.model;
   if (p.apiKey) config.apiKey = p.apiKey;
   if (p.ollama) Object.assign(config.ollama, p.ollama);
@@ -153,4 +170,12 @@ export function applySettings(config: Config, raw: unknown): Applied {
 
   const changed = Object.entries(p).flatMap(([k, v]) => (v && typeof v === "object" ? Object.keys(v).map((f) => `${k}.${f}`) : [k]));
   return { changed, providerChanged: changed.some((k) => PROVIDER_KEYS.has(k.split(".")[0]!)), restart };
+}
+
+/** Settings that only change how the screen looks. They need no PIN, because nothing about safety depends on them. */
+export const COSMETIC_KEYS = new Set(["view", "look"]);
+
+/** The part of the look that only the screen needs; the style, colour and glow travel as stage state. */
+export function clientLook(l: Config["look"]) {
+  return { size: l.size, reactivity: l.reactivity, ambient: l.ambient, captions: l.captions, captionSize: l.captionSize };
 }

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { touch } from "./touch";
 
-const NEXT_VIEW = { minimal: "companion", companion: "workspace", workspace: "minimal" } as const;
+// Minimal hides the status line and the clock, so it is only chosen on purpose (Settings, /view minimal), never by cycling.
+const NEXT_VIEW = { minimal: "companion", companion: "workspace", workspace: "companion" } as const;
 
 export interface OwnerMenuProps {
   muted: boolean;

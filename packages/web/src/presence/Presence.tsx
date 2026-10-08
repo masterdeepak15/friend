@@ -14,9 +14,11 @@ export interface PresenceProps {
   style?: PresenceStyle;
   /** Mood intensity 0..1. */
   intensity?: number;
+  /** Size factor for the full presence (the owner's choice, 0.5 to 1.5). */
+  scale?: number;
 }
 
-export function Presence({ state, amplitude, pulse = 0, mode, accent = "#3fd8ff", style = "sphere", intensity = 0.6 }: PresenceProps) {
+export function Presence({ state, amplitude, pulse = 0, mode, accent = "#3fd8ff", style = "sphere", intensity = 0.6, scale = 1 }: PresenceProps) {
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<PresenceHandle | null>(null);
   const latest = useRef({ state, amplitude, mode, accent, intensity });
@@ -43,5 +45,5 @@ export function Presence({ state, amplitude, pulse = 0, mode, accent = "#3fd8ff"
   useEffect(() => handle.current?.setAccent(accent), [accent]);
   useEffect(() => handle.current?.setIntensity(intensity), [intensity]);
 
-  return <div ref={host} data-presence data-mode={mode} data-style={style} data-state={state} data-amplitude={amplitude.toFixed(2)} className={`presence presence-${mode}`} aria-hidden="true" />;
+  return <div ref={host} data-presence data-mode={mode} data-style={style} data-state={state} data-amplitude={amplitude.toFixed(2)} className={`presence presence-${mode}`} style={mode === "full" && scale !== 1 ? { transform: `scale(${scale})` } : undefined} aria-hidden="true" />;
 }

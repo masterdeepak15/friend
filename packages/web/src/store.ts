@@ -6,6 +6,7 @@ import {
   type SceneMode,
   type StageObject,
   type ViewPreset,
+  type ClientLook,
 } from "@friend/protocol";
 
 export type Connection = "connecting" | "open" | "closed" | "unauthorized";
@@ -55,6 +56,10 @@ export interface StageViewState {
   chatLive: boolean;
   /** What the owner wants on the screen besides the AI's pictures. */
   view: ViewPreset;
+  /** The owner's choices for the presence's size and reactions, the glow, and the captions. */
+  look: ClientLook;
+  /** The server has told us which view the owner chose (until then the corner widgets are not drawn, so they never flash up and vanish). */
+  viewKnown: boolean;
   busy: boolean;
   /** What Friend says it is doing right now (null when nothing). */
   activity: string | null;
@@ -64,6 +69,8 @@ export interface StageViewState {
   challenge: VoiceChallenge | null;
   camera: CameraView;
 }
+
+export const DEFAULT_CLIENT_LOOK: ClientLook = { size: 1, reactivity: 0.7, ambient: true, captions: true, captionSize: "medium" };
 
 export const initialState: StageViewState = {
   scene: "conversation",
@@ -78,6 +85,8 @@ export const initialState: StageViewState = {
   chat: [],
   chatLive: false,
   view: "companion",
+  look: DEFAULT_CLIENT_LOOK,
+  viewKnown: false,
   busy: false,
   activity: null,
   deviceOnline: false,
@@ -185,7 +194,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     case "chat.user":
       return { ...state, chat: capChat([...state.chat, { role: "user", text: m.text }]), chatLive: false };
     case "ui":
-      return { ...state, view: m.view };
+      return { ...state, view: m.view, look: m.look ?? state.look, viewKnown: true };
     case "caption.delta": {
       const fresh = state.captionDone;
       const last = state.chat.at(-1);
