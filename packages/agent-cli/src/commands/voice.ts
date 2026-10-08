@@ -1,4 +1,4 @@
-import { loadConfig } from "@friend/server";
+import { Audit, Auth, Voiceprint, loadConfig, openDb } from "@friend/server";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -133,6 +133,12 @@ export async function voiceStatusCommand(io: IO): Promise<number> {
   const cfg = loadConfig(io.dataDir);
   const marker = readMarker(io.dataDir);
   io.out(`Voice enabled:  ${cfg.voice.enabled ? "yes" : "no"}`);
+  const print = readVoiceprint(io.dataDir);
+  io.out(
+    `Speaker recognition: ${
+      print ? `enrolled (${print.samples} samples, ${new Date(print.createdAt).toLocaleDateString()})` : "not set up. Open the owner menu (Esc) and choose Enroll my voice."
+    }`,
+  );
   if (!marker) {
     io.out("Voice engine:   not installed. Run: friend voice setup");
     return 0;
@@ -150,14 +156,57 @@ export async function voiceStatusCommand(io: IO): Promise<number> {
   return 0;
 }
 
+/** Reads the enrollment record without touching the key: only the averaged voice is secret, not whether one exists. */
+function readVoiceprint(dataDir: string): { samples: number; createdAt: number } | null {
+  const db = openDb(dataDir);
+  try {
+    return new Voiceprint(db, Buffer.alloc(32)).info();
+  } finally {
+    db.close();
+  }
+}
+
+/** Deletes the saved voiceprint after checking the owner's PIN. Recognition is off afterwards: every voice counts as the owner's. */
+export async function voiceForgetCommand(io: IO): Promise<number> {
+  const db = openDb(io.dataDir);
+  try {
+    const print = new Voiceprint(db, Buffer.alloc(32));
+    if (!print.exists()) {
+      io.out("There is no saved voice to delete.");
+      return 0;
+    }
+    const auth = new Auth(db, new Audit(db));
+    const pin = await io.ask("Owner PIN: ", { hidden: true });
+    let ok = false;
+    try {
+      ok = await auth.verifyPin(pin.trim(), "cli");
+    } catch (e) {
+      io.err((e as Error).message);
+      return 1;
+    }
+    if (!ok) {
+      io.err("Incorrect PIN. Your saved voice was kept.");
+      return 1;
+    }
+    print.clear();
+    new Audit(db).log("owner", "voice.removed", { via: "cli" });
+    io.out("Your saved voice was deleted. Every voice is treated as yours until you enroll again.");
+    return 0;
+  } finally {
+    db.close();
+  }
+}
+
 export async function voiceCommand(args: string[], io: IO): Promise<number> {
   switch (args[0]) {
     case "setup":
       return voiceSetupCommand(io);
     case "status":
       return voiceStatusCommand(io);
+    case "forget":
+      return voiceForgetCommand(io);
     default:
-      io.err("Usage: friend voice setup | friend voice status");
+      io.err("Usage: friend voice setup | friend voice status | friend voice forget");
       return 1;
   }
 }

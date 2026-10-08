@@ -25,7 +25,7 @@ export const USAGE = `Usage: friend <command>
   node --url <ws-url> --code <code> [--roots a,b] [--name pc]
                              connect this PC to a Friend gateway
   ollama setup|status        use a local model through Ollama (no API key needed)
-  voice setup|status         install or check local speech (hold Space to talk)
+  voice setup|status|forget  install or check local speech (hold Space to talk); forget deletes your saved voice
   rules list|remove <id>     manage always-allow rules
   devices list|revoke <id>   manage paired devices
   status                     show configuration

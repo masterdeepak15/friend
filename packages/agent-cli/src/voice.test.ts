@@ -131,6 +131,56 @@ describe("friend voice status", () => {
   });
 });
 
+describe("friend voice status / forget (speaker recognition)", () => {
+  const pin = "246810";
+  /** An owner with a PIN and, optionally, an enrolled voiceprint in this data dir. */
+  async function seed(enrolled: boolean) {
+    const { openDb, Auth, Audit, Voiceprint } = await import("@friend/server");
+    const db = openDb(dataDir);
+    await new Auth(db, new Audit(db)).setupOwner({ password: "correct horse battery", pin, assistantName: "Jarvis" });
+    const vp = new Voiceprint(db, Buffer.alloc(32, 1));
+    const enroll = () => vp.enroll([[1, 0, 0], [0.9, 0.1, 0], [0.95, 0, 0.05]], "test-model");
+    if (enrolled) enroll();
+    return { enroll, exists: () => vp.exists(), close: () => db.close() };
+  }
+  const withPin = (answer: string): IO => ({ ...makeIo(), ask: async () => answer });
+
+  it("status says whether the owner's voice is enrolled", async () => {
+    const s = await seed(false);
+    await run(["voice", "status"], makeIo());
+    expect(text()).toMatch(/speaker recognition:\s+not set up/i);
+    lines = [];
+    s.enroll();
+    await run(["voice", "status"], makeIo());
+    expect(text()).toMatch(/speaker recognition:\s+enrolled \(3 samples/i);
+    s.close();
+  });
+
+  it("forget removes the voiceprint after the right PIN", async () => {
+    const s = await seed(true);
+    expect(await run(["voice", "forget"], withPin(pin))).toBe(0);
+    expect(s.exists()).toBe(false);
+    expect(text()).toMatch(/deleted/i);
+    s.close();
+  });
+
+  it("forget keeps the voiceprint on a wrong PIN", async () => {
+    const s = await seed(true);
+    expect(await run(["voice", "forget"], withPin("000000"))).toBe(1);
+    expect(s.exists()).toBe(true);
+    expect(text()).toMatch(/incorrect pin/i);
+    s.close();
+  });
+
+  it("forget says so when there is nothing to forget, without asking for the PIN", async () => {
+    const s = await seed(false);
+    s.close();
+    const io = { ...makeIo(), ask: async () => { throw new Error("must not ask"); } };
+    expect(await run(["voice", "forget"], io)).toBe(0);
+    expect(text()).toMatch(/no (saved )?voice/i);
+  });
+});
+
 describe("voice settings in friend config", () => {
   const set = (k: string, v: string) => run(["config", "set", k, v], makeIo());
   it("stores nested voice settings with the right types", async () => {
