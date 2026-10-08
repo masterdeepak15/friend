@@ -45,6 +45,16 @@ Results 2026-10-08:
 | Browser support | MediaRecorder with webm/opus, getUserMedia on localhost, WAV from the engine decodes | PASS |
 | Sidecar cleanup | engine exits when the app is killed | PASS |
 
+## Code sandbox (Docker) check
+
+Results 2026-10-08:
+
+| Check | How | Result |
+|---|---|---|
+| Container flags | exact `docker run` arguments: no network, read-only root, `--cap-drop ALL`, no-new-privileges, 512m memory and swap, 1 CPU, 128 pids, user 65534, one read-only mount, no privileged/host/socket options | PASS (`codebox.test.ts`) |
+| Real containers | python/node/shell run; network and DNS blocked; writes outside `/tmp` denied; only `main.py` visible, no host paths; memory hog killed; endless loop stopped at the limit with no container left behind; fork bomb limited | PASS (`codebox.real.test.ts`, 8 tests against Docker 29.8) |
+| Agent tool | approval card shows the whole program; denial runs nothing; errors, partial output and timeouts reported in words; Docker missing/stopped explained; guests cannot use it | PASS (`agent/code.test.ts`) |
+
 ## Sandbox (free-form pages) check
 
 Results 2026-10-08:
