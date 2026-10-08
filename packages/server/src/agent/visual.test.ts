@@ -73,7 +73,7 @@ beforeEach(async () => {
 describe("weather.get", () => {
   it("is read-only, so it runs without a card, and draws the forecast by itself", async () => {
     const p = new FakeProvider([[call("1", "weather.get", { city: "Pune" }), done], [text("It is 31 degrees."), done]]);
-    await build(p).runTurn("what is the weather in Pune?", ctx());
+    await build(p).runTurn("I need a forecast, can you look?", ctx()); // no city named, so the model decides
     expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
     expect(getWeather).toHaveBeenCalledWith("Pune");
     expect(ids().sort()).toEqual(["weather-hours", "weather-humidity", "weather-now", "weather-wind"]);
@@ -142,7 +142,7 @@ describe("announcing without acting", () => {
       [call("1", "system.info"), done],
       [text("All good."), done],
     ]);
-    await build(p).runTurn("show my computer stats", ctx());
+    await build(p).runTurn("go ahead and check the machine", ctx());
     expect(exec).toHaveBeenCalledTimes(1);
     const nudge = p.calls[1]!.messages.at(-1)!;
     expect(nudge.role).toBe("user");
@@ -187,6 +187,7 @@ describe("the prompt asks for pictures and for action", () => {
     expect(system).toContain("weather.get");
     expect(system).toContain("system.info");
     expect(system).toMatch(/never curl/i);
+    expect(system).toMatch(/never invent numbers/i);
   });
 
   it("keeps the tool descriptions short, because a small model reads them on every request", () => {

@@ -41,6 +41,8 @@ export interface VoiceConfig {
   ttsVoice: string;
   /** Force a spoken language (e.g. "hi"); null detects it automatically. */
   language: string | null;
+  /** Also speak the replies to messages that were typed (not only to what was said aloud). */
+  speakTyped: boolean;
   /** Speaker match at or above this is the owner (0..1). */
   accept: number;
   /** Speaker match at or above this but below `accept` asks for the PIN; below it the voice is a guest. */
@@ -52,6 +54,7 @@ export const DEFAULT_VOICE: VoiceConfig = {
   sttModel: "base",
   ttsVoice: "en_US-lessac-medium",
   language: null,
+  speakTyped: true,
   accept: 0.72,
   challenge: 0.58,
 };

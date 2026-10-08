@@ -8,12 +8,14 @@ import { useFriend } from "./useFriend";
 import { PluginsPanel } from "./plugins/PluginsPanel";
 import { EnrollmentFlow } from "./voice/EnrollmentFlow";
 import { useVoiceKeys } from "./voice/keys";
+import { useAudioUnlock } from "./voice/unlock";
 
 type Phase = "loading" | "setup" | "login" | "stage";
 
 function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const { state, send, dispatch, voice } = useFriend(onSignedOut);
   useVoiceKeys(voice);
+  useAudioUnlock(voice);
   const [muted, setMuted] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);

@@ -52,6 +52,7 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
     sttModel: nonEmpty,
     ttsVoice: nonEmpty,
     language: (v) => (v.trim() === "" ? null : v.trim()),
+    speakTyped: bool,
     accept: unit,
     challenge: unit,
   },

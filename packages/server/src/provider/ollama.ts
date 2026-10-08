@@ -1,3 +1,4 @@
+import { Agent, fetch as undiciFetch } from "undici";
 import type { Msg, Provider, ProviderEvent, StreamRequest } from "./types";
 
 export interface OllamaOptions {
@@ -9,6 +10,8 @@ export interface OllamaOptions {
   keepAlive?: string;
   /** The model can look at pictures (for example llava or qwen2.5vl). */
   vision?: boolean;
+  /** Longest silence to wait for the model, in milliseconds. Unset or 0 means wait as long as it needs. */
+  timeoutMs?: number;
 }
 
 // Tool names travel without dots ("fs.list" as "fs__list"), like with the Claude provider.
@@ -66,7 +69,16 @@ let callCounter = 0;
 export class OllamaProvider implements Provider {
   id = "ollama";
 
-  constructor(private opts: OllamaOptions) {}
+  /**
+   * A small model on a CPU can take minutes just to read the prompt before it sends a single byte. Node's default
+   * fetch gives up after 5 minutes of silence, so by default there is no limit here (stopping a turn still works).
+   */
+  private agent: Agent;
+
+  constructor(private opts: OllamaOptions) {
+    const limit = opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : 0;
+    this.agent = new Agent({ headersTimeout: limit, bodyTimeout: limit });
+  }
 
   get vision(): boolean {
     return this.opts.vision === true;
@@ -94,16 +106,22 @@ export class OllamaProvider implements Provider {
       keep_alive: this.opts.keepAlive ?? "30m",
     };
 
-    let res: Response;
+    let res: Awaited<ReturnType<typeof undiciFetch>>;
     try {
-      res = await fetch(`${url}/api/chat`, {
+      res = await undiciFetch(`${url}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
         signal: req.signal,
+        dispatcher: this.agent,
       });
-    } catch {
+    } catch (e) {
       if (req.signal.aborted) return;
+      const code = (e as { cause?: { code?: string } }).cause?.code ?? "";
+      if (code === "UND_ERR_HEADERS_TIMEOUT" || code === "UND_ERR_BODY_TIMEOUT") {
+        yield { type: "error", userFacing: true, message: "The model took too long to answer. Try again, or use a smaller or faster model." };
+        return;
+      }
       yield { type: "error", userFacing: true, message: `I can't reach Ollama at ${url}. Is it running? Try: friend ollama status` };
       return;
     }

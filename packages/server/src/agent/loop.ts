@@ -6,6 +6,7 @@ import type { CodeBox } from "../codebox";
 import type { Plugins } from "../plugins";
 import { statsScene } from "../stats";
 import { weatherScene, weatherSummary, type WeatherService } from "../weather";
+import { detectIntents } from "./intents";
 import { promisesAction } from "./promise";
 import type { Config } from "../config";
 import type { Db } from "../db";
@@ -111,6 +112,22 @@ export class Agent {
       const pluginTools = (d.plugins?.toolDefs() ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
       const tools = ctx.trust === "owner" ? [...toolSpecs(), ...pluginTools] : [];
       let nudged = false;
+
+      // Clear requests for real data (weather in a named city, the computer's stats) are answered with the real tools
+      // right away: the pictures appear at once, and the model only has to say a short summary.
+      if (!guest) {
+        for (const [i, auto] of detectIntents(text).entries()) {
+          const id = `auto-${Date.now().toString(36)}-${i}`;
+          const callMsg: Msg = { role: "assistant", content: [{ type: "tool_use", id, name: auto.name, input: auto.args }] };
+          messages.push(callMsg);
+          keep(callMsg);
+          const r = await this.executeTool({ id, name: auto.name, args: auto.args }, ctx, abort.signal);
+          if (abort.signal.aborted) return;
+          const resultMsg: Msg = { role: "tool", content: [{ type: "tool_result", toolUseId: id, content: r.text, isError: r.isError }] };
+          messages.push(resultMsg);
+          keep(resultMsg);
+        }
+      }
 
       for (let step = 0; step < MAX_STEPS; step++) {
         let assistantText = "";
