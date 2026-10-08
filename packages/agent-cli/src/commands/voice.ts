@@ -108,7 +108,7 @@ export async function voiceSetupCommand(io: IO, deps: VoiceSetupDeps = {}): Prom
   }
 
   io.out("2/3 Installing the speech packages…");
-  const pip = await run(p.python, ["-m", "pip", "install", "--disable-pip-version-check", "faster-whisper>=1.2,<2", "piper-tts>=1.8,<2", "av>=15,<19"], { onLine });
+  const pip = await run(p.python, ["-m", "pip", "install", "--disable-pip-version-check", "faster-whisper>=1.2,<2", "piper-tts>=1.8,<2", "sherpa-onnx>=1.13,<2", "av>=15,<19"], { onLine });
   if (pip.code !== 0) {
     io.err(`Could not install the speech packages.\n${tail(pip.stdout)}`);
     return 1;

@@ -51,7 +51,7 @@ describe("friend voice setup", () => {
     const flat = calls.map((c) => [c.cmd, ...c.args].join(" "));
     expect(flat.some((l) => /-m venv/.test(l) && l.includes(p.venv))).toBe(true);
     const pip = flat.find((l) => /pip install/.test(l))!;
-    for (const pkg of ["faster-whisper", "piper-tts", "av>=15,<19"]) expect(pip).toContain(pkg);
+    for (const pkg of ["faster-whisper", "piper-tts", "sherpa-onnx", "av>=15,<19"]) expect(pip).toContain(pkg);
     const dl = calls.find((c) => c.args.includes("-c") && c.args.join(" ").includes("load_engines"))!;
     expect(dl.cwd).toBe("/repo/packages/voice");
     expect(dl.args.join(" ")).toContain(p.models.replace(/\\/g, "/"));
