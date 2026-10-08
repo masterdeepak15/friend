@@ -4,6 +4,7 @@ import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
 import type { Config } from "../config";
 import type { Db } from "../db";
+import type { Memory } from "../memory";
 import type { DeviceHub } from "../devices";
 import { classifyShell } from "../policy/classify";
 import type { PolicyEngine } from "../policy/engine";
@@ -14,6 +15,8 @@ import { loadHistory, repairDangling, saveMessage } from "./history";
 import { buildSystemPrompt } from "./prompt";
 
 export const MAX_STEPS = 20;
+/** How many of the newest notes go into every prompt; older ones are found with memory.search. */
+export const NOTES_IN_PROMPT = 20;
 /** Largest tool result sent back to the model; older, bigger results would otherwise swamp every later turn. */
 export const MAX_RESULT_CHARS = 24_000;
 
@@ -29,6 +32,8 @@ export interface AgentDeps {
   assistantName: () => string;
   /** Takes one picture through the owner's browser. Without it the camera tool reports it is unavailable. */
   camera?: Pick<CameraBroker, "request">;
+  /** The owner's saved notes. Without it the memory tools report they are unavailable. */
+  memory?: Memory;
 }
 
 export interface TurnCtx {
@@ -94,7 +99,9 @@ export class Agent {
         const calls: ToolCall[] = [];
         let failed: string | null = null;
         let userFacing = false;
-        const system = buildSystemPrompt(d.assistantName(), d.stage.summary(), guest ? "guest" : "owner");
+        // read fresh each step, so a note saved earlier in this turn is visible right away; guests never see notes
+        const notes = !guest && d.memory ? d.memory.recent(NOTES_IN_PROMPT).map((m) => `#${m.id} ${m.text}`) : undefined;
+        const system = buildSystemPrompt(d.assistantName(), d.stage.summary(), guest ? "guest" : "owner", notes);
         for await (const ev of d.provider.stream({ system, messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
             if (!assistantText) stage({ cmd: "presence", state: "speaking" });
@@ -156,6 +163,29 @@ export class Agent {
     }
   }
 
+  private runMemoryTool(name: string, args: Record<string, unknown>): { ok: boolean; text: string } {
+    const { memory, audit } = this.deps;
+    if (!memory) return { ok: false, text: "Memory is not available." };
+    if (name === "memory.remember") {
+      const text = String(args.text);
+      const r = memory.add(text, "agent");
+      if (!r.ok) return { ok: false, text: r.error };
+      audit.log("agent", "memory.remember", { id: r.id, length: text.length, duplicate: r.duplicate });
+      return { ok: true, text: r.duplicate ? `Already remembered (#${r.id}).` : `Remembered (#${r.id}).` };
+    }
+    if (name === "memory.search") {
+      const found = memory.search(String(args.query));
+      return { ok: true, text: found.length ? found.map((m) => `#${m.id} ${m.text}`).join("\n") : "No matching notes." };
+    }
+    if (name === "memory.forget") {
+      const id = Number(args.id);
+      if (!memory.forget(id)) return { ok: false, text: "No note with that number." };
+      audit.log("agent", "memory.forget", { id });
+      return { ok: true, text: `Forgot note #${id}.` };
+    }
+    return { ok: false, text: `Unknown tool: ${name}` };
+  }
+
   private async executeTool(
     call: ToolCall,
     ctx: TurnCtx,
@@ -198,6 +228,11 @@ export class Agent {
         return fail(`The owner did not approve this action (${outcome.reason ?? "denied"}).`);
       }
       approvedOutside = !insideRoots;
+    }
+
+    if (call.name.startsWith("memory.")) {
+      const out = this.runMemoryTool(call.name, args);
+      return out.ok ? { text: out.text, isError: false } : fail(out.text);
     }
 
     if (call.name === "camera.snap") {

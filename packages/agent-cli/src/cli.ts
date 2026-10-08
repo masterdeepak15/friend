@@ -2,6 +2,7 @@ import { configCommand } from "./commands/config";
 import { nodeCommand } from "./commands/node";
 import { pairCommand } from "./commands/pair";
 import { devicesCommand, rulesCommand } from "./commands/rules";
+import { memoryCommand } from "./commands/memory";
 import { ollamaCommand } from "./commands/ollama";
 import { voiceCommand } from "./commands/voice";
 import { setupCommand } from "./commands/setup";
@@ -26,6 +27,7 @@ export const USAGE = `Usage: friend <command>
                              connect this PC to a Friend gateway
   ollama setup|status        use a local model through Ollama (no API key needed)
   voice setup|status|forget  install or check local speech (hold Space to talk); forget deletes your saved voice
+  memory list|forget <n>|clear  see and delete the notes Friend keeps about you
   rules list|remove <id>     manage always-allow rules
   devices list|revoke <id>   manage paired devices
   status                     show configuration
@@ -47,6 +49,8 @@ export async function run(argv: string[], io: IO): Promise<number> {
         return await voiceCommand(rest, io);
       case "ollama":
         return await ollamaCommand(rest, io);
+      case "memory":
+        return await memoryCommand(rest, io);
       case "rules":
         return await rulesCommand(rest, io);
       case "devices":
