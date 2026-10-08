@@ -87,6 +87,8 @@ Every command starts with `friend`. If you run Friend from the source code, writ
 |---|---|---|
 | `friend lan` (or `friend lan status`) | Shows what Friend listens on and the addresses to open. | Checking, or finding the address for your phone. |
 | `friend lan on` | Lets other devices on your network open Friend. Prints the addresses and the things to know (plain http, no microphone on other devices, firewall prompt). | Using Friend from a phone or another PC. |
+| `friend lan on --https` | The same, with a secure `https://` address (Friend makes its own certificate), so a phone may use the microphone and camera. | Talking to Friend from a phone. |
+| `friend lan https on` (or `off`) | Turns the secure address on or off by itself. | You already ran `friend lan on`, or want plain http back. |
 | `friend lan on --port 9100` | The same on another port. | Port 8787 is taken. |
 | `friend lan port 9100` | Changes only the port. | Another program uses 8787. |
 | `friend lan off` | Back to this PC only. | Closing it again. |
@@ -127,6 +129,7 @@ Connectors (Gmail, Chrome control, any MCP service) are managed inside the app, 
 | `ollama.url`, `ollama.model`, `ollama.vision`, `ollama.contextTokens` | The local model: server address, model name, whether it can see pictures, and how much it remembers at once. |
 | `voice.enabled`, `voice.sttModel`, `voice.ttsVoice`, `voice.language`, `voice.speakTyped`, `voice.accept`, `voice.challenge` | Speech on or off, the listening model, the speaking voice, a forced language, speaking typed replies, and the two thresholds for recognising your voice. |
 | `bind`, `port` | Where Friend listens (easier: `friend lan`). |
+| `https` | `true` serves a secure `https://` address with a certificate Friend makes for itself, so a phone may use the microphone (easier: `friend lan https on`). |
 | `publicUrl`, `allowedOrigins`, `allowedHosts`, `trustProxy` | For running behind your own domain or reverse proxy (see "Using your own domain later"). |
 | `roots` | The workspace folders Friend may use freely, separated by commas. |
 
@@ -363,6 +366,8 @@ By default Friend is reachable only on this PC, at http://127.0.0.1:8787.
 ```bash
 pnpm friend lan                 # shows how it is set up and the addresses
 pnpm friend lan on              # also reachable from phones and other PCs on your network
+pnpm friend lan on --https      # the same, with a secure address so a phone can use the microphone
+pnpm friend lan https on        # (or off) only the secure address
 pnpm friend lan on --port 9100  # the same, on another port
 pnpm friend lan port 9100       # change only the port
 pnpm friend lan off             # this PC only again
@@ -371,8 +376,9 @@ pnpm friend lan off             # this PC only again
 Restart `friend start` afterwards. It then prints the addresses, for example `Also on your network: http://192.168.1.20:9100`; open that on the other device and sign in. Things to know:
 
 - Anyone on the network can open the sign-in page. The password and PIN still guard everything, so use a strong password. Creating the owner account is only possible on this PC.
-- The connection is plain http, so other people on the network could read it. Use it on a network you trust, or put Friend behind HTTPS (`publicUrl`, below).
-- **Browsers allow the microphone and camera only on localhost or HTTPS.** Over plain http on another device you can type and read, but voice and camera need HTTPS.
+- Over plain http other people on the network could read the connection. Use it on a network you trust, turn on the secure address (below), or put Friend behind your own HTTPS (`publicUrl`, below).
+- **Browsers allow the microphone and camera only on localhost or HTTPS.** Over plain http on a phone you can type and read, but not talk. Run `friend lan https on` and restart: Friend makes its own certificate and serves `https://192.168.x.x:8787`. The first time, the phone warns that the certificate is not from a known authority (Android Chrome: Advanced, Proceed; iPhone Safari: Show Details, visit this website). After that the microphone works. The warning appears because the certificate is Friend's own, not bought from an authority; the traffic is still encrypted.
+- **On a phone** the screen shows a round microphone button (hold it and let go to send, or tap once to start and again to send), a keyboard button and a menu button. There is no Space or Esc to press.
 - Windows asks once whether to let Node.js through the firewall: allow it on *Private* networks.
 - To open it by a name (`http://my-pc:9100`) add the name: `friend config set allowedHosts my-pc`.
 

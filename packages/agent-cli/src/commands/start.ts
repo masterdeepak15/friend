@@ -77,11 +77,12 @@ export async function startFriend(opts: StartOptions): Promise<RunningFriend> {
     writeFileSync(tokenFile, token, { mode: 0o600 });
   }
   const node: DeviceNode = startDeviceNode({
-    url: `ws://127.0.0.1:${port}/device`,
+    url: `${app.config.https ? "wss" : "ws"}://127.0.0.1:${port}/device`,
     token,
     roots: app.config.roots,
+    ...(app.config.https ? { ca: readFileSync(join(opts.dataDir, "tls", "cert.pem"), "utf8") } : {}), // this PC trusts only its own Friend's certificate
   });
-  const urls = urlsFor(app.config.bind, port);
+  const urls = urlsFor(app.config.bind, port, undefined, app.config.https);
   opts.out(`Friend is running at ${urls.local}`);
   for (const n of urls.network) opts.out(`Also on your network: ${n}`);
   if (!app.auth.hasOwner()) opts.out("No owner yet. Run: friend onboard (guided), or friend setup (just the account)");

@@ -366,3 +366,33 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .voice-hear { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 .connector-command { margin: 0; padding: 8px 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--edge); font: 0.85rem var(--mono); overflow-x: auto; user-select: all; }
+
+/* ---- phones and tablets: no keyboard, a finger for a mouse ---- */
+html, body { overscroll-behavior: none; }
+@media (pointer: coarse) { .stage { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } }
+input, textarea, select, .connector-command { -webkit-user-select: text; user-select: text; }
+.owner-menu { max-height: calc(100dvh - 80px); overflow-y: auto; }
+.touch-controls {
+  position: absolute; z-index: 25; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; align-items: flex-end; justify-content: center; gap: 26px;
+  pointer-events: none;
+}
+.touch-controls > * { pointer-events: auto; }
+.touch-talk { display: grid; justify-items: center; gap: 6px; }
+.touch-hint { max-width: 70vw; padding: 2px 10px; font: 500 0.74rem var(--mono); letter-spacing: 0.06em; color: var(--muted); text-align: center; text-shadow: 0 0 6px #000, 0 0 2px #000; }
+.touch-mic, .touch-side {
+  display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--edge); color: var(--ink); background: var(--glass);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); touch-action: none; -webkit-user-select: none; user-select: none; padding: 0;
+}
+.touch-mic { width: 76px; height: 76px; border-color: var(--accent); box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 30%, transparent); }
+.touch-mic.on { background: color-mix(in srgb, var(--bad) 40%, transparent); border-color: var(--bad); box-shadow: 0 0 28px var(--bad); animation: mic-pulse 1s ease-in-out infinite; }
+.touch-side { width: 52px; height: 52px; margin-bottom: 12px; touch-action: manipulation; }
+@media (prefers-reduced-motion: reduce) { .touch-mic.on { animation: none; } }
+@media (pointer: coarse) {
+  .captions { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 150px); }
+  .status-badge, .clock { bottom: max(8px, env(safe-area-inset-bottom)); }
+  .presence-corner { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 70px); }
+}
+@media (max-width: 600px) and (pointer: coarse) {
+  .panel-chat { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 150px); height: min(48vh, calc(100dvh - 260px)); }
+  .objects-stack { padding-bottom: 190px; }
+}

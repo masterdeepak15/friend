@@ -11,7 +11,7 @@ export async function statusCommand(io: IO): Promise<number> {
   io.out(`Data folder:  ${cfg.dataDir}`);
   io.out(`Owner set up: ${owner}`);
   io.out(`Listens on:   ${cfg.bind}:${cfg.port}`);
-  for (const n of urlsFor(cfg.bind, cfg.port).network) io.out(`Network URL:  ${n}`);
+  for (const n of urlsFor(cfg.bind, cfg.port, undefined, cfg.https).network) io.out(`Network URL:  ${n}`);
   io.out(`Public URL:   ${cfg.publicUrl ?? "(none)"}`);
   io.out(`Workspace:    ${cfg.roots.length ? cfg.roots.join(", ") : "(none, every file action asks first)"}`);
   io.out(`Model:        ${cfg.model}`);

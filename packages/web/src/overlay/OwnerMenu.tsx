@@ -28,12 +28,18 @@ export interface OwnerMenuProps {
   onToggleTasks?: () => void;
   view?: "minimal" | "companion" | "workspace";
   onView?: (view: "minimal" | "companion" | "workspace") => void;
+  /** Counts up each time something else (the menu button on a touch screen) asks for the menu to open. */
+  openRequest?: number;
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, view, onView }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, view, onView, openRequest }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (openRequest) setOpen(true);
+  }, [openRequest]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

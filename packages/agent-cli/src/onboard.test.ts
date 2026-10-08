@@ -430,12 +430,27 @@ describe("workspace, network and look", () => {
     expect(text()).toMatch(/Workspace: /);
   });
 
-  it("opens Friend to the network on a chosen port, and warns about the microphone", async () => {
-    await onboardCommand([], makeIo([...upTo, "", "2", "9100", ...Array(30).fill("")]), world().deps);
+  it("opens Friend to the network on a chosen port with a secure address, so a phone can use the microphone", async () => {
+    await onboardCommand([], makeIo([...upTo, "", "2", "9100", "", ...Array(30).fill("")]), world().deps);
     const cfg = loadConfig(dataDir);
-    expect([cfg.bind, cfg.port]).toEqual(["0.0.0.0", 9100]);
+    expect([cfg.bind, cfg.port, cfg.https]).toEqual(["0.0.0.0", 9100, true]);
+    expect(asked.some((q) => /secure \(https\) address so a phone can use the microphone/.test(q))).toBe(true);
+    expect(text()).toMatch(/Friend will be at https:\/\/127\.0\.0\.1:9100/);
+    expect(text()).not.toMatch(/microphone and camera only work on this PC/);
+  });
+
+  it("keeps plain http when the owner declines the secure address, and warns about the microphone", async () => {
+    await onboardCommand([], makeIo([...upTo, "", "2", "9100", "n", ...Array(30).fill("")]), world().deps);
+    const cfg = loadConfig(dataDir);
+    expect([cfg.bind, cfg.port, cfg.https]).toEqual(["0.0.0.0", 9100, false]);
     expect(text()).toMatch(/Friend will be at http:\/\/127\.0\.0\.1:9100/);
     expect(text()).toMatch(/microphone and camera only work on this PC/);
+  });
+
+  it("does not ask about https when only this PC can open Friend", async () => {
+    await onboardCommand([], makeIo([...upTo, "", "", "", ...Array(30).fill("")]), world().deps);
+    expect(loadConfig(dataDir).https).toBe(false);
+    expect(asked.some((q) => /secure \(https\)/.test(q))).toBe(false);
   });
 
   it("asks again for a port that makes no sense", async () => {

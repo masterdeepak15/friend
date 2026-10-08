@@ -2,6 +2,8 @@ import type { ClientMsg } from "@friend/protocol";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { CommandBar } from "../input/CommandBar";
 import type { Slash } from "../input/commands";
+import { TouchControls } from "../input/TouchControls";
+import { useCoarsePointer } from "../input/useCoarsePointer";
 import { reactivityFactor } from "../presence/reactivity";
 import { CATALOG } from "../objects/objects";
 import { Presence } from "../presence/Presence";
@@ -42,14 +44,18 @@ export interface StageProps {
   voice?: { pressStart(): void; pressEnd(): void; blur?(): void };
   /** The / commands of the message bar; without them a line starting with / is sent like any other. */
   slash?: Slash;
+  /** On a touch screen (no Esc key) a button opens the owner menu. */
+  onMenu?: () => void;
 }
 
 const LONG_PRESS_MS = 350;
 
 /** Layers 1–3: ambient background, voice presence, agent-placed objects, captions and the hidden command bar. */
-export function Stage({ state, send, dispatch, voice, slash }: StageProps) {
+export function Stage({ state, send, dispatch, voice, slash, onMenu }: StageProps) {
   const viewport = useViewport();
   const [openRequest, setOpenRequest] = useState(0);
+  const [barOpen, setBarOpen] = useState(false);
+  const coarse = useCoarsePointer();
   const narrow = viewport.w < 600;
   const corner = state.scene === "focus" || state.scene === "multi";
   const style = { "--accent": state.mood.accent, "--intensity": state.mood.intensity } as React.CSSProperties;
@@ -163,7 +169,8 @@ export function Stage({ state, send, dispatch, voice, slash }: StageProps) {
           {state.captions}
         </p>
       )}
-      <CommandBar requestOpen={openRequest} slash={slash} onSend={(text) => send({ type: "chat.send", text })} />
+      {coarse && voice && !barOpen && <TouchControls voice={voice} mode={mode} onType={() => setOpenRequest((n) => n + 1)} onMenu={() => onMenu?.()} />}
+      <CommandBar requestOpen={openRequest} slash={slash} onOpenChange={setBarOpen} onSend={(text) => send({ type: "chat.send", text })} />
     </div>
   );
 }

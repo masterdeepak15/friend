@@ -60,6 +60,35 @@ describe("friend lan", () => {
     expect(t.text()).toMatch(/firewall/i);
   });
 
+  it("on --https also turns on the secure address, and says what the phone will show", async () => {
+    const t = io();
+    expect(await lanCommand(["on", "--https"], t.i, fakeIfaces)).toBe(0);
+    expect(loadConfig(t.dataDir)).toMatchObject({ bind: "0.0.0.0", https: true });
+    expect(t.text()).toContain("https://192.168.1.20:8787");
+    expect(t.text()).toMatch(/certificate warning/);
+    expect(t.text()).not.toMatch(/plain http/);
+  });
+
+  it("https on and off change only the secure address, and status says which it is", async () => {
+    const t = io();
+    await lanCommand(["on"], t.i, fakeIfaces);
+    expect(loadConfig(t.dataDir).https).toBe(false);
+    await lanCommand(["status"], t.i, fakeIfaces);
+    expect(t.text()).toMatch(/Secure \(https\): off.*friend lan https on/s);
+    expect(await lanCommand(["https", "on"], t.i, fakeIfaces)).toBe(0);
+    expect(loadConfig(t.dataDir)).toMatchObject({ bind: "0.0.0.0", https: true });
+    expect(t.text()).toMatch(/Advanced.*Proceed/s);
+    expect(await lanCommand(["https", "off"], t.i, fakeIfaces)).toBe(0);
+    expect(loadConfig(t.dataDir).https).toBe(false);
+    expect(await lanCommand(["https", "maybe"], t.i, fakeIfaces)).toBe(1);
+    expect(t.err.join("\n")).toMatch(/Usage: friend lan https on \| off/);
+  });
+
+  it("the secure addresses use https", () => {
+    expect(urlsFor("0.0.0.0", 9000, fakeIfaces, true)).toEqual({ local: "https://127.0.0.1:9000", network: ["https://192.168.1.20:9000", "https://10.0.0.7:9000"] });
+    expect(urlsFor("127.0.0.1", 9000, fakeIfaces, true)).toEqual({ local: "https://127.0.0.1:9000", network: [] });
+  });
+
   it("on --port changes the port at the same time", async () => {
     const t = io();
     await lanCommand(["on", "--port", "9100"], t.i, fakeIfaces);

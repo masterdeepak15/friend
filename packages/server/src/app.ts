@@ -35,6 +35,7 @@ import { applySettings, clientLook, COSMETIC_KEYS, refuseForAgent, settingsView,
 import { OllamaProvider } from "./provider/ollama";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
+import { ensureTlsCert } from "./tls";
 import { HttpError } from "./http-error";
 import { Challenges } from "./voice/challenge";
 import { loadOrCreateKey } from "./voice/crypto";
@@ -439,7 +440,9 @@ export async function createApp(opts: AppOptions) {
     },
   };
 
+  const tls = config.https ? await ensureTlsCert(opts.dataDir, [...config.allowedHosts, ...(config.publicUrl ? [new URL(config.publicUrl).hostname] : [])]) : undefined;
   const gateway = createGateway({
+    ...(tls ? { tls } : {}),
     connectors: connectorsApi,
     voicePreview: async (id) => {
       if (!voice || !voiceAvailable()) throw new HttpError(503, "Voice is not available. Run: friend voice setup");

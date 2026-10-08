@@ -5,6 +5,8 @@ import { Recorder } from "./recorder";
 
 /** Recordings shorter than this (about a fifth of a second) are accidental taps. */
 const MIN_BYTES = 2000;
+/** A page opened over plain http from another device: browsers refuse the microphone there. */
+const insecurePage = () => typeof window !== "undefined" && window.isSecureContext === false;
 const LEVEL_POLL_MS = 50;
 
 export interface VoiceDeps {
@@ -58,7 +60,7 @@ export class VoiceController {
       return;
     }
     if (!(this.deps.supported?.() ?? Recorder.supported())) {
-      this.alert("warn", "This browser cannot record audio here (use localhost or HTTPS).");
+      this.alert("warn", insecurePage() ? "This page is not secure, so the browser blocks the microphone. On the PC run: friend lan https on, restart Friend, and open the https:// address." : "This browser cannot record audio here (use localhost or HTTPS).");
       return;
     }
     this.pressed = true;

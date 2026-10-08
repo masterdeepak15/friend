@@ -7,6 +7,7 @@ export { Memory } from "./memory";
 export { Plugins, inspectPlugin } from "./plugins";
 export type { PluginInfo, PluginManifest } from "./plugins";
 export { Auth } from "./auth";
+export { ensureTlsCert, tlsHosts } from "./tls";
 export { loadConfig, saveConfig, defaultDataDir, configPath } from "./config";
 export type { Config } from "./config";
 export { openDb } from "./db";

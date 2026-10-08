@@ -370,11 +370,13 @@ async function network(c: Ctx): Promise<Result> {
   }
   cfg.port = port;
   cfg.bind = where === "lan" ? "0.0.0.0" : "127.0.0.1";
+  // A phone is only allowed to use the microphone over https, so on the network it is the sensible default.
+  cfg.https = where === "lan" ? await yesNo(c.ui, "Use a secure (https) address so a phone can use the microphone? Your phone will show a one-time certificate warning.", true) : false;
   saveConfig(cfg);
-  const u = urlsFor(cfg.bind, cfg.port);
+  const u = urlsFor(cfg.bind, cfg.port, undefined, cfg.https);
   io.out(`Friend will be at ${u.local}`);
   for (const n of u.network) io.out(`and on your network at ${n}`);
-  if (where === "lan") io.out("Note: the microphone and camera only work on this PC (or over HTTPS). Everything else works from the other devices.");
+  if (where === "lan" && !cfg.https) io.out("Note: the microphone and camera only work on this PC (or over HTTPS). Everything else works from the other devices. Later: friend lan https on");
   return "done";
 }
 
@@ -395,7 +397,7 @@ async function look(c: Ctx): Promise<Result> {
 }
 
 function summary(cfg: Config, c: Ctx): string[] {
-  const u = urlsFor(cfg.bind, cfg.port);
+  const u = urlsFor(cfg.bind, cfg.port, undefined, cfg.https);
   const db = openDb(c.io.dataDir);
   let owner = "not created yet";
   try {
@@ -426,7 +428,7 @@ async function finish(c: Ctx): Promise<Result> {
     io.out("Start it whenever you like with: friend start");
     return "done";
   }
-  const url = urlsFor(cfg.bind, cfg.port).local;
+  const url = urlsFor(cfg.bind, cfg.port, undefined, cfg.https).local;
   if (await yesNo(c.ui, "Open it in your browser when it is up?", true)) setTimeout(() => void deps.openUrl(url), 2500);
   io.out("Starting Friend. Press Ctrl+C to stop it.");
   c.state.done.finish = new Date().toISOString();

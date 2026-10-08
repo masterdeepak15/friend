@@ -36,6 +36,7 @@ const PARSERS: Record<string, (v: string) => unknown> = {
     return t;
   },
   publicUrl: (v) => (v === "" ? null : v),
+  https: bool,
   port: (v) => {
     const n = Number(v);
     if (!Number.isInteger(n) || n < 0 || n > 65535) throw new Error("Port must be a number between 0 and 65535");
@@ -91,6 +92,7 @@ export const KEY_HELP: Record<string, string> = {
   provider: "which model answers: claude (API key), claude-code (your Claude subscription) or ollama (on this PC)",
   bind: "address Friend listens on: 127.0.0.1 is this PC only, 0.0.0.0 is your whole network (easier: friend lan on)",
   port: "the web port (easier: friend lan port N)",
+  https: "true serves a secure https:// address (Friend makes its own certificate), so a phone may use the microphone (easier: friend lan https on)",
   publicUrl: "the address people use when Friend is behind your own domain, or empty",
   roots: "folders Friend may read and write freely, separated by commas",
   allowedOrigins: "extra web addresses allowed to connect, separated by commas",

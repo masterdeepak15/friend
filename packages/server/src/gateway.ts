@@ -29,6 +29,8 @@ export interface GatewayDeps {
   auth: Auth;
   audit: Audit;
   webDir?: string;
+  /** A key and certificate: serve https:// instead of http://. */
+  tls?: { key: string; cert: string };
   onClientMessage: (session: Session, msg: ClientMsg, conn: ClientConn) => void;
   onClientConnect?: (session: Session, conn: ClientConn) => void | (() => void);
   onDeviceConnect: (device: Device, ws: WebSocket) => void;
@@ -163,7 +165,7 @@ export function createGateway(deps: GatewayDeps) {
     bodyLimit: 64 * 1024,
     forceCloseConnections: true, // shutdown must not wait for idle keep-alive connections
   };
-  const app: FastifyInstance = Fastify(options);
+  const app: FastifyInstance = Fastify(deps.tls ? ({ ...options, https: { key: deps.tls.key, cert: deps.tls.cert } } as unknown as FastifyServerOptions) : options);
   app.register(fastifyCookie);
 
   const hostOf = (header: string | undefined): string => {

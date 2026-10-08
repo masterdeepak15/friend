@@ -5,6 +5,7 @@ import { ConnectorsPanel } from "./connectors/ConnectorsPanel";
 import { buildSlash } from "./input/appCommands";
 import type { SlashCommand } from "./input/commands";
 import { HelpPanel } from "./input/HelpPanel";
+import { useCoarsePointer } from "./input/useCoarsePointer";
 import { ChatPanel } from "./layout/ChatPanel";
 import { resetPositions, usePanels } from "./layout/prefs";
 import { TasksPanel } from "./layout/TasksPanel";
@@ -31,6 +32,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [managingPlugins, setManagingPlugins] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState<null | "model" | "look">(null);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
+  const [menuRequest, setMenuRequest] = useState(0);
   const [help, setHelp] = useState<SlashCommand[] | null>(null);
   const panels = usePanels(state.view);
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
@@ -42,6 +44,22 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     reminded.current = true;
     dispatch({ type: "alert.add", level: "info", text: "Voice recognition is not set up. Press Esc, then Enroll my voice." });
   }, [state.voice.available, state.voice.enrolled, dispatch]);
+
+  // A touch screen has no Space or Esc: say once where the talk and menu buttons are.
+  const coarse = useCoarsePointer();
+  const toldTouch = useRef(false);
+  useEffect(() => {
+    if (!coarse || toldTouch.current || state.connection !== "open") return;
+    toldTouch.current = true;
+    let seen = false;
+    try {
+      seen = localStorage.getItem("friend.touchHint") === "1";
+      localStorage.setItem("friend.touchHint", "1");
+    } catch {
+      /* private mode: the hint just shows each visit */
+    }
+    if (!seen) dispatch({ type: "alert.add", level: "info", text: "Hold the round mic button to talk, or tap it once to start and again to send. The keyboard button types; the menu button opens settings." });
+  }, [coarse, state.connection, dispatch]);
 
   // The earlier conversation, loaded once the connection is up, for the chat panel.
   const seeded = useRef(false);
@@ -111,7 +129,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
 
   return (
     <>
-      <Stage state={shown} send={send} dispatch={dispatch} voice={voice} slash={slash} />
+      <Stage state={shown} send={send} dispatch={dispatch} voice={voice} slash={slash} onMenu={() => setMenuRequest((n) => n + 1)} />
       <Overlay
         approval={state.approval}
         challenge={state.challenge}
@@ -153,6 +171,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         onToggleTasks={() => panels.toggle("tasks")}
         view={state.view}
         onView={setView}
+        openRequest={menuRequest}
       />
     </>
   );

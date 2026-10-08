@@ -9,6 +9,8 @@ export interface NodeOptions {
   token: string;
   roots: string[];
   reconnect?: boolean;
+  /** Friend's own self-made certificate (PEM), trusted as the only authority for this connection to Friend on the same PC. */
+  ca?: string;
   backoffMs?: number;
   onState?: (s: NodeState) => void;
 }
@@ -44,7 +46,7 @@ export function startDeviceNode(opts: NodeOptions): DeviceNode {
   function connect() {
     if (stopped) return;
     setState("connecting");
-    const sock = new WebSocket(opts.url, { headers: { authorization: `Bearer ${opts.token}` } });
+    const sock = new WebSocket(opts.url, { headers: { authorization: `Bearer ${opts.token}` }, ...(opts.ca ? { ca: opts.ca } : {}) });
     ws = sock;
     sock.on("error", () => {});
     sock.on("message", async (data) => {

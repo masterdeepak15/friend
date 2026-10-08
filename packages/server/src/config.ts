@@ -7,6 +7,8 @@ export interface Config {
   bind: string;
   port: number;
   publicUrl: string | null;
+  /** Serve https:// with a certificate Friend makes for itself, so a phone on the network is allowed to use the microphone. */
+  https: boolean;
   trustProxy: boolean;
   allowedOrigins: string[];
   /** Extra hostnames accepted in the Host header (besides localhost, IP literals and the publicUrl host). */
@@ -171,6 +173,7 @@ const defaults = (dataDir: string): Config => ({
   bind: "127.0.0.1",
   port: 8787,
   publicUrl: null,
+  https: false,
   trustProxy: false,
   allowedOrigins: [],
   allowedHosts: [],
@@ -217,6 +220,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
   return {
     ...base,
     ...stored,
+    https: stored.https === true,
     destructivePatterns,
     ollama: { ...DEFAULT_OLLAMA, ...stored.ollama },
     claudeCode: sanitizeClaudeCode(stored.claudeCode),

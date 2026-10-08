@@ -8,8 +8,11 @@ const isTyping = (el: EventTarget | null) =>
  * Hidden until the owner taps the stage or starts typing; hides again after sending.
  * A line that starts with / is a command for this screen (see /help): it is never sent to the AI.
  */
-export function CommandBar({ onSend, requestOpen, slash }: { onSend: (text: string) => void; requestOpen: number; slash?: Slash }) {
+export function CommandBar({ onSend, requestOpen, slash, onOpenChange }: { onSend: (text: string) => void; requestOpen: number; slash?: Slash; onOpenChange?: (open: boolean) => void }) {
   const [open, setOpen] = useState(false);
+  const changed = useRef(onOpenChange);
+  changed.current = onOpenChange;
+  useEffect(() => changed.current?.(open), [open]);
   const [text, setText] = useState("");
   const [selected, setSelected] = useState(0);
   const input = useRef<HTMLInputElement>(null);
