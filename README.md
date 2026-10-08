@@ -49,6 +49,20 @@ Press **Esc** (or long-press the top-left corner), choose **Enroll my voice**, r
 - A voice match is a convenience, not a lock: a recording or a cloned voice can fool any speaker model. That is why a borderline match needs the PIN and risky actions always ask for it.
 - Python tests for the speech engine: `cd packages/voice && python -m venv .venv && .venv/Scripts/pip install -e .[dev] && .venv/Scripts/python -m pytest`.
 
+## Pictures first: weather, stats and graphics
+
+Friend is meant to show answers, not only say them. It controls the whole screen and picks the object that fits (gauge, chart, table, timeline, graph, or its own animated page).
+
+- **Weather:** "what is the weather in Pune?" gets live data from Open-Meteo (no account or key) and puts temperature, humidity, wind and a 24-hour chart on screen.
+- **Computer stats:** "how is my computer doing?" puts CPU load, memory and disk gauges, uptime and CPU on screen.
+- For these two, Friend calls the tools **itself** as soon as the request is clear (a named city, or a computer word plus a status word), so the graphs appear immediately even with a small local model; the model then only says a short summary. Asked together, both sets stay on screen. Anything else is decided by the model, which is told never to invent numbers and never to announce an action without doing it (if a small model does, Friend asks it once to actually call the tool).
+
+## Voice replies
+
+Friend answers aloud to **both** spoken and typed messages (`friend config set voice.speakTyped false` to keep typed ones silent). The voice follows the text: each sentence is spoken as soon as it is written, and code blocks are never read aloud.
+
+Browsers keep sound blocked until the page has had a click, tap or key press. Friend unlocks sound on the first one anywhere on the page, and shows a one-time hint if sound is still blocked. Needs `friend voice setup` once, and a restart of `friend start` afterwards.
+
 ## Memory
 
 Tell Friend "remember that my sister is Priya" and it keeps a short note. The 20 newest notes are in front of the model in every conversation; older ones are found on demand ("what do you know about Priya?").

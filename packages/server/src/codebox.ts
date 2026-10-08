@@ -42,9 +42,18 @@ export const spawnDocker: DockerExec = (args, { timeoutMs }) =>
     let timedOut = false;
     child.stdout.on("data", (d) => void (stdout.length < cap && (stdout += d)));
     child.stderr.on("data", (d) => void (stderr.length < cap && (stderr += d)));
+    // Removes a container by name whatever state it is in: running, or only created because the time ran out while
+    // docker was still starting it (--rm does not clean up a container that never ran).
+    const remove = () =>
+      new Promise<void>((done) => {
+        if (!name) return done();
+        const rm = spawn("docker", ["rm", "-f", name], { windowsHide: true, stdio: "ignore" });
+        rm.on("error", () => done());
+        rm.on("close", () => done());
+      });
     const timer = setTimeout(() => {
       timedOut = true;
-      if (name) spawn("docker", ["kill", name], { windowsHide: true }).on("error", () => {});
+      void remove(); // stops a running program straight away
       child.kill();
     }, timeoutMs);
     child.on("error", (e) => {
@@ -53,7 +62,9 @@ export const spawnDocker: DockerExec = (args, { timeoutMs }) =>
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve({ code, stdout, stderr, timedOut });
+      // the CLI is gone now, so nothing can create the container after this removal
+      if (timedOut) void remove().then(() => resolve({ code, stdout, stderr, timedOut }));
+      else resolve({ code, stdout, stderr, timedOut });
     });
   });
 

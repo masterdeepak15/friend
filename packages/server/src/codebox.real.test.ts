@@ -86,6 +86,14 @@ print([p for p in ("/mnt/c", "/c", "/Users", "/host_mnt", "/var/run/docker.sock"
     expect(left).toBe("");
   }, 60_000);
 
+  it("leaves nothing behind even when the time runs out while docker is still starting the container", async () => {
+    // a 1 second limit often fires before the container has started: it must still be removed
+    for (let i = 0; i < 4; i++) await box.run({ language: "python", code: "import time; time.sleep(30)", timeoutSec: 1 });
+    await new Promise((res) => setTimeout(res, 2500));
+    const left = execFileSync("docker", ["ps", "-a", "--filter", "name=friend-run-", "--format", "{{.Names}} {{.Status}}"], { encoding: "utf8" }).trim();
+    expect(left).toBe("");
+  }, 120_000);
+
   it("limits a fork bomb", async () => {
     const r = await py(`
 import os

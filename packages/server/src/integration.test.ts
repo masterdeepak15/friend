@@ -122,15 +122,14 @@ describe("voice end to end", () => {
     expect(voice.synthesized).toEqual([]);
   });
 
-  it("does not speak replies to typed messages", async () => {
+  it("speaks the replies to typed messages too", async () => {
     const voice = new FakeVoice();
     await boot([[text("Typed reply."), done]], voice);
     const c = await Client.connect(await login());
     c.send({ type: "chat.send", text: "hello" });
     await until(() => c.of("caption.end").length > 0);
-    await new Promise((r) => setTimeout(r, 100));
-    expect(c.of("audio.chunk")).toEqual([]);
-    expect(voice.synthesized).toEqual([]);
+    await until(() => c.of("audio.chunk").length > 0);
+    expect(voice.synthesized).toEqual(["Typed reply."]);
   });
 
   it("stops speaking on voice.interrupt: audio.stop is sent and no later clip follows", async () => {

@@ -68,6 +68,29 @@ export function chunkBase64(buf: Buffer, maxChars: number = MAX_CHUNK_CHARS): st
   return out;
 }
 
+export interface SpeechStream {
+  /** More of the reply. Every sentence that is complete is spoken straight away. */
+  push(text: string): void;
+  /** The reply is finished: says what is left. Resolves when the last clip has been sent. */
+  end(): Promise<void>;
+}
+
+const fenceCount = (text: string) => (text.match(/```/g) ?? []).length;
+
+/**
+ * Where the last finished sentence (or line) in `text` ends, or 0 when there is none yet. A full stop that is part of
+ * a number ("31.5") or an abbreviation ("Dr.") does not count, and neither does anything inside a code block.
+ */
+function lastBoundary(text: string): number {
+  for (let i = text.length - 2; i >= 0; i--) {
+    const c = text[i]!;
+    const lineEnd = c === "\n" && text.slice(0, i).trim() !== "";
+    const sentenceEnd = (c === "." || c === "!" || c === "?") && /\s/.test(text[i + 1]!) && !ABBREVIATION.test(text.slice(0, i + 1));
+    if ((lineEnd || sentenceEnd) && fenceCount(text.slice(0, i + 1)) % 2 === 0) return i + 1;
+  }
+  return 0;
+}
+
 /** Turns reply text into spoken audio, one sentence at a time, so playback starts early. */
 export class Speaker {
   private job = 0;
@@ -75,15 +98,39 @@ export class Speaker {
 
   constructor(private voice: VoiceService, private audit: Audit, private voiceName?: string) {}
 
+  /** Says a whole text, sentence by sentence. */
   async speak(text: string, emit: (m: ServerMsg) => void): Promise<void> {
-    const sentences = splitSentences(speechText(text));
-    if (sentences.length === 0) return;
+    const s = this.stream(emit);
+    s.push(text);
+    await s.end();
+  }
+
+  /**
+   * Speaks a reply while it is still being written: every sentence is synthesized and sent as soon as it is
+   * finished, in order, so the voice keeps up with the captions instead of starting after them.
+   */
+  stream(emit: (m: ServerMsg) => void): SpeechStream {
     if (this.active) emit({ type: "audio.stop" }); // a newer reply replaces the one still playing
     const job = ++this.job;
     this.active = true;
-    try {
-      for (const [i, sentence] of sentences.entries()) {
-        if (job !== this.job) return;
+    const alive = () => job === this.job;
+    const queue: string[] = [];
+    let pending = "";
+    let ended = false;
+    let wake: (() => void) | null = null;
+    let clip = 0;
+    const poke = () => {
+      const w = wake;
+      wake = null;
+      w?.();
+    };
+
+    const worker = (async () => {
+      for (;;) {
+        while (queue.length === 0 && !ended && alive()) await new Promise<void>((r) => (wake = r));
+        if (!alive()) return; // interrupted or replaced: send nothing more
+        const sentence = queue.shift();
+        if (sentence === undefined) return; // the reply ended and everything was said
         let wav: Buffer;
         try {
           wav = await this.voice.synthesize(sentence, this.voiceName);
@@ -91,15 +138,40 @@ export class Speaker {
           this.audit.log("voice", "voice.tts_failed", { message: (e as Error).message });
           continue;
         }
-        if (job !== this.job) return; // interrupted while synthesizing: send nothing more
+        if (!alive()) return; // interrupted while synthesizing
         const chunks = chunkBase64(wav);
-        chunks.forEach((data, seq) =>
-          emit({ type: "audio.chunk", id: `${job}-${i}`, seq, last: seq === chunks.length - 1, mime: "audio/wav", data }),
-        );
+        const id = `${job}-${clip++}`;
+        chunks.forEach((data, seq) => emit({ type: "audio.chunk", id, seq, last: seq === chunks.length - 1, mime: "audio/wav", data }));
       }
-    } finally {
-      if (job === this.job) this.active = false;
-    }
+    })().finally(() => {
+      if (alive()) this.active = false;
+    });
+
+    /** Moves finished sentences from the pending text to the queue. At the end, everything left goes. */
+    const take = (final: boolean) => {
+      const open = fenceCount(pending) % 2 === 1;
+      if (open && !final) return; // inside a code block: wait for it to close
+      const text = open ? pending.slice(0, pending.lastIndexOf("```")) : pending; // an unclosed block is never read
+      const cut = final ? text.length : lastBoundary(text);
+      if (cut === 0) return;
+      pending = final ? "" : text.slice(cut);
+      queue.push(...splitSentences(speechText(text.slice(0, cut))));
+      poke();
+    };
+
+    return {
+      push: (t) => {
+        if (!alive() || ended) return;
+        pending += t;
+        take(false);
+      },
+      end: () => {
+        ended = true;
+        if (alive()) take(true);
+        poke();
+        return worker;
+      },
+    };
   }
 
   /** Cancels the running job and tells every client to stop playing. */

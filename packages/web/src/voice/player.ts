@@ -47,6 +47,11 @@ export class AudioPlayer {
     if (ctx.state === "suspended") void ctx.resume().catch(() => {});
   }
 
+  /** True while the browser is still blocking sound (nothing has been clicked or pressed on the page yet). */
+  locked(): boolean {
+    return !this.ctx || this.ctx.state !== "running";
+  }
+
   enqueue(chunk: AudioChunk): void {
     if (!Number.isInteger(chunk.seq) || chunk.seq < 0 || chunk.seq > MAX_SEQ) return;
     const bytes = fromBase64(chunk.data);

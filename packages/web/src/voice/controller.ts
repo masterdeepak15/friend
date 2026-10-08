@@ -16,7 +16,7 @@ export interface VoiceDeps {
   recorder?: Pick<Recorder, "active" | "start" | "stop" | "cancel" | "level">;
   /** Builds the recorder when none is injected; `onError` must be called if it fails on its own. */
   makeRecorder?: (onError: () => void) => NonNullable<VoiceDeps["recorder"]>;
-  player?: Pick<AudioPlayer, "playing" | "stop" | "unlock" | "enqueue" | "onChange" | "level"> & { dispose?: () => void };
+  player?: Pick<AudioPlayer, "playing" | "stop" | "unlock" | "enqueue" | "onChange" | "level"> & { locked?: () => boolean; dispose?: () => void };
   supported?: () => boolean;
 }
 
@@ -33,6 +33,7 @@ export class VoiceController {
   private pressed = false;
   private disposed = false;
   private uploads = 0;
+  private toldAboutSound = false;
   private abort: AbortController | null = null;
   private poll: ReturnType<typeof setInterval> | null = null;
   private unsubscribe: () => void;
@@ -118,8 +119,17 @@ export class VoiceController {
   }
 
   handleServer(msg: ServerAudioMsg): void {
-    if (msg.type === "audio.chunk") this.player.enqueue(msg);
-    else this.player.stop();
+    if (msg.type !== "audio.chunk") return this.player.stop();
+    this.player.enqueue(msg); // it plays as soon as the browser allows sound
+    if (!this.toldAboutSound && this.player.locked?.()) {
+      this.toldAboutSound = true;
+      this.deps.dispatch({ type: "alert.add", level: "info", text: "Sound is blocked by the browser. Click or press a key once anywhere on the page to hear me." });
+    }
+  }
+
+  /** A click or key press happened somewhere on the page: the browser now allows sound. */
+  unlock(): void {
+    this.player.unlock();
   }
 
   dispose(): void {

@@ -10,6 +10,8 @@ export interface VoiceControls {
   pressStart(): void;
   pressEnd(): void;
   blur(): void;
+  /** Any click or key press: lets the browser play sound. */
+  unlock(): void;
 }
 
 export function useFriend(onUnauthorized: () => void): {
@@ -86,6 +88,7 @@ export function useFriend(onUnauthorized: () => void): {
       pressStart: () => void controller.current?.pressStart(),
       pressEnd: () => void controller.current?.pressEnd(),
       blur: () => controller.current?.blur(),
+      unlock: () => controller.current?.unlock(),
     }),
     [],
   );

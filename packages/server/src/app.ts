@@ -8,6 +8,7 @@ import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
+import { WeatherService } from "./weather";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Tasks } from "./tasks";
@@ -49,6 +50,8 @@ export interface AppOptions {
   codeBox?: Pick<CodeBox, "run">;
   /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
   pluginCatalogDir?: string;
+  /** Where weather comes from. Defaults to Open-Meteo. */
+  weather?: Pick<WeatherService, "get">;
 }
 
 /** Used when no API key is configured: every turn ends with a setup notice on screen. */
@@ -97,6 +100,7 @@ export async function createApp(opts: AppOptions) {
     memory,
     tasks,
     plugins,
+    weather: opts.weather ?? new WeatherService(),
     code: opts.codeBox ?? new CodeBox(),
     camera: {
       request: (emit, signal) => {
@@ -188,14 +192,14 @@ export async function createApp(opts: AppOptions) {
 
   /** Runs the turn for something that was said, then speaks the reply. Guests get the isolated guest turn. */
   async function runVoiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" = "owner"): Promise<void> {
-    let reply = "";
+    // the voice keeps pace with the captions: each sentence is spoken as soon as it has been written
+    const talk = speaker?.stream(broadcast);
     const emit = (m: ServerMsg) => {
-      if (m.type === "caption.delta") reply += m.text;
+      if (m.type === "caption.delta" && epoch === lockEpoch) talk?.push(m.text); // locked meanwhile: stay silent
       broadcast(m);
     };
     await agent.runTurn(text, { trust, emit, ip });
-    if (epoch !== lockEpoch) return; // locked while the agent was working: stay silent
-    if (speaker && reply.trim()) await speaker.speak(reply, broadcast);
+    await talk?.end();
   }
 
   /** The owner answers "was that you?" with the PIN; only then do the held-back words run, as the owner. */
@@ -367,9 +371,14 @@ export async function createApp(opts: AppOptions) {
     onClientMessage: (_session, msg: ClientMsg, conn) => {
       switch (msg.type) {
         case "chat.send":
-          void agent
-            .runTurn(msg.text, { trust: "owner", emit: broadcast, ip: conn.ip })
-            .catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
+          // the reply is spoken as it is written, like one to a spoken request, unless the owner turned that off
+          if (speaker && voiceAvailable() && config.voice.speakTyped) {
+            void runVoiceTurn(msg.text, conn.ip, lockEpoch).catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
+          } else {
+            void agent
+              .runTurn(msg.text, { trust: "owner", emit: broadcast, ip: conn.ip })
+              .catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
+          }
           break;
         case "approval.respond":
           void approvals

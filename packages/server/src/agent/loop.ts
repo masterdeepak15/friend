@@ -1,9 +1,13 @@
-import type { ServerMsg, Tier, ToolDef, Trust } from "@friend/protocol";
+import type { ServerMsg, StageCommand, Tier, ToolDef, Trust } from "@friend/protocol";
 import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
 import type { CodeBox } from "../codebox";
 import type { Plugins } from "../plugins";
+import { statsScene } from "../stats";
+import { weatherScene, weatherSummary, type WeatherService } from "../weather";
+import { detectIntents } from "./intents";
+import { promisesAction } from "./promise";
 import type { Config } from "../config";
 import type { Db } from "../db";
 import type { Memory } from "../memory";
@@ -18,6 +22,8 @@ import { loadHistory, repairDangling, saveMessage } from "./history";
 import { promptParts } from "./prompt";
 
 export const MAX_STEPS = 20;
+/** Sent once, only when the model announced an action without calling a tool. Never stored in the conversation history. */
+const NUDGE = "(Automatic reminder) You said you would do something but did not call a tool. Call the tool now, then show the result on the screen. If nothing more is needed, just answer.";
 /** How many of the newest notes go into every prompt; older ones are found with memory.search. */
 export const NOTES_IN_PROMPT = 20;
 /** Largest tool result sent back to the model; older, bigger results would otherwise swamp every later turn. */
@@ -43,6 +49,8 @@ export interface AgentDeps {
   code?: Pick<CodeBox, "run">;
   /** Installed plugins: their skills go into the prompt and their tools join the tool list. */
   plugins?: Plugins;
+  /** Live weather. Without it the weather tool reports it is unavailable. */
+  weather?: Pick<WeatherService, "get">;
 }
 
 export interface TurnCtx {
@@ -62,6 +70,7 @@ const clipArgs = (args: unknown): unknown =>
 
 export class Agent {
   private busy = false;
+  private scenesThisTurn = 0;
   private abort: AbortController | null = null;
 
   constructor(private deps: AgentDeps) {}
@@ -83,6 +92,7 @@ export class Agent {
       return;
     }
     this.busy = true;
+    this.scenesThisTurn = 0;
     const stage = (cmd: Parameters<StageState["apply"]>[0]) => {
       d.stage.apply(cmd);
       emit({ type: "stage", command: cmd });
@@ -103,6 +113,23 @@ export class Agent {
       const messages: Msg[] = guest ? [userMsg] : loadHistory(d.db);
       const pluginTools = (d.plugins?.toolDefs() ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
       const tools = ctx.trust === "owner" ? [...toolSpecs(), ...pluginTools] : [];
+      let nudged = false;
+
+      // Clear requests for real data (weather in a named city, the computer's stats) are answered with the real tools
+      // right away: the pictures appear at once, and the model only has to say a short summary.
+      if (!guest) {
+        for (const [i, auto] of detectIntents(text).entries()) {
+          const id = `auto-${Date.now().toString(36)}-${i}`;
+          const callMsg: Msg = { role: "assistant", content: [{ type: "tool_use", id, name: auto.name, input: auto.args }] };
+          messages.push(callMsg);
+          keep(callMsg);
+          const r = await this.executeTool({ id, name: auto.name, args: auto.args }, ctx, abort.signal);
+          if (abort.signal.aborted) return;
+          const resultMsg: Msg = { role: "tool", content: [{ type: "tool_result", toolUseId: id, content: r.text, isError: r.isError }] };
+          messages.push(resultMsg);
+          keep(resultMsg);
+        }
+      }
 
       for (let step = 0; step < MAX_STEPS; step++) {
         let assistantText = "";
@@ -150,7 +177,15 @@ export class Agent {
         const assistantMsg: Msg = { role: "assistant", content };
         messages.push(assistantMsg);
         if (content.length) keep(assistantMsg);
-        if (calls.length === 0) return;
+        if (calls.length === 0) {
+          // a small model may say it will do something and then stop: ask once for the actual call
+          if (!guest && !nudged && step < MAX_STEPS - 1 && promisesAction(assistantText)) {
+            nudged = true;
+            messages.push({ role: "user", content: [{ type: "text", text: NUDGE }] }); // kept in memory for this turn only
+            continue;
+          }
+          return;
+        }
 
         stage({ cmd: "presence", state: "thinking" });
         const results: ContentBlock[] = [];
@@ -317,6 +352,15 @@ export class Agent {
       return { text: r.stdout || "(no output)", isError: false };
     }
 
+    if (call.name === "weather.get") {
+      if (!d.weather) return fail("Weather is not available.");
+      const r = await d.weather.get(String(args.city));
+      d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: r.ok });
+      if (!r.ok) return fail(r.error);
+      this.showScene(weatherScene(r.weather), ctx.emit);
+      return { text: weatherSummary(r.weather), isError: false };
+    }
+
     if (call.name === "skill.use") {
       const text = d.plugins?.skillText(String(args.plugin), String(args.name));
       if (!text) return fail("No such skill.");
@@ -346,6 +390,26 @@ export class Agent {
     if (!result.ok) return fail(result.error);
     const capped = result.output.length > MAX_RESULT_CHARS;
     const output = capped ? result.output.slice(0, MAX_RESULT_CHARS) : result.output;
-    return { text: result.truncated || capped ? `${output}\n[output truncated]` : output, isError: false };
+    let text = result.truncated || capped ? `${output}\n[output truncated]` : output;
+    if (call.name === "system.info") {
+      // the gauges appear whatever the model does next
+      const scene = statsScene(result.output);
+      if (scene) {
+        this.showScene(scene, ctx.emit);
+        text += "\n(The CPU, memory and disk gauges are already on the screen; just say a short summary.)";
+      }
+    }
+    return { text, isError: false };
+  }
+
+  /**
+   * Puts a ready-made set of pictures on the screen. The first one in a request replaces what was there so it always
+   * fits; later ones in the same request are added next to it (weather and stats asked for together stay together).
+   */
+  private showScene(commands: StageCommand[], emit: (m: ServerMsg) => void): void {
+    const first = this.scenesThisTurn++ === 0;
+    for (const cmd of first ? [{ cmd: "clear" } as StageCommand, ...commands] : commands) {
+      if (this.deps.stage.apply(cmd).ok) emit({ type: "stage", command: cmd });
+    }
   }
 }
