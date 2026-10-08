@@ -208,15 +208,16 @@ describe("voice on the stage", () => {
     vi.useRealTimers();
   });
 
-  it("a pointer cancel during a long press ends the recording", () => {
+  it("a pointer cancel during a long press discards the recording (more cases in stage.pointer.test.tsx)", () => {
     vi.useFakeTimers();
-    const v = { pressStart: vi.fn(), pressEnd: vi.fn() };
+    const v = { pressStart: vi.fn(), pressEnd: vi.fn(), blur: vi.fn() };
     render(<Stage state={withState({})} send={noop} dispatch={noop} voice={v} />);
     const stage = screen.getByTestId("stage");
     fireEvent.pointerDown(stage);
     act(() => void vi.advanceTimersByTime(400));
     fireEvent.pointerCancel(stage);
-    expect(v.pressEnd).toHaveBeenCalledTimes(1);
+    expect(v.blur).toHaveBeenCalledTimes(1);
+    expect(v.pressEnd).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 });

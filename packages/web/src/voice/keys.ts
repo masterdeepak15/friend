@@ -6,9 +6,11 @@ export interface VoiceKeys {
   blur(): void;
 }
 
-const IGNORED_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"]);
+/** Elements where Space already means something; talking must not steal it. */
+const IGNORED_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A", "SUMMARY"]);
+const IGNORED_ROLES = new Set(["button", "checkbox", "switch", "tab", "menuitem", "link", "radio", "option", "textbox", "combobox", "slider"]);
 const ignored = (t: EventTarget | null) =>
-  t instanceof HTMLElement && (IGNORED_TAGS.has(t.tagName) || t.isContentEditable || t.getAttribute("role") === "button");
+  t instanceof HTMLElement && (IGNORED_TAGS.has(t.tagName) || t.isContentEditable || IGNORED_ROLES.has(t.getAttribute("role") ?? ""));
 const isSpace = (e: KeyboardEvent) => e.code === "Space" || e.key === " ";
 
 /** Hold Space to talk. Typing in a field, other keys and modifier combinations are left alone. */
@@ -32,8 +34,8 @@ export function useVoiceKeys(voice: VoiceKeys): void {
       e.preventDefault();
       ref.current.pressEnd();
     };
+    // Focus or visibility lost: close the microphone whether the recording was started by key or by pointer.
     const lose = () => {
-      if (!held) return;
       held = false;
       ref.current.blur();
     };

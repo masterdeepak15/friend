@@ -1,9 +1,13 @@
 const MIME_PREFERENCE = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+/** If the browser never reports the recorder stopped, give up waiting after this long. */
+const STOP_TIMEOUT_MS = 3000;
 
 export interface RecorderOptions {
   /** Longest recording; onLimit fires once when it is reached. */
   maxMs?: number;
   onLimit?: () => void;
+  /** The recorder failed or the microphone disappeared while recording. The device is already released. */
+  onError?: () => void;
 }
 
 function friendlyError(e: unknown): Error {
@@ -52,6 +56,8 @@ export class Recorder {
         rec.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) this.chunks.push(e.data);
         };
+        rec.onerror = () => this.failed();
+        for (const track of this.stream.getTracks()) track.onended = () => this.failed(); // unplugged, or permission revoked
         this.openMeter(this.stream);
         rec.start(250);
         this.rec = rec;
@@ -70,16 +76,29 @@ export class Recorder {
     }
   }
 
+  /** Ends the recording and resolves with the audio. Always resolves, even if the browser misbehaves. */
   stop(): Promise<Blob> {
     const rec = this.rec;
     if (!rec) return Promise.reject(new Error("Not recording."));
     return new Promise<Blob>((resolve) => {
-      rec.onstop = () => {
+      let done = false;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        if (timeout) clearTimeout(timeout);
         const blob = new Blob(this.chunks, { type: rec.mimeType || "audio/webm" });
         this.release();
         resolve(blob);
       };
-      rec.stop();
+      timeout = setTimeout(finish, STOP_TIMEOUT_MS);
+      rec.onstop = finish;
+      if (rec.state === "inactive") return finish(); // already ended (device lost): nothing to wait for
+      try {
+        rec.stop();
+      } catch {
+        finish();
+      }
     });
   }
 
@@ -89,6 +108,7 @@ export class Recorder {
     if (rec) {
       rec.ondataavailable = null;
       rec.onstop = null;
+      rec.onerror = null;
       try {
         if (rec.state !== "inactive") rec.stop();
       } catch {
@@ -108,6 +128,12 @@ export class Recorder {
     return Math.min(1, Math.sqrt(sum / data.length) * 4);
   }
 
+  private failed(): void {
+    if (!this.rec) return;
+    this.cancel();
+    this.opts.onError?.();
+  }
+
   private openMeter(stream: MediaStream): void {
     try {
       this.ctx = new AudioContext();
@@ -122,7 +148,10 @@ export class Recorder {
   private release(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream?.getTracks().forEach((t) => {
+      t.onended = null;
+      t.stop();
+    });
     void this.ctx?.close().catch(() => {});
     this.stream = null;
     this.rec = null;

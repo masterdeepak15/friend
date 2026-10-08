@@ -9,7 +9,14 @@ export interface AudioChunk {
 interface Pending {
   parts: Map<number, Uint8Array>;
   lastSeq: number | null;
+  bytes: number;
 }
+
+/** Limits that keep a buggy or hostile server from growing the browser's memory without bound. */
+const MAX_SEQ = 4096;
+const MAX_PENDING_CLIPS = 8;
+const MAX_QUEUED_CLIPS = 20;
+const MAX_CLIP_BYTES = 6_000_000;
 
 function fromBase64(data: string): Uint8Array | null {
   try {
@@ -41,17 +48,27 @@ export class AudioPlayer {
   }
 
   enqueue(chunk: AudioChunk): void {
+    if (!Number.isInteger(chunk.seq) || chunk.seq < 0 || chunk.seq > MAX_SEQ) return;
     const bytes = fromBase64(chunk.data);
     if (!bytes) return;
-    const p = this.pending.get(chunk.id) ?? { parts: new Map<number, Uint8Array>(), lastSeq: null };
+
+    let p = this.pending.get(chunk.id);
+    if (!p) {
+      if (this.pending.size >= MAX_PENDING_CLIPS) this.pending.delete(this.pending.keys().next().value!); // drop the oldest
+      p = { parts: new Map(), lastSeq: null, bytes: 0 };
+      this.pending.set(chunk.id, p);
+    }
+    p.bytes += bytes.length;
+    if (p.bytes > MAX_CLIP_BYTES) {
+      this.pending.delete(chunk.id);
+      return;
+    }
     p.parts.set(chunk.seq, bytes);
     if (chunk.last) p.lastSeq = chunk.seq;
-    this.pending.set(chunk.id, p);
     if (p.lastSeq === null || p.parts.size !== p.lastSeq + 1) return;
 
     this.pending.delete(chunk.id);
-    const total = [...p.parts.values()].reduce((n, b) => n + b.length, 0);
-    const joined = new Uint8Array(total);
+    const joined = new Uint8Array([...p.parts.values()].reduce((n, b) => n + b.length, 0));
     let at = 0;
     for (let i = 0; i <= p.lastSeq; i++) {
       const part = p.parts.get(i);
@@ -60,6 +77,7 @@ export class AudioPlayer {
       at += part.length;
     }
     this.queue.push(joined.buffer);
+    while (this.queue.length > MAX_QUEUED_CLIPS) this.queue.shift();
     void this.pump();
   }
 
@@ -80,6 +98,14 @@ export class AudioPlayer {
       }
     }
     this.setPlaying(false);
+  }
+
+  /** Stops playback and releases the audio context (the browser limits how many can exist). */
+  dispose(): void {
+    this.stop();
+    void this.ctx?.close().catch(() => {});
+    this.ctx = null;
+    this.analyser = null;
   }
 
   playing(): boolean {
@@ -128,6 +154,20 @@ export class AudioPlayer {
     const gen = this.gen;
     try {
       const ctx = this.ensureContext();
+      if (ctx.state === "suspended") {
+        // the browser has not allowed audio yet (no user gesture): do not pretend to be playing
+        try {
+          await ctx.resume();
+        } catch {
+          /* still blocked */
+        }
+        if (gen !== this.gen) return;
+        if ((ctx as AudioContext).state !== "running") {
+          this.queue.unshift(next);
+          this.busy = false;
+          return;
+        }
+      }
       const audio = await ctx.decodeAudioData(next);
       if (gen !== this.gen) return; // stopped while decoding
       const src = ctx.createBufferSource();

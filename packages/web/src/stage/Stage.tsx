@@ -37,7 +37,7 @@ export interface StageProps {
   send: (m: ClientMsg) => void;
   dispatch: (a: LocalAction) => void;
   /** Push-to-talk by long-pressing the stage; omitted when voice is not wired up. */
-  voice?: { pressStart(): void; pressEnd(): void };
+  voice?: { pressStart(): void; pressEnd(): void; blur?(): void };
 }
 
 const LONG_PRESS_MS = 350;
@@ -52,28 +52,47 @@ export function Stage({ state, send, dispatch, voice }: StageProps) {
   const mode = state.voice.mode;
   const presenceState = mode === "listening" ? "listening" : mode === "speaking" ? "speaking" : mode === "transcribing" ? "thinking" : state.presence.state;
   const presenceAmplitude = mode === "listening" || mode === "speaking" ? state.voice.level : state.presence.amplitude;
-  const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; down: boolean; talking: boolean }>({ timer: null, down: false, talking: false });
+  const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; down: boolean; talking: boolean; id: number | null }>({
+    timer: null,
+    down: false,
+    talking: false,
+    id: null,
+  });
   const startPress = (e: React.PointerEvent) => {
     if (!(e.target === e.currentTarget || (e.target as HTMLElement).closest("[data-presence]"))) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return; // right and middle buttons are not a press
     const p = press.current;
+    if (p.down && p.id !== null && e.pointerId !== p.id) return; // a second finger while one is already down
+    if (p.timer) clearTimeout(p.timer); // never stack timers
     p.down = true;
     p.talking = false;
-    if (voice) {
-      p.timer = setTimeout(() => {
-        p.talking = true;
-        voice.pressStart();
-      }, LONG_PRESS_MS);
+    p.id = typeof e.pointerId === "number" ? e.pointerId : null;
+    try {
+      // keep receiving the release even if the pointer leaves the stage or the window
+      if (p.id !== null) (e.currentTarget as HTMLElement).setPointerCapture?.(p.id);
+    } catch {
+      /* capture is best effort */
     }
+    p.timer = voice
+      ? setTimeout(() => {
+          if (!p.down) return;
+          p.talking = true;
+          voice.pressStart();
+        }, LONG_PRESS_MS)
+      : null;
   };
-  const endPress = (cancelled: boolean) => {
+  const endPress = (e: React.PointerEvent, cancelled: boolean) => {
     const p = press.current;
     if (!p.down) return;
+    if (p.id !== null && typeof e.pointerId === "number" && e.pointerId !== p.id) return; // another finger
     p.down = false;
+    p.id = null;
     if (p.timer) clearTimeout(p.timer);
     p.timer = null;
     if (p.talking) {
       p.talking = false;
-      voice?.pressEnd();
+      if (cancelled) voice?.blur?.(); // a cancelled gesture discards the recording
+      else voice?.pressEnd();
     } else if (!cancelled) {
       setOpenRequest((n) => n + 1); // a short tap opens the text bar
     }
@@ -115,8 +134,8 @@ export function Stage({ state, send, dispatch, voice }: StageProps) {
       className="stage"
       style={style}
       onPointerDown={startPress}
-      onPointerUp={() => endPress(false)}
-      onPointerCancel={() => endPress(true)}
+      onPointerUp={(e) => endPress(e, false)}
+      onPointerCancel={(e) => endPress(e, true)}
       onContextMenu={(e) => voice && e.preventDefault()}
     >
       <div className="ambient" aria-hidden="true" style={{ opacity: 0.35 + 0.65 * state.mood.intensity }} />
