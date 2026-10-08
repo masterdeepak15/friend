@@ -154,6 +154,74 @@ describe("auto layout, exit animation and mood", () => {
   });
 });
 
+describe("voice on the stage", () => {
+  const noop = () => {};
+  const presence = (c: HTMLElement) => c.querySelector("[data-presence]") as HTMLElement;
+  const voice = (mode: StageViewState["voice"]["mode"], level = 0.6): StageViewState["voice"] => ({ mode, level, available: true });
+
+  it("shows listening and the microphone level while the owner talks", () => {
+    const { container } = render(<Stage state={withState({ voice: voice("listening", 0.6) })} send={noop} dispatch={noop} />);
+    expect(presence(container).dataset.state).toBe("listening");
+    expect(presence(container).dataset.amplitude).toBe("0.60");
+  });
+  it("shows speaking and the playback level while Friend talks", () => {
+    const { container } = render(<Stage state={withState({ voice: voice("speaking", 0.8) })} send={noop} dispatch={noop} />);
+    expect(presence(container).dataset.state).toBe("speaking");
+    expect(presence(container).dataset.amplitude).toBe("0.80");
+  });
+  it("shows thinking while the recording is being transcribed", () => {
+    const { container } = render(<Stage state={withState({ voice: voice("transcribing") })} send={noop} dispatch={noop} />);
+    expect(presence(container).dataset.state).toBe("thinking");
+  });
+  it("leaves the server-driven presence alone when voice is idle", () => {
+    const state = withState({ presence: { state: "speaking", style: "sphere", amplitude: 0.4, pulse: 1 } });
+    const { container } = render(<Stage state={state} send={noop} dispatch={noop} />);
+    expect(presence(container).dataset.state).toBe("speaking");
+    expect(presence(container).dataset.amplitude).toBe("0.40");
+  });
+
+  it("a long press on the stage talks (press and release) and does not open the text bar", () => {
+    vi.useFakeTimers();
+    const v = { pressStart: vi.fn(), pressEnd: vi.fn() };
+    render(<Stage state={withState({})} send={noop} dispatch={noop} voice={v} />);
+    const stage = screen.getByTestId("stage");
+    fireEvent.pointerDown(stage);
+    act(() => void vi.advanceTimersByTime(400));
+    expect(v.pressStart).toHaveBeenCalledTimes(1);
+    fireEvent.pointerUp(stage);
+    expect(v.pressEnd).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText(/message/i)).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("a quick tap opens the text bar and does not talk", async () => {
+    vi.useFakeTimers();
+    const v = { pressStart: vi.fn(), pressEnd: vi.fn() };
+    render(<Stage state={withState({})} send={noop} dispatch={noop} voice={v} />);
+    const stage = screen.getByTestId("stage");
+    fireEvent.pointerDown(stage);
+    act(() => void vi.advanceTimersByTime(100));
+    fireEvent.pointerUp(stage);
+    act(() => void vi.advanceTimersByTime(600));
+    expect(v.pressStart).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/message/i)).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it("a pointer cancel during a long press discards the recording (more cases in stage.pointer.test.tsx)", () => {
+    vi.useFakeTimers();
+    const v = { pressStart: vi.fn(), pressEnd: vi.fn(), blur: vi.fn() };
+    render(<Stage state={withState({})} send={noop} dispatch={noop} voice={v} />);
+    const stage = screen.getByTestId("stage");
+    fireEvent.pointerDown(stage);
+    act(() => void vi.advanceTimersByTime(400));
+    fireEvent.pointerCancel(stage);
+    expect(v.blur).toHaveBeenCalledTimes(1);
+    expect(v.pressEnd).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+});
+
 describe("<CommandBar> inside the stage", () => {
   it("opens on a key press, sends chat.send on Enter, and hides again", async () => {
     const send = vi.fn<(m: ClientMsg) => void>();

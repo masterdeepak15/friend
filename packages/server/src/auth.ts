@@ -107,6 +107,14 @@ export class Auth {
     return { id: r.id, kind: r.kind, expiresAt: r.e };
   }
 
+  /** True while the session with this id exists, is not revoked and has not expired. */
+  sessionActive(id: number): boolean {
+    const r = this.db.prepare("select expires_at e, revoked from sessions where id = ?").get(id) as
+      | { e: number; revoked: number }
+      | undefined;
+    return !!r && !r.revoked && r.e > this.clock();
+  }
+
   revokeSession(token: string): void {
     this.db.prepare("update sessions set revoked = 1 where token_hash = ?").run(sha256(token));
   }

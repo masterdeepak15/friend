@@ -15,6 +15,15 @@ export interface Alert {
   text: string;
 }
 
+export type VoiceMode = "idle" | "listening" | "transcribing" | "speaking";
+
+export interface VoiceView {
+  mode: VoiceMode;
+  /** Live microphone or playback loudness, 0..1. */
+  level: number;
+  available: boolean;
+}
+
 export interface StageViewState {
   scene: SceneMode;
   objects: StageObject[];
@@ -27,6 +36,7 @@ export interface StageViewState {
   connection: Connection;
   busy: boolean;
   deviceOnline: boolean;
+  voice: VoiceView;
 }
 
 export const initialState: StageViewState = {
@@ -41,12 +51,16 @@ export const initialState: StageViewState = {
   connection: "connecting",
   busy: false,
   deviceOnline: false,
+  voice: { mode: "idle", level: 0, available: false },
 };
 
 export type LocalAction =
   | { type: "conn"; value: Connection }
   | { type: "alert.dismiss"; id: number }
-  | { type: "object.dismiss"; id: string };
+  | { type: "object.dismiss"; id: string }
+  | { type: "alert.add"; level: "info" | "warn" | "error"; text: string }
+  | { type: "voice.mode"; mode: VoiceMode }
+  | { type: "voice.level"; level: number };
 
 let alertSeq = 0;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
@@ -81,6 +95,16 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
   const local = input as LocalAction | null;
   if (local && typeof local === "object") {
     if (local.type === "conn") return { ...state, connection: local.value };
+    if (local.type === "alert.add") {
+      return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: local.level, text: local.text }] };
+    }
+    if (local.type === "voice.mode") {
+      return { ...state, voice: { ...state.voice, mode: local.mode, level: local.mode === "idle" ? 0 : state.voice.level } };
+    }
+    if (local.type === "voice.level") {
+      const level = Number.isFinite(local.level) ? Math.min(1, Math.max(0, local.level)) : 0;
+      return { ...state, voice: { ...state.voice, level } };
+    }
     if (local.type === "object.dismiss") return { ...state, objects: state.objects.filter((o) => o.id !== local.id) };
     if (local.type === "alert.dismiss") return { ...state, alerts: state.alerts.filter((a) => a.id !== local.id) };
   }
@@ -119,8 +143,18 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     case "alert":
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: m.level, text: m.text }] };
     case "status":
-      return { ...state, busy: m.busy, deviceOnline: m.deviceOnline };
+      return {
+        ...state,
+        busy: m.busy,
+        deviceOnline: m.deviceOnline,
+        voice: m.voiceAvailable === undefined ? state.voice : { ...state.voice, available: m.voiceAvailable },
+      };
     case "error":
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: "error", text: m.message }] };
+    case "voice.heard":
+      return { ...state, captions: m.text, captionDone: true };
+    case "audio.chunk":
+    case "audio.stop":
+      return state; // handled by the audio player, outside the reducer
   }
 }

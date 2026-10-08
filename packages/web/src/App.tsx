@@ -5,21 +5,24 @@ import { OwnerMenu } from "./overlay/OwnerMenu";
 import { Overlay } from "./overlay/Overlay";
 import { Stage } from "./stage/Stage";
 import { useFriend } from "./useFriend";
+import { useVoiceKeys } from "./voice/keys";
 
 type Phase = "loading" | "setup" | "login" | "stage";
 
 function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
-  const { state, send, dispatch } = useFriend(onSignedOut);
+  const { state, send, dispatch, voice } = useFriend(onSignedOut);
+  useVoiceKeys(voice);
   const [muted, setMuted] = useState(false);
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
   return (
     <>
-      <Stage state={shown} send={send} dispatch={dispatch} />
+      <Stage state={shown} send={send} dispatch={dispatch} voice={voice} />
       <Overlay
         approval={state.approval}
         alerts={state.alerts}
         connection={state.connection}
         deviceOnline={state.deviceOnline}
+        voiceMode={state.voice.mode}
         send={send}
         dispatch={dispatch}
       />

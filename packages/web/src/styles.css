@@ -147,6 +147,16 @@ button { cursor: pointer; }
   position: absolute; top: max(10px, env(safe-area-inset-top)); right: 12px; padding: 6px 12px;
   font: 500 0.78rem var(--mono); letter-spacing: 0.08em; color: var(--warn); border: 1px solid var(--warn); background: rgba(0, 0, 0, 0.6);
 }
+.mic-indicator {
+  position: absolute; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+  font: 500 0.82rem var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: #ffd9a0;
+  background: rgba(0, 0, 0, 0.78); border: 1px solid var(--warn);
+}
+.mic-indicator i { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 10px var(--bad); animation: mic-pulse 1s ease-in-out infinite; }
+.mic-transcribing i { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
+@keyframes mic-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .mic-indicator i { animation: none; } }
 .toasts { position: absolute; top: max(48px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: grid; gap: 6px; width: min(420px, calc(100% - 24px)); }
 .toast { padding: 10px 14px; background: rgba(0, 0, 0, 0.82); border: 1px solid var(--edge); font-size: 0.92rem; }
 .toast-warn { border-color: var(--warn); color: #ffd9a0; }

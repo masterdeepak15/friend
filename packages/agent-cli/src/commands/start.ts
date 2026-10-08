@@ -1,13 +1,17 @@
-import { createApp, loadConfig } from "@friend/server";
+import { HttpVoiceService, SidecarProcess, createApp, loadConfig } from "@friend/server";
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IO } from "../cli";
 import { startDeviceNode, type DeviceNode } from "../node";
+import { QUIET_ENV, findVoiceDir, readMarker, voicePaths } from "./voice";
 
 export interface RunningFriend {
   app: Awaited<ReturnType<typeof createApp>>;
   port: number;
+  /** True while the local speech engine is running and healthy. */
+  voiceAvailable(): boolean;
   stop(): Promise<void>;
 }
 
@@ -15,6 +19,8 @@ export interface StartOptions {
   dataDir: string;
   port?: number;
   webDir?: string;
+  /** Folder containing the friend_voice Python package. */
+  voiceDir?: string;
   out: (line: string) => void;
 }
 
@@ -26,9 +32,35 @@ function findWebDir(explicit?: string): string | undefined {
 
 export async function startFriend(opts: StartOptions): Promise<RunningFriend> {
   const stored = loadConfig(opts.dataDir);
+
+  // Voice is optional: only when installed (`friend voice setup`) and enabled in the config.
+  const marker = stored.voice.enabled ? readMarker(opts.dataDir) : null;
+  const secret = randomBytes(24).toString("hex");
+  const sidecar = marker
+    ? new SidecarProcess({
+        command: marker.python,
+        args: [
+          "-m",
+          "friend_voice",
+          "--data-dir",
+          voicePaths(opts.dataDir).models,
+          "--stt-model",
+          stored.voice.sttModel,
+          "--tts-voice",
+          stored.voice.ttsVoice,
+        ],
+        token: secret,
+        cwd: opts.voiceDir ?? findVoiceDir(),
+        readyTimeoutMs: 180_000,
+        env: QUIET_ENV,
+      })
+    : null;
+  const voice = sidecar ? new HttpVoiceService({ baseUrl: () => sidecar.baseUrl(), token: secret }) : undefined;
+
   const app = await createApp({
     dataDir: opts.dataDir,
     webDir: findWebDir(opts.webDir),
+    voice,
     config: {
       ...(opts.port !== undefined ? { port: opts.port } : {}),
       apiKey: stored.apiKey ?? process.env.FRIEND_ANTHROPIC_KEY ?? null,
@@ -50,11 +82,39 @@ export async function startFriend(opts: StartOptions): Promise<RunningFriend> {
   });
   opts.out(`Friend is running at http://127.0.0.1:${port}`);
   if (!app.auth.hasOwner()) opts.out("No owner yet. Run: friend setup");
+
+  // The speech engine loads its models in the background; clients are told when voice goes up or down.
+  const voiceAvailable = () => voice?.available() ?? false;
+  let lastAvailable = voiceAvailable();
+  let watcher: NodeJS.Timeout | null = null;
+  if (sidecar) {
+    opts.out("Voice: starting the speech engine…");
+    sidecar
+      .start()
+      .then(() => {
+        opts.out("Voice is ready. Hold Space to talk.");
+        lastAvailable = voiceAvailable();
+        app.notifyStatus();
+      })
+      .catch((e: Error) => opts.out(`Voice is unavailable: could not start the speech engine (${e.message}). Run: friend voice setup`));
+    watcher = setInterval(() => {
+      const now = voiceAvailable();
+      if (now !== lastAvailable) {
+        lastAvailable = now;
+        app.notifyStatus();
+      }
+    }, 3000);
+    watcher.unref();
+  }
+
   return {
     app,
     port,
+    voiceAvailable,
     async stop() {
+      if (watcher) clearInterval(watcher);
       node.stop();
+      await sidecar?.stop();
       await app.stop();
     },
   };

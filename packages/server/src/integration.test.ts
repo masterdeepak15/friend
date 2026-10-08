@@ -8,6 +8,7 @@ import WebSocket from "ws";
 import { createApp } from "./app";
 import { FakeProvider } from "./provider/fake";
 import type { ProviderEvent } from "./provider/types";
+import { FakeVoice, type VoiceService } from "./voice/service";
 
 const owner = { password: "correct horse battery", pin: "123456", assistantName: "Jarvis" };
 const text = (t: string): ProviderEvent => ({ type: "text_delta", text: t });
@@ -22,12 +23,13 @@ let provider: FakeProvider;
 const nodes: DeviceNode[] = [];
 const sockets: WebSocket[] = [];
 
-async function boot(script: ProviderEvent[][]) {
+async function boot(script: ProviderEvent[][], voice?: VoiceService) {
   work = realpathSync(mkdtempSync(join(tmpdir(), "friend-int-")));
   provider = new FakeProvider(script);
   app = await createApp({
     dataDir: mkdtempSync(join(tmpdir(), "friend-data-")),
     provider,
+    voice,
     config: { port: 0, roots: [work] },
     expireIntervalMs: 100,
     approvalTimeoutMs: 5000,
@@ -86,6 +88,174 @@ afterEach(async () => {
   for (const s of sockets.splice(0)) s.terminate();
   for (const n of nodes.splice(0)) n.stop();
   await app.stop();
+});
+
+describe("voice end to end", () => {
+  const utter = (cookie: string, body = "AUDIO") =>
+    fetch(base() + "/api/voice/utterance", { method: "POST", headers: { cookie, "content-type": "audio/webm" }, body });
+  const clipIds = (c: Client) => [...new Set(c.of("audio.chunk").map((m) => m.id))];
+
+  it("hears the owner, answers in captions, and speaks the reply sentence by sentence", async () => {
+    const voice = new FakeVoice({ transcripts: ["status please"] });
+    await boot([[text("Hello boss. All good."), done]], voice);
+    const cookie = await login();
+    const c = await Client.connect(cookie);
+    const res = await utter(cookie);
+    expect(await res.json()).toEqual({ text: "status please" });
+    await until(() => clipIds(c).length === 2);
+    expect(c.of("voice.heard").map((m) => m.text)).toEqual(["status please"]);
+    expect(c.captions()).toContain("Hello boss.");
+    expect(JSON.stringify(provider.calls[0]!.messages)).toContain("status please");
+    expect(voice.synthesized).toEqual(["Hello boss.", "All good."]);
+    expect(c.of("audio.chunk").filter((m) => m.last)).toHaveLength(2);
+  });
+
+  it("does not start a turn or say anything for an empty or punctuation-only transcript", async () => {
+    const voice = new FakeVoice({ transcripts: ["", " ... ", "?!"] });
+    await boot([[text("should not run"), done]], voice);
+    const cookie = await login();
+    const c = await Client.connect(cookie);
+    for (let i = 0; i < 3; i++) expect(await (await utter(cookie)).json()).toEqual({ text: "" });
+    await new Promise((r) => setTimeout(r, 150));
+    expect(provider.calls).toHaveLength(0);
+    expect(c.of("voice.heard")).toEqual([]);
+    expect(voice.synthesized).toEqual([]);
+  });
+
+  it("does not speak replies to typed messages", async () => {
+    const voice = new FakeVoice();
+    await boot([[text("Typed reply."), done]], voice);
+    const c = await Client.connect(await login());
+    c.send({ type: "chat.send", text: "hello" });
+    await until(() => c.of("caption.end").length > 0);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(c.of("audio.chunk")).toEqual([]);
+    expect(voice.synthesized).toEqual([]);
+  });
+
+  it("stops speaking on voice.interrupt: audio.stop is sent and no later clip follows", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let n = 0;
+    const slowSecond: VoiceService = {
+      available: () => true,
+      transcribe: async () => ({ text: "talk to me", language: "en" }),
+      synthesize: async (t) => {
+        if (n++ === 1) await gate;
+        return Buffer.from("RIFF" + t);
+      },
+    };
+    await boot([[text("First part. Second part."), done]], slowSecond);
+    const cookie = await login();
+    const c = await Client.connect(cookie);
+    await utter(cookie);
+    await until(() => clipIds(c).length === 1);
+    c.send({ type: "voice.interrupt" });
+    await until(() => c.of("audio.stop").length > 0);
+    release();
+    await new Promise((r) => setTimeout(r, 150));
+    expect(clipIds(c)).toHaveLength(1);
+  });
+
+  it("reports voice availability in status and answers 503 when it is unavailable", async () => {
+    await boot([[text("x"), done]], new FakeVoice({ available: false }));
+    const cookie = await login();
+    const c = await Client.connect(cookie);
+    await until(() => c.of("status").length > 0);
+    expect(c.of("status")[0]!.voiceAvailable).toBe(false);
+    expect((await utter(cookie)).status).toBe(503);
+  });
+
+  it("reports voice as unavailable when no voice service is configured", async () => {
+    await boot([[text("x"), done]]);
+    const cookie = await login();
+    const c = await Client.connect(cookie);
+    await until(() => c.of("status").length > 0);
+    expect(c.of("status")[0]!.voiceAvailable).toBe(false);
+    expect((await utter(cookie)).status).toBe(503);
+  });
+
+  it("an emergency lock stops a recording that is still being transcribed: no turn starts afterwards", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const slow: VoiceService = {
+      available: () => true,
+      transcribe: async () => {
+        await gate;
+        return { text: "delete everything", language: "en" };
+      },
+      synthesize: async (t) => Buffer.from("RIFF" + t),
+    };
+    await boot([[text("should never run"), done]], slow);
+    const cookie = await login();
+    const c = await Client.connect(cookie);
+    const pending = utter(cookie);
+    await new Promise((r) => setTimeout(r, 100)); // the upload is now waiting on transcription
+    expect((await post("/api/lock", {}, { cookie })).status).toBe(200);
+    release();
+    const res = await pending;
+    expect(res.status).toBe(401);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(provider.calls).toHaveLength(0);
+    expect(c.of("voice.heard")).toEqual([]);
+    expect(app.agent.isBusy()).toBe(false);
+  });
+
+  it("does not speak a reply that was produced after an emergency lock", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const voice = new FakeVoice({ transcripts: ["tell me something"] });
+    await boot([[text("Here is a secret."), done]], voice);
+    const slowProvider = {
+      id: "slow",
+      async *stream() {
+        await gate;
+        yield { type: "text_delta", text: "Here is a secret." } as ProviderEvent;
+        yield { type: "done" } as ProviderEvent;
+      },
+    };
+    (app.agent as unknown as { deps: { provider: unknown } }).deps.provider = slowProvider;
+    const cookie = await login();
+    await utter(cookie);
+    await until(() => app.agent.isBusy());
+    await post("/api/lock", {}, { cookie });
+    release();
+    await until(() => !app.agent.isBusy());
+    await new Promise((r) => setTimeout(r, 200));
+    expect(voice.synthesized).toEqual([]);
+  });
+
+  it("answers 409 instead of silently dropping speech while the agent is busy", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const voice = new FakeVoice({ transcripts: ["first", "second"] });
+    await boot([[text("ok"), done]], voice);
+    (app.agent as unknown as { deps: { provider: unknown } }).deps.provider = {
+      id: "slow",
+      async *stream() {
+        await gate;
+        yield { type: "text_delta", text: "ok" } as ProviderEvent;
+        yield { type: "done" } as ProviderEvent;
+      },
+    };
+    const cookie = await login();
+    const c = await Client.connect(cookie);
+    expect((await utter(cookie)).status).toBe(200);
+    await until(() => app.agent.isBusy());
+    const second = await utter(cookie);
+    expect(second.status).toBe(409);
+    expect(c.of("voice.heard").map((m) => m.text)).toEqual(["first"]);
+    expect(voice.transcribed).toHaveLength(1); // the second recording was refused before any transcription work
+    release();
+    await until(() => !app.agent.isBusy());
+  });
+
+  it("returns 502 and starts no turn when transcription fails", async () => {
+    await boot([[text("x"), done]], new FakeVoice({ failTranscribe: true }));
+    const cookie = await login();
+    expect((await utter(cookie)).status).toBe(502);
+    expect(provider.calls).toHaveLength(0);
+  });
 });
 
 describe("end to end", () => {

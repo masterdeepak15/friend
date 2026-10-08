@@ -1,5 +1,5 @@
 import type { ClientMsg } from "@friend/protocol";
-import { Component, useEffect, useState, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { CommandBar } from "../input/CommandBar";
 import { CATALOG } from "../objects/objects";
 import { Presence } from "../presence/Presence";
@@ -36,15 +36,67 @@ export interface StageProps {
   state: StageViewState;
   send: (m: ClientMsg) => void;
   dispatch: (a: LocalAction) => void;
+  /** Push-to-talk by long-pressing the stage; omitted when voice is not wired up. */
+  voice?: { pressStart(): void; pressEnd(): void; blur?(): void };
 }
 
+const LONG_PRESS_MS = 350;
+
 /** Layers 1–3: ambient background, voice presence, agent-placed objects, captions and the hidden command bar. */
-export function Stage({ state, send, dispatch }: StageProps) {
+export function Stage({ state, send, dispatch, voice }: StageProps) {
   const viewport = useViewport();
   const [openRequest, setOpenRequest] = useState(0);
   const narrow = viewport.w < 600;
   const corner = state.scene === "focus" || state.scene === "multi";
   const style = { "--accent": state.mood.accent, "--intensity": state.mood.intensity } as React.CSSProperties;
+  const mode = state.voice.mode;
+  const presenceState = mode === "listening" ? "listening" : mode === "speaking" ? "speaking" : mode === "transcribing" ? "thinking" : state.presence.state;
+  const presenceAmplitude = mode === "listening" || mode === "speaking" ? state.voice.level : state.presence.amplitude;
+  const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; down: boolean; talking: boolean; id: number | null }>({
+    timer: null,
+    down: false,
+    talking: false,
+    id: null,
+  });
+  const startPress = (e: React.PointerEvent) => {
+    if (!(e.target === e.currentTarget || (e.target as HTMLElement).closest("[data-presence]"))) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return; // right and middle buttons are not a press
+    const p = press.current;
+    if (p.down && p.id !== null && e.pointerId !== p.id) return; // a second finger while one is already down
+    if (p.timer) clearTimeout(p.timer); // never stack timers
+    p.down = true;
+    p.talking = false;
+    p.id = typeof e.pointerId === "number" ? e.pointerId : null;
+    try {
+      // keep receiving the release even if the pointer leaves the stage or the window
+      if (p.id !== null) (e.currentTarget as HTMLElement).setPointerCapture?.(p.id);
+    } catch {
+      /* capture is best effort */
+    }
+    p.timer = voice
+      ? setTimeout(() => {
+          if (!p.down) return;
+          p.talking = true;
+          voice.pressStart();
+        }, LONG_PRESS_MS)
+      : null;
+  };
+  const endPress = (e: React.PointerEvent, cancelled: boolean) => {
+    const p = press.current;
+    if (!p.down) return;
+    if (p.id !== null && typeof e.pointerId === "number" && e.pointerId !== p.id) return; // another finger
+    p.down = false;
+    p.id = null;
+    if (p.timer) clearTimeout(p.timer);
+    p.timer = null;
+    if (p.talking) {
+      p.talking = false;
+      if (cancelled) voice?.blur?.(); // a cancelled gesture discards the recording
+      else voice?.pressEnd();
+    } else if (!cancelled) {
+      setOpenRequest((n) => n + 1); // a short tap opens the text bar
+    }
+  };
   const entries = useGhosts(state.objects, prefersReducedMotion() ? 0 : EXIT_MS);
   const autos = entries.filter((e) => e.object.placement === "auto");
   const fixed = entries.filter((e) => e.object.placement !== "auto");
@@ -81,14 +133,15 @@ export function Stage({ state, send, dispatch }: StageProps) {
       data-testid="stage"
       className="stage"
       style={style}
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget || (e.target as HTMLElement).closest("[data-presence]")) setOpenRequest((n) => n + 1);
-      }}
+      onPointerDown={startPress}
+      onPointerUp={(e) => endPress(e, false)}
+      onPointerCancel={(e) => endPress(e, true)}
+      onContextMenu={(e) => voice && e.preventDefault()}
     >
       <div className="ambient" aria-hidden="true" style={{ opacity: 0.35 + 0.65 * state.mood.intensity }} />
       <Presence
-        state={state.presence.state}
-        amplitude={state.presence.amplitude}
+        state={presenceState}
+        amplitude={presenceAmplitude}
         pulse={state.presence.pulse}
         mode={corner ? "corner" : "full"}
         accent={state.mood.accent}

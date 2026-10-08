@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApprovalRespond, ClientMsg, Placement, StageCommand, StageObject } from "./index";
+import { ApprovalRespond, ClientMsg, Placement, ServerMsg, StageCommand, StageObject } from "./index";
 
 const obj = { id: "a", type: "card", props: { text: "hi" }, placement: "center" };
 
@@ -12,6 +12,30 @@ describe("stage schemas", () => {
   });
   it("rejects an object type outside the catalog", () => {
     expect(StageObject.safeParse({ ...obj, type: "html" }).success).toBe(false);
+  });
+});
+
+describe("voice messages", () => {
+  const chunk = { type: "audio.chunk", id: "a1", seq: 0, last: false, mime: "audio/wav", data: "UklGRg==" };
+  it("accepts voice.heard, audio.chunk and audio.stop from the server", () => {
+    expect(ServerMsg.safeParse({ type: "voice.heard", text: "hello" }).success).toBe(true);
+    expect(ServerMsg.safeParse(chunk).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "audio.stop" }).success).toBe(true);
+  });
+  it("rejects malformed audio chunks", () => {
+    expect(ServerMsg.safeParse({ ...chunk, seq: -1 }).success).toBe(false);
+    expect(ServerMsg.safeParse({ ...chunk, seq: 1.5 }).success).toBe(false);
+    expect(ServerMsg.safeParse({ ...chunk, data: 5 }).success).toBe(false);
+    expect(ServerMsg.safeParse({ ...chunk, last: "yes" }).success).toBe(false);
+    expect(ServerMsg.safeParse({ type: "audio.chunk", id: "a1" }).success).toBe(false);
+  });
+  it("carries voice availability on status and keeps old status messages valid", () => {
+    expect(ServerMsg.safeParse({ type: "status", busy: false, deviceOnline: true, voiceAvailable: true }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "status", busy: false, deviceOnline: true }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "status", busy: false, deviceOnline: true, voiceAvailable: "yes" }).success).toBe(false);
+  });
+  it("accepts voice.interrupt from the client", () => {
+    expect(ClientMsg.safeParse({ type: "voice.interrupt" }).success).toBe(true);
   });
 });
 
