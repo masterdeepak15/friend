@@ -39,9 +39,27 @@ export interface VoiceConfig {
   ttsVoice: string;
   /** Force a spoken language (e.g. "hi"); null detects it automatically. */
   language: string | null;
+  /** Speaker match at or above this is the owner (0..1). */
+  accept: number;
+  /** Speaker match at or above this but below `accept` asks for the PIN; below it the voice is a guest. */
+  challenge: number;
 }
 
-export const DEFAULT_VOICE: VoiceConfig = { enabled: true, sttModel: "base", ttsVoice: "en_US-lessac-medium", language: null };
+export const DEFAULT_VOICE: VoiceConfig = {
+  enabled: true,
+  sttModel: "base",
+  ttsVoice: "en_US-lessac-medium",
+  language: null,
+  accept: 0.72,
+  challenge: 0.58,
+};
+
+/** Bad thresholds in an edited config must never make strangers look like the owner, so they fall back to the defaults. */
+export function sanitizeVoice(v: VoiceConfig): VoiceConfig {
+  const ok = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
+  if (ok(v.accept) && ok(v.challenge) && v.accept > v.challenge) return v;
+  return { ...v, accept: DEFAULT_VOICE.accept, challenge: DEFAULT_VOICE.challenge };
+}
 
 export const DEFAULT_DESTRUCTIVE_PATTERNS = [
   String.raw`\brm\s+(-[a-z]*r|-[a-z]*f)`,
@@ -122,7 +140,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     ...stored,
     destructivePatterns,
     ollama: { ...DEFAULT_OLLAMA, ...stored.ollama },
-    voice: { ...DEFAULT_VOICE, ...stored.voice },
+    voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
     dataDir,
   };
 }
