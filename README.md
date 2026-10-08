@@ -2,7 +2,7 @@
 
 A self-hosted personal AI assistant. It runs on your PC, talks to you from any screen over WebSocket, uses tools on your machine with risk-based approvals, and controls a full-screen sci-fi "stage" itself.
 
-Phase 1: secure login, agent loop with Claude, CLI device node, approvals with PIN, and a minimal stage with a particle-sphere presence. Phase 2a: chart, gauge, timeline and graph objects, automatic layout, fade-out, orb and ring voice styles and mood intensity. Phase 5a: local voice. Hold Space and speak; Friend answers aloud. Phase 5b: only your voice commands it. Phase 2b: the agent can look through your camera, one approved picture at a time. Voice, camera, memory, heartbeat, taskboard and the plugin store come in later phases. See `docs/superpowers/specs` and `docs/superpowers/plans`.
+Phase 1: secure login, agent loop with Claude, CLI device node, approvals with PIN, and a minimal stage with a particle-sphere presence. Phase 2a: chart, gauge, timeline and graph objects, automatic layout, fade-out, orb and ring voice styles and mood intensity. Phase 5a: local voice. Hold Space and speak; Friend answers aloud. Phase 5b: only your voice commands it. Phase 2b: the agent can look through your camera, one approved picture at a time. Also built: memory (notes it keeps about you), tasks and reminders with a heartbeat, free-form pages in an isolated frame, a Docker code sandbox, and a plugin store. Models: Claude, or a local model through Ollama. See `docs/superpowers/specs` and `docs/superpowers/plans`.
 
 ## Quick start (development)
 
@@ -56,6 +56,16 @@ Tell Friend "remember that my sister is Priya" and it keeps a short note. The 20
 - Up to 200 notes of 500 characters each, stored in the local database. When full it refuses and asks you to forget something; it never drops notes silently.
 - You control all of it: `friend memory list`, `friend memory forget <number>`, `friend memory clear` (asks for the PIN). You can also just say "forget note 7".
 - Notes are treated as **data about you, never as instructions**, so text inside a note (or text a web page tricked the agent into saving) cannot give the agent orders. Guests and unrecognized voices never see your notes. The agent is told never to save passwords, PINs or keys.
+
+## Plugins
+
+Plugins add **skills** (instructions the agent loads when they fit, for example "write my stand-up") and **tools** (small programs the agent can call, for example an exact unit converter). Three examples are bundled in `plugins/`: `unit-converter`, `standup-writer`, `rubber-duck`.
+
+- Manage them from the screen (Esc, then **Plugins**) or the terminal: `friend plugin catalog | list | install <name|folder> | enable <id> | disable <id> | remove <id>`.
+- **Installing shows what is inside and needs your confirmation (the PIN in the browser).** Switching a plugin on needs the PIN too; switching off and removing do not.
+- A plugin's tools can never be more powerful than the code sandbox: they run in a throwaway Docker container (no network, no access to your files, time and memory limits), get their arguments as `/work/args.json`, and **ask for your approval on every call**. Skills are text only: they give the model words, never power, and cannot override your rules or the approval system.
+- Plugins are validated strictly (lowercase ids, size and file-count limits, no links, every file must be inside the plugin folder) and re-validated each time Friend loads; a broken plugin is switched off with a visible reason.
+- Make your own: a folder with `plugin.json` plus the files it names, then `friend plugin install ./my-plugin`. See `docs/superpowers/specs/2026-10-08-friend-plugins-design.md` for the format. Downloading plugins from the internet is deliberately not supported yet (it needs signed packages to be safe).
 
 ## Running code safely (Docker)
 

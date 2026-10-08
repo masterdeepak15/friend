@@ -206,6 +206,33 @@ function toolDef(m: PluginManifest, t: PluginManifest["tools"][number], code: st
   };
 }
 
+export const isPluginId = (id: string): boolean => id.length >= 1 && id.length <= 40 && NAME.test(id);
+
+export interface CatalogEntry {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  tools: number;
+  skills: number;
+  /** Set when the bundled plugin itself is broken; it cannot be installed. */
+  error: string | null;
+}
+
+/** The bundled plugins: one folder each. Anything that does not validate is listed with its error instead of being hidden. */
+export function listCatalog(dir: string): CatalogEntry[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((d) => isPluginId(d) && lstatSync(join(dir, d)).isDirectory())
+    .sort()
+    .map((id) => {
+      const r = inspectPlugin(join(dir, id));
+      if (!r.ok) return { id, name: id, version: "", description: "", tools: 0, skills: 0, error: r.error };
+      const m = r.manifest;
+      return { id, name: m.name, version: m.version, description: m.description, tools: m.tools.length, skills: m.skills.length, error: null };
+    });
+}
+
 /** Installed plugins: skills (instructions) and tools (programs for the code sandbox). Plugins are re-checked every time they load. */
 export class Plugins {
   private cache: Map<string, Inspected> | null = null;

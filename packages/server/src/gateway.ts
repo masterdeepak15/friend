@@ -39,11 +39,23 @@ export interface GatewayDeps {
   onVoiceUtterance?: (session: Session, audio: Buffer, mime: string, ip: string) => Promise<{ text: string }>;
   /** Teaching Friend the owner's voice; the routes answer 503 without it. */
   voiceEnroll?: VoiceEnrollApi;
+  /** Managing plugins from the owner's screen; the routes answer 503 without it. */
+  plugins?: PluginsApi;
   /** A picture arrived for a camera request: "unknown" when nobody is waiting for that id, "invalid" when it is not a JPEG. */
   onCameraFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
 }
 
 export const MAX_CAMERA_FRAME_BYTES = 2 * 1024 * 1024;
+
+/** What the plugin routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
+export interface PluginsApi {
+  list(): unknown;
+  /** Installs a bundled plugin; needs the owner's PIN because it adds capabilities. */
+  install(id: string, pin: string, ip: string): Promise<{ id: string; upgraded: boolean }>;
+  /** Switching on needs the PIN; switching off does not. */
+  setEnabled(id: string, enabled: boolean, pin: string | undefined, ip: string): Promise<void>;
+  remove(id: string): void;
+}
 
 /** What the enrollment routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
 export interface VoiceEnrollApi {
@@ -264,6 +276,49 @@ export function createGateway(deps: GatewayDeps) {
       return { ok: true };
     },
   );
+
+  // ---- plugins (owner session only) ----
+  const pluginWindow = new SlidingWindow(30, 60_000);
+  const pluginGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    const session = token ? auth.resolveSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "Unauthorized" });
+    if (!pluginWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+    if (!deps.plugins) return reply.code(503).send({ error: "Plugins are not available" });
+  };
+  const pluginError = (reply: FastifyReply, e: unknown, what: string) => {
+    if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+    audit.log("owner", "plugin.failed", { what, message: (e as Error).message }); // raw detail stays in the audit log
+    return reply.code(500).send({ error: "That did not work. Try again." });
+  };
+  app.get("/api/plugins", { onRequest: pluginGuard }, async () => deps.plugins!.list());
+  app.post("/api/plugins/install", { onRequest: pluginGuard }, async (req, reply) => {
+    const body = z.object({ id: z.string().max(64), pin: z.string().min(1).max(32) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Choose a plugin and enter your PIN" });
+    try {
+      return await deps.plugins!.install(body.data.id, body.data.pin, req.ip);
+    } catch (e) {
+      return pluginError(reply, e, "install");
+    }
+  });
+  app.post<{ Params: { id: string } }>("/api/plugins/:id/enabled", { onRequest: pluginGuard }, async (req, reply) => {
+    const body = z.object({ enabled: z.boolean(), pin: z.string().min(1).max(32).optional() }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Invalid input" });
+    try {
+      await deps.plugins!.setEnabled(req.params.id, body.data.enabled, body.data.pin, req.ip);
+      return { ok: true };
+    } catch (e) {
+      return pluginError(reply, e, "enable");
+    }
+  });
+  app.delete<{ Params: { id: string } }>("/api/plugins/:id", { onRequest: pluginGuard }, async (req, reply) => {
+    try {
+      deps.plugins!.remove(req.params.id);
+      return { ok: true };
+    } catch (e) {
+      return pluginError(reply, e, "remove");
+    }
+  });
 
   // ---- voice enrollment (owner session only) ----
   const enrollWindow = new SlidingWindow(30, 60_000);

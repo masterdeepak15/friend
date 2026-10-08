@@ -7,13 +7,15 @@ import { CameraBroker } from "./camera";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
-import { Plugins } from "./plugins";
+import { Plugins, isPluginId, listCatalog } from "./plugins";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Tasks } from "./tasks";
 import { join } from "node:path";
 import { loadConfig, type Config } from "./config";
 import { openDb } from "./db";
 import { DeviceHub } from "./devices";
-import { createGateway, type ClientConn } from "./gateway";
+import { createGateway, type ClientConn, type PluginsApi } from "./gateway";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import { OllamaProvider } from "./provider/ollama";
@@ -45,6 +47,8 @@ export interface AppOptions {
   heartbeatMs?: number;
   /** Where the agent's programs run. Defaults to throwaway Docker containers. */
   codeBox?: Pick<CodeBox, "run">;
+  /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
+  pluginCatalogDir?: string;
 }
 
 /** Used when no API key is configured: every turn ends with a setup notice on screen. */
@@ -227,6 +231,37 @@ export async function createApp(opts: AppOptions) {
     await runVoiceTurn(held.text, conn.ip, epoch);
   }
 
+  const catalogDir = opts.pluginCatalogDir ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../..", "plugins");
+  const pluginsApi: PluginsApi = {
+    list: () => {
+      const installed = plugins.list();
+      const have = new Set(installed.map((p) => p.id));
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })) };
+    },
+    install: async (id, pin, ip) => {
+      if (!isPluginId(id)) throw new HttpError(400, "That is not a plugin name.");
+      if (!listCatalog(catalogDir).some((c) => c.id === id)) throw new HttpError(404, "That plugin is not in the catalog.");
+      await requirePin(pin, ip);
+      const r = plugins.install(join(catalogDir, id));
+      if (!r.ok) throw new HttpError(400, `That plugin cannot be installed: ${r.error}`);
+      audit.log("owner", "plugin.installed", { id: r.id, upgraded: r.upgraded, ip });
+      return { id: r.id, upgraded: r.upgraded };
+    },
+    setEnabled: async (id, enabled, pin, ip) => {
+      if (!isPluginId(id) || !plugins.list().some((p) => p.id === id)) throw new HttpError(404, "There is no such plugin.");
+      if (enabled) {
+        if (!pin) throw new HttpError(400, "Enter your PIN to switch a plugin on.");
+        await requirePin(pin, ip);
+      }
+      plugins.setEnabled(id, enabled);
+      audit.log("owner", enabled ? "plugin.enabled" : "plugin.disabled", { id, ip });
+    },
+    remove: (id) => {
+      if (!isPluginId(id) || !plugins.remove(id)) throw new HttpError(404, "There is no such plugin.");
+      audit.log("owner", "plugin.removed", { id });
+    },
+  };
+
   const gateway = createGateway({
     config,
     auth,
@@ -310,6 +345,7 @@ export async function createApp(opts: AppOptions) {
           },
         }
       : undefined,
+    plugins: pluginsApi,
     onCameraFrame: (id, jpeg) => {
       const out = camera.deliver(id, jpeg);
       if (out === "ok") {
