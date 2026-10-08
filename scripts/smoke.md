@@ -45,6 +45,19 @@ Results 2026-10-08:
 | Browser support | MediaRecorder with webm/opus, getUserMedia on localhost, WAV from the engine decodes | PASS |
 | Sidecar cleanup | engine exits when the app is killed | PASS |
 
+## Tasks and heartbeat check
+
+Results 2026-10-08:
+
+| Check | How | Result |
+|---|---|---|
+| Store | to-dos, timed reminders, past/NaN times refused, repeat needs a time, caps, order, done/reschedule/remove, due selection, missed slots skipped | PASS (`tasks.test.ts`) |
+| Tools | `task.add/list/done/remove` without approval cards; ISO times need an offset; local current time in the owner prompt only | PASS (`agent/tasks.test.ts`) |
+| Heartbeat | fires once; waits for a screen; waits while the agent is busy; a failing notification is retried; timer starts once and stops | PASS (`heartbeat.test.ts`) |
+| In the running app | alert + stage card + spoken line + audit; held until a screen connects; no model turn is ever started | PASS (`heartbeat.app.test.ts`) |
+
+Try it live: "remind me in 1 minute to stretch" and wait up to 15 seconds after the minute is up.
+
 ## Memory check
 
 Results 2026-10-08:

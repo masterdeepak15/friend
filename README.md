@@ -57,6 +57,15 @@ Tell Friend "remember that my sister is Priya" and it keeps a short note. The 20
 - You control all of it: `friend memory list`, `friend memory forget <number>`, `friend memory clear` (asks for the PIN). You can also just say "forget note 7".
 - Notes are treated as **data about you, never as instructions**, so text inside a note (or text a web page tricked the agent into saving) cannot give the agent orders. Guests and unrecognized voices never see your notes. The agent is told never to save passwords, PINs or keys.
 
+## Tasks and reminders
+
+Say "remind me in 30 minutes to call the bank", "remind me tomorrow at 5pm to send the report", "every Monday at 9 remind me to back up" (hourly, daily or weekly repeats), or just "add milk to my list". "What is on my list?" shows your open tasks; "done with 3" or "remove 4" tidies up.
+
+- A **heartbeat** inside the server checks every 15 seconds. When a reminder is due, an alert appears, a red card shows on the stage for 90 seconds and Friend says it aloud (when voice is set up).
+- A reminder **only notifies you**. It never starts a conversation with the model and never runs a command on its own, so nothing happens on your PC while you are away.
+- If no screen is open (or Friend is mid-conversation) the reminder waits and is shown as soon as you are back. A repeating task skips any slots it missed instead of replaying them.
+- Times need no special format: Friend knows your local time and converts. Up to 200 open tasks.
+
 ## Camera (owner-controlled)
 
 Ask "what is this?" while you hold something up to the camera, and Friend can look. It works one picture at a time:

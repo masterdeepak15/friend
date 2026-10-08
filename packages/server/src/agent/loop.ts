@@ -5,6 +5,7 @@ import type { CameraBroker } from "../camera";
 import type { Config } from "../config";
 import type { Db } from "../db";
 import type { Memory } from "../memory";
+import { localIso, type Tasks } from "../tasks";
 import type { DeviceHub } from "../devices";
 import { classifyShell } from "../policy/classify";
 import type { PolicyEngine } from "../policy/engine";
@@ -34,6 +35,8 @@ export interface AgentDeps {
   camera?: Pick<CameraBroker, "request">;
   /** The owner's saved notes. Without it the memory tools report they are unavailable. */
   memory?: Memory;
+  /** The owner's to-dos and reminders. Without it the task tools report they are unavailable. */
+  tasks?: Tasks;
 }
 
 export interface TurnCtx {
@@ -101,7 +104,7 @@ export class Agent {
         let userFacing = false;
         // read fresh each step, so a note saved earlier in this turn is visible right away; guests never see notes
         const notes = !guest && d.memory ? d.memory.recent(NOTES_IN_PROMPT).map((m) => `#${m.id} ${m.text}`) : undefined;
-        const system = buildSystemPrompt(d.assistantName(), d.stage.summary(), guest ? "guest" : "owner", notes);
+        const system = buildSystemPrompt(d.assistantName(), d.stage.summary(), guest ? "guest" : "owner", notes, localIso(new Date(d.tasks?.now() ?? Date.now())));
         for await (const ev of d.provider.stream({ system, messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
             if (!assistantText) stage({ cmd: "presence", state: "speaking" });
@@ -161,6 +164,50 @@ export class Agent {
       this.busy = false;
       emit({ type: "status", busy: false, deviceOnline: d.devices.hasOnline() });
     }
+  }
+
+  private runTaskTool(name: string, args: Record<string, unknown>): { ok: boolean; text: string } {
+    const { tasks, audit } = this.deps;
+    if (!tasks) return { ok: false, text: "Tasks are not available." };
+    const describe = (t: { dueAt: number | null; repeat: string | null }) =>
+      t.dueAt === null ? "" : ` (due ${localIso(new Date(t.dueAt))}${t.repeat ? `, repeats ${t.repeat}` : ""})`;
+
+    if (name === "task.add") {
+      const { title, inMinutes, dueAt, repeat } = args as { title: string; inMinutes?: number; dueAt?: string; repeat?: "hourly" | "daily" | "weekly" };
+      if (inMinutes !== undefined && dueAt !== undefined) return { ok: false, text: "Give either inMinutes or dueAt, not both." };
+      let due: number | null = null;
+      if (inMinutes !== undefined) due = tasks.now() + inMinutes * 60_000;
+      if (dueAt !== undefined) {
+        // a time without an offset would silently be read in the wrong zone
+        if (!/(Z|[+-]\d\d:?\d\d)$/i.test(dueAt) || Number.isNaN(Date.parse(dueAt))) {
+          return { ok: false, text: "Give the time as ISO 8601 with an offset, like 2026-10-09T17:00:00+05:30." };
+        }
+        due = Date.parse(dueAt);
+      }
+      const r = tasks.add({ title, dueAt: due, repeat });
+      if (!r.ok) return { ok: false, text: r.error };
+      audit.log("agent", "task.add", { id: r.id, due, repeat: repeat ?? null });
+      return { ok: true, text: `Added task #${r.id}${describe({ dueAt: due, repeat: repeat ?? null })}.` };
+    }
+    if (name === "task.list") {
+      const open = tasks.list();
+      return { ok: true, text: open.length ? open.map((t) => `#${t.id} ${t.title}${describe(t)}`).join("\n") : "No open tasks." };
+    }
+    if (name === "task.done") {
+      const id = Number(args.id);
+      const r = tasks.done(id);
+      if (!r.ok) return { ok: false, text: r.error };
+      audit.log("agent", "task.done", { id });
+      const next = r.rescheduled ? tasks.list().find((t) => t.id === id) : undefined;
+      return { ok: true, text: r.rescheduled && next?.dueAt ? `Marked #${id} done. Next reminder: ${localIso(new Date(next.dueAt))}.` : `Marked #${id} done.` };
+    }
+    if (name === "task.remove") {
+      const id = Number(args.id);
+      if (!tasks.remove(id)) return { ok: false, text: "No task with that number." };
+      audit.log("agent", "task.remove", { id });
+      return { ok: true, text: `Removed task #${id}.` };
+    }
+    return { ok: false, text: `Unknown tool: ${name}` };
   }
 
   private runMemoryTool(name: string, args: Record<string, unknown>): { ok: boolean; text: string } {
@@ -230,8 +277,8 @@ export class Agent {
       approvedOutside = !insideRoots;
     }
 
-    if (call.name.startsWith("memory.")) {
-      const out = this.runMemoryTool(call.name, args);
+    if (call.name.startsWith("memory.") || call.name.startsWith("task.")) {
+      const out = call.name.startsWith("memory.") ? this.runMemoryTool(call.name, args) : this.runTaskTool(call.name, args);
       return out.ok ? { text: out.text, isError: false } : fail(out.text);
     }
 

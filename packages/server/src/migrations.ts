@@ -82,4 +82,19 @@ create table memories (
 );
 `,
   },
+  {
+    id: 4,
+    sql: `
+create table tasks (
+  id integer primary key autoincrement,
+  title text not null,
+  due_at integer,
+  repeat text check (repeat in ('hourly', 'daily', 'weekly')),
+  status text not null default 'open' check (status in ('open', 'done')),
+  created_at integer not null,
+  fired_at integer
+);
+create index tasks_due on tasks (status, due_at);
+`,
+  },
 ];
