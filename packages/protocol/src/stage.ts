@@ -17,7 +17,7 @@ export type PresenceState = z.infer<typeof PresenceState>;
 export const PresenceStyle = z.enum(["sphere", "orb", "ring"]);
 export type PresenceStyle = z.infer<typeof PresenceStyle>;
 
-export const OBJECT_TYPES = ["card", "stat", "list", "table", "code", "chart", "gauge", "timeline", "graph"] as const;
+export const OBJECT_TYPES = ["card", "stat", "list", "table", "code", "chart", "gauge", "timeline", "graph", "sandbox"] as const;
 
 export const StageObject = z.object({
   id: z.string().min(1).max(64),

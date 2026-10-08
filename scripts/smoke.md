@@ -45,6 +45,17 @@ Results 2026-10-08:
 | Browser support | MediaRecorder with webm/opus, getUserMedia on localhost, WAV from the engine decodes | PASS |
 | Sidecar cleanup | engine exits when the app is killed | PASS |
 
+## Sandbox (free-form pages) check
+
+Results 2026-10-08:
+
+| Check | How | Result |
+|---|---|---|
+| Frame attributes | `sandbox` is exactly `allow-scripts`; no `allow-same-origin`; `referrerpolicy=no-referrer`; `allow=""`; page in `srcdoc` | PASS (`objects/sandbox.test.tsx`) |
+| Policy | `default-src 'none'`, inline script/style, `data:`/`blob:` images, no form action or base; policy precedes agent content; agent text cannot rewrite it | PASS |
+| Size and type | non-text or over 100,000 characters refused on show and update, in words the model can read | PASS (`stage.sandbox.test.ts`) |
+| Real Chrome | demo scene: animated canvas renders; self-test: network blocked, parent app blocked, storage blocked | PASS |
+
 ## Tasks and heartbeat check
 
 Results 2026-10-08:

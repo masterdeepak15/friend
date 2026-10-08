@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { sanitizeMarkdown } from "../stage/sanitize";
 import { Chart, Gauge, Graph, Timeline } from "./charts";
+import { Sandbox } from "./sandbox";
 
 type Props = Record<string, unknown>;
 
@@ -99,4 +100,5 @@ export const CATALOG = {
   gauge: Gauge,
   timeline: Timeline,
   graph: Graph,
+  sandbox: Sandbox,
 } as const;

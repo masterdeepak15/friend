@@ -25,6 +25,24 @@ const clear: Call = { name: "stage.clear", args: {} };
 const hours = Array.from({ length: 12 }, (_, i) => `${i * 2}:00`);
 const wave = (base: number, amp: number, shift: number) => hours.map((_, i) => Math.round(base + amp * Math.sin(i / 1.7 + shift)));
 
+/** A page the "agent" made: animated particles, plus a self-test that tries to break out of its frame and reports what happened. */
+const SANDBOX_DEMO = `<style>body{display:grid;place-items:center;height:100vh;overflow:hidden}canvas{position:absolute;inset:0}
+#t{position:relative;z-index:1;font:13px/1.6 ui-monospace,monospace;background:#000b;padding:10px 14px;border:1px solid #3fd8ff55}</style>
+<canvas id=c></canvas><div id=t>Running inside an isolated frame…</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+function fit(){c.width=innerWidth;c.height=innerHeight}fit();onresize=fit;
+const P=Array.from({length:110},()=>({a:Math.random()*6.28,r:30+Math.random()*130,s:.2+Math.random()*.8}));
+(function f(){x.fillStyle='rgba(5,11,16,.18)';x.fillRect(0,0,c.width,c.height);
+for(const p of P){p.a+=p.s*.02;x.fillStyle='hsl('+(170+p.r)+',90%,60%)';x.fillRect(c.width/2+Math.cos(p.a)*p.r*1.5,c.height/2+Math.sin(p.a)*p.r*.8,2.5,2.5)}
+requestAnimationFrame(f)})();
+const out=[];
+fetch('/api/state').then(()=>out.push('network: REACHED (bad)'),()=>out.push('network: blocked'))
+.finally(()=>{try{parent.document.title;out.push('parent app: REACHED (bad)')}catch(e){out.push('parent app: blocked')}
+try{localStorage.x=1;out.push('storage: REACHED (bad)')}catch(e){out.push('storage: blocked')}
+document.getElementById('t').innerHTML='Isolation self-test<br>'+out.join('<br>')});
+</script>`;
+
 const SCENES: { say: string; calls: Call[] }[] = [
   {
     say: "Good evening, boss. Systems are online. Here is your overview.",
@@ -64,6 +82,14 @@ const SCENES: { say: string; calls: Call[] }[] = [
       { name: "stage.presence", args: { style: "orb" } },
       { name: "stage.mood", args: { accent: "#ffb454", intensity: 0.9 } },
       show("note", "card", { title: "Heads up", text: "Disk C: is **97% full**. Want me to find what is taking the space?" }, "bottom", { style: "alert", ttl: 20 }),
+    ],
+  },
+  {
+    say: "I can also draw my own small pages, locked in a box with no network. This one tests its own walls.",
+    calls: [
+      clear,
+      { name: "stage.presence", args: { style: "sphere" } },
+      show("toy", "sandbox", { title: "A page I made", html: SANDBOX_DEMO }, "center"),
     ],
   },
   {

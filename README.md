@@ -57,6 +57,15 @@ Tell Friend "remember that my sister is Priya" and it keeps a short note. The 20
 - You control all of it: `friend memory list`, `friend memory forget <number>`, `friend memory clear` (asks for the PIN). You can also just say "forget note 7".
 - Notes are treated as **data about you, never as instructions**, so text inside a note (or text a web page tricked the agent into saving) cannot give the agent orders. Guests and unrecognized voices never see your notes. The agent is told never to save passwords, PINs or keys.
 
+## Free-form pages (sandbox)
+
+When none of the standard objects fits, the agent can draw its own small page on the stage: a custom visualization, a calculator, a timer, a game. It is HTML, CSS and JavaScript written inline (up to 100,000 characters) and runs in an isolated frame:
+
+- `sandbox="allow-scripts"` without `allow-same-origin`, so the page has an empty origin: it cannot read your session, storage or the app, cannot call Friend's APIs, navigate the window, open popups or submit forms.
+- A fixed Content-Security-Policy placed before anything the agent wrote: `default-src 'none'` (no network of any kind, no external scripts, fonts or frames), inline script and style only, images only as `data:` URLs.
+- The app never listens for messages from the frame, and every object has a dismiss (×) button.
+- Checked in a real browser: the demo's page tries `fetch`, `parent.document` and `localStorage` and reports each as blocked (`pnpm demo`, fifth message).
+
 ## Tasks and reminders
 
 Say "remind me in 30 minutes to call the bank", "remind me tomorrow at 5pm to send the report", "every Monday at 9 remind me to back up" (hourly, daily or weekly repeats), or just "add milk to my list". "What is on my list?" shows your open tasks; "done with 3" or "remove 4" tidies up.

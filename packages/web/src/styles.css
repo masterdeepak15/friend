@@ -167,6 +167,8 @@ button { cursor: pointer; }
   width: min(460px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; padding: 20px;
   background: rgba(2, 12, 18, 0.92); border-color: var(--warn); box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.55), 0 0 30px rgba(255, 180, 84, 0.25);
 }
+.obj-sandbox { display: flex; flex-direction: column; gap: 6px; width: 100%; min-width: min(560px, 80vw); height: min(420px, 60vh); }
+.obj-sandbox iframe { flex: 1; width: 100%; min-height: 200px; border: 1px solid var(--edge); background: #050b10; }
 .camera-indicator {
   position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px;
   background: rgba(2, 12, 18, 0.9); border-color: var(--bad); color: #ffc2c9; font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase;
