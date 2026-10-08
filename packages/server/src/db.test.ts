@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "./config";
 import { openDb } from "./db";
+import { MIGRATIONS } from "./migrations";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "friend-test-"));
 const tables = (db: ReturnType<typeof openDb>) =>
@@ -21,7 +22,7 @@ describe("openDb", () => {
     openDb(dir).close();
     const db = openDb(dir);
     const rows = db.prepare("select count(*) c from schema_version").get() as { c: number };
-    expect(rows.c).toBe(1);
+    expect(rows.c).toBe(MIGRATIONS.length);
   });
 });
 

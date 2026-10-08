@@ -140,6 +140,7 @@ describe("voice end to end", () => {
     const slowSecond: VoiceService = {
       available: () => true,
       transcribe: async () => ({ text: "talk to me", language: "en" }),
+      embed: async () => ({ embedding: [1], seconds: 1 }),
       synthesize: async (t) => {
         if (n++ === 1) await gate;
         return Buffer.from("RIFF" + t);
@@ -184,6 +185,7 @@ describe("voice end to end", () => {
         await gate;
         return { text: "delete everything", language: "en" };
       },
+      embed: async () => ({ embedding: [1], seconds: 1 }),
       synthesize: async (t) => Buffer.from("RIFF" + t),
     };
     await boot([[text("should never run"), done]], slow);
