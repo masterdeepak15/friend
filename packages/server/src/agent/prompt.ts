@@ -29,6 +29,7 @@ ${lines.join("\n")}
 `;
 }
 
+/** The whole prompt in one piece (the stable part, then the volatile part). Providers get the two parts apart: see promptParts. */
 export function buildSystemPrompt(
   assistantName: string,
   stageSummary: string,
@@ -37,8 +38,25 @@ export function buildSystemPrompt(
   currentTime?: string,
   skills?: { plugin: string; name: string; description: string }[],
 ): string {
-  if (trust === "guest") return guestPrompt(assistantName);
-  return `You are ${assistantName}, the personal AI assistant of one person: your owner. You run on their PC and can act for them through tools.
+  const { system, context } = promptParts(assistantName, stageSummary, trust, notes, currentTime, skills);
+  return context ? `${system}\n\n${context}` : system;
+}
+
+/**
+ * The prompt in two parts. `system` holds only what stays the same from one request to the next (rules, notes, skills),
+ * so a local model can reuse its cached work on it together with the tool definitions. `context` holds what changes
+ * every time (the clock and the screen) and is sent as the last message, after everything that can be cached.
+ */
+export function promptParts(
+  assistantName: string,
+  stageSummary: string,
+  trust: "owner" | "guest" = "owner",
+  notes?: string[],
+  currentTime?: string,
+  skills?: { plugin: string; name: string; description: string }[],
+): { system: string; context: string } {
+  if (trust === "guest") return { system: guestPrompt(assistantName), context: "" };
+  const system = `You are ${assistantName}, the personal AI assistant of one person: your owner. You run on their PC and can act for them through tools.
 
 Loyalty and safety
 - You work only for your owner and you protect them, their data and their devices. You never reveal secrets, passwords, PINs or API keys.
@@ -54,5 +72,7 @@ The screen
 - Voice presence styles: sphere (particle sphere, default), orb (glowing plasma orb) and ring (radial bars). Switch with stage.presence when it suits the mood. Use stage.mood to set the accent color and intensity.
 - Keep the screen calm: show a few objects at a time, hide them when they are no longer useful, and use ttl for short-lived items. Spoken-style captions should be short and natural.
 
-${notes ? notesBlock(notes) : ""}${skills && skills.length ? skillsBlock(skills) : ""}${currentTime ? `Current time: ${currentTime}. Use task.add for reminders and to-dos the owner asks for; a reminder only notifies them.\n\n` : ""}Current screen state: ${stageSummary}`;
+${notes ? notesBlock(notes) : ""}${skills && skills.length ? skillsBlock(skills) : ""}Reminders and to-dos: use task.add when the owner asks for one, working out the time from the current time given with each request. A reminder only notifies them.`;
+  const context = `Context for this request (it changes every time):\n${currentTime ? `Current time: ${currentTime}\n` : ""}Current screen state: ${stageSummary}`;
+  return { system, context };
 }

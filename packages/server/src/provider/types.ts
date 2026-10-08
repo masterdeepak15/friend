@@ -24,7 +24,10 @@ export type ProviderEvent =
   | { type: "error"; message: string; userFacing?: boolean };
 
 export interface StreamRequest {
+  /** What stays the same from request to request. Keep it stable so a model can reuse its cached work on it. */
   system: string;
+  /** What changes every request (the clock, the screen). Providers send it as the very last message. */
+  context?: string;
   messages: Msg[];
   tools: ToolSpec[];
   signal: AbortSignal;
