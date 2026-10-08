@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LoginScreen } from "./auth/LoginScreen";
 import { SetupScreen } from "./auth/SetupScreen";
 import { buildSlash } from "./input/appCommands";
+import type { SlashCommand } from "./input/commands";
+import { HelpPanel } from "./input/HelpPanel";
 import { ChatPanel } from "./layout/ChatPanel";
 import { resetPositions, usePanels } from "./layout/prefs";
 import { TasksPanel } from "./layout/TasksPanel";
@@ -27,6 +29,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [enrolling, setEnrolling] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [help, setHelp] = useState<SlashCommand[] | null>(null);
   const panels = usePanels(state.view);
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
 
@@ -84,6 +87,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         setPanel: (id, on) => panels.toggle(id, on),
         view: state.view,
         setView,
+        openHelp: setHelp,
         resetLayout: () => {
           resetPositions();
           window.location.reload(); // panels read their saved place when they open
@@ -116,6 +120,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
         {managingPlugins && <PluginsPanel onClose={() => setManagingPlugins(false)} />}
         {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+        {help && <HelpPanel commands={help} onClose={() => setHelp(null)} />}
       </Overlay>
       <OwnerMenu
         muted={muted}

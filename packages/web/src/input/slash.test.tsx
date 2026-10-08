@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandBar } from "./CommandBar";
+import { HelpPanel } from "./HelpPanel";
 import { buildCommands, buildSlash, type CommandDeps } from "./appCommands";
 import { filterCommands, parseSlash, runSlash, unescapeSlash } from "./commands";
 
@@ -20,6 +21,7 @@ function deps(over: Partial<CommandDeps> = {}): CommandDeps {
     clearScreen: vi.fn(),
     statusLine: () => "Ready",
     endSession: vi.fn(),
+    openHelp: vi.fn(),
     panelOn: () => false,
     setPanel: vi.fn(),
     view: "companion",
@@ -85,12 +87,12 @@ describe("the commands", () => {
     expect(d.notify).toHaveBeenCalledWith("Ready");
     expect((d.endSession as ReturnType<typeof vi.fn>).mock.calls).toEqual([["logout"], ["lock"]]);
   });
-  it("/help lists them all, and an unknown command says so", () => {
+  it("/help opens the list of every command, and an unknown command says so", () => {
     const d = deps();
     const cmds = buildCommands(d);
     runSlash(cmds, "/help", d.notify);
-    const help = (d.notify as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
-    for (const c of cmds) expect(help).toContain(`/${c.name}`);
+    const shown = (d.openHelp as ReturnType<typeof vi.fn>).mock.calls[0]![0] as typeof cmds;
+    expect(shown.map((c) => c.name).sort()).toEqual(cmds.map((c) => c.name).sort());
     runSlash(cmds, "/nope", d.notify);
     expect(d.notify).toHaveBeenLastCalledWith(expect.stringMatching(/no command \/nope/i));
   });
@@ -130,11 +132,8 @@ describe("panel, view and layout commands", () => {
     expect(d.notify).toHaveBeenLastCalledWith(expect.stringMatching(/Drag a panel/));
   });
 
-  it("/help names them all", () => {
-    const d = deps();
-    runSlash(buildCommands(d), "/help", d.notify);
-    const help = (d.notify as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
-    for (const n of ["/chat", "/tasks", "/view", "/layout"]) expect(help).toContain(n);
+  it("every command has a description, so /help can explain it", () => {
+    for (const c of buildCommands(deps())) expect(c.description.length, c.name).toBeGreaterThan(8);
   });
 });
 
@@ -219,5 +218,18 @@ describe("the message bar", () => {
     render(<CommandBar onSend={onSend} requestOpen={1} />);
     await userEvent.type(screen.getByLabelText("Message"), "/hello{Enter}");
     expect(onSend).toHaveBeenCalledWith("/hello");
+  });
+});
+
+describe("<HelpPanel>", () => {
+  it("lists each command with its usage and what it does, and closes", async () => {
+    const onClose = vi.fn();
+    render(<HelpPanel commands={buildCommands(deps())} onClose={onClose} />);
+    expect(screen.getByText("/settings")).toBeTruthy();
+    expect(screen.getByText(/Open the settings/)).toBeTruthy();
+    expect(screen.getByText(/minimal\|companion\|workspace/)).toBeTruthy();
+    expect(screen.getByText(/never go to the AI/i)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalled();
   });
 });

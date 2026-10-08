@@ -298,3 +298,12 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   .panel-chat { top: auto !important; bottom: 56px; height: 52vh; }
   .panel-tasks { top: 56px !important; height: 30vh; }
 }
+
+/* ---- command list (/help) ---- */
+.help { width: min(560px, calc(100% - 24px)); max-height: calc(100% - 24px); display: flex; flex-direction: column; }
+.help-list { margin: 8px 0; overflow-y: auto; display: grid; gap: 4px; min-height: 0; }
+.help-row { display: grid; grid-template-columns: minmax(130px, 38%) 1fr; gap: 12px; padding: 6px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.help-row dt { font: 600 0.9rem var(--mono); color: var(--accent); overflow-wrap: anywhere; }
+.help-row dt i { font-style: normal; font-weight: 400; color: var(--warn); }
+.help-row dd { margin: 0; color: var(--ink); font-size: 0.9rem; }
+@media (max-width: 600px) { .help-row { grid-template-columns: 1fr; gap: 2px; } }

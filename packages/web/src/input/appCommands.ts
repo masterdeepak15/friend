@@ -24,6 +24,8 @@ export interface CommandDeps {
   setView: (view: "minimal" | "companion" | "workspace") => void;
   /** Puts every panel back where it starts. */
   resetLayout: () => void;
+  /** Shows the list of commands with their descriptions. */
+  openHelp: (commands: SlashCommand[]) => void;
 }
 
 /** The commands the owner can type in the message bar. Each one runs here and never reaches the AI. */
@@ -79,13 +81,13 @@ export function buildCommands(d: CommandDeps): SlashCommand[] {
     },
     { name: "clear", description: "Take everything off the screen", run: d.clearScreen },
     { name: "status", description: "What Friend is doing right now", run: () => d.notify(d.statusLine()) },
-    { name: "logout", description: "Sign out", run: () => d.endSession("logout") },
+    { name: "logout", description: "Sign out of Friend on this screen", run: () => d.endSession("logout") },
     { name: "lock", description: "Emergency lock: end every session and stop the agent", run: () => d.endSession("lock") },
   ];
   list.push({
     name: "help",
-    description: "List the commands",
-    run: () => d.notify(`Commands: ${list.map((c) => `/${c.name}${c.usage ? ` ${c.usage}` : ""}`).join(", ")}. Anything else goes to Friend.`),
+    description: "List every command with what it does",
+    run: () => d.openHelp(list),
   });
   return list.sort((a, b) => a.name.localeCompare(b.name));
 }
