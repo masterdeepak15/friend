@@ -252,3 +252,15 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 .settings-field select option { background: #06141c; }
 .settings-check { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+
+/* ---- slash command list above the message bar ---- */
+.command-bar { position: relative; }
+.slash-list {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); margin: 0; padding: 4px; list-style: none;
+  max-height: 40vh; overflow-y: auto; background: rgba(2, 12, 18, 0.96); border: 1px solid var(--edge);
+}
+.slash-list li { display: flex; align-items: baseline; gap: 10px; padding: 7px 10px; cursor: pointer; }
+.slash-list li.on, .slash-list li:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.slash-list b { font: 600 0.9rem var(--mono); color: var(--accent); }
+.slash-list i { font: 0.78rem var(--mono); color: var(--warn); font-style: normal; }
+.slash-list span { font-size: 0.82rem; color: var(--muted); }

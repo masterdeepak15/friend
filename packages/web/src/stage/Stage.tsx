@@ -1,6 +1,7 @@
 import type { ClientMsg } from "@friend/protocol";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { CommandBar } from "../input/CommandBar";
+import type { Slash } from "../input/commands";
 import { CATALOG } from "../objects/objects";
 import { Presence } from "../presence/Presence";
 import type { LocalAction, StageViewState } from "../store";
@@ -38,12 +39,14 @@ export interface StageProps {
   dispatch: (a: LocalAction) => void;
   /** Push-to-talk by long-pressing the stage; omitted when voice is not wired up. */
   voice?: { pressStart(): void; pressEnd(): void; blur?(): void };
+  /** The / commands of the message bar; without them a line starting with / is sent like any other. */
+  slash?: Slash;
 }
 
 const LONG_PRESS_MS = 350;
 
 /** Layers 1–3: ambient background, voice presence, agent-placed objects, captions and the hidden command bar. */
-export function Stage({ state, send, dispatch, voice }: StageProps) {
+export function Stage({ state, send, dispatch, voice, slash }: StageProps) {
   const viewport = useViewport();
   const [openRequest, setOpenRequest] = useState(0);
   const narrow = viewport.w < 600;
@@ -157,7 +160,7 @@ export function Stage({ state, send, dispatch, voice }: StageProps) {
           {state.captions}
         </p>
       )}
-      <CommandBar requestOpen={openRequest} onSend={(text) => send({ type: "chat.send", text })} />
+      <CommandBar requestOpen={openRequest} slash={slash} onSend={(text) => send({ type: "chat.send", text })} />
     </div>
   );
 }

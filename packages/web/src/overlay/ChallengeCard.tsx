@@ -35,7 +35,7 @@ export function ChallengeCard({
       <pre className="approval-summary" data-testid="challenge-text" style={{ whiteSpace: "pre-wrap" }}>
         {challenge.text}
       </pre>
-      <PinPad pin={pin} onChange={setPin} />
+      <PinPad pin={pin} onChange={setPin} onSubmit={confirm} />
       <div className="approval-actions">
         <button type="button" style={touch} className="primary" disabled={pin.length < 6} onClick={confirm}>
           Confirm

@@ -169,7 +169,20 @@ export function EnrollmentFlow({ api = httpEnrollApi, createRecorder = (o) => ne
       {(view === "pin-save" || view === "pin-delete") && (
         <>
           <p className="auth-note">{view === "pin-save" ? "Enter your PIN to save your voice." : "Enter your PIN to delete your saved voice."}</p>
-          <PinPad pin={pin} onChange={setPin} />
+          <PinPad
+            pin={pin}
+            onChange={setPin}
+            onSubmit={
+              view === "pin-save" // Enter saves; deleting your voice always needs a deliberate click
+                ? () =>
+                    !busy &&
+                    void run(async () => {
+                      await api.finish(pin);
+                      if (alive.current) setView("saved");
+                    })
+                : undefined
+            }
+          />
           {error && (
             <p role="alert" className="auth-error">
               {error}

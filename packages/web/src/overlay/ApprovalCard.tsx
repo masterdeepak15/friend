@@ -25,7 +25,7 @@ export function ApprovalCard({ approval, send }: { approval: PendingApproval; se
       <pre className="approval-summary" data-testid="approval-summary" style={{ whiteSpace: "pre-wrap" }}>
         {approval.summary}
       </pre>
-      {approval.needsPin && <PinPad pin={pin} onChange={setPin} />}
+      {approval.needsPin && <PinPad pin={pin} onChange={setPin} onSubmit={() => canApprove && respond("approve")} />}
       <div className="approval-actions">
         <button type="button" style={touch} className="primary" disabled={!canApprove} onClick={() => respond("approve")}>
           Approve

@@ -71,7 +71,7 @@ export function PluginsPanel({ api = httpPluginsApi, onClose }: { api?: PluginsA
               ? `Install ${pending.plugin.name}? ${pending.plugin.tools > 0 ? "Its tools run in a Docker sandbox with no network and no access to your files, and ask for your approval every time. " : ""}Enter your PIN to confirm.`
               : `Switch on ${pending.name}? Enter your PIN to confirm.`}
           </p>
-          <PinPad pin={pin} onChange={setPin} />
+          <PinPad pin={pin} onChange={setPin} onSubmit={() => !busy && confirm()} />
           {error && (
             <p role="alert" className="auth-error">
               {error}

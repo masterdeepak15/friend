@@ -103,7 +103,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose }: { api?: Settin
           <span className="approval-title">Settings</span>
         </div>
         <p className="auth-note">Enter your PIN to save these changes.</p>
-        <PinPad pin={pin} onChange={setPin} />
+        <PinPad pin={pin} onChange={setPin} onSubmit={() => !busy && void save()} />
         {error && (
           <p role="alert" className="auth-error">
             {error}

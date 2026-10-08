@@ -7,6 +7,8 @@ import { Stage } from "./stage/Stage";
 import { useFriend } from "./useFriend";
 import { PluginsPanel } from "./plugins/PluginsPanel";
 import { SettingsPanel } from "./settings/SettingsPanel";
+import { buildSlash } from "./input/appCommands";
+import { describeStatus } from "./overlay/StatusBadge";
 import { EnrollmentFlow } from "./voice/EnrollmentFlow";
 import { useVoiceKeys } from "./voice/keys";
 import { useAudioUnlock } from "./voice/unlock";
@@ -31,9 +33,34 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     dispatch({ type: "alert.add", level: "info", text: "Voice recognition is not set up. Press Esc, then Enroll my voice." });
   }, [state.voice.available, state.voice.enrolled, dispatch]);
 
+  const slash = useMemo(
+    () =>
+      buildSlash({
+        notify: (text) => dispatch({ type: "alert.add", level: "info", text }),
+        openSettings: () => setSettingsOpen(true),
+        openPlugins: () => setManagingPlugins(true),
+        openVoice: state.voice.available ? () => setEnrolling(true) : null,
+        muted,
+        setMuted,
+        cameraOn: state.camera.enabled,
+        setCamera: (value) => dispatch({ type: "camera.enable", value }),
+        clearScreen: () => {
+          for (const o of state.objects) send({ type: "stage.event", objectId: o.id, event: "dismiss" });
+        },
+        statusLine: () =>
+          describeStatus({ connection: state.connection, deviceOnline: state.deviceOnline, approval: state.approval, voiceMode: state.voice.mode, busy: state.busy, activity: state.activity }).text,
+        endSession: (how) => {
+          void fetch(how === "lock" ? "/api/lock" : "/api/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+            .catch(() => {})
+            .finally(onSignedOut);
+        },
+      }),
+    [dispatch, send, muted, onSignedOut, state.voice.available, state.voice.mode, state.camera.enabled, state.objects, state.connection, state.deviceOnline, state.approval, state.busy, state.activity],
+  );
+
   return (
     <>
-      <Stage state={shown} send={send} dispatch={dispatch} voice={voice} />
+      <Stage state={shown} send={send} dispatch={dispatch} voice={voice} slash={slash} />
       <Overlay
         approval={state.approval}
         challenge={state.challenge}

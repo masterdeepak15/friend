@@ -25,12 +25,12 @@ Noted as the owner sent them. Nothing here is built yet; each item has a first p
 - A small schedule strip/panel (next reminders and open tasks), opened by an option button, by Esc menu, or by voice ("what is scheduled?").
 - Option buttons: a row of quick actions the user can click or say (Tasks, Chat, Weather, Stats, Settings), hidden or shown from Settings, also reachable from the Esc menu.
 
-## 5. PIN entry must work with the keyboard
+## 5. PIN entry must work with the keyboard (DONE)
 "Now it is only click."
 - Quick fix, small: the PIN pad accepts digits, Backspace and Enter from the keyboard (focus it when it opens). Applies to approvals, challenge, plugins, settings, enrollment.
 - Keep the on-screen keys for touch.
 
-## 6. Slash commands in the command bar
+## 6. Slash commands in the command bar (DONE: first set)
 "Better to make /commands so I can enter /settings, /something."
 - Typing `/` in the command bar shows a small list that filters as you type; Enter or click runs it. These run on the client or the server directly and never go to the AI model, so they are instant, free and work even when the model is down.
 - First set: /settings, /chat, /tasks (schedule), /plugins, /camera on|off, /mute, /clear (clear the stage), /status, /voice, /help, /lock (emergency lock). Later: /model claude-code|claude|ollama, /layout minimal|companion|workspace.
