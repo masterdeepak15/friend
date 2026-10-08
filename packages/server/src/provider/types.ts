@@ -1,7 +1,9 @@
 export type ContentBlock =
   | { type: "text"; text: string }
   | { type: "tool_use"; id: string; name: string; input: unknown }
-  | { type: "tool_result"; toolUseId: string; content: string; isError: boolean };
+  | { type: "tool_result"; toolUseId: string; content: string; isError: boolean }
+  /** A picture for the model to look at in this turn only (base64). It is never stored. */
+  | { type: "image"; mime: string; data: string };
 
 export interface Msg {
   role: "user" | "assistant" | "tool";
@@ -30,5 +32,7 @@ export interface StreamRequest {
 
 export interface Provider {
   id: string;
+  /** Whether the model can look at pictures. Absent means no. */
+  readonly vision?: boolean;
   stream(req: StreamRequest): AsyncIterable<ProviderEvent>;
 }

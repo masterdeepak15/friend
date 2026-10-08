@@ -155,7 +155,11 @@ describe("provider settings in friend config", () => {
     expect(await set("ollama.contextTokens", "16384")).toBe(0);
     const cfg = loadConfig(dataDir);
     expect(cfg.provider).toBe("ollama");
-    expect(cfg.ollama).toEqual({ url: "http://localhost:11434", model: "llama3.1:8b", contextTokens: 16384 });
+    expect(cfg.ollama).toEqual({ url: "http://localhost:11434", model: "llama3.1:8b", contextTokens: 16384, vision: false });
+    expect(await set("ollama.vision", "true")).toBe(0);
+    expect(loadConfig(dataDir).ollama.vision).toBe(true);
+    expect(await set("ollama.vision", "yes")).toBe(1);
+    await set("ollama.vision", "false");
   });
   it("rejects bad values", async () => {
     expect(await set("provider", "gpt")).toBe(1);

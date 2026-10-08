@@ -7,6 +7,8 @@ export interface OllamaOptions {
   /** Context window to request. Ollama's default (4096) is too small for the system prompt plus tool schemas. */
   contextTokens: number;
   keepAlive?: string;
+  /** The model can look at pictures (for example llava or qwen2.5vl). */
+  vision?: boolean;
 }
 
 // Tool names travel without dots ("fs.list" as "fs__list"), like with the Claude provider.
@@ -18,9 +20,10 @@ interface OllamaMessage {
   content: string;
   tool_calls?: { function: { name: string; arguments: unknown } }[];
   tool_name?: string;
+  images?: string[];
 }
 
-function toOllamaMessages(system: string, messages: Msg[]): OllamaMessage[] {
+function toOllamaMessages(system: string, messages: Msg[], vision: boolean): OllamaMessage[] {
   const out: OllamaMessage[] = [{ role: "system", content: system }];
   const nameById = new Map<string, string>();
   for (const m of messages) {
@@ -40,6 +43,9 @@ function toOllamaMessages(system: string, messages: Msg[]): OllamaMessage[] {
         if (b.type !== "tool_result") continue;
         out.push({ role: "tool", content: b.content, tool_name: nameById.get(b.toolUseId) ?? "tool" });
       }
+      // Ollama takes pictures on a user message; a model that cannot see would only be confused by them.
+      const pictures = vision ? m.content.flatMap((b) => (b.type === "image" ? [b.data] : [])) : [];
+      if (pictures.length) out.push({ role: "user", content: "Here is the picture from the camera.", images: pictures });
     }
   }
   return out;
@@ -62,12 +68,16 @@ export class OllamaProvider implements Provider {
 
   constructor(private opts: OllamaOptions) {}
 
+  get vision(): boolean {
+    return this.opts.vision === true;
+  }
+
   async *stream(req: StreamRequest): AsyncIterable<ProviderEvent> {
     const { url, model } = this.opts;
     const body = {
       model,
       stream: true,
-      messages: toOllamaMessages(req.system, req.messages),
+      messages: toOllamaMessages(req.system, req.messages, this.vision),
       ...(req.tools.length
         ? {
             tools: req.tools.map((t) => ({

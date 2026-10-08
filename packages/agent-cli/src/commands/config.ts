@@ -58,6 +58,7 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
   ollama: {
     url: httpUrl,
     model: nonEmpty,
+    vision: bool,
     contextTokens: (v) => {
       const n = Number(v);
       if (!Number.isInteger(n) || n < 1024 || n > 131072) throw new Error("contextTokens must be a whole number between 1024 and 131072");

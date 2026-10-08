@@ -4,7 +4,7 @@ import type { Audit } from "./audit";
 import { LockoutError, type Auth } from "./auth";
 import type { Db } from "./db";
 import { isSimpleCommand } from "./policy/classify";
-import type { PolicyEngine } from "./policy/engine";
+import { ASK_EVERY_TIME, type PolicyEngine } from "./policy/engine";
 
 export interface ApprovalRequest {
   tool: string;
@@ -93,7 +93,7 @@ export class Approvals {
     }
     if (!this.entries.has(msg.id)) return; // answered while the PIN was being checked
 
-    if (msg.decision === "approve_always" && entry.req.tier === "T2") this.addRule(entry.req);
+    if (msg.decision === "approve_always" && entry.req.tier === "T2" && !ASK_EVERY_TIME.has(entry.req.tool)) this.addRule(entry.req);
     this.finish(msg.id, { approved: true }, msg.decision);
   }
 

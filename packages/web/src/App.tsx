@@ -31,6 +31,7 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
       <Overlay
         approval={state.approval}
         challenge={state.challenge}
+        cameraStream={state.camera.stream}
         alerts={state.alerts}
         connection={state.connection}
         deviceOnline={state.deviceOnline}
@@ -47,6 +48,8 @@ function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         voiceAvailable={state.voice.available}
         voiceEnrolled={state.voice.enrolled}
         onEnroll={() => setEnrolling(true)}
+        cameraOn={state.camera.enabled}
+        onToggleCamera={() => dispatch({ type: "camera.enable", value: !state.camera.enabled })}
       />
     </>
   );

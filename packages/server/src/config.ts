@@ -27,9 +27,11 @@ export interface OllamaConfig {
   url: string;
   model: string;
   contextTokens: number;
+  /** The model can look at pictures, so the camera tool may be used with it. */
+  vision?: boolean;
 }
 
-export const DEFAULT_OLLAMA: OllamaConfig = { url: "http://127.0.0.1:11434", model: "qwen2.5:7b", contextTokens: 8192 };
+export const DEFAULT_OLLAMA: OllamaConfig = { url: "http://127.0.0.1:11434", model: "qwen2.5:7b", contextTokens: 8192, vision: false };
 
 export interface VoiceConfig {
   enabled: boolean;

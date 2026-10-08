@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApprovalRespond, ClientMsg, Placement, ServerMsg, StageCommand, StageObject } from "./index";
+import { ApprovalRespond, ClientMsg, Placement, ServerMsg, StageCommand, StageObject, describeCall } from "./index";
 
 const obj = { id: "a", type: "card", props: { text: "hi" }, placement: "center" };
 
@@ -56,6 +56,22 @@ describe("speaker verification messages", () => {
     expect(ServerMsg.safeParse({ type: "status", busy: false, deviceOnline: true, voiceEnrolled: true }).success).toBe(true);
     expect(ServerMsg.safeParse({ type: "status", busy: false, deviceOnline: true, voiceEnrolled: "yes" }).success).toBe(false);
   });
+  it("carries camera requests to the browser and denials back", () => {
+    expect(ServerMsg.safeParse({ type: "camera.request", id: "r1" }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "camera.cancel", id: "r1" }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "camera.request" }).success).toBe(false);
+    for (const reason of ["off", "no-camera", "permission", "busy"]) {
+      expect(ClientMsg.safeParse({ type: "camera.denied", id: "r1", reason }).success).toBe(true);
+    }
+    expect(ClientMsg.safeParse({ type: "camera.denied", id: "r1", reason: "because" }).success).toBe(false);
+  });
+
+  it("describes the camera tool honestly on the approval card", () => {
+    const s = describeCall("camera.snap", {});
+    expect(s).toMatch(/one picture/i);
+    expect(s).toMatch(/AI model/);
+  });
+
   it("accepts voice.confirm with a PIN and voice.cancel from the client", () => {
     expect(ClientMsg.safeParse({ type: "voice.confirm", id: "c1", pin: "123456" }).success).toBe(true);
     expect(ClientMsg.safeParse({ type: "voice.cancel", id: "c1" }).success).toBe(true);

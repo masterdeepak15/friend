@@ -16,19 +16,28 @@ export interface ClaudeOptions {
   client?: MessagesClient;
 }
 
+const toAnthropicImage = (b: { mime?: string; data?: string }) => ({
+  type: "image",
+  source: { type: "base64", media_type: b.mime, data: b.data },
+});
+
 function toAnthropicMessages(messages: Msg[]): unknown[] {
   return messages.map((m) => {
     if (m.role === "tool") {
       return {
         role: "user",
-        content: m.content
-          .filter((b) => b.type === "tool_result")
-          .map((b) => ({
-            type: "tool_result",
-            tool_use_id: (b as { toolUseId: string }).toolUseId,
-            content: (b as { content: string }).content,
-            is_error: (b as { isError: boolean }).isError,
-          })),
+        // tool results first, then any pictures the tools produced: the API wants them in that order
+        content: [
+          ...m.content
+            .filter((b) => b.type === "tool_result")
+            .map((b) => ({
+              type: "tool_result",
+              tool_use_id: (b as { toolUseId: string }).toolUseId,
+              content: (b as { content: string }).content,
+              is_error: (b as { isError: boolean }).isError,
+            })),
+          ...m.content.filter((b) => b.type === "image").map(toAnthropicImage),
+        ],
       };
     }
     return {
@@ -42,6 +51,7 @@ function toAnthropicMessages(messages: Msg[]): unknown[] {
 
 export class ClaudeProvider implements Provider {
   id = "claude";
+  readonly vision = true;
   private client: MessagesClient;
   private model: string;
   private maxTokens: number;

@@ -1,6 +1,7 @@
 import type { ServerMsg, Tier, Trust } from "@friend/protocol";
 import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
+import type { CameraBroker } from "../camera";
 import type { Config } from "../config";
 import type { Db } from "../db";
 import type { DeviceHub } from "../devices";
@@ -26,6 +27,8 @@ export interface AgentDeps {
   audit: Audit;
   config: Config;
   assistantName: () => string;
+  /** Takes one picture through the owner's browser. Without it the camera tool reports it is unavailable. */
+  camera?: Pick<CameraBroker, "request">;
 }
 
 export interface TurnCtx {
@@ -127,12 +130,15 @@ export class Agent {
 
         stage({ cmd: "presence", state: "thinking" });
         const results: ContentBlock[] = [];
+        const pictures: ContentBlock[] = [];
         for (const c of calls) {
           if (abort.signal.aborted) return;
-          const r = await this.executeTool(c, ctx);
+          const r = await this.executeTool(c, ctx, abort.signal);
           results.push({ type: "tool_result", toolUseId: c.id, content: r.text, isError: r.isError });
+          if (r.image) pictures.push({ type: "image", mime: r.image.mime, data: r.image.data });
         }
-        const toolMsg: Msg = { role: "tool", content: results };
+        // pictures follow all the tool results; they are shown to the model now and never stored
+        const toolMsg: Msg = { role: "tool", content: [...results, ...pictures] };
         messages.push(toolMsg);
         keep(toolMsg);
         if (step === MAX_STEPS - 1) {
@@ -150,7 +156,11 @@ export class Agent {
     }
   }
 
-  private async executeTool(call: ToolCall, ctx: TurnCtx): Promise<{ text: string; isError: boolean }> {
+  private async executeTool(
+    call: ToolCall,
+    ctx: TurnCtx,
+    signal: AbortSignal,
+  ): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string } }> {
     const d = this.deps;
     const fail = (error: string) => ({ text: `Error: ${error}`, isError: true });
     const def = getToolDef(call.name);
@@ -171,6 +181,13 @@ export class Agent {
       d.audit.log("agent", "tool.denied", { tool: call.name, args: clipArgs(args), trust: ctx.trust });
       return fail("This action is not allowed.");
     }
+    if (call.name === "camera.snap") {
+      // refuse before bothering the owner with a card for a picture that could not be used
+      if (!d.camera) return fail("The camera is not available.");
+      if (!d.provider.vision) {
+        return fail("This model cannot look at pictures. Use a vision model (Claude, or an Ollama vision model with ollama.vision true).");
+      }
+    }
     if (decision === "ask" || decision === "ask_with_pin") {
       const outcome = await d.approvals.request(
         { tool: call.name, args, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin", device },
@@ -181,6 +198,12 @@ export class Agent {
         return fail(`The owner did not approve this action (${outcome.reason ?? "denied"}).`);
       }
       approvedOutside = !insideRoots;
+    }
+
+    if (call.name === "camera.snap") {
+      const shot = await d.camera!.request(ctx.emit, signal);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: shot.ok });
+      return shot.ok ? { text: "Picture taken.", isError: false, image: { mime: shot.mime, data: shot.data } } : fail(shot.error);
     }
 
     const result =

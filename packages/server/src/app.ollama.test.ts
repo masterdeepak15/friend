@@ -39,7 +39,7 @@ describe("config defaults", () => {
     const cfg = loadConfig(mkdtempSync(join(tmpdir(), "friend-cfg-")));
     expect(cfg.provider).toBe("claude");
     expect(cfg.ollama).toEqual(DEFAULT_OLLAMA);
-    expect(DEFAULT_OLLAMA).toEqual({ url: "http://127.0.0.1:11434", model: "qwen2.5:7b", contextTokens: 8192 });
+    expect(DEFAULT_OLLAMA).toEqual({ url: "http://127.0.0.1:11434", model: "qwen2.5:7b", contextTokens: 8192, vision: false });
   });
 });
 

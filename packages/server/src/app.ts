@@ -3,6 +3,7 @@ import { Agent } from "./agent/loop";
 import { Approvals } from "./approvals";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
+import { CameraBroker } from "./camera";
 import { join } from "node:path";
 import { loadConfig, type Config } from "./config";
 import { openDb } from "./db";
@@ -33,6 +34,8 @@ export interface AppOptions {
   webDir?: string;
   expireIntervalMs?: number;
   approvalTimeoutMs?: number;
+  /** How long a camera request waits for the browser's picture. */
+  cameraTimeoutMs?: number;
 }
 
 /** Used when no API key is configured: every turn ends with a setup notice on screen. */
@@ -64,6 +67,7 @@ export async function createApp(opts: AppOptions) {
       : config.apiKey
         ? new ClaudeProvider({ apiKey: config.apiKey, model: config.model })
         : new MissingKeyProvider());
+  const camera = new CameraBroker(opts.cameraTimeoutMs);
   const agent = new Agent({
     provider,
     policy,
@@ -74,6 +78,12 @@ export async function createApp(opts: AppOptions) {
     audit,
     config,
     assistantName: () => auth.assistantName(),
+    camera: {
+      request: (emit, signal) => {
+        audit.log("agent", "camera.requested", {});
+        return camera.request(emit, signal);
+      },
+    },
   });
 
   const clients = new Set<ClientConn>();
@@ -260,6 +270,16 @@ export async function createApp(opts: AppOptions) {
           },
         }
       : undefined,
+    onCameraFrame: (id, jpeg) => {
+      const out = camera.deliver(id, jpeg);
+      if (out === "ok") {
+        audit.log("owner", "camera.frame", { bytes: jpeg.length }); // size only, never pixels
+        broadcast({ type: "camera.cancel", id }); // every other tab stops waiting
+      } else {
+        audit.log("owner", "camera.frame_ignored", { reason: out, bytes: jpeg.length });
+      }
+      return out;
+    },
     onClientConnect: (_session, conn) => {
       clients.add(conn);
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
@@ -286,6 +306,12 @@ export async function createApp(opts: AppOptions) {
         case "voice.confirm":
           void confirmChallenge(msg.id, msg.pin, conn).catch((e) => audit.log("system", "voice.confirm_error", { message: (e as Error).message }));
           break;
+        case "camera.denied":
+          if (camera.deny(msg.id, msg.reason)) {
+            audit.log("owner", "camera.denied", { reason: msg.reason });
+            broadcast({ type: "camera.cancel", id: msg.id });
+          }
+          break;
         case "voice.cancel":
           if (challenges.take(msg.id)) {
             audit.log("owner", "voice.challenge_cancelled", { ip: conn.ip });
@@ -309,6 +335,7 @@ export async function createApp(opts: AppOptions) {
       const dropped = challenges.clear();
       if (dropped) broadcast({ type: "voice.challenge.end", id: dropped });
       enrollment?.cancel();
+      camera.cancelAll(broadcast);
       agent.cancel();
       speaker?.interrupt(broadcast);
       approvals.denyAll("Emergency lock");
@@ -331,6 +358,7 @@ export async function createApp(opts: AppOptions) {
     gateway,
     voiceprint,
     challenges,
+    camera,
     /** Tell every client the voice sidecar went up or down. */
     notifyStatus(): void {
       broadcast(statusMsg());
@@ -345,6 +373,7 @@ export async function createApp(opts: AppOptions) {
       stopped = true;
       if (timer) clearInterval(timer);
       challenges.clear();
+      camera.cancelAll(broadcast);
       agent.cancel();
       approvals.denyAll("Shutting down");
       await gateway.close();

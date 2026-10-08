@@ -3,6 +3,9 @@ import type { Config } from "../config";
 import type { Db } from "../db";
 import { RuleStore, type Matcher, type Rule } from "./rules";
 
+/** Tools that touch the owner's privacy: no standing rule can ever skip the approval card. */
+export const ASK_EVERY_TIME = new Set(["camera.snap"]);
+
 export type Decision = "allow" | "ask" | "ask_with_pin" | "deny";
 
 export interface DecideInput {
@@ -29,6 +32,7 @@ export class PolicyEngine {
       case "T1":
         return "allow";
       case "T2":
+        if (ASK_EVERY_TIME.has(input.tool)) return "ask";
         return this.rules.matches(input.tool, input.args) ? "allow" : "ask";
       case "T3":
         return "ask_with_pin";

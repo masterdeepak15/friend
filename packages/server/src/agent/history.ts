@@ -3,10 +3,18 @@ import type { ContentBlock, Msg } from "../provider/types";
 
 const WINDOW = 40;
 
+export const PICTURE_STUB = "[camera picture, not kept]";
+
+/** Pictures are for the model to see during the turn; what is remembered is only that there was one. */
+export function stripImages(msg: Msg): Msg {
+  if (!msg.content.some((b) => b.type === "image")) return msg;
+  return { ...msg, content: msg.content.map((b): ContentBlock => (b.type === "image" ? { type: "text", text: PICTURE_STUB } : b)) };
+}
+
 export function saveMessage(db: Db, msg: Msg): void {
   db.prepare("insert into messages (role, content_json, created_at) values (?, ?, ?)").run(
     msg.role,
-    JSON.stringify(msg.content),
+    JSON.stringify(stripImages(msg).content),
     Date.now(),
   );
 }
