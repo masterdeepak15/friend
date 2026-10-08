@@ -93,6 +93,7 @@ describe("Speaker", () => {
     const flaky: VoiceService = {
       available: () => true,
       transcribe: async () => ({ text: "", language: "en" }),
+      embed: async () => ({ embedding: [1], seconds: 1 }),
       synthesize: async (t) => {
         if (n++ === 0) throw new Error("boom");
         return Buffer.from("RIFF" + t);
@@ -111,6 +112,7 @@ describe("Speaker", () => {
     const slow: VoiceService = {
       available: () => true,
       transcribe: async () => ({ text: "", language: "en" }),
+      embed: async () => ({ embedding: [1], seconds: 1 }),
       synthesize: async (t) => {
         await gate;
         return Buffer.from("RIFF" + t);
@@ -136,6 +138,7 @@ describe("Speaker", () => {
     const voice: VoiceService = {
       available: () => true,
       transcribe: async () => ({ text: "", language: "en" }),
+      embed: async () => ({ embedding: [1], seconds: 1 }),
       synthesize: async (t) => {
         if (first) {
           first = false;

@@ -45,4 +45,17 @@ Results 2026-10-08:
 | Browser support | MediaRecorder with webm/opus, getUserMedia on localhost, WAV from the engine decodes | PASS |
 | Sidecar cleanup | engine exits when the app is killed | PASS |
 
-Not verified by a human: holding Space and speaking into a real microphone (the test browser has no microphone), hearing the reply through speakers, and the sphere reacting to the live level. Try it: `friend voice setup`, `friend start`, open the page, hold Space, speak.
+## Phase 5b (speaker verification) check
+
+Results 2026-10-08:
+
+| Check | How | Result |
+|---|---|---|
+| Voiceprint from the real model | Piper voices as people: same voice across phrases scores above 0.75, different voices below 0.72 | PASS (`packages/voice/tests/test_real_speaker.py`) |
+| Enroll, accept, reject, end to end | real sidecar behind the gateway: enroll `lessac` with three phrases and the PIN, then a new phrase from `lessac` runs as owner; `amy` and `ryan` never do and get a tool-less, history-less turn | PASS (`voice/real.speaker.test.ts`) |
+| Challenge, guest, enrollment, lock, config | scripted speakers: right/wrong PIN, 3-try limit, cancel, replace, lock; guest isolation; PIN, consistency and rate limit for enrollment | PASS (`voice/trust.test.ts`, `challenge.test.ts`, `enrollment.test.ts`) |
+| Client | store, ChallengeCard, EnrollmentFlow, owner menu entry | PASS (jsdom) |
+
+Not verified by a human: enrolling with a real microphone and the thresholds with real room noise (Piper voices are cleaner than a real mic, so expect to adjust `voice.accept` / `voice.challenge`). Try it: `friend start`, press Esc, Enroll my voice.
+
+Not verified by a human (5a): holding Space and speaking into a real microphone (the test browser has no microphone), hearing the reply through speakers, and the sphere reacting to the live level. Try it: `friend voice setup`, `friend start`, open the page, hold Space, speak.

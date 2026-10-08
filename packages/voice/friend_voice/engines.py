@@ -17,10 +17,16 @@ class TTS(Protocol):
         """Return a complete WAV file."""
 
 
+class Speaker(Protocol):
+    def embed(self, audio: bytes) -> dict:
+        """Return {"embedding": [float, ...] (unit length), "seconds": float}. Raises ValueError for too little speech."""
+
+
 @dataclass
 class Engines:
     stt: STT
     tts: TTS
+    speaker: Optional[Speaker] = None
 
 
 def wav_bytes(pcm16: bytes, sample_rate: int = 22050) -> bytes:
@@ -39,7 +45,7 @@ class FakeSTT:
             raise RuntimeError("fake stt failure")
         if audio.startswith(b"LONG"):
             raise ValueError("recording longer than 90 seconds")
-        text = audio[5:].decode("utf-8", "replace") if audio.startswith(b"TEXT:") else "hello from the fake engine"
+        text = audio[5:].split(b"|VOICE:")[0].decode("utf-8", "replace") if audio.startswith(b"TEXT:") else "hello from the fake engine"
         return {"text": text, "language": language or "en", "duration": round(len(audio) / 32000, 3)}
 
 
@@ -48,5 +54,28 @@ class FakeTTS:
         return wav_bytes(b"\x00\x00" * 2205)  # 0.1 s of silence
 
 
+class FakeSpeaker:
+    """A body containing `VOICE:<name>:<anything>` gets a vector derived from <name> plus a little noise."""
+
+    DIM = 256
+
+    def embed(self, audio: bytes) -> dict:
+        import hashlib
+        import math
+        import random
+
+        marker = audio.find(b"VOICE:")
+        if marker < 0:
+            raise ValueError("not enough speech to recognize a voice (fake)")
+        rest = audio[marker + 6 :].split(b":", 1)
+        name = rest[0]
+        detail = rest[1] if len(rest) > 1 else b""
+        base = random.Random(hashlib.sha256(name).digest()).gauss
+        noise = random.Random(hashlib.sha256(name + b"|" + detail).digest()).gauss
+        vec = [base(0, 1) + 0.15 * noise(0, 1) for _ in range(self.DIM)]
+        norm = math.sqrt(sum(x * x for x in vec))
+        return {"embedding": [round(x / norm, 6) for x in vec], "seconds": 3.0}
+
+
 def FakeEngines() -> Engines:  # noqa: N802 - factory used like a class in tests
-    return Engines(stt=FakeSTT(), tts=FakeTTS())
+    return Engines(stt=FakeSTT(), tts=FakeTTS(), speaker=FakeSpeaker())

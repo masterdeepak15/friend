@@ -39,6 +39,31 @@ describe("voice messages", () => {
   });
 });
 
+describe("speaker verification messages", () => {
+  it("voice.heard can carry how much the voice was trusted", () => {
+    for (const trust of ["owner", "guest", "unverified"]) {
+      expect(ServerMsg.safeParse({ type: "voice.heard", text: "hi", trust }).success).toBe(true);
+    }
+    expect(ServerMsg.safeParse({ type: "voice.heard", text: "hi" }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "voice.heard", text: "hi", trust: "admin" }).success).toBe(false);
+  });
+  it("accepts a challenge and its end from the server", () => {
+    expect(ServerMsg.safeParse({ type: "voice.challenge", id: "c1", text: "open the garage" }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "voice.challenge.end", id: "c1" }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "voice.challenge", id: "c1" }).success).toBe(false);
+  });
+  it("status carries whether a voice is enrolled", () => {
+    expect(ServerMsg.safeParse({ type: "status", busy: false, deviceOnline: true, voiceEnrolled: true }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "status", busy: false, deviceOnline: true, voiceEnrolled: "yes" }).success).toBe(false);
+  });
+  it("accepts voice.confirm with a PIN and voice.cancel from the client", () => {
+    expect(ClientMsg.safeParse({ type: "voice.confirm", id: "c1", pin: "123456" }).success).toBe(true);
+    expect(ClientMsg.safeParse({ type: "voice.cancel", id: "c1" }).success).toBe(true);
+    expect(ClientMsg.safeParse({ type: "voice.confirm", id: "c1" }).success).toBe(false);
+    expect(ClientMsg.safeParse({ type: "voice.confirm", id: "c1", pin: "x".repeat(40) }).success).toBe(false);
+  });
+});
+
 describe("client messages", () => {
   it("rejects an unknown approval decision", () => {
     expect(ApprovalRespond.safeParse({ type: "approval.respond", id: "1", decision: "maybe" }).success).toBe(false);

@@ -14,9 +14,22 @@ export interface Config {
   destructivePatterns: string[];
   model: string;
   apiKey: string | null;
+  /** Which model backend answers: Claude (needs an API key) or a local Ollama server. */
+  provider: ProviderName;
+  ollama: OllamaConfig;
   voice: VoiceConfig;
   dataDir: string;
 }
+
+export type ProviderName = "claude" | "ollama";
+
+export interface OllamaConfig {
+  url: string;
+  model: string;
+  contextTokens: number;
+}
+
+export const DEFAULT_OLLAMA: OllamaConfig = { url: "http://127.0.0.1:11434", model: "qwen2.5:7b", contextTokens: 8192 };
 
 export interface VoiceConfig {
   enabled: boolean;
@@ -26,9 +39,27 @@ export interface VoiceConfig {
   ttsVoice: string;
   /** Force a spoken language (e.g. "hi"); null detects it automatically. */
   language: string | null;
+  /** Speaker match at or above this is the owner (0..1). */
+  accept: number;
+  /** Speaker match at or above this but below `accept` asks for the PIN; below it the voice is a guest. */
+  challenge: number;
 }
 
-export const DEFAULT_VOICE: VoiceConfig = { enabled: true, sttModel: "base", ttsVoice: "en_US-lessac-medium", language: null };
+export const DEFAULT_VOICE: VoiceConfig = {
+  enabled: true,
+  sttModel: "base",
+  ttsVoice: "en_US-lessac-medium",
+  language: null,
+  accept: 0.72,
+  challenge: 0.58,
+};
+
+/** Bad thresholds in an edited config must never make strangers look like the owner, so they fall back to the defaults. */
+export function sanitizeVoice(v: VoiceConfig): VoiceConfig {
+  const ok = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
+  if (ok(v.accept) && ok(v.challenge) && v.accept > v.challenge) return v;
+  return { ...v, accept: DEFAULT_VOICE.accept, challenge: DEFAULT_VOICE.challenge };
+}
 
 export const DEFAULT_DESTRUCTIVE_PATTERNS = [
   String.raw`\brm\s+(-[a-z]*r|-[a-z]*f)`,
@@ -71,6 +102,8 @@ const defaults = (dataDir: string): Config => ({
   destructivePatterns: DEFAULT_DESTRUCTIVE_PATTERNS,
   model: "claude-sonnet-5-5",
   apiKey: null,
+  provider: "claude",
+  ollama: { ...DEFAULT_OLLAMA },
   voice: { ...DEFAULT_VOICE },
   dataDir,
 });
@@ -102,5 +135,12 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
   const stored = JSON.parse(readFileSync(file, "utf8")) as Partial<Config>;
   // Built-in destructive patterns can only be extended, never dropped by an old or edited config file.
   const destructivePatterns = [...new Set([...base.destructivePatterns, ...(stored.destructivePatterns ?? [])])];
-  return { ...base, ...stored, destructivePatterns, voice: { ...DEFAULT_VOICE, ...stored.voice }, dataDir };
+  return {
+    ...base,
+    ...stored,
+    destructivePatterns,
+    ollama: { ...DEFAULT_OLLAMA, ...stored.ollama },
+    voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
+    dataDir,
+  };
 }

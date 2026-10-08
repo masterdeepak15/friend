@@ -1,7 +1,7 @@
 import fastifyCookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import { ClientMsg, type ServerMsg } from "@friend/protocol";
-import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerOptions } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from "fastify";
 import { existsSync } from "node:fs";
 import { isIP } from "node:net";
 import type { IncomingMessage } from "node:http";
@@ -37,6 +37,17 @@ export interface GatewayDeps {
   voiceAvailable?: () => boolean;
   /** Handles one recorded utterance; resolves with what was heard ("" when nothing intelligible). */
   onVoiceUtterance?: (session: Session, audio: Buffer, mime: string, ip: string) => Promise<{ text: string }>;
+  /** Teaching Friend the owner's voice; the routes answer 503 without it. */
+  voiceEnroll?: VoiceEnrollApi;
+}
+
+/** What the enrollment routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
+export interface VoiceEnrollApi {
+  state(): { enrolled: boolean; samples: number; min: number; max: number };
+  sample(audio: Buffer, mime: string): Promise<{ count: number; note: string | null }>;
+  finish(pin: string, ip: string): Promise<{ samples: number }>;
+  cancel(): void;
+  remove(pin: string, ip: string): Promise<void>;
 }
 
 export const MAX_UTTERANCE_BYTES = 4 * 1024 * 1024;
@@ -224,6 +235,61 @@ export function createGateway(deps: GatewayDeps) {
       }
     },
   );
+
+  // ---- voice enrollment (owner session only) ----
+  const enrollWindow = new SlidingWindow(30, 60_000);
+  const PinBody = z.object({ pin: z.string().min(1).max(32) });
+  /** Session check, rate limit and availability for every enrollment route. */
+  const enrollGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    const session = token ? auth.resolveSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "Unauthorized" });
+    if (!enrollWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+    if (!deps.voiceEnroll) return reply.code(503).send({ error: "Voice is not available" });
+  };
+  const enrollError = (reply: FastifyReply, e: unknown, what: string) => {
+    if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+    audit.log("owner", "voice.enroll_failed", { what, message: (e as Error).message }); // raw detail stays in the audit log
+    return reply.code(502).send({ error: "Voice enrollment failed. Try again." });
+  };
+  app.get("/api/voice/enroll", { onRequest: enrollGuard }, async () => deps.voiceEnroll!.state());
+  app.post(
+    "/api/voice/enroll/sample",
+    { bodyLimit: MAX_UTTERANCE_BYTES, onRequest: enrollGuard },
+    async (req, reply) => {
+      const body = req.body;
+      if (!Buffer.isBuffer(body)) return reply.code(415).send({ error: "Send the recording as audio/*" });
+      if (body.length === 0) return reply.code(400).send({ error: "Empty recording" });
+      try {
+        return await deps.voiceEnroll!.sample(body, String(req.headers["content-type"] ?? "audio/webm"));
+      } catch (e) {
+        return enrollError(reply, e, "sample");
+      }
+    },
+  );
+  app.post("/api/voice/enroll/finish", { onRequest: enrollGuard }, async (req, reply) => {
+    const body = PinBody.safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN to save your voice" });
+    try {
+      return await deps.voiceEnroll!.finish(body.data.pin, req.ip);
+    } catch (e) {
+      return enrollError(reply, e, "finish");
+    }
+  });
+  app.post("/api/voice/enroll/cancel", { onRequest: enrollGuard }, async () => {
+    deps.voiceEnroll!.cancel();
+    return { ok: true };
+  });
+  app.delete("/api/voice/enroll", { onRequest: enrollGuard }, async (req, reply) => {
+    const body = PinBody.safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN to delete your voice" });
+    try {
+      await deps.voiceEnroll!.remove(body.data.pin, req.ip);
+      return { ok: true };
+    } catch (e) {
+      return enrollError(reply, e, "remove");
+    }
+  });
 
   app.post("/api/lock", async (req, reply) => {
     const token = req.cookies[COOKIE_NAME];

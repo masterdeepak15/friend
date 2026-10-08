@@ -58,4 +58,17 @@ create table audit_log (
 );
 `,
   },
+  {
+    id: 2,
+    sql: `
+create table voiceprint (
+  id integer primary key check (id = 1),
+  centroid_enc blob not null,
+  dim integer not null,
+  samples integer not null,
+  model text not null,
+  created_at integer not null
+);
+`,
+  },
 ];

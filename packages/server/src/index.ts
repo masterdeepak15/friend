@@ -1,6 +1,7 @@
 export { createApp } from "./app";
 export type { AppOptions } from "./app";
 export { Audit } from "./audit";
+export { Voiceprint } from "./voice/voiceprint";
 export { Auth } from "./auth";
 export { loadConfig, saveConfig, defaultDataDir, configPath } from "./config";
 export type { Config } from "./config";
@@ -12,3 +13,6 @@ export { SidecarProcess } from "./voice/sidecar";
 export { DEFAULT_VOICE } from "./config";
 export type { VoiceConfig } from "./config";
 export { VoiceError } from "./voice/service";
+export { OllamaProvider } from "./provider/ollama";
+export { DEFAULT_OLLAMA } from "./config";
+export type { OllamaConfig, ProviderName } from "./config";

@@ -32,7 +32,21 @@ Hold **Space** (or long-press the screen) and speak; release to send. Friend ans
 - Needs Python 3.10 or newer. `friend voice status` shows the state; `friend config set voice.sttModel small` (or `voice.language hi`, `voice.ttsVoice <piper voice>`, `voice.enabled false`) changes it, then run `friend voice setup` again for new models.
 - Recordings are limited to 90 seconds and 4 MB. While Friend is busy with a request, a new recording is refused (409) instead of being dropped silently. Emergency lock also cancels a recording that is still being transcribed.
 - The browser needs microphone permission and a secure origin (localhost, or HTTPS through your domain).
-- **Until speaker verification (next phase), anyone who can press Space on a logged-in browser speaks as you.** The PIN still guards risky actions.
+- **Until you enroll your voice, anyone who can press Space on a logged-in browser speaks as you.** The PIN still guards risky actions.
+
+### Only your voice commands Friend (speaker verification)
+
+Press **Esc** (or long-press the top-left corner), choose **Enroll my voice**, read the phrases aloud and enter your PIN. Friend keeps only an averaged 256-number voiceprint, encrypted on disk (AES-256-GCM, key in `voice.key` next to the database). Recordings are never kept. After that every spoken request is scored against your voiceprint:
+
+| Match | What happens |
+|---|---|
+| Your voice (0.72 or higher) | Runs as you, as before. |
+| Close, or too short to tell (0.58 to 0.72) | Nothing runs. A card asks "Was that you?"; the right PIN runs the words, a wrong PIN (3 tries), Dismiss or 60 seconds drops them. |
+| Another voice (below 0.58) | A guest: polite answer, no tools, none of your conversation or screen, nothing saved. You get a warning with what was said. |
+
+- `friend voice status` shows whether a voice is enrolled; `friend voice forget` deletes it after the PIN (so does the enrollment panel). `friend config set voice.accept 0.75` and `voice.challenge 0.6` tune the two thresholds.
+- Emergency lock drops any pending challenge and any enrollment in progress.
+- A voice match is a convenience, not a lock: a recording or a cloned voice can fool any speaker model. That is why a borderline match needs the PIN and risky actions always ask for it.
 - Python tests for the speech engine: `cd packages/voice && python -m venv .venv && .venv/Scripts/pip install -e .[dev] && .venv/Scripts/python -m pytest`.
 
 ## Safety model

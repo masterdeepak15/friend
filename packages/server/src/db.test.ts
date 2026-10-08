@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "./config";
 import { openDb } from "./db";
+import { MIGRATIONS } from "./migrations";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "friend-test-"));
 const tables = (db: ReturnType<typeof openDb>) =>
@@ -21,7 +22,7 @@ describe("openDb", () => {
     openDb(dir).close();
     const db = openDb(dir);
     const rows = db.prepare("select count(*) c from schema_version").get() as { c: number };
-    expect(rows.c).toBe(1);
+    expect(rows.c).toBe(MIGRATIONS.length);
   });
 });
 
@@ -46,9 +47,19 @@ describe("loadConfig", () => {
   });
   it("has voice defaults and merges a partly edited voice section", () => {
     const dir = tmp();
-    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "base", ttsVoice: "en_US-lessac-medium", language: null });
+    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "base", ttsVoice: "en_US-lessac-medium", language: null, accept: 0.72, challenge: 0.58 });
     writeFileSync(join(dir, "config.json"), JSON.stringify({ voice: { sttModel: "small", language: "hi" } }));
-    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "small", ttsVoice: "en_US-lessac-medium", language: "hi" });
+    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "small", ttsVoice: "en_US-lessac-medium", language: "hi", accept: 0.72, challenge: 0.58 });
+  });
+  it("keeps edited speaker thresholds, but falls back when they are nonsense", () => {
+    const dir = tmp();
+    loadConfig(dir);
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ voice: { accept: 0.8, challenge: 0.6 } }));
+    expect(loadConfig(dir).voice).toMatchObject({ accept: 0.8, challenge: 0.6 });
+    for (const bad of [{ accept: 0.5, challenge: 0.6 }, { accept: 2, challenge: 0.5 }, { accept: "high", challenge: 0.5 }, { accept: 0.7, challenge: 0.7 }]) {
+      writeFileSync(join(dir, "config.json"), JSON.stringify({ voice: bad }));
+      expect(loadConfig(dir).voice).toMatchObject({ accept: 0.72, challenge: 0.58 });
+    }
   });
   it("includes destructive shell patterns by default", () => {
     expect(loadConfig(tmp()).destructivePatterns.length).toBeGreaterThan(5);

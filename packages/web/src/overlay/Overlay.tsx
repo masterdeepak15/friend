@@ -1,11 +1,17 @@
 import type { ClientMsg, PendingApproval } from "@friend/protocol";
-import type { Alert, Connection, LocalAction, VoiceMode } from "../store";
+import type { ReactNode } from "react";
+import type { Alert, Connection, LocalAction, VoiceChallenge, VoiceMode } from "../store";
 import { AlertToast } from "./AlertToast";
 import { ApprovalCard } from "./ApprovalCard";
+import { ChallengeCard } from "./ChallengeCard";
 import { MicIndicator } from "./MicIndicator";
 
 export interface OverlayProps {
   approval: PendingApproval | null;
+  /** A borderline voice waiting for the owner's PIN. */
+  challenge?: VoiceChallenge | null;
+  /** Other client-owned panels, such as voice enrollment. */
+  children?: ReactNode;
   alerts: Alert[];
   connection: Connection;
   deviceOnline: boolean;
@@ -15,7 +21,7 @@ export interface OverlayProps {
 }
 
 /** Layer 4: always above whatever the agent has put on the stage. */
-export function Overlay({ approval, alerts, connection, deviceOnline, voiceMode, send, dispatch }: OverlayProps) {
+export function Overlay({ approval, challenge, children, alerts, connection, deviceOnline, voiceMode, send, dispatch }: OverlayProps) {
   const badge =
     connection !== "open" ? "Reconnecting…" : !deviceOnline ? "No device connected" : null;
   return (
@@ -27,7 +33,9 @@ export function Overlay({ approval, alerts, connection, deviceOnline, voiceMode,
       )}
       <MicIndicator mode={voiceMode} />
       <AlertToast alerts={alerts} dispatch={dispatch} />
+      {challenge && !approval && <ChallengeCard key={challenge.id} challenge={challenge} send={send} dispatch={dispatch} />}
       {approval && <ApprovalCard approval={approval} send={send} />}
+      {children}
     </div>
   );
 }

@@ -5,10 +5,14 @@ export interface OwnerMenuProps {
   muted: boolean;
   onToggleMute: () => void;
   onSignedOut: () => void;
+  /** Speech is available, so the owner can teach Friend their voice. */
+  voiceAvailable?: boolean;
+  voiceEnrolled?: boolean;
+  onEnroll?: () => void;
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -53,6 +57,18 @@ export function OwnerMenu({ muted, onToggleMute, onSignedOut }: OwnerMenuProps) 
           <button type="button" style={touch} onClick={onToggleMute}>
             {muted ? "Unmute stage" : "Mute stage"}
           </button>
+          {voiceAvailable && onEnroll && (
+            <button
+              type="button"
+              style={touch}
+              onClick={() => {
+                setOpen(false);
+                onEnroll();
+              }}
+            >
+              {voiceEnrolled ? "Voice settings" : "Enroll my voice"}
+            </button>
+          )}
           <button type="button" style={touch} onClick={() => post("/api/logout")}>
             Log out
           </button>

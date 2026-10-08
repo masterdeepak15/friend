@@ -10,6 +10,21 @@ const nonEmpty = (v: string) => {
   if (!v.trim()) throw new Error("Value must not be empty");
   return v.trim();
 };
+const unit = (v: string) => {
+  const n = Number(v);
+  if (v.trim() === "" || !Number.isFinite(n) || n < 0 || n > 1) throw new Error("Expected a number between 0 and 1");
+  return n;
+};
+const httpUrl = (v: string) => {
+  let u: URL;
+  try {
+    u = new URL(v.trim());
+  } catch {
+    throw new Error("Expected a URL such as http://127.0.0.1:11434");
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("The URL must start with http:// or https://");
+  return u.origin;
+};
 
 const PARSERS: Record<string, (v: string) => unknown> = {
   apiKey: (v) => v,
@@ -21,18 +36,37 @@ const PARSERS: Record<string, (v: string) => unknown> = {
     if (!Number.isInteger(n) || n < 0 || n > 65535) throw new Error("Port must be a number between 0 and 65535");
     return n;
   },
+  provider: (v) => {
+    if (v !== "claude" && v !== "ollama") throw new Error("Provider must be claude or ollama");
+    return v;
+  },
   roots: list,
   allowedOrigins: list,
   allowedHosts: list,
   trustProxy: bool,
 };
 
-const VOICE_PARSERS: Record<string, (v: string) => unknown> = {
-  enabled: bool,
-  sttModel: nonEmpty,
-  ttsVoice: nonEmpty,
-  language: (v) => (v.trim() === "" ? null : v.trim()),
+const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
+  voice: {
+    enabled: bool,
+    sttModel: nonEmpty,
+    ttsVoice: nonEmpty,
+    language: (v) => (v.trim() === "" ? null : v.trim()),
+    accept: unit,
+    challenge: unit,
+  },
+  ollama: {
+    url: httpUrl,
+    model: nonEmpty,
+    contextTokens: (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1024 || n > 131072) throw new Error("contextTokens must be a whole number between 1024 and 131072");
+      return n;
+    },
+  },
 };
+
+const allKeys = () => [...Object.keys(PARSERS), ...Object.entries(GROUPS).flatMap(([g, f]) => Object.keys(f).map((k) => `${g}.${k}`))];
 
 export async function configCommand(args: string[], io: IO): Promise<number> {
   const [sub, key, ...valueParts] = args;
@@ -43,18 +77,20 @@ export async function configCommand(args: string[], io: IO): Promise<number> {
   const value = valueParts.join(" ");
   const cfg = loadConfig(io.dataDir);
 
-  if (key.startsWith("voice.")) {
-    const field = key.slice("voice.".length);
-    const parse = VOICE_PARSERS[field];
+  const dot = key.indexOf(".");
+  if (dot > 0) {
+    const group = key.slice(0, dot);
+    const field = key.slice(dot + 1);
+    const parse = GROUPS[group]?.[field];
     if (!parse) {
-      io.err(`Unknown voice setting "${field}". Settings: ${Object.keys(VOICE_PARSERS).map((k) => `voice.${k}`).join(", ")}`);
+      io.err(`Unknown setting "${key}". Settings: ${allKeys().join(", ")}`);
       return 1;
     }
-    (cfg.voice as unknown as Record<string, unknown>)[field] = parse(value);
+    (cfg[group as "voice" | "ollama"] as unknown as Record<string, unknown>)[field] = parse(value);
   } else {
     const parse = PARSERS[key];
     if (!parse) {
-      io.err(`Unknown config key "${key}". Keys: ${[...Object.keys(PARSERS), ...Object.keys(VOICE_PARSERS).map((k) => `voice.${k}`)].join(", ")}`);
+      io.err(`Unknown config key "${key}". Keys: ${allKeys().join(", ")}`);
       return 1;
     }
     (cfg as unknown as Record<string, unknown>)[key] = parse(value);

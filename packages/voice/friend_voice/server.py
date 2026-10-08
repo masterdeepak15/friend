@@ -83,6 +83,8 @@ def make_server(
                 return self._stt(parse_qs(url.query))
             if url.path == "/tts":
                 return self._tts()
+            if url.path == "/embed":
+                return self._embed()
             self._drain(64 * 1024)
             self._json(404, {"error": "not found"}, close=True)
 
@@ -101,10 +103,32 @@ def make_server(
                 return
             language = (query.get("language") or [None])[0]
             try:
-                self._json(200, engines.stt.transcribe(audio, language))
+                result = engines.stt.transcribe(audio, language)
+                if query.get("embed") == ["1"]:
+                    # the voiceprint of the same recording; too little speech still gives a transcript
+                    result["embedding"] = None
+                    if engines.speaker is not None:
+                        try:
+                            result["embedding"] = engines.speaker.embed(audio)["embedding"]
+                        except ValueError as e:
+                            result["embeddingError"] = str(e)
+                self._json(200, result)
             except ValueError as e:  # bad input (e.g. a recording that is too long): the caller's problem
                 self._json(400, {"error": str(e)})
             except Exception as e:  # engine failures are reported, never crash the server
+                self._json(500, {"error": str(e)})
+
+        def _embed(self) -> None:
+            audio = self._read_body()
+            if audio is None:
+                return
+            if engines.speaker is None:
+                return self._json(501, {"error": "the speaker model is not available"})
+            try:
+                self._json(200, engines.speaker.embed(audio))
+            except ValueError as e:
+                self._json(400, {"error": str(e)})
+            except Exception as e:
                 self._json(500, {"error": str(e)})
 
         def _tts(self) -> None:
