@@ -97,4 +97,14 @@ create table tasks (
 create index tasks_due on tasks (status, due_at);
 `,
   },
+  {
+    id: 5,
+    sql: `
+create table plugins (
+  id text primary key,
+  enabled integer not null default 1,
+  installed_at integer not null
+);
+`,
+  },
 ];
