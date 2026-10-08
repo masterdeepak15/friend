@@ -14,9 +14,22 @@ export interface Config {
   destructivePatterns: string[];
   model: string;
   apiKey: string | null;
+  /** Which model backend answers: Claude (needs an API key) or a local Ollama server. */
+  provider: ProviderName;
+  ollama: OllamaConfig;
   voice: VoiceConfig;
   dataDir: string;
 }
+
+export type ProviderName = "claude" | "ollama";
+
+export interface OllamaConfig {
+  url: string;
+  model: string;
+  contextTokens: number;
+}
+
+export const DEFAULT_OLLAMA: OllamaConfig = { url: "http://127.0.0.1:11434", model: "qwen2.5:7b", contextTokens: 8192 };
 
 export interface VoiceConfig {
   enabled: boolean;
@@ -71,6 +84,8 @@ const defaults = (dataDir: string): Config => ({
   destructivePatterns: DEFAULT_DESTRUCTIVE_PATTERNS,
   model: "claude-sonnet-5-5",
   apiKey: null,
+  provider: "claude",
+  ollama: { ...DEFAULT_OLLAMA },
   voice: { ...DEFAULT_VOICE },
   dataDir,
 });
@@ -102,5 +117,12 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
   const stored = JSON.parse(readFileSync(file, "utf8")) as Partial<Config>;
   // Built-in destructive patterns can only be extended, never dropped by an old or edited config file.
   const destructivePatterns = [...new Set([...base.destructivePatterns, ...(stored.destructivePatterns ?? [])])];
-  return { ...base, ...stored, destructivePatterns, voice: { ...DEFAULT_VOICE, ...stored.voice }, dataDir };
+  return {
+    ...base,
+    ...stored,
+    destructivePatterns,
+    ollama: { ...DEFAULT_OLLAMA, ...stored.ollama },
+    voice: { ...DEFAULT_VOICE, ...stored.voice },
+    dataDir,
+  };
 }

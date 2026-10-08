@@ -9,6 +9,7 @@ import { DeviceHub } from "./devices";
 import { createGateway, type ClientConn } from "./gateway";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
+import { OllamaProvider } from "./provider/ollama";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
 import { HttpError } from "./http-error";
@@ -33,7 +34,8 @@ class MissingKeyProvider implements Provider {
     yield {
       type: "error",
       userFacing: true,
-      message: "I need an Anthropic API key before I can think. Run: friend config set apiKey <your key>",
+      message:
+        "I need an Anthropic API key before I can think. Run: friend config set apiKey <your key>. Or use a local model: friend ollama setup --use",
     };
   }
 }
@@ -48,7 +50,12 @@ export async function createApp(opts: AppOptions) {
   const stage = new StageState();
   const approvals = new Approvals({ auth, policy, audit, db }, opts.approvalTimeoutMs);
   const provider =
-    opts.provider ?? (config.apiKey ? new ClaudeProvider({ apiKey: config.apiKey, model: config.model }) : new MissingKeyProvider());
+    opts.provider ??
+    (config.provider === "ollama"
+      ? new OllamaProvider(config.ollama)
+      : config.apiKey
+        ? new ClaudeProvider({ apiKey: config.apiKey, model: config.model })
+        : new MissingKeyProvider());
   const agent = new Agent({
     provider,
     policy,

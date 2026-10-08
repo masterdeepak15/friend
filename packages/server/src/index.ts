@@ -12,3 +12,6 @@ export { SidecarProcess } from "./voice/sidecar";
 export { DEFAULT_VOICE } from "./config";
 export type { VoiceConfig } from "./config";
 export { VoiceError } from "./voice/service";
+export { OllamaProvider } from "./provider/ollama";
+export { DEFAULT_OLLAMA } from "./config";
+export type { OllamaConfig, ProviderName } from "./config";
