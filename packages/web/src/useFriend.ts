@@ -2,6 +2,7 @@ import type { ClientMsg } from "@friend/protocol";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { createSocket, type FriendSocket } from "./socket";
 import { initialState, reduce, type LocalAction, type StageViewState } from "./store";
+import { CameraController } from "./camera/controller";
 import { postUtterance } from "./voice/api";
 import { VoiceController } from "./voice/controller";
 
@@ -20,6 +21,7 @@ export function useFriend(onUnauthorized: () => void): {
   const [state, dispatch] = useReducer(reduce as (s: StageViewState, a: unknown) => StageViewState, initialState);
   const socket = useRef<FriendSocket | null>(null);
   const controller = useRef<VoiceController | null>(null);
+  const camera = useRef<CameraController | null>(null);
   const unauthorized = useRef(onUnauthorized);
   unauthorized.current = onUnauthorized;
   const latest = useRef(state);
@@ -35,9 +37,25 @@ export function useFriend(onUnauthorized: () => void): {
       available: () => latest.current.voice.available,
     });
     controller.current = ctl;
+    const cam = new CameraController({
+      send: (m) => s.send(m),
+      dispatch: (a) => dispatch(a),
+      enabled: () => latest.current.camera.enabled,
+      upload: async (id, jpeg) => {
+        const res = await fetch(`/api/camera/frame/${encodeURIComponent(id)}`, {
+          method: "POST",
+          headers: { "content-type": "image/jpeg" },
+          body: jpeg,
+        });
+        if (!res.ok) throw new Error(`upload failed (${res.status})`);
+      },
+    });
+    camera.current = cam;
     const offMsg = s.onMessage((m) => {
       dispatch(m);
-      const type = (m as { type?: string } | null)?.type;
+      const type = (m as { type?: string; id?: unknown } | null)?.type;
+      const id = (m as { id?: unknown } | null)?.id;
+      if ((type === "camera.request" || type === "camera.cancel") && typeof id === "string") void cam.handle({ type, id });
       if (type === "audio.chunk" || type === "audio.stop") ctl.handleServer(m as Parameters<VoiceController["handleServer"]>[0]);
     });
     const offState = s.onState((v) => {
@@ -48,11 +66,18 @@ export function useFriend(onUnauthorized: () => void): {
       offMsg();
       offState();
       ctl.dispose();
+      cam.dispose();
       s.close();
       controller.current = null;
+      camera.current = null;
       socket.current = null;
     };
   }, []);
+
+  // switching the camera off ends any capture that is in progress
+  useEffect(() => {
+    if (!state.camera.enabled) camera.current?.dispose();
+  }, [state.camera.enabled]);
 
   const send = useCallback((m: ClientMsg) => socket.current?.send(m), []);
   const local = useCallback((a: LocalAction) => dispatch(a), []);

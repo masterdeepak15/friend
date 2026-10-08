@@ -31,6 +31,13 @@ export interface VoiceChallenge {
   text: string;
 }
 
+export interface CameraView {
+  /** The owner's switch. It is not remembered: a reload turns the camera off again. */
+  enabled: boolean;
+  /** The live stream while the camera is open for a picture, otherwise null. */
+  stream: MediaStream | null;
+}
+
 export interface StageViewState {
   scene: SceneMode;
   objects: StageObject[];
@@ -46,6 +53,7 @@ export interface StageViewState {
   voice: VoiceView;
   /** A borderline voice waiting for the owner's PIN. */
   challenge: VoiceChallenge | null;
+  camera: CameraView;
 }
 
 export const initialState: StageViewState = {
@@ -62,6 +70,7 @@ export const initialState: StageViewState = {
   deviceOnline: false,
   voice: { mode: "idle", level: 0, available: false, enrolled: false },
   challenge: null,
+  camera: { enabled: false, stream: null },
 };
 
 export type LocalAction =
@@ -70,6 +79,9 @@ export type LocalAction =
   | { type: "object.dismiss"; id: string }
   | { type: "alert.add"; level: "info" | "warn" | "error"; text: string }
   | { type: "challenge.dismiss"; id: string }
+  | { type: "camera.enable"; value: boolean }
+  | { type: "camera.open"; stream: MediaStream }
+  | { type: "camera.closed" }
   | { type: "voice.mode"; mode: VoiceMode }
   | { type: "voice.level"; level: number };
 
@@ -109,6 +121,12 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     if (local.type === "alert.add") {
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: local.level, text: local.text }] };
     }
+    if (local.type === "camera.enable") {
+      // switching off also drops any preview that is showing
+      return { ...state, camera: { enabled: local.value, stream: local.value ? state.camera.stream : null } };
+    }
+    if (local.type === "camera.open") return { ...state, camera: { ...state.camera, stream: local.stream } };
+    if (local.type === "camera.closed") return { ...state, camera: { ...state.camera, stream: null } };
     if (local.type === "challenge.dismiss") {
       return state.challenge?.id === local.id ? { ...state, challenge: null } : state;
     }
