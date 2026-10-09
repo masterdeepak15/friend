@@ -1,7 +1,7 @@
 // Builds the npm package: one program (dist/friend.mjs) plus the files it needs next to it.
 // Run `pnpm build` first (it builds the web app), or use `pnpm package` from the repository root.
 import { build } from "esbuild";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +15,24 @@ const web = join(repo, "packages/web/dist");
 if (!existsSync(join(web, "index.html"))) {
   console.error("The web app is not built yet. Run `pnpm build` first (or `pnpm package` from the repository root).");
   process.exit(1);
+}
+
+// A web app built before the last change to its sources would ship an old screen; refuse that.
+const newest = (dir) => {
+  let t = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    t = Math.max(t, e.isDirectory() ? newest(p) : statSync(p).mtimeMs);
+  }
+  return t;
+};
+const builtAt = statSync(join(web, "index.html")).mtimeMs;
+for (const src of ["packages/web/src", "packages/protocol/src", "packages/web/index.html"]) {
+  const p = join(repo, src);
+  if (existsSync(p) && (statSync(p).isDirectory() ? newest(p) : statSync(p).mtimeMs) > builtAt) {
+    console.error(`The web app is older than ${src}. Run \`pnpm build\` first (or \`pnpm package\` from the repository root).`);
+    process.exit(1);
+  }
 }
 
 rmSync(dist, { recursive: true, force: true });
