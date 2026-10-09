@@ -69,6 +69,10 @@ export interface StageViewState {
   /** A borderline voice waiting for the owner's PIN. */
   challenge: VoiceChallenge | null;
   camera: CameraView;
+  /** Who spoke last and how well they were recognized (null until someone has spoken). `seq` changes with every utterance. */
+  speaker: { name: string | null; trust: "owner" | "member" | "guest" | "unverified"; seq: number } | null;
+  /** What the profile badge calls the owner (empty: "Owner"). */
+  ownerName: string;
 }
 
 export const DEFAULT_CLIENT_LOOK: ClientLook = { size: 1, reactivity: 0.7, ambient: true, captions: true, captionSize: "medium" };
@@ -94,6 +98,8 @@ export const initialState: StageViewState = {
   voice: { mode: "idle", level: 0, available: false, enrolled: false },
   challenge: null,
   camera: { enabled: false, stream: null },
+  speaker: null,
+  ownerName: "",
 };
 
 export interface ChatLine {
@@ -109,6 +115,7 @@ export type LocalAction =
   | { type: "conn"; value: Connection }
   | { type: "alert.dismiss"; id: number }
   | { type: "object.dismiss"; id: string }
+  | { type: "object.place"; id: string; placement: StageObject["placement"] }
   | { type: "alert.add"; level: "info" | "warn" | "error"; text: string }
   | { type: "challenge.dismiss"; id: string }
   | { type: "camera.enable"; value: boolean }
@@ -134,7 +141,13 @@ function applyStage(s: StageViewState, cmd: Extract<ServerMsg, { type: "stage" }
     case "hide":
       return { ...s, objects: s.objects.filter((o) => o.id !== cmd.id) };
     case "clear":
-      return { ...s, objects: [], scene: "conversation" };
+      return { ...s, objects: s.objects.filter((o) => o.pinned), scene: "conversation" }; // the owner's widgets stay
+    case "pin":
+      return { ...s, objects: s.objects.map((o) => (o.id === cmd.id ? { ...o, pinned: true } : o)) };
+    case "unpin":
+      return { ...s, objects: s.objects.map((o) => (o.id === cmd.id ? (({ pinned: _p, ...rest }) => rest)(o) : o)) };
+    case "place":
+      return { ...s, objects: s.objects.map((o) => (o.id === cmd.id ? { ...o, placement: cmd.placement } : o)) };
     case "presence":
       return {
         ...s,
@@ -175,6 +188,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return { ...state, voice: { ...state.voice, level } };
     }
     if (local.type === "object.dismiss") return { ...state, objects: state.objects.filter((o) => o.id !== local.id) };
+    if (local.type === "object.place") return { ...state, objects: state.objects.map((o) => (o.id === local.id ? { ...o, placement: local.placement } : o)) };
     if (local.type === "alert.dismiss") return { ...state, alerts: state.alerts.filter((a) => a.id !== local.id) };
   }
   const parsed = ServerMsg.safeParse(input);
@@ -195,7 +209,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     case "chat.user":
       return { ...state, chat: capChat([...state.chat, { role: "user", text: m.text }]), chatLive: false };
     case "ui":
-      return { ...state, view: m.view, look: m.look ?? state.look, viewKnown: true };
+      return { ...state, view: m.view, look: m.look ?? state.look, ownerName: m.ownerName ?? state.ownerName, viewKnown: true };
     case "caption.delta": {
       const fresh = state.captionDone;
       const last = state.chat.at(-1);
@@ -239,7 +253,12 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     case "error":
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: "error", text: m.message }] };
     case "voice.heard":
-      return { ...state, captions: m.trust === "guest" ? `Guest: ${m.text}` : m.trust === "member" && m.speaker ? `${m.speaker}: ${m.text}` : m.text, captionDone: true };
+      return {
+        ...state,
+        captions: m.trust === "guest" ? `Guest: ${m.text}` : m.trust === "member" && m.speaker ? `${m.speaker}: ${m.text}` : m.text,
+        captionDone: true,
+        speaker: { name: m.trust === "member" ? (m.speaker ?? null) : null, trust: m.trust ?? "unverified", seq: (state.speaker?.seq ?? 0) + 1 },
+      };
     case "voice.challenge":
       return { ...state, challenge: { id: m.id, text: m.text } };
     case "voice.challenge.end":

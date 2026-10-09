@@ -1,4 +1,20 @@
-import { REGION_NAMES, REGIONS, clampToSafe, overlap, rectOf, type Placement, type Rect, type RegionName, type StageObject } from "@friend/protocol";
+import { REGION_NAMES, REGIONS, clampToSafe, overlap, rectOf, type Placement, type Rect, type RegionName, type ScreenInfo, type StageObject } from "@friend/protocol";
+
+/** How many pictures a phone screen shows comfortably at once (they stack in one column). */
+export const PHONE_COMFORT = 2;
+
+/** What the model is told about the screen it is drawing on, and what that means for the layout. */
+export function describeDevice(screen: ScreenInfo | null): string {
+  if (!screen) return "screen: size unknown (assume a wide desktop)";
+  const base = `screen: ${screen.kind}, ${screen.orientation}, ${screen.width}x${screen.height} px${screen.touch ? ", touch (no keyboard or mouse)" : ""}`;
+  if (screen.kind === "phone") {
+    return `${base}. Objects stack in one column here and the regions do not apply: placement is ignored, so say things short, show at most ${PHONE_COMFORT} pictures at once, prefer a stat, gauge, list or card over a wide chart or table, and avoid sandbox pages that need a wide area`;
+  }
+  if (screen.kind === "tablet") {
+    return `${base}. Medium screen: up to 3 or 4 pictures, "left" and "right" work, keep text large and short`;
+  }
+  return `${base}. Wide screen: all regions work, up to 6 pictures`;
+}
 
 /** More than this much of the smaller box covered counts as sitting on top of it. */
 const CONFLICT = 0.25;
@@ -43,7 +59,12 @@ export interface Placed {
  * Keeps one object from landing on top of another or on the always-visible parts of the screen. A box that sticks out is
  * moved inside the safe area; a spot that is taken is swapped for a free one (or "auto"). Nothing is ever refused.
  */
-export function placeObject(object: StageObject, shown: StageObject[], panels: PanelName[] = []): Placed {
+export function placeObject(object: StageObject, shown: StageObject[], panels: PanelName[] = [], screen: ScreenInfo | null = null): Placed {
+  // a phone stacks everything in one column: regions and boxes mean nothing there
+  if (screen?.kind === "phone") {
+    if (object.placement === "auto") return { object };
+    return { object: { ...object, placement: "auto" }, note: "Placement changed: this is a phone, where objects stack in one column, so it was set to auto." };
+  }
   const onScreen = [...shown, ...panelObjects(panels)];
   let placement = object.placement;
   const notes: string[] = [];
@@ -95,20 +116,25 @@ export function describeScreen(
   entries: { object: StageObject; expiresAt: number | null }[],
   now: number,
   panels: PanelName[] = [],
+  screen: ScreenInfo | null = null,
+  view?: string,
 ): string {
   const open = panels.length ? `; the owner has open: ${panels.map((p) => PANEL_TEXT[p]).join(", ")}, so keep clear of them` : "";
+  const known = [screen ? describeDevice(screen) : "", view ? `view=${view}` : ""].filter(Boolean);
+  const device = known.length ? `${known.join("; ")}; ` : "";
+  const phone = screen?.kind === "phone";
   const taken = panelObjects(panels);
   if (entries.length === 0) {
     const { free } = regionUse(taken);
-    return `scene=${scene}; presence=${presence}; the stage is empty${open}; free regions: ${free.join(", ") || "none"}`;
+    return `${device}scene=${scene}; presence=${presence}; the stage is empty${open}${phone ? "" : `; free regions: ${free.join(", ") || "none"}`}`;
   }
   const items = entries.map(({ object: o, expiresAt }) => {
     const where = typeof o.placement === "string" ? o.placement : "custom box";
-    const life = expiresAt === null ? "stays" : `leaves in ${Math.max(0, Math.round((expiresAt - now) / 1000))}s`;
-    return `${o.id} (${o.type}, ${where}, ${life})`;
+    const life = o.pinned ? "pinned widget" : expiresAt === null ? "stays" : `leaves in ${Math.max(0, Math.round((expiresAt - now) / 1000))}s`;
+    return `${o.id} (${o.type}, ${phone ? "stacked" : where}, ${life})`;
   });
   const { free } = regionUse([...entries.map((e) => e.object), ...taken]);
-  return `scene=${scene}; presence=${presence}; on screen: ${items.join("; ")}${open}; free regions: ${free.join(", ") || "none, replace something first"}`;
+  return `${device}scene=${scene}; presence=${presence}; on screen: ${items.join("; ")}${open}${phone ? "" : `; free regions: ${free.join(", ") || "none, replace something first"}`}`;
 }
 
 /** The design guide for the system prompt: the fixed parts of the screen, where things go, and what lives how long. */
@@ -118,6 +144,8 @@ export const LAYOUT_GUIDE = `Screen layout (follow this when you decide where th
 - Compose, do not pile up. One answer is one picture or a small set: one object, "center"; two, "left" and "right" (the chart on the left, its numbers on the right); three to six, "auto" with scene "multi". Give the biggest or most important object the most room. A sandbox page or a big chart takes the whole stage: use scene "focus" and "center".
 - Check "on screen" and "free regions" in each request before you place anything. Update an object (same id) instead of adding a copy. If the new answer replaces the old one, hide the old objects or use stage.clear first. If you place something on top of something else, the system moves it and tells you; use that to choose better next time.
 - Lifetimes: things the owner asked to see stay until they dismiss them or you replace them. Passing information (a reminder, a progress note, a one-off confirmation) gets a ttl of 15 to 60 seconds. Never leave stale objects: remove what no longer matters when the topic changes.
+- Know the screen you are drawing on: each request starts with "screen:" (phone, tablet or desktop, portrait or landscape, its size) and "view=". Lay things out for it: on a phone everything stacks in one column, so show at most two short pictures at a time and prefer a stat, gauge, list or card; on a tablet use up to four; on a wide desktop use the regions. If the screen changes (the owner turns the phone, or opens Friend on another device), the next request tells you; adapt without being asked.
+- Temporary and pinned. What you show for a task is temporary: when the task is done and the owner has what they need, take it off the screen (stage.hide for one, stage.clear for all) so the screen goes back to how the owner keeps it. Pinned widgets are the owner's: they stay across refreshes, logins and restarts, in the place the owner dragged them to, and stage.clear leaves them alone. Pin something with stage.pin only when the owner asks for it to stay, or when you offer and they agree (for example a clock, a to-do list, a status gauge). Never hide, move or unpin a pinned widget unless the owner asks. To change what a pinned widget shows, stage.update it by its id.
 - Pick the object by the data: one number gauge or stat, a few numbers side by side stat, a trend chart, items with details table, a to-do or schedule list or timeline, relationships graph, a short note card, anything else a sandbox page. Keep text short; the pictures carry the answer and your voice adds one or two sentences.
 - The owner can open a chat panel (right edge) and a schedule panel (upper left); the request's screen description lists them when open. Keep your pictures out of their way and do not repeat what they already show. The owner arranges the corner widgets and panels themselves; never try to move them. Change what the screen shows with view.set only when the owner asks for a cleaner or fuller screen.
 - The look of the voice presence (style, colour, brightness, size) belongs to the owner. If stage.presence or stage.mood say the look is fixed, accept it. Use look.set only when the owner asks you to change it.

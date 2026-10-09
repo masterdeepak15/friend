@@ -27,6 +27,8 @@ export interface Config {
   /** What the screen shows besides the AI's pictures: minimal, companion (status line and clock) or workspace (also chat and schedule). */
   view: ViewPreset;
   look: LookConfig;
+  /** What the profile badge on the screen calls the owner. Empty shows "Owner". */
+  ownerName: string;
   dataDir: string;
 }
 
@@ -202,6 +204,7 @@ const defaults = (dataDir: string): Config => ({
   voice: { ...DEFAULT_VOICE },
   view: "companion",
   look: { ...DEFAULT_LOOK },
+  ownerName: "",
   dataDir,
 });
 
@@ -243,6 +246,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
     view: stored.view === "minimal" || stored.view === "workspace" ? stored.view : "companion",
     look: sanitizeLook(stored.look),
+    ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",
     dataDir,
   };
 }

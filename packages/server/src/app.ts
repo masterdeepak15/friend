@@ -1,6 +1,6 @@
 import type { ClientMsg, ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
-import { isCatalogVoice, voiceLabel } from "@friend/protocol";
+import { clampToSafe, isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
 import { firstExistingDir } from "./assets";
 import { chatLines } from "./chatlog";
@@ -36,6 +36,7 @@ import { OllamaProvider } from "./provider/ollama";
 import { OpenAiProvider } from "./provider/openai";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
+import { dbWidgetStore } from "./widgets";
 import { ensureTlsCert } from "./tls";
 import { HttpError } from "./http-error";
 import { Challenges } from "./voice/challenge";
@@ -93,6 +94,8 @@ export async function createApp(opts: AppOptions) {
   const policy = new PolicyEngine(db, config);
   const devices = new DeviceHub();
   const stage = new StageState();
+  stage.useStore(dbWidgetStore(db)); // the owner's pinned widgets come back
+  stage.trackView(() => config.view);
   stage.setLook(config.look); // the owner's own style, colour and brightness are where every screen starts
   const approvals = new Approvals({ auth, policy, audit, db }, opts.approvalTimeoutMs);
   // told to the screen once the clients exist (below); Claude Code is skipped quietly until then
@@ -144,7 +147,7 @@ export async function createApp(opts: AppOptions) {
       else swap();
     }
     if (applied.changed.includes("voice.ttsVoice")) void warmVoice(config.voice.ttsVoice, voiceBefore);
-    if (applied.changed.some((k) => k === "view" || k.startsWith("look."))) {
+    if (applied.changed.some((k) => k === "view" || k === "ownerName" || k.startsWith("look."))) {
       if (applied.changed.some((k) => k.startsWith("look."))) for (const command of stage.setLook(config.look)) broadcast({ type: "stage", command });
       broadcast(uiMsg());
     }
@@ -239,7 +242,7 @@ export async function createApp(opts: AppOptions) {
     broadcast({ type: "alert", level: "info", text: "The voice request timed out and was dropped." });
   });
   let stopped = false;
-  const uiMsg = (): ServerMsg => ({ type: "ui", view: config.view, look: clientLook(config.look) });
+  const uiMsg = (): ServerMsg => ({ type: "ui", view: config.view, look: clientLook(config.look), ownerName: config.ownerName });
   const statusMsg = (): ServerMsg => ({
     type: "status",
     busy: agent.isBusy(),
@@ -688,13 +691,36 @@ export async function createApp(opts: AppOptions) {
         case "ui.panels":
           stage.setPanels(msg.open);
           break;
+        case "ui.screen":
+          stage.setScreen(msg);
+          break;
+        case "stage.move": {
+          // the owner dragged or resized an object: it keeps the box they left it in, kept inside the safe part of the screen
+          const [x, y, w, h] = clampToSafe([msg.rect.x * 100, msg.rect.y * 100, msg.rect.w * 100, msg.rect.h * 100]);
+          const command = { cmd: "place" as const, id: msg.objectId, placement: { x: x / 100, y: y / 100, w: w / 100, h: h / 100 } };
+          if (stage.apply(command, Date.now(), true).ok) broadcast({ type: "stage", command });
+          break;
+        }
+        case "stage.pin": {
+          const command = { cmd: msg.pinned ? ("pin" as const) : ("unpin" as const), id: msg.objectId };
+          const done = stage.apply(command, Date.now(), true);
+          if (done.ok) broadcast({ type: "stage", command });
+          else conn.send({ type: "alert", level: "warn", text: done.error });
+          audit.log("owner", msg.pinned ? "stage.pin" : "stage.unpin", { objectId: msg.objectId });
+          break;
+        }
         case "ping":
           conn.send(statusMsg());
           break;
         case "stage.event":
           audit.log("owner", "stage.event", { objectId: msg.objectId, event: msg.event });
-          if (msg.event === "dismiss" && stage.apply({ cmd: "hide", id: msg.objectId }).ok) {
-            broadcast({ type: "stage", command: { cmd: "hide", id: msg.objectId } });
+          if (msg.event === "dismiss") {
+            // the owner's own X: this removes even a pinned widget, for good
+            const done = stage.apply({ cmd: "hide", id: msg.objectId }, Date.now(), true);
+            if (done.ok) {
+              broadcast({ type: "stage", command: { cmd: "hide", id: msg.objectId } });
+              for (const follow of done.follow ?? []) broadcast({ type: "stage", command: follow });
+            }
           }
           break;
       }
@@ -742,7 +768,9 @@ export async function createApp(opts: AppOptions) {
       heartbeat.start();
       hub.startAll(); // connectors that were on come back in the background; Friend does not wait for them
       timer = setInterval(() => {
-        for (const id of stage.expire()) broadcast({ type: "stage", command: { cmd: "hide", id } });
+        const gone = stage.expire();
+        for (const id of gone) broadcast({ type: "stage", command: { cmd: "hide", id } });
+        if (gone.length) for (const follow of stage.settleNow()) broadcast({ type: "stage", command: follow });
       }, opts.expireIntervalMs ?? 1000);
       return gateway.listen();
     },

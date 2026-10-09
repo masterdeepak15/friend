@@ -331,8 +331,22 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "stage.clear",
-    description: "Remove everything from the screen and return to the bare presence.",
+    description: "Remove every temporary picture from the screen and return to the bare presence. Pinned widgets stay.",
     input: z.object({}),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "stage.pin",
+    description: "Keep a shown object as a widget: it stays on the screen across refreshes, logins and restarts, in the place the owner gives it, until it is removed on purpose. Use it for things worth keeping (a clock, a to-do list, a status gauge) when the owner asks or agrees, never for passing answers.",
+    input: z.object({ id: z.string() }),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "stage.unpin",
+    description: "Turn a pinned widget back into a temporary picture. Only when the owner asks.",
+    input: z.object({ id: z.string() }),
     baseTier: "T0",
     target: "gateway",
   },

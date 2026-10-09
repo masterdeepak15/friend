@@ -21,6 +21,7 @@ import { EnrollmentFlow } from "./voice/EnrollmentFlow";
 import { useVoiceKeys } from "./voice/keys";
 import { useAudioUnlock } from "./voice/unlock";
 import { ElsewhereCard } from "./overlay/ElsewhereCard";
+import { useScreenReport } from "./layout/screen";
 import { HouseholdPanel } from "./voice/HouseholdPanel";
 
 type Phase = "loading" | "setup" | "login" | "stage";
@@ -29,6 +30,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const { state, send, dispatch, voice, useHere } = useFriend(onSignedOut);
   useVoiceKeys(voice);
   useAudioUnlock(voice);
+  useScreenReport(send, state.connection);
   const [muted, setMuted] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [household, setHousehold] = useState(false);
@@ -145,6 +147,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         activity={state.activity}
         showStatus={state.viewKnown && panels.show.status}
         showClock={state.viewKnown && panels.show.clock}
+        profile={state.viewKnown && panels.show.profile ? { ownerName: state.ownerName, speaker: state.speaker } : null}
         send={send}
         dispatch={dispatch}
       >

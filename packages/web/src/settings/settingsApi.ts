@@ -6,6 +6,8 @@ export interface SettingsView {
   /** The key itself is never sent to the screen. */
   apiKeySet: boolean;
   view: "minimal" | "companion" | "workspace";
+  /** What the profile badge calls the owner. */
+  ownerName?: string;
   look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
@@ -33,7 +35,7 @@ export interface Look {
 export const DEFAULT_LOOK: Look = { style: "sphere", accent: "#3fd8ff", intensity: 0.6, size: 1, reactivity: 0.7, ambient: true, captions: true, captionSize: "medium", aiMayChange: true };
 
 /** Changes that only affect how the screen looks, which need no PIN. */
-export const COSMETIC = new Set(["view", "look"]);
+export const COSMETIC = new Set(["view", "look", "ownerName"]);
 export const needsPin = (patch: Record<string, unknown>): boolean => Object.keys(patch).some((k) => !COSMETIC.has(k));
 
 export interface SaveResult {
@@ -110,6 +112,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if (after.provider !== before.provider) patch.provider = after.provider;
   if (after.model !== before.model) patch.model = after.model;
   if (after.view !== before.view) patch.view = after.view;
+  if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
   for (const group of ["ollama", "claudeCode", "voice", "look"] as const) {
     const changed: Record<string, unknown> = {};

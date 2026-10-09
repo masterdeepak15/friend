@@ -1,14 +1,14 @@
 import type { ViewPreset } from "@friend/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type PanelId = "chat" | "tasks" | "status" | "clock";
-export const PANEL_IDS: PanelId[] = ["chat", "tasks", "status", "clock"];
+export type PanelId = "chat" | "tasks" | "status" | "clock" | "profile";
+export const PANEL_IDS: PanelId[] = ["chat", "tasks", "status", "clock", "profile"];
 
 /** What each view shows before the owner switches anything on or off by hand. */
 export const VIEW_PANELS: Record<ViewPreset, Record<PanelId, boolean>> = {
-  minimal: { chat: false, tasks: false, status: false, clock: false },
-  companion: { chat: false, tasks: false, status: true, clock: true },
-  workspace: { chat: true, tasks: true, status: true, clock: true },
+  minimal: { chat: false, tasks: false, status: false, clock: false, profile: false },
+  companion: { chat: false, tasks: false, status: true, clock: true, profile: true },
+  workspace: { chat: true, tasks: true, status: true, clock: true, profile: true },
 };
 
 export const VIEWS: ViewPreset[] = ["minimal", "companion", "workspace"];

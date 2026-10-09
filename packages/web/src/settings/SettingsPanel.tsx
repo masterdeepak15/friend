@@ -405,6 +405,9 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
         </Field>
 
         <h4 className="plugins-heading">What is on the screen</h4>
+        <Field label="Your name" hint="Shown on the badge in the corner, next to the shield, while you are signed in. Empty shows Owner.">
+          <input value={draft.ownerName ?? ""} maxLength={40} placeholder="Owner" onChange={(e) => setDraft({ ...draft, ownerName: e.target.value })} />
+        </Field>
         <Field label="View" hint="Minimal: only the voice presence. Companion: plus a status line and a clock. Workspace: also the chat and the schedule. Drag any panel to move it.">
           <select value={draft.view} onChange={(e) => setDraft({ ...draft, view: e.target.value as SettingsView["view"] })}>
             <option value="minimal">Minimal</option>

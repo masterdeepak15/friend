@@ -36,6 +36,11 @@ const PARSERS: Record<string, (v: string) => unknown> = {
     return t;
   },
   publicUrl: (v) => (v === "" ? null : v),
+  ownerName: (v) => {
+    const name = v.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
+    if (name.length > 40) throw new Error("The name can be at most 40 characters");
+    return name;
+  },
   https: bool,
   port: (v) => {
     const n = Number(v);
@@ -112,6 +117,7 @@ export const KEY_HELP: Record<string, string> = {
   port: "the web port (easier: friend lan port N)",
   https: "true serves a secure https:// address (Friend makes its own certificate), so a phone may use the microphone (easier: friend lan https on)",
   publicUrl: "the address people use when Friend is behind your own domain, or empty",
+  ownerName: "your name, shown on the profile badge (the shield) in the corner of the screen; empty shows Owner",
   roots: "folders Friend may read and write freely, separated by commas",
   allowedOrigins: "extra web addresses allowed to connect, separated by commas",
   allowedHosts: "extra host names that may reach Friend (for example my-pc), separated by commas",

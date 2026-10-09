@@ -14,6 +14,8 @@ export const SettingsPatch = z
     /** Empty means "leave the saved key alone". */
     apiKey: z.string().trim().max(400),
     view: ViewPreset,
+    /** What the profile badge calls the owner. Empty clears it. */
+    ownerName: z.string().trim().max(40),
     look: z
       .object({
         style: PresenceStyle,
@@ -78,6 +80,7 @@ export interface SettingsView {
   /** The key itself is never sent to the screen. */
   apiKeySet: boolean;
   view: Config["view"];
+  ownerName: string;
   look: Config["look"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** The key itself is never sent to the screen. */
@@ -92,6 +95,7 @@ export function settingsView(c: Config): SettingsView {
     model: c.model,
     apiKeySet: !!c.apiKey,
     view: c.view,
+    ownerName: c.ownerName,
     look: { ...c.look },
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
     openai: { url: c.openai.url, model: c.openai.model, vision: !!c.openai.vision, apiKeySet: !!c.openai.apiKey },
@@ -184,6 +188,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
 
   config.provider = next.provider;
   if (p.view) config.view = p.view;
+  if (p.ownerName !== undefined) config.ownerName = p.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
   if (p.look) config.look = sanitizeLook({ ...config.look, ...p.look });
   if (p.model) config.model = p.model;
   if (p.apiKey) config.apiKey = p.apiKey;
@@ -204,7 +209,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
 }
 
 /** Settings that only change how the screen looks. They need no PIN, because nothing about safety depends on them. */
-export const COSMETIC_KEYS = new Set(["view", "look"]);
+export const COSMETIC_KEYS = new Set(["view", "look", "ownerName"]);
 
 /** The part of the look that only the screen needs; the style, colour and glow travel as stage state. */
 export function clientLook(l: Config["look"]) {

@@ -121,4 +121,14 @@ create table voice_people (
 );
 `,
   },
+  {
+    id: 7,
+    sql: `
+create table widgets (
+  id text primary key,
+  object_json text not null,
+  position integer not null
+);
+`,
+  },
 ];

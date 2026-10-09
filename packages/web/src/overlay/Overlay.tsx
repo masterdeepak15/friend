@@ -1,6 +1,7 @@
 import type { ClientMsg, PendingApproval } from "@friend/protocol";
 import type { ReactNode } from "react";
-import type { Alert, Connection, LocalAction, VoiceChallenge, VoiceMode } from "../store";
+import type { Alert, Connection, LocalAction, StageViewState, VoiceChallenge, VoiceMode } from "../store";
+import { ProfileBadge } from "./ProfileBadge";
 import { CameraIndicator } from "../camera/CameraIndicator";
 import { AlertToast } from "./AlertToast";
 import { ApprovalCard } from "./ApprovalCard";
@@ -28,16 +29,19 @@ export interface OverlayProps {
   /** The corner widgets the chosen view shows (both on by default). */
   showStatus?: boolean;
   showClock?: boolean;
+  /** The shield with the name of whoever is talking: pass it to draw the profile badge. */
+  profile?: { ownerName: string; speaker: StageViewState["speaker"] } | null;
   send: (m: ClientMsg) => void;
   dispatch: (a: LocalAction) => void;
 }
 
 /** Layer 4: always above whatever the agent has put on the stage. */
-export function Overlay({ approval, challenge, cameraStream, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, showStatus = true, showClock = true, send, dispatch }: OverlayProps) {
+export function Overlay({ approval, challenge, cameraStream, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, showStatus = true, showClock = true, profile = null, send, dispatch }: OverlayProps) {
   return (
     <div data-overlay className="overlay" style={{ position: "fixed", inset: 0, zIndex: 1000, pointerEvents: "none" }}>
       {showStatus && <StatusBadge connection={connection} deviceOnline={deviceOnline} approval={approval} voiceMode={voiceMode} busy={busy} activity={activity} />}
       {showClock && <Clock />}
+      {profile && <ProfileBadge ownerName={profile.ownerName} speaker={profile.speaker} />}
       <MicIndicator mode={voiceMode} />
       {cameraStream && <CameraIndicator stream={cameraStream} />}
       <AlertToast alerts={alerts} dispatch={dispatch} />

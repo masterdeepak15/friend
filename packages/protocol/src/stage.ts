@@ -26,6 +26,8 @@ export const StageObject = z.object({
   placement: Placement,
   ttl: z.number().positive().max(3600).optional(),
   style: z.enum(["glass", "alert"]).optional(),
+  /** A widget: it stays (and keeps the place the owner gave it) across refreshes, logins and restarts, until it is removed on purpose. */
+  pinned: z.boolean().optional(),
 });
 export type StageObject = z.infer<typeof StageObject>;
 
@@ -35,6 +37,11 @@ export const StageCommand = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("update"), id: z.string(), props: z.record(z.string(), z.unknown()) }),
   z.object({ cmd: z.literal("hide"), id: z.string() }),
   z.object({ cmd: z.literal("clear") }),
+  /** Make a shown object a widget that stays, or let it go back to being a temporary picture. */
+  z.object({ cmd: z.literal("pin"), id: z.string() }),
+  z.object({ cmd: z.literal("unpin"), id: z.string() }),
+  /** The owner moved or resized an object. */
+  z.object({ cmd: z.literal("place"), id: z.string(), placement: Placement }),
   z.object({ cmd: z.literal("presence"), state: PresenceState.optional(), style: PresenceStyle.optional() }),
   z.object({ cmd: z.literal("mood"), accent: z.string().max(16).optional(), intensity: unit.optional() }),
 ]);

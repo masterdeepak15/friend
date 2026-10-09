@@ -19,6 +19,17 @@ export const ClientLook = z.object({
 });
 export type ClientLook = z.infer<typeof ClientLook>;
 
+const ScreenInfoShape = {
+  width: z.number().int().min(100).max(10000),
+  height: z.number().int().min(100).max(10000),
+  kind: z.enum(["phone", "tablet", "desktop"]),
+  orientation: z.enum(["portrait", "landscape"]),
+  /** The main pointer is a finger. */
+  touch: z.boolean(),
+};
+export const ScreenInfo = z.object(ScreenInfoShape);
+export type ScreenInfo = z.infer<typeof ScreenInfo>;
+
 export const PendingApproval = z.object({
   id: z.string(),
   tool: z.string(),
@@ -39,7 +50,7 @@ export const ServerMsg = z.discriminatedUnion("type", [
   /** What the owner just said or typed, so every open screen can show the conversation. */
   z.object({ type: z.literal("chat.user"), text: z.string() }),
   /** The owner's chosen view (sent on connect and whenever it changes). */
-  z.object({ type: z.literal("ui"), view: ViewPreset, look: ClientLook.optional() }),
+  z.object({ type: z.literal("ui"), view: ViewPreset, look: ClientLook.optional(), ownerName: z.string().max(40).optional() }),
   z.object({ type: z.literal("activity"), text: z.string().max(80).nullable() }),
   z.object({
     type: z.literal("status"),
@@ -97,6 +108,12 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("camera.denied"), id: z.string(), reason: z.enum(["off", "no-camera", "permission", "busy"]) }),
   /** Which side panels the owner has open, so the AI keeps its pictures out of their way. */
   z.object({ type: z.literal("ui.panels"), open: z.array(z.enum(["chat", "tasks"])).max(2) }),
+  /** What this screen is: its size in CSS pixels, the kind of device, and how it is held, so the AI can lay things out for it. */
+  z.object({ type: z.literal("ui.screen"), ...ScreenInfoShape }),
+  /** The owner dragged or resized an object (fractions of the screen, 0..1). */
+  z.object({ type: z.literal("stage.move"), objectId: z.string().max(64), rect: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }) }),
+  /** The owner pinned an object as a widget, or unpinned it. */
+  z.object({ type: z.literal("stage.pin"), objectId: z.string().max(64), pinned: z.boolean() }),
   z.object({ type: z.literal("ping") }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;

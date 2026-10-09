@@ -129,6 +129,7 @@ Connectors (Gmail, Chrome control, any MCP service) are managed inside the app, 
 | Key | What it is |
 |---|---|
 | `provider` | Which model answers: `claude` (API key), `claude-code` (your subscription), `ollama` (this PC) or `openai` (any OpenAI-compatible server, such as OmniRoute). |
+| `ownerName` | Your name, shown on the profile badge (a shield in the corner) while you are signed in; it shows whoever Friend just recognized when they speak. Empty shows "Owner". |
 | `apiKey`, `model` | The Anthropic API key and the Claude model used with it. |
 | `claudeCode.model`, `claudeCode.command`, `claudeCode.fallback` | The subscription route: model (`sonnet`, `haiku`, `opus`), the command that starts Claude Code, and `ollama` or `none` for what to use when Claude is unavailable. |
 | `ollama.url`, `ollama.model`, `ollama.vision`, `ollama.contextTokens` | The local model: server address, model name, whether it can see pictures, and how much it remembers at once. |
@@ -282,6 +283,13 @@ Press **Esc** (or long-press the top-left corner), choose **Enroll my voice**, r
 - Emergency lock drops any pending challenge and any enrollment in progress.
 - A voice match is a convenience, not a lock: a recording or a cloned voice can fool any speaker model. That is why a borderline match needs the PIN and risky actions always ask for it.
 - Python tests for the speech engine: `cd packages/voice && python -m venv .venv && .venv/Scripts/pip install -e .[dev] && .venv/Scripts/python -m pytest`.
+
+## Your screen: it knows what it draws on, and you can keep widgets
+
+- **Friend knows the screen.** Your browser tells Friend the size and kind of its screen (phone, tablet or desktop, portrait or landscape) when it connects and whenever you resize or turn it. The assistant lays things out for that screen: on a phone it shows one or two short pictures in a column, on a wide desktop it uses the whole stage. It also knows which view you chose and which pictures and widgets are showing.
+- **Temporary pictures and widgets.** What Friend shows while it works is temporary: it takes it off the screen when the task is done, and the screen goes back to how you keep it. To keep something, press the pin on its corner, or ask "keep this on screen". A pinned widget is a widget: it stays across refreshes, signing out and in, and restarts, in the place you gave it. "Clear the screen" leaves your widgets alone; the **×** on a widget removes it for good (the assistant never removes or unpins your widgets unless you ask).
+- **Move and resize.** On a computer or tablet, drag an object by the bar at its top and resize it by its bottom-right corner (or focus the bar and use the arrow keys; hold Shift to resize). Objects stay inside the part of the screen that is free of the menu, captions, status line and clock.
+- **The profile badge.** A shield in the corner shows your name (`friend config set ownerName "Your name"`, or Settings → Voice presence) while you are signed in. When Friend recognizes a family member's voice the badge shows their name; an unrecognized voice shows Guest. Drag it where you like; it is hidden in the Minimal view.
 
 ## Pictures first: weather, stats and graphics
 
