@@ -9,7 +9,8 @@ import {
   type ClientLook,
 } from "@friend/protocol";
 
-export type Connection = "connecting" | "open" | "closed" | "unauthorized";
+/** "elsewhere": Friend is open in another window; this one waits for "Use here". */
+export type Connection = "connecting" | "open" | "closed" | "unauthorized" | "elsewhere";
 
 export interface Alert {
   id: number;

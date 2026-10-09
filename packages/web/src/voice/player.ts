@@ -43,8 +43,15 @@ export class AudioPlayer {
 
   /** Create/resume the audio context. Call it from a user gesture (a key press) so playback is allowed. */
   unlock(): void {
+    // iPhone and iPad: play through the speaker even when the silent switch is on, as a call or a video would
+    try {
+      const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+      if (session) session.type = "playback";
+    } catch {
+      /* not supported here */
+    }
     const ctx = this.ensureContext();
-    if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+    if (ctx.state !== "running") void ctx.resume().catch(() => {});
   }
 
   /** True while the browser is still blocking sound (nothing has been clicked or pressed on the page yet). */
@@ -134,7 +141,8 @@ export class AudioPlayer {
 
   private ensureContext(): AudioContext {
     if (!this.ctx) {
-      this.ctx = new AudioContext();
+      const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext; // older Safari
+      this.ctx = new Ctor();
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 1024;
       this.analyser.connect(this.ctx.destination);
@@ -159,7 +167,7 @@ export class AudioPlayer {
     const gen = this.gen;
     try {
       const ctx = this.ensureContext();
-      if (ctx.state === "suspended") {
+      if (ctx.state !== "running") { // Safari also uses "interrupted" (after a call, or switching apps)
         // the browser has not allowed audio yet (no user gesture): do not pretend to be playing
         try {
           await ctx.resume();

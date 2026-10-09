@@ -16,6 +16,7 @@ export type StatusKind = "offline" | "waiting" | "listening" | "working" | "spea
 /** One plain line about what Friend is doing, so the owner is never left guessing. The most urgent thing wins. */
 export function describeStatus(s: StatusInput): { kind: StatusKind; text: string } {
   if (s.connection === "unauthorized") return { kind: "offline", text: "Signed out" };
+  if (s.connection === "elsewhere") return { kind: "offline", text: "Open in another window" };
   if (s.connection !== "open") return { kind: "offline", text: "Reconnecting…" };
   if (s.approval) return { kind: "waiting", text: "Waiting for your approval" };
   if (s.voiceMode === "listening") return { kind: "listening", text: "Listening" };

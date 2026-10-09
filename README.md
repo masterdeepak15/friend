@@ -51,7 +51,7 @@ Every command starts with `friend`. If you run Friend from the source code, writ
 
 | Command | What it does | Use it when |
 |---|---|---|
-| `friend start` | Starts Friend: the web app, the assistant, the speech engine if installed, and your connectors. Prints the address (and your network address when that is on). Ctrl+C stops it. | Every day. Open the address in a browser and sign in. |
+| `friend start` | Starts Friend: the web app, the assistant, the speech engine if installed, and your connectors. Prints the address (and your network address when that is on). Ctrl+C stops it. Friend's screen works in one browser window at a time: open it in a second place and that window shows "Use here", which moves Friend there and stops the first. | Every day. Open the address in a browser and sign in. |
 | `friend pair` | Prints a one-time pairing code, valid for 5 minutes, and the command to run on the other PC. | You want Friend to also work on a second PC. |
 | `friend node --url ws://HOST:8787/device --code CODE` | Run on the other PC: connects it to your Friend. Add `--roots C:/work,D:/files` for the folders it may use freely and `--name laptop` to name it. | The second step after `friend pair`. |
 | `friend devices list` | Lists the paired PCs and when each was last seen. | Checking what is connected. |

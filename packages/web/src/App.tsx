@@ -20,11 +20,12 @@ import { useFriend } from "./useFriend";
 import { EnrollmentFlow } from "./voice/EnrollmentFlow";
 import { useVoiceKeys } from "./voice/keys";
 import { useAudioUnlock } from "./voice/unlock";
+import { ElsewhereCard } from "./overlay/ElsewhereCard";
 
 type Phase = "loading" | "setup" | "login" | "stage";
 
 export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
-  const { state, send, dispatch, voice } = useFriend(onSignedOut);
+  const { state, send, dispatch, voice, useHere } = useFriend(onSignedOut);
   useVoiceKeys(voice);
   useAudioUnlock(voice);
   const [muted, setMuted] = useState(false);
@@ -173,6 +174,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         onView={setView}
         openRequest={menuRequest}
       />
+      {state.connection === "elsewhere" && <ElsewhereCard onUseHere={useHere} />}
     </>
   );
 }

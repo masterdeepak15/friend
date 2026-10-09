@@ -591,6 +591,11 @@ export function createGateway(deps: GatewayDeps) {
     return fwd || req.socket.remoteAddress || "unknown";
   };
 
+  // Friend's screen is open in one window at a time (like WhatsApp Web). A browser names its window with `tab`;
+  // a second window is turned away (4409) until its owner chooses "Use here" (`takeover=1`), which closes the first (4410).
+  // A window that reconnects or reloads is the same tab, so it just takes its own place back.
+  let activeOwner: { ws: WebSocket; tab: string } | null = null;
+
   function handleClient(ws: WebSocket, req: IncomingMessage) {
     if (!originAllowed(req)) {
       audit.log("anonymous", "ws.origin_refused", { origin: req.headers.origin });
@@ -599,6 +604,20 @@ export function createGateway(deps: GatewayDeps) {
     const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
     const session = token ? auth.resolveSession(token) : null;
     if (!session) return ws.close(4401, "unauthorized");
+
+    const params = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const tab = (params.get("tab") ?? "").slice(0, 64);
+    if (tab) {
+      if (activeOwner && activeOwner.ws.readyState === WebSocket.OPEN) {
+        if (params.get("takeover") !== "1" && activeOwner.tab !== tab) return ws.close(4409, "in use elsewhere");
+        activeOwner.ws.close(4410, "replaced");
+      }
+      const mine = { ws, tab };
+      activeOwner = mine;
+      ws.on("close", () => {
+        if (activeOwner === mine) activeOwner = null;
+      });
+    }
 
     const conn: ClientConn = {
       ip: clientIp(req),
@@ -610,6 +629,7 @@ export function createGateway(deps: GatewayDeps) {
     const dispose = deps.onClientConnect?.(session, conn);
     ws.on("close", () => dispose?.());
     ws.on("message", (data) => {
+      if (tab && activeOwner?.ws !== ws) return; // a window that was replaced no longer speaks for Friend
       let json: unknown;
       try {
         json = JSON.parse(String(data));

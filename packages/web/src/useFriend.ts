@@ -19,6 +19,7 @@ export function useFriend(onUnauthorized: () => void): {
   send: (m: ClientMsg) => void;
   dispatch: (a: LocalAction) => void;
   voice: VoiceControls;
+  useHere: () => void;
 } {
   const [state, dispatch] = useReducer(reduce as (s: StageViewState, a: unknown) => StageViewState, initialState);
   const socket = useRef<FriendSocket | null>(null);
@@ -63,6 +64,10 @@ export function useFriend(onUnauthorized: () => void): {
     const offState = s.onState((v) => {
       dispatch({ type: "conn", value: v });
       if (v === "unauthorized") unauthorized.current();
+      if (v === "elsewhere") {
+        ctl.blur(); // another window has Friend now: this one stops listening and speaking
+        cam.dispose();
+      }
     });
     return () => {
       offMsg();
@@ -92,5 +97,6 @@ export function useFriend(onUnauthorized: () => void): {
     }),
     [],
   );
-  return { state, send, dispatch: local, voice };
+  const useHere = useCallback(() => socket.current?.takeOver(), []);
+  return { state, send, dispatch: local, voice, useHere };
 }
