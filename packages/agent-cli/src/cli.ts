@@ -6,6 +6,7 @@ import { memoryCommand } from "./commands/memory";
 import { pluginCommand } from "./commands/plugin";
 import { doctorCommand } from "./commands/doctor";
 import { lanCommand } from "./commands/lan";
+import { daemonCommand } from "./commands/daemon";
 import { onboardCommand } from "./commands/onboard";
 import { ollamaCommand } from "./commands/ollama";
 import { claudeCommand } from "./commands/claude";
@@ -34,6 +35,7 @@ export const USAGE = `Usage: friend <command>
   doctor                     check what this PC has and what is missing (changes nothing)
   setup                      create the owner account (password, PIN, assistant name)
   start                      run the gateway and a local device node
+  daemon start|stop|restart|status  run Friend in the background (no terminal needed), stop it, or see if it is running
   pair                       print a one-time code to connect another PC
   node --url <ws-url> --code <code> [--roots a,b] [--name pc]
                              connect this PC to a Friend gateway
@@ -59,6 +61,8 @@ export async function run(argv: string[], io: IO): Promise<number> {
         return await setupCommand(io);
       case "start":
         return await startCommand(io);
+      case "daemon":
+        return await daemonCommand(rest, io);
       case "pair":
         return await pairCommand(io);
       case "node":

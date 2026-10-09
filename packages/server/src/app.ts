@@ -673,9 +673,8 @@ export async function createApp(opts: AppOptions) {
       camera.cancelAll(broadcast);
       agent.cancel();
       approvals.denyAll("Shutting down");
-      await gateway.close();
-      await provider.close?.().catch(() => {});
-      await hub.close().catch(() => {});
+      // connectors, the provider and the web server close side by side, so the slowest one sets the time, not their sum
+      await Promise.all([gateway.close().catch(() => {}), provider.close?.().catch(() => {}), hub.close().catch(() => {})]);
       db.close();
     },
   };

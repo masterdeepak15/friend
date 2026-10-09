@@ -118,8 +118,10 @@ export async function startFriend(opts: StartOptions): Promise<RunningFriend> {
     async stop() {
       if (watcher) clearInterval(watcher);
       node.stop();
-      await sidecar?.stop();
-      await app.stop();
+      // The speech engine and the server stop side by side, and nothing is waited on for long: a program that
+      // will not exit must not keep Ctrl+C hanging.
+      const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.());
+      await Promise.race([Promise.allSettled([sidecar?.stop(), app.stop()]), wait(6000)]);
     },
   };
 }

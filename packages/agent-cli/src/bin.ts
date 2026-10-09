@@ -58,4 +58,6 @@ const io: IO = {
 
 run(process.argv.slice(2), io).then((code) => {
   if (code !== 0) process.exitCode = code;
+  // After `friend start` has stopped everything, a lingering connection must not keep the terminal waiting.
+  if (process.argv[2] === "start") setTimeout(() => process.exit(), 1000).unref();
 });
