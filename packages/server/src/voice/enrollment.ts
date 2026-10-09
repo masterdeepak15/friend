@@ -1,4 +1,11 @@
-import { centroid, checkConsistency, cosine, type Voiceprint } from "./voiceprint";
+import { centroid, checkConsistency, cosine } from "./voiceprint";
+
+/** Where a finished enrollment goes: the owner's voiceprint, or one person of the household. */
+export interface PrintStore {
+  exists(): boolean;
+  enroll(embeddings: readonly (readonly number[])[], model: string): void;
+  clear(): void;
+}
 
 /** A mistake the owner can fix (not enough samples, mixed voices). Safe to show as is. */
 export class EnrollError extends Error {}
@@ -22,7 +29,7 @@ export class Enrollment {
   private samples: number[][] = [];
 
   constructor(
-    private voiceprint: Voiceprint,
+    private voiceprint: PrintStore,
     private model: string,
   ) {}
 

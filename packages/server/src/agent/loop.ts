@@ -15,7 +15,7 @@ import type { Memory } from "../memory";
 import { localIso, type Tasks } from "../tasks";
 import type { DeviceHub } from "../devices";
 import { classifyShell } from "../policy/classify";
-import type { PolicyEngine } from "../policy/engine";
+import { MEMBER_TOOLS, type PolicyEngine } from "../policy/engine";
 import type { AdminApi } from "../admin";
 import type { ContentBlock, Msg, Provider, ToolSpec } from "../provider/types";
 import { z } from "zod";
@@ -83,7 +83,14 @@ export interface TurnCtx {
   trust: Trust;
   emit: (m: ServerMsg) => void;
   ip: string;
+  /** Who is speaking, when trust is "member" (a recognized person of the household). */
+  person?: { id: number; name: string };
 }
+
+/** What a household member said and was answered in the last while, kept in memory only: it is never written to disk. */
+const MEMBER_MEMORY_MS = 30 * 60_000;
+const MEMBER_MEMORY_MSGS = 12;
+const earlierOf = (talk: { at: number; lines: Msg[] } | undefined, now: number): Msg[] => (talk && now - talk.at < MEMBER_MEMORY_MS ? talk.lines : []);
 
 interface ToolCall {
   id: string;
@@ -99,6 +106,7 @@ export class Agent {
   private scenesThisTurn = 0;
   private abort: AbortController | null = null;
   private idleJobs: (() => void)[] = [];
+  private memberTalk = new Map<number, { at: number; lines: Msg[] }>();
 
   /** Runs `job` as soon as no request is being answered (right away when idle). */
   whenIdle(job: () => void): void {
@@ -131,28 +139,38 @@ export class Agent {
       emit({ type: "stage", command: cmd });
     };
     emit({ type: "status", busy: true, deviceOnline: d.devices.hasOnline() });
-    if (ctx.trust !== "guest") emit({ type: "chat.user", text }); // every open screen can show the conversation
+    if (ctx.trust === "owner") emit({ type: "chat.user", text }); // every open screen can show the conversation
     emit({ type: "activity", text: "Thinking" });
     stage({ cmd: "presence", state: "thinking" });
     const abort = new AbortController();
     this.abort = abort;
-    // An unverified speaker gets an isolated conversation: no owner history in, nothing stored out.
+    // Anyone but the owner gets an isolated conversation: no owner history in, nothing stored out. An unverified
+    // speaker (guest) has no memory at all; a recognized household member has a short one, kept in memory only.
     const guest = ctx.trust === "guest";
+    const member = ctx.trust === "member" && !!ctx.person;
+    const isolated = ctx.trust !== "owner";
     const keep = (m: Msg) => {
-      if (!guest) saveMessage(d.db, m);
+      if (!isolated) saveMessage(d.db, m);
     };
+    let lastAnswer = ""; // a household member's last reply, for their short memory
     try {
-      if (!guest) repairDangling(d.db);
+      if (!isolated) repairDangling(d.db);
       const userMsg: Msg = { role: "user", content: [{ type: "text", text }] };
       keep(userMsg);
-      const messages: Msg[] = guest ? [userMsg] : loadHistory(d.db);
+      const earlier = member ? earlierOf(this.memberTalk.get(ctx.person!.id), d.tasks?.now() ?? Date.now()) : [];
+      const messages: Msg[] = isolated ? [...earlier, userMsg] : loadHistory(d.db);
       const pluginTools = (d.plugins?.toolDefs() ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
-      const tools = ctx.trust === "owner" ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])] : [];
+      const tools =
+        ctx.trust === "owner"
+          ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])]
+          : member
+            ? toolSpecs().filter((t) => MEMBER_TOOLS.has(t.name))
+            : [];
       let nudged = false;
 
       // Clear requests for real data (weather in a named city, the computer's stats) are answered with the real tools
       // right away: the pictures appear at once, and the model only has to say a short summary.
-      if (!guest) {
+      if (!isolated) {
         for (const [i, auto] of detectIntents(text).entries()) {
           const id = `auto-${Date.now().toString(36)}-${i}`;
           const callMsg: Msg = { role: "assistant", content: [{ type: "tool_use", id, name: auto.name, input: auto.args }] };
@@ -173,17 +191,18 @@ export class Agent {
         let failed: string | null = null;
         let userFacing = false;
         // read fresh each step, so a note saved earlier in this turn is visible right away; guests never see notes
-        const notes = !guest && d.memory ? d.memory.recent(NOTES_IN_PROMPT).map((m) => `#${m.id} ${m.text}`) : undefined;
+        const notes = !isolated && d.memory ? d.memory.recent(NOTES_IN_PROMPT).map((m) => `#${m.id} ${m.text}`) : undefined;
         const { system, context } = promptParts(
           d.assistantName(),
           d.stage.summary(),
-          guest ? "guest" : "owner",
+          guest ? "guest" : member ? "member" : "owner",
           notes,
           localIso(new Date(d.tasks?.now() ?? Date.now())),
-          guest ? undefined : d.plugins?.skills(),
-          guest ? undefined : d.mcp?.summary(),
+          isolated ? undefined : d.plugins?.skills(),
+          isolated ? undefined : d.mcp?.summary(),
+          member ? ctx.person!.name : undefined,
         );
-        for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: guest ? "guest" : "owner", messages, tools, signal: abort.signal })) {
+        for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: isolated ? "guest" : "owner", messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
             if (!assistantText) {
               stage({ cmd: "presence", state: "speaking" });
@@ -219,11 +238,12 @@ export class Agent {
         if (content.length) keep(assistantMsg);
         if (calls.length === 0) {
           // a small model may say it will do something and then stop: ask once for the actual call
-          if (!guest && !nudged && step < MAX_STEPS - 1 && promisesAction(assistantText)) {
+          if (!isolated && !nudged && step < MAX_STEPS - 1 && promisesAction(assistantText)) {
             nudged = true;
             messages.push({ role: "user", content: [{ type: "text", text: NUDGE }] }); // kept in memory for this turn only
             continue;
           }
+          if (member && assistantText) lastAnswer = assistantText;
           return;
         }
 
@@ -250,6 +270,11 @@ export class Agent {
       d.audit.log("system", "agent.error", { message: (e as Error).message });
       emit({ type: "caption.delta", text: "Sorry, something went wrong on my side." });
     } finally {
+      if (member && lastAnswer) {
+        // only the words, never tool results: a short, plain thread that the next question can lean on
+        const lines: Msg[] = [...earlierOf(this.memberTalk.get(ctx.person!.id), d.tasks?.now() ?? Date.now()), { role: "user", content: [{ type: "text", text }] }, { role: "assistant", content: [{ type: "text", text: lastAnswer }] }];
+        this.memberTalk.set(ctx.person!.id, { at: d.tasks?.now() ?? Date.now(), lines: lines.slice(-MEMBER_MEMORY_MSGS) });
+      }
       emit({ type: "caption.end" });
       emit({ type: "activity", text: null });
       stage({ cmd: "presence", state: "idle" });

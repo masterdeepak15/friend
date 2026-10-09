@@ -107,4 +107,18 @@ create table plugins (
 );
 `,
   },
+  {
+    id: 6,
+    sql: `
+create table voice_people (
+  id integer primary key autoincrement,
+  name text not null unique collate nocase,
+  centroid_enc blob not null,
+  dim integer not null,
+  samples integer not null,
+  model text not null,
+  created_at integer not null
+);
+`,
+  },
 ];

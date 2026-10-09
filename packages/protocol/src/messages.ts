@@ -53,8 +53,10 @@ export const ServerMsg = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("voice.heard"),
     text: z.string(),
-    /** owner: the voice matched; guest: it did not; unverified: no voice is enrolled yet. */
-    trust: z.enum(["owner", "guest", "unverified"]).optional(),
+    /** owner: the voice matched; member: a person of the household matched; guest: it did not; unverified: no voice is enrolled yet. */
+    trust: z.enum(["owner", "guest", "unverified", "member"]).optional(),
+    /** Who is speaking, when the voice matched a person of the household. */
+    speaker: z.string().max(60).optional(),
   }),
   /** A borderline voice: nothing runs until the owner confirms with the PIN. */
   z.object({ type: z.literal("voice.challenge"), id: z.string(), text: z.string() }),

@@ -239,7 +239,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     case "error":
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: "error", text: m.message }] };
     case "voice.heard":
-      return { ...state, captions: m.trust === "guest" ? `Guest: ${m.text}` : m.text, captionDone: true };
+      return { ...state, captions: m.trust === "guest" ? `Guest: ${m.text}` : m.trust === "member" && m.speaker ? `${m.speaker}: ${m.text}` : m.text, captionDone: true };
     case "voice.challenge":
       return { ...state, challenge: { id: m.id, text: m.text } };
     case "voice.challenge.end":

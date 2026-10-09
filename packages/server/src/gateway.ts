@@ -41,6 +41,8 @@ export interface GatewayDeps {
   onVoiceUtterance?: (session: Session, audio: Buffer, mime: string, ip: string) => Promise<{ text: string }>;
   /** Teaching Friend the owner's voice; the routes answer 503 without it. */
   voiceEnroll?: VoiceEnrollApi;
+  /** Teaching Friend the voices of the household; the routes answer 503 without it. */
+  household?: HouseholdApi;
   /** Managing plugins from the owner's screen; the routes answer 503 without it. */
   plugins?: PluginsApi;
   /** Managing connectors from the owner's screen; the routes answer 503 without it. */
@@ -106,6 +108,21 @@ export interface VoiceEnrollApi {
   finish(pin: string, ip: string): Promise<{ samples: number }>;
   cancel(): void;
   remove(pin: string, ip: string): Promise<void>;
+}
+
+/** The other people whose voices Friend knows (wife, son, daughter...). Owner only; saving or removing a voice needs the PIN. */
+export interface HouseholdApi {
+  overview(): {
+    people: { id: number; name: string; samples: number; createdAt: number }[];
+    max: number;
+    ownerEnrolled: boolean;
+    enrolling: { name: string; samples: number; min: number; max: number; enrolled: boolean } | null;
+  };
+  begin(name: string): { name: string; samples: number; min: number; max: number; enrolled: boolean };
+  sample(audio: Buffer, mime: string): Promise<{ count: number; note: string | null }>;
+  finish(pin: string, ip: string): Promise<{ samples: number; name: string }>;
+  cancel(): void;
+  remove(id: number, pin: string, ip: string): Promise<void>;
 }
 
 export const MAX_UTTERANCE_BYTES = 4 * 1024 * 1024;
@@ -547,6 +564,59 @@ export function createGateway(deps: GatewayDeps) {
       return { ok: true };
     } catch (e) {
       return enrollError(reply, e, "remove");
+    }
+  });
+
+  // The household: the voices of the other people Friend should know. Same guard as the owner's own enrollment.
+  const NameBody = z.object({ name: z.string().min(1).max(80) });
+  const householdGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    await enrollGuard(req, reply);
+    if (reply.sent) return;
+    if (!deps.household) return reply.code(503).send({ error: "Voice is not available" });
+  };
+  app.get("/api/voice/people", { onRequest: householdGuard }, async () => deps.household!.overview());
+  app.post("/api/voice/people/begin", { onRequest: householdGuard }, async (req, reply) => {
+    const body = NameBody.safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter a name" });
+    try {
+      return deps.household!.begin(body.data.name);
+    } catch (e) {
+      return enrollError(reply, e, "person.begin");
+    }
+  });
+  app.post("/api/voice/people/sample", { bodyLimit: MAX_UTTERANCE_BYTES, onRequest: householdGuard }, async (req, reply) => {
+    const body = req.body;
+    if (!Buffer.isBuffer(body)) return reply.code(415).send({ error: "Send the recording as audio/*" });
+    if (body.length === 0) return reply.code(400).send({ error: "Empty recording" });
+    try {
+      return await deps.household!.sample(body, String(req.headers["content-type"] ?? "audio/webm"));
+    } catch (e) {
+      return enrollError(reply, e, "person.sample");
+    }
+  });
+  app.post("/api/voice/people/finish", { onRequest: householdGuard }, async (req, reply) => {
+    const body = PinBody.safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN to save this voice" });
+    try {
+      return await deps.household!.finish(body.data.pin, req.ip);
+    } catch (e) {
+      return enrollError(reply, e, "person.finish");
+    }
+  });
+  app.post("/api/voice/people/cancel", { onRequest: householdGuard }, async () => {
+    deps.household!.cancel();
+    return { ok: true };
+  });
+  app.delete("/api/voice/people/:id", { onRequest: householdGuard }, async (req, reply) => {
+    const id = Number((req.params as { id: string }).id);
+    const body = PinBody.safeParse(req.body);
+    if (!Number.isInteger(id) || id < 1) return reply.code(400).send({ error: "Unknown person" });
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN to remove this voice" });
+    try {
+      await deps.household!.remove(id, body.data.pin, req.ip);
+      return { ok: true };
+    } catch (e) {
+      return enrollError(reply, e, "person.remove");
     }
   });
 

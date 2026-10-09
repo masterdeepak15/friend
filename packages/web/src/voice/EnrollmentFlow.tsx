@@ -22,10 +22,12 @@ export interface EnrollmentFlowProps {
   api?: EnrollApi;
   createRecorder?: (opts: RecorderOptions) => RecorderLike;
   onClose: () => void;
+  /** The name of another person of the household, when this teaches their voice instead of the owner's. */
+  who?: string;
 }
 
 /** Owner-opened panel that teaches Friend the owner's voice. Drawn by the client; saving or deleting needs the PIN. */
-export function EnrollmentFlow({ api = httpEnrollApi, createRecorder = (o) => new Recorder(o), onClose }: EnrollmentFlowProps) {
+export function EnrollmentFlow({ api = httpEnrollApi, createRecorder = (o) => new Recorder(o), onClose, who }: EnrollmentFlowProps) {
   const [info, setInfo] = useState<EnrollState | null>(null);
   const [count, setCount] = useState(0);
   const [note, setNote] = useState<string | null>(null);
@@ -123,12 +125,13 @@ export function EnrollmentFlow({ api = httpEnrollApi, createRecorder = (o) => ne
   return (
     <div className="approval enroll glass" role="dialog" aria-label="Voice enrollment" style={{ pointerEvents: "auto" }}>
       <div className="approval-head">
-        <span className="approval-title">Teach Friend your voice</span>
+        <span className="approval-title">{who ? `Teach Friend ${who}'s voice` : "Teach Friend your voice"}</span>
       </div>
 
       {view === "record" && (
         <>
-          {info?.enrolled && <p className="auth-note">Your voice is already saved. Saving a new one replaces it.</p>}
+          {!who && info?.enrolled && <p className="auth-note">Your voice is already saved. Saving a new one replaces it.</p>}
+          {who && <p className="auth-note">Hand the device to {who}. {who} reads each sentence aloud, close to the microphone, in a quiet room.</p>}
           <p className="auth-note">{label}. Press Record, read this aloud in a quiet room, then press Stop.</p>
           <pre className="approval-summary" data-testid="enroll-phrase" style={{ whiteSpace: "pre-wrap" }}>
             {PHRASES[phraseNo]}
@@ -152,9 +155,9 @@ export function EnrollmentFlow({ api = httpEnrollApi, createRecorder = (o) => ne
               </button>
             )}
             <button type="button" style={touch} disabled={recording || busy || count < min} onClick={() => setView("pin-save")}>
-              Save my voice
+              {who ? `Save ${who}'s voice` : "Save my voice"}
             </button>
-            {info?.enrolled && (
+            {!who && info?.enrolled && (
               <button type="button" style={touch} className="danger" disabled={recording || busy} onClick={() => setView("pin-delete")}>
                 Delete my voice
               </button>
@@ -168,7 +171,7 @@ export function EnrollmentFlow({ api = httpEnrollApi, createRecorder = (o) => ne
 
       {(view === "pin-save" || view === "pin-delete") && (
         <>
-          <p className="auth-note">{view === "pin-save" ? "Enter your PIN to save your voice." : "Enter your PIN to delete your saved voice."}</p>
+          <p className="auth-note">{view === "pin-save" ? (who ? `Enter your PIN to save ${who}'s voice.` : "Enter your PIN to save your voice.") : "Enter your PIN to delete your saved voice."}</p>
           <PinPad
             pin={pin}
             onChange={setPin}
@@ -239,7 +242,9 @@ export function EnrollmentFlow({ api = httpEnrollApi, createRecorder = (o) => ne
         <>
           <p className="auth-note">
             {view === "saved"
-              ? "Your voice is saved. From now on I will tell you apart from other speakers."
+              ? who
+                ? `${who}'s voice is saved. From now on I will know when ${who} is talking.`
+                : "Your voice is saved. From now on I will tell you apart from other speakers."
               : "Your voice was deleted. Every voice is treated as yours until you enroll again."}
           </p>
           <div className="approval-actions">

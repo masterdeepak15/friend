@@ -41,7 +41,7 @@ describe("voice messages", () => {
 
 describe("speaker verification messages", () => {
   it("voice.heard can carry how much the voice was trusted", () => {
-    for (const trust of ["owner", "guest", "unverified"]) {
+    for (const trust of ["owner", "guest", "unverified", "member"]) {
       expect(ServerMsg.safeParse({ type: "voice.heard", text: "hi", trust }).success).toBe(true);
     }
     expect(ServerMsg.safeParse({ type: "voice.heard", text: "hi" }).success).toBe(true);

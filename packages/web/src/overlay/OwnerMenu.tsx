@@ -12,6 +12,8 @@ export interface OwnerMenuProps {
   voiceAvailable?: boolean;
   voiceEnrolled?: boolean;
   onEnroll?: () => void;
+  /** Opens the panel for the other people of the household. */
+  onHousehold?: () => void;
   /** The camera switch. The camera stays off until the owner turns it on here. */
   cameraOn?: boolean;
   onToggleCamera?: () => void;
@@ -33,7 +35,7 @@ export interface OwnerMenuProps {
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, view, onView, openRequest }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, onHousehold, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, view, onView, openRequest }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -148,6 +150,18 @@ export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, vo
               }}
             >
               {voiceEnrolled ? "Voice settings" : "Enroll my voice"}
+            </button>
+          )}
+          {voiceAvailable && voiceEnrolled && onHousehold && (
+            <button
+              type="button"
+              style={touch}
+              onClick={() => {
+                setOpen(false);
+                onHousehold();
+              }}
+            >
+              Family voices
             </button>
           )}
           <button type="button" style={touch} onClick={() => post("/api/logout")}>

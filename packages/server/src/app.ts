@@ -43,7 +43,8 @@ import { loadOrCreateKey } from "./voice/crypto";
 import { EnrollError, Enrollment } from "./voice/enrollment";
 import { VoiceError, type VoiceService } from "./voice/service";
 import { Speaker } from "./voice/speaker";
-import { Voiceprint, decideTrust, type VoiceTrust } from "./voice/voiceprint";
+import { Voiceprint } from "./voice/voiceprint";
+import { Household, HouseholdError, MAX_PEOPLE, decideSpeaker, type WhoSpeaks } from "./voice/household";
 
 /** Recorded with each voiceprint so a model change can be told apart later. */
 const SPEAKER_MODEL = "wespeaker_en_voxceleb_resnet34";
@@ -227,8 +228,12 @@ export async function createApp(opts: AppOptions) {
   const speaker = voice ? new Speaker(voice, audit, () => config.voice.ttsVoice) : null;
   const voiceAvailable = () => !!voice && voice.available();
   // The owner's voiceprint: encrypted at rest, key in a private file next to the database.
-  const voiceprint = voice ? new Voiceprint(db, loadOrCreateKey(join(opts.dataDir, "voice.key"))) : null;
+  const voiceKey = voice ? loadOrCreateKey(join(opts.dataDir, "voice.key")) : null;
+  const voiceprint = voiceKey ? new Voiceprint(db, voiceKey) : null;
   const enrollment = voiceprint ? new Enrollment(voiceprint, SPEAKER_MODEL) : null;
+  // The other people of the household (wife, son, daughter...), recognized by voice like the owner is.
+  const household = voiceKey ? new Household(db, voiceKey) : null;
+  let memberEnrollment: { name: string; enrollment: Enrollment } | null = null;
   const challenges = new Challenges((id) => {
     broadcast({ type: "voice.challenge.end", id });
     broadcast({ type: "alert", level: "info", text: "The voice request timed out and was dropped." });
@@ -285,30 +290,32 @@ export async function createApp(opts: AppOptions) {
   }
 
   /** How much to trust a voice. A recording too short to identify cannot be trusted, but only the PIN can settle it. */
-  function judge(embedding: number[] | null): VoiceTrust {
-    if (!embedding) return "challenge";
+  function judge(embedding: number[] | null): WhoSpeaks {
+    if (!embedding) return { trust: "challenge" };
     let score: number | null;
+    let member: ReturnType<Household["identify"]> = null;
     try {
       score = voiceprint!.score(embedding);
+      member = household?.identify(embedding) ?? null;
     } catch (e) {
       audit.log("system", "voice.score_failed", { message: (e as Error).message });
-      return "guest";
+      return { trust: "guest" };
     }
-    if (score === null) return "guest";
-    const trust = decideTrust(score, config.voice);
-    audit.log("system", "voice.trust", { trust, score: Math.round(score * 1000) / 1000 });
-    return trust;
+    const who = decideSpeaker(score, member, config.voice);
+    // the person is named in the log by number only: the audit trail never holds names or what was said by family members
+    audit.log("system", "voice.trust", { trust: who.trust, score: score === null ? null : Math.round(score * 1000) / 1000, ...(who.person ? { person: who.person.id, personScore: Math.round(who.person.score * 1000) / 1000 } : {}) });
+    return who;
   }
 
   /** Runs the turn for something that was said, then speaks the reply. Guests get the isolated guest turn. */
-  async function runVoiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" = "owner"): Promise<void> {
+  async function runVoiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" | "member" = "owner", person?: { id: number; name: string }): Promise<void> {
     // the voice keeps pace with the captions: each sentence is spoken as soon as it has been written
     const talk = speaker?.stream(broadcast);
     const emit = (m: ServerMsg) => {
       if (m.type === "caption.delta" && epoch === lockEpoch) talk?.push(m.text); // locked meanwhile: stay silent
       broadcast(m);
     };
-    await agent.runTurn(text, { trust, emit, ip });
+    await agent.runTurn(text, { trust, emit, ip, ...(person ? { person } : {}) });
     await talk?.end();
   }
 
@@ -460,7 +467,7 @@ export async function createApp(opts: AppOptions) {
       if (!voice) throw new HttpError(503, "Voice is not available");
       if (agent.isBusy()) throw new HttpError(409, "Friend is busy with the last request. Try again in a moment.");
       const epoch = lockEpoch;
-      const enrolled = voiceprint?.exists() ?? false;
+      const enrolled = voiceprint?.exists() ?? false; // the owner's voice must be known before anyone else's matters
       let heard: string;
       let embedding: number[] | null = null;
       try {
@@ -477,8 +484,14 @@ export async function createApp(opts: AppOptions) {
       // nothing intelligible (silence, noise, punctuation only): no turn, nothing shown
       if (!/[\p{L}\p{N}]/u.test(heard)) return { text: "" };
       const crash = (e: unknown) => audit.log("system", "voice.turn_crash", { message: (e as Error).message });
-      const trust = enrolled ? judge(embedding) : "unverified";
-      if (trust === "challenge") {
+      const who: WhoSpeaks | { trust: "unverified" } = enrolled ? judge(embedding) : { trust: "unverified" };
+      const trust = who.trust;
+      if (trust === "member" && "person" in who && who.person) {
+        const person = { id: who.person.id, name: who.person.name };
+        broadcast({ type: "voice.heard", text: heard, trust: "member", speaker: person.name });
+        audit.log("system", "voice.member", { person: person.id }); // never the words: a family member's talk is not logged
+        void runVoiceTurn(heard, ip, epoch, "member", person).catch(crash);
+      } else if (trust === "challenge") {
         // close, but not sure enough: nothing runs unless the owner confirms with the PIN
         const { challenge, replaced } = challenges.open(heard, ip);
         if (replaced) broadcast({ type: "voice.challenge.end", id: replaced });
@@ -533,6 +546,72 @@ export async function createApp(opts: AppOptions) {
           },
         }
       : undefined,
+    household:
+      household && voiceprint && voice
+        ? {
+            overview: () => ({
+              people: household.list(),
+              max: MAX_PEOPLE,
+              ownerEnrolled: voiceprint.exists(),
+              enrolling: memberEnrollment ? { name: memberEnrollment.name, ...memberEnrollment.enrollment.state() } : null,
+            }),
+            begin: (rawName) => {
+              if (!voiceprint.exists()) throw new HttpError(400, "Teach Friend your own voice first (Esc, then Enroll my voice). Then add the others.");
+              try {
+                const name = household.canAdd(rawName);
+                memberEnrollment?.enrollment.cancel();
+                const target = { exists: () => false, enroll: (e: readonly (readonly number[])[], model: string) => void household.add(name, e, model), clear: () => {} };
+                memberEnrollment = { name, enrollment: new Enrollment(target, SPEAKER_MODEL) };
+                return { name, ...memberEnrollment.enrollment.state() };
+              } catch (e) {
+                if (e instanceof HouseholdError) throw new HttpError(400, e.message);
+                throw e;
+              }
+            },
+            sample: async (audio, mime) => {
+              const current = memberEnrollment;
+              if (!current) throw new HttpError(400, "Choose a name first.");
+              let embedding: number[];
+              try {
+                embedding = (await voice.embed(audio, mime)).embedding;
+              } catch (e) {
+                if (e instanceof VoiceError) throw new HttpError(400, e.message);
+                throw e;
+              }
+              try {
+                return current.enrollment.add(embedding);
+              } catch (e) {
+                if (e instanceof EnrollError) throw new HttpError(400, e.message);
+                throw e;
+              }
+            },
+            finish: async (pin, ip) => {
+              const current = memberEnrollment;
+              if (!current) throw new HttpError(400, "Choose a name first.");
+              await requirePin(pin, ip);
+              try {
+                const out = current.enrollment.finish();
+                memberEnrollment = null;
+                audit.log("owner", "voice.person_added", { ip, samples: out.samples });
+                broadcast(statusMsg());
+                return { ...out, name: current.name };
+              } catch (e) {
+                if (e instanceof EnrollError || e instanceof HouseholdError) throw new HttpError(400, e.message);
+                throw e;
+              }
+            },
+            cancel: () => {
+              memberEnrollment?.enrollment.cancel();
+              memberEnrollment = null;
+            },
+            remove: async (id, pin, ip) => {
+              await requirePin(pin, ip);
+              if (!household.remove(id)) throw new HttpError(404, "That person is not saved.");
+              audit.log("owner", "voice.person_removed", { ip, person: id });
+              broadcast(statusMsg());
+            },
+          }
+        : undefined,
     plugins: pluginsApi,
     settings: {
       get: () => settingsView(config),

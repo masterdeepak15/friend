@@ -6,6 +6,12 @@ import { RuleStore, type Matcher, type Rule } from "./rules";
 /** Tools that touch the owner's privacy: no standing rule can ever skip the approval card. */
 export const ASK_EVERY_TIME = new Set(["camera.snap"]);
 
+/**
+ * What a recognized person of the household (not the owner) may use: the weather and the screen's pictures. Nothing
+ * that reads files, runs commands, uses the camera, changes settings or touches the owner's notes and schedule.
+ */
+export const MEMBER_TOOLS = new Set(["weather.get", "stage.scene", "stage.show", "stage.update", "stage.hide", "stage.presence", "stage.mood"]);
+
 export type Decision = "allow" | "ask" | "ask_with_pin" | "deny";
 
 export interface DecideInput {
@@ -25,6 +31,7 @@ export class PolicyEngine {
 
   decide(input: DecideInput): Decision {
     if (input.trust === "guest") return input.tool === "stage.presence" ? "allow" : "deny";
+    if (input.trust === "member") return MEMBER_TOOLS.has(input.tool) ? "allow" : "deny";
     let tier: Tier = input.baseTier;
     if (!input.insideRoots && (tier === "T0" || tier === "T1")) tier = "T2";
     switch (tier) {

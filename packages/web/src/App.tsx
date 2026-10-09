@@ -21,6 +21,7 @@ import { EnrollmentFlow } from "./voice/EnrollmentFlow";
 import { useVoiceKeys } from "./voice/keys";
 import { useAudioUnlock } from "./voice/unlock";
 import { ElsewhereCard } from "./overlay/ElsewhereCard";
+import { HouseholdPanel } from "./voice/HouseholdPanel";
 
 type Phase = "loading" | "setup" | "login" | "stage";
 
@@ -30,6 +31,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   useAudioUnlock(voice);
   const [muted, setMuted] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
+  const [household, setHousehold] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState<null | "model" | "look">(null);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
@@ -149,6 +151,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         {state.viewKnown && panels.show.chat && <ChatPanel lines={state.chat} live={state.chatLive} onSend={(text) => send({ type: "chat.send", text })} onClose={() => panels.toggle("chat", false)} />}
         {state.viewKnown && panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
+        {household && <HouseholdPanel onClose={() => setHousehold(false)} />}
         {managingPlugins && <PluginsPanel onClose={() => setManagingPlugins(false)} />}
         {settingsOpen && <SettingsPanel initialTab={settingsOpen} onClose={() => setSettingsOpen(null)} />}
         {connectorsOpen && <ConnectorsPanel onClose={() => setConnectorsOpen(false)} />}
@@ -161,6 +164,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         voiceAvailable={state.voice.available}
         voiceEnrolled={state.voice.enrolled}
         onEnroll={() => setEnrolling(true)}
+        onHousehold={() => setHousehold(true)}
         onPlugins={() => setManagingPlugins(true)}
         onSettings={() => setSettingsOpen("model")}
         onConnectors={() => setConnectorsOpen(true)}
