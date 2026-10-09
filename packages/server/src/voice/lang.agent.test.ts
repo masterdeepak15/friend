@@ -41,6 +41,28 @@ const until = async (cond: () => boolean) => {
   expect(cond()).toBe(true);
 };
 
+describe("hearing a voice before choosing it", () => {
+  const preview = (base: string, cookie: string, voice: string) =>
+    fetch(`${base}/api/voice/preview`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ voice }) });
+
+  it("says a Hindi sentence with a Hindi voice, a Marathi one with the Marathi voice, and English with an English voice", async () => {
+    const { voice, base, cookie } = await boot([]);
+    expect((await preview(base, cookie, "hi_IN-pratham-medium")).status).toBe(200);
+    expect((await preview(base, cookie, "mr_IN-google-medium")).status).toBe(200);
+    expect((await preview(base, cookie, "en_US-amy-medium")).status).toBe(200);
+    expect(voice.voicesUsed).toEqual(["hi_IN-pratham-medium", "mr_IN-google-medium", "en_US-amy-medium"]);
+    expect(voice.synthesized[0]).toMatch(/^नमस्ते/);
+    expect(voice.synthesized[1]).toMatch(/^नमस्कार/);
+    expect(voice.synthesized[2]).toMatch(/^Hello, I am Jarvis/);
+  });
+
+  it("still refuses a voice that is not one of the known ones", async () => {
+    const { base, cookie } = await boot([]);
+    expect((await preview(base, cookie, "hi_IN-nobody-medium")).status).toBe(400);
+    expect((await preview(base, cookie, "../../etc")).status).toBe(400);
+  });
+});
+
 describe("answering in the owner's language", () => {
   it("always tells the model to write Hindi and Marathi in Devanagari and keep English words in Latin letters", async () => {
     const { provider, send } = await boot([[{ type: "text_delta", text: "ok" }, done]]);

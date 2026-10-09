@@ -48,7 +48,8 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [hearing, setHearing] = useState(false);
+  /** Which voice is being loaded or played for the owner to hear (null: none). */
+  const [hearing, setHearing] = useState<null | "main" | "hindi" | "marathi">(null);
   const [hearNote, setHearNote] = useState<string | null>(null);
   const alive = useRef(true);
 
@@ -100,6 +101,16 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
   const set = <G extends "ollama" | "claudeCode" | "voice" | "look">(group: G, field: keyof SettingsView[G], value: unknown) =>
     setDraft({ ...draft, [group]: { ...draft[group], [field]: value } });
   const look = draft.look;
+
+  const hear = (which: "main" | "hindi" | "marathi", voice: string) => {
+    if (!voice) return;
+    setHearing(which);
+    setHearNote(which === "main" ? null : "The first time, the voice downloads (about 64 MB). Please wait…");
+    preview(voice)
+      .then(() => alive.current && setHearNote("Playing…"))
+      .catch((e: Error) => alive.current && setHearNote(e.message))
+      .finally(() => alive.current && setHearing(null));
+  };
 
   const save = async (withPin?: string) => {
     setError(null);
@@ -318,20 +329,14 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
         </select>
       </Field>
       <div className="voice-hear">
-        <button
-          type="button"
-          style={touch}
-          disabled={hearing}
-          onClick={() => {
-            setHearing(true);
-            setHearNote(null);
-            preview(draft.voice.ttsVoice)
-              .then(() => alive.current && setHearNote("Playing…"))
-              .catch((e: Error) => alive.current && setHearNote(e.message))
-              .finally(() => alive.current && setHearing(false));
-          }}
-        >
-          {hearing ? "Loading the voice…" : "Hear it"}
+        <button type="button" style={touch} disabled={hearing !== null} onClick={() => hear("main", draft.voice.ttsVoice)}>
+          {hearing === "main" ? "Loading the voice…" : "Hear it"}
+        </button>
+        <button type="button" style={touch} disabled={hearing !== null || !draft.voice.hindiVoice} onClick={() => hear("hindi", draft.voice.hindiVoice ?? "")}>
+          {hearing === "hindi" ? "Loading the voice…" : "Hear the Hindi voice"}
+        </button>
+        <button type="button" style={touch} disabled={hearing !== null || !draft.voice.marathiVoice} onClick={() => hear("marathi", draft.voice.marathiVoice ?? "")}>
+          {hearing === "marathi" ? "Loading the voice…" : "Hear the Marathi voice"}
         </button>
         {hearNote && (
           <small className="auth-note" role="status">

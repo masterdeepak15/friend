@@ -1,6 +1,6 @@
 import type { ClientMsg, ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
-import { clampToSafe, isCatalogVoice, voiceLabel } from "@friend/protocol";
+import { HINDI_VOICES, MARATHI_VOICES, clampToSafe, isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
 import { firstExistingDir } from "./assets";
 import { chatLines } from "./chatlog";
@@ -475,7 +475,11 @@ export async function createApp(opts: AppOptions) {
     connectors: connectorsApi,
     voicePreview: async (id) => {
       if (!voice || !voiceAvailable()) throw new HttpError(503, "Voice is not available. Run: friend voice setup");
-      if (!isCatalogVoice(id) && id !== config.voice.ttsVoice) throw new HttpError(400, "That voice is not in the list.");
+      const indian = [...HINDI_VOICES, ...MARATHI_VOICES].some((v) => v.id === id) || id === config.voice.hindiVoice || id === config.voice.marathiVoice;
+      if (!isCatalogVoice(id) && !indian && id !== config.voice.ttsVoice) throw new HttpError(400, "That voice is not in the list.");
+      // a Hindi or Marathi voice says a sentence in its own language: an English one would sound wrong
+      if (id.startsWith("hi_")) return voice.synthesize("नमस्ते, मैं आपकी सहायक हूँ। मेरी आवाज़ ऐसी है।", id);
+      if (id.startsWith("mr_")) return voice.synthesize("नमस्कार, मी तुमची मदतनीस आहे. माझा आवाज असा आहे.", id);
       return voice.synthesize(`Hello, I am ${auth.assistantName()}. This is how I sound.`, id);
     },
     config,

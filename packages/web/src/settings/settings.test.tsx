@@ -211,6 +211,35 @@ describe("the voice tab", () => {
     expect(screen.getByRole("button", { name: "Hear it" })).toHaveProperty("disabled", false);
   });
 
+  it("lets you hear the Hindi and the Marathi voice, each by itself, with the voice it names", async () => {
+    const withIndian: SettingsView = { ...view, voice: { ...view.voice, hindiVoice: "hi_IN-priyamvada-medium", marathiVoice: "mr_IN-google-medium" } };
+    const preview = vi.fn(async () => {});
+    setup({}, withIndian, "model", preview);
+    await voiceTab();
+    await userEvent.click(screen.getByRole("button", { name: "Hear the Hindi voice" }));
+    await waitFor(() => expect(preview).toHaveBeenCalledWith("hi_IN-priyamvada-medium"));
+    await userEvent.click(await screen.findByRole("button", { name: "Hear the Marathi voice" }));
+    await waitFor(() => expect(preview).toHaveBeenCalledWith("mr_IN-google-medium"));
+    expect(preview).toHaveBeenCalledTimes(2);
+  });
+
+  it("warns that the first listen downloads the voice", async () => {
+    const withIndian: SettingsView = { ...view, voice: { ...view.voice, hindiVoice: "hi_IN-rohan-medium" } };
+    const preview = vi.fn(() => new Promise<void>(() => {}));
+    setup({}, withIndian, "model", preview);
+    await voiceTab();
+    await userEvent.click(screen.getByRole("button", { name: "Hear the Hindi voice" }));
+    expect(await screen.findByText(/downloads \(about 64 MB\)/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Hear it" })).toHaveProperty("disabled", true); // one voice at a time
+  });
+
+  it("can not play a Hindi or Marathi voice that is set to 'same as the voice above'", async () => {
+    setup();
+    await voiceTab();
+    expect(screen.getByRole("button", { name: "Hear the Hindi voice" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Hear the Marathi voice" })).toHaveProperty("disabled", true);
+  });
+
   it("keeps a voice that is not in the list, so it is not lost when the settings are opened", async () => {
     const custom: SettingsView = { ...view, voice: { ...view.voice, ttsVoice: "hi_IN-pratham-medium" } };
     setup({}, custom);
