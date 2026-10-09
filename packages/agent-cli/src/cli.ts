@@ -40,7 +40,7 @@ export const USAGE = `Usage: friend <command>
   node --url <ws-url> --code <code> [--roots a,b] [--name pc]
                              connect this PC to a Friend gateway
   ollama setup|status        use a local model through Ollama (no API key needed)
-  lan status|on|off|port N   let other devices on your network open Friend, or change the port (restart to apply)
+  lan status|on|off|port N|https on|off  let other devices on your network open Friend, change the port, or turn on the secure (https) address a phone needs for the microphone (restart to apply)
   claude setup|status        use your Claude subscription through Claude Code (no API key needed)
   voice setup|list|status|forget  install local speech and choose a female or male voice; check it; forget deletes your saved voice
   memory list|forget <n>|clear  see and delete the notes Friend keeps about you
@@ -75,6 +75,11 @@ export async function run(argv: string[], io: IO): Promise<number> {
         return await onboardCommand(rest, io);
       case "doctor":
         return await doctorCommand(io);
+      case "help":
+      case "--help":
+      case "-h":
+        io.out(USAGE);
+        return 0;
       case "version":
       case "--version":
       case "-v":
