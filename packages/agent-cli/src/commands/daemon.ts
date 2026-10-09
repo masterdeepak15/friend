@@ -95,7 +95,7 @@ function readPid(dataDir: string): PidRecord | null {
 }
 
 /** The background Friend of this data folder, or null (a pid file left by a crash or reboot is cleaned up). */
-function running(dataDir: string, deps: DaemonDeps): PidRecord | null {
+export function running(dataDir: string, deps: DaemonDeps): PidRecord | null {
   const r = readPid(dataDir);
   if (r && deps.alive(r.pid)) return r;
   if (r) rmSync(pidFile(dataDir), { force: true });

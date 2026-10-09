@@ -89,6 +89,7 @@ Every command starts with `friend`. If you run Friend from the source code, writ
 | `friend daemon stop` | Stops the background Friend and the speech engine with it. | Shutting it down. |
 | `friend daemon restart` | Stops it and starts it again. | After changing a setting such as `friend lan on` or a different model. |
 | `friend daemon status` | Says whether the background Friend is running, for how long, and at which address. Exit code 0 when running, 1 when not. | Checking, or in a script. |
+| `friend upgrade` | Updates Friend in one go: checks npm for the newest version, stops the background Friend, installs it, and starts it again. Add `--force` to reinstall the same version. If Friend runs in a terminal instead, it asks you to press Ctrl+C there first. | A new version is out. |
 | `friend lan` (or `friend lan status`) | Shows what Friend listens on and the addresses to open. | Checking, or finding the address for your phone. |
 | `friend lan on` | Lets other devices on your network open Friend. Prints the addresses and the things to know (plain http, no microphone on other devices, firewall prompt). | Using Friend from a phone or another PC. |
 | `friend lan on --https` | The same, with a secure `https://` address (Friend makes its own certificate), so a phone may use the microphone and camera. | Talking to Friend from a phone. |
