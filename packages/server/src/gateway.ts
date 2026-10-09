@@ -127,6 +127,15 @@ export interface HouseholdApi {
 
 export const MAX_UTTERANCE_BYTES = 4 * 1024 * 1024;
 
+/** "45 seconds", "2 minutes", "1 hour": how long a lock lasts, in words. */
+function waitText(seconds: number): string {
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 90) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
 /** Allows `max` hits per key within a sliding window. Keys that have gone quiet are forgotten. */
 export class SlidingWindow {
   private hits = new Map<string, number[]>();
@@ -210,6 +219,13 @@ export function createGateway(deps: GatewayDeps) {
 
   app.get("/api/state", async () => ({ hasOwner: auth.hasOwner() }));
 
+  // Whether this browser is signed in. The screen asks before it draws anything, so the home screen is never shown to someone who is not.
+  app.get("/api/session", async (req, reply) => {
+    const token = req.cookies[COOKIE_NAME];
+    reply.header("cache-control", "no-store");
+    return { signedIn: !!token && !!auth.resolveSession(token) };
+  });
+
   app.post("/api/setup", async (req, reply) => {
     const remote = req.socket.remoteAddress ?? "";
     const forwarded = req.headers["x-forwarded-for"] || req.headers["forwarded"] || req.headers["x-real-ip"];
@@ -242,10 +258,16 @@ export function createGateway(deps: GatewayDeps) {
       });
       return { ok: true };
     } catch (e) {
+      reply.header("cache-control", "no-store");
       if (e instanceof LockoutError) {
-        return reply.code(429).header("retry-after", Math.ceil(e.retryAfterMs / 1000)).send({ error: e.message });
+        const seconds = Math.max(1, Math.ceil(e.retryAfterMs / 1000));
+        return reply.code(429).header("retry-after", seconds).send({ error: `Too many wrong passwords. Try again in ${waitText(seconds)}.`, retryAfterSeconds: seconds });
       }
-      return reply.code(401).send({ error: "Invalid credentials" });
+      // a wrong password: say how many tries are left, or that the address is now locked and for how long
+      const state = auth.loginState(req.ip);
+      const seconds = Math.ceil(state.retryAfterMs / 1000);
+      if (seconds > 0) return reply.code(401).send({ error: `Wrong password. Locked for ${waitText(seconds)}.`, triesLeft: 0, retryAfterSeconds: seconds });
+      return reply.code(401).send({ error: "Invalid credentials", triesLeft: state.triesLeft });
     }
   });
 

@@ -50,26 +50,26 @@ describe("login and sessions", () => {
     await expect(auth.login("nope nope nope", "1.1.1.1")).rejects.toThrow();
     expect(audit.list(10).some((r) => r.kind === "login.fail")).toBe(true);
   });
-  it("locks an IP after 5 failures until the clock advances", async () => {
-    for (let i = 0; i < 5; i++) await expect(auth.login("bad bad bad", "2.2.2.2")).rejects.toThrow();
+  it("locks an IP after 3 wrong tries until the clock advances", async () => {
+    for (let i = 0; i < 3; i++) await expect(auth.login("bad bad bad", "2.2.2.2")).rejects.toThrow();
     await expect(auth.login(owner.password, "2.2.2.2")).rejects.toBeInstanceOf(LockoutError);
     now += 2 * 60 * 60 * 1000;
     await expect(auth.login(owner.password, "2.2.2.2")).resolves.toBeTruthy();
   });
   it("rate limits verifyPin the same way", async () => {
-    for (let i = 0; i < 5; i++) expect(await auth.verifyPin("000000", "3.3.3.3")).toBe(false);
+    for (let i = 0; i < 3; i++) expect(await auth.verifyPin("000000", "3.3.3.3")).toBe(false);
     await expect(auth.verifyPin(owner.pin, "3.3.3.3")).rejects.toBeInstanceOf(LockoutError);
   });
   it("limits a burst of simultaneous PIN guesses to the lockout threshold", async () => {
     const results = await Promise.allSettled(Array.from({ length: 50 }, (_, i) => auth.verifyPin(String(100000 + i), "8.8.8.8")));
     const evaluated = results.filter((r) => r.status === "fulfilled").length;
-    expect(evaluated).toBeLessThanOrEqual(5);
-    expect(audit.list(200).filter((r) => r.kind === "pin.fail").length).toBeLessThanOrEqual(5);
+    expect(evaluated).toBeLessThanOrEqual(3);
+    expect(audit.list(200).filter((r) => r.kind === "pin.fail").length).toBeLessThanOrEqual(3);
   });
   it("limits a burst of simultaneous login guesses the same way", async () => {
     const results = await Promise.allSettled(Array.from({ length: 50 }, (_, i) => auth.login(`wrong password ${i}`, "8.8.4.4")));
-    expect(results.filter((r) => r.status === "rejected" && !(r.reason instanceof LockoutError)).length).toBeLessThanOrEqual(5);
-    expect(audit.list(200).filter((r) => r.kind === "login.fail").length).toBeLessThanOrEqual(5);
+    expect(results.filter((r) => r.status === "rejected" && !(r.reason instanceof LockoutError)).length).toBeLessThanOrEqual(3);
+    expect(audit.list(200).filter((r) => r.kind === "login.fail").length).toBeLessThanOrEqual(3);
   });
   it("applies an account-wide limit across many source addresses", async () => {
     for (let i = 0; i < 25; i++) await auth.login("wrong password", `10.0.0.${i}`).catch(() => {});

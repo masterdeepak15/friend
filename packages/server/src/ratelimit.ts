@@ -31,6 +31,19 @@ export class RateLimiter {
     this.entries.set(key, e);
   }
 
+  /** Wrong tries left before the next lock. Once locked before, one wrong try is enough to lock again, for longer. */
+  triesLeft(key: string): number {
+    const e = this.entries.get(key);
+    if (!e || e.fails === 0) return this.maxFails;
+    return e.fails < this.maxFails ? this.maxFails - e.fails : 1;
+  }
+
+  /** How long the key is locked from now, in milliseconds (0 when it is not). */
+  lockedFor(key: string): number {
+    const e = this.entries.get(key);
+    return e ? Math.max(0, e.lockedUntil - this.clock()) : 0;
+  }
+
   reset(key: string): void {
     this.entries.delete(key);
   }

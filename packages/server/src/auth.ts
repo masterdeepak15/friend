@@ -16,6 +16,8 @@ export interface Device {
 }
 
 const SESSION_TTL_MS = 7 * 24 * 3600 * 1000;
+/** Wrong passwords or PINs from one address before it is locked out. */
+export const LOGIN_TRIES = 3;
 const PAIR_TTL_MS = 5 * 60 * 1000;
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -45,8 +47,15 @@ export class Auth {
   private accountLimiter: RateLimiter;
 
   constructor(private db: Db, private audit: Audit, private clock: () => number = Date.now) {
-    this.limiter = new RateLimiter(clock);
+    // three wrong tries and this address is locked for a minute; every wrong try after that doubles the wait (up to an hour)
+    this.limiter = new RateLimiter(clock, LOGIN_TRIES);
     this.accountLimiter = new RateLimiter(clock, 20);
+  }
+
+  /** Where a sign-in stands for this address: the wrong tries left, and how long it is locked. Safe to show the visitor. */
+  loginState(ip: string): { triesLeft: number; retryAfterMs: number } {
+    const key = `login:${ip}`;
+    return { triesLeft: this.limiter.triesLeft(key), retryAfterMs: Math.max(this.limiter.lockedFor(key), this.accountLimiter.lockedFor("login:*")) };
   }
 
   /** Check the locks and count the attempt immediately, before any await, so concurrent guesses cannot slip past. */

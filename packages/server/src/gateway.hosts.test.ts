@@ -76,7 +76,7 @@ describe("trustProxy", () => {
       const r = await call("POST", "/api/login", { host: `127.0.0.1:${port}`, "x-forwarded-for": `spoof-${i}, 5.5.5.5` }, { password: "wrong password" });
       statuses.push(r.status);
     }
-    expect(statuses.slice(0, 5).every((s) => s === 401)).toBe(true);
-    expect(statuses.slice(5).every((s) => s === 429)).toBe(true);
+    expect(statuses.slice(0, 3).every((s) => s === 401)).toBe(true);
+    expect(statuses.slice(3).every((s) => s === 429)).toBe(true);
   });
 });

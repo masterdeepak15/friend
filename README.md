@@ -192,6 +192,8 @@ pnpm friend setup          # password, PIN, assistant name, workspace folder, AP
 pnpm friend start          # gateway + local device node, http://127.0.0.1:8787
 ```
 
+Sign-in is guarded against guessing: after **three wrong passwords** (or PINs) from one address, that address is locked for a minute, and every wrong try after that doubles the wait (up to an hour). The sign-in screen shows the tries left and a countdown, and even the right password waits out a lock. Many addresses together are limited too. A refresh never shows any part of the home screen before sign-in: the page asks the server first and draws only the sign-in screen until you are in.
+
 Open the address in a browser, sign in, and press any key to talk. Press `Esc` (or long-press the top-left corner) for the owner menu: mute stage, log out, emergency lock.
 
 Preview the whole look with no API key and no network: `pnpm build && pnpm demo`, then open the printed address. Each message you send shows the next scene (gauges and charts, a timeline, a graph, the orb and ring voice styles, a warm mood).

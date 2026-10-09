@@ -189,11 +189,23 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
 export function App() {
   const [phase, setPhase] = useState<Phase>("loading");
 
+  // Nothing of the home screen is drawn until the server says this browser is signed in. If the server cannot be asked, the sign-in screen is shown, never the home screen.
   useEffect(() => {
-    fetch("/api/state")
-      .then((r) => r.json() as Promise<{ hasOwner: boolean }>)
-      .then((s) => setPhase(s.hasOwner ? "stage" : "setup"))
-      .catch(() => setPhase("stage"));
+    let live = true;
+    const go = (p: Phase) => live && setPhase(p);
+    (async () => {
+      try {
+        const state = (await (await fetch("/api/state")).json()) as { hasOwner: boolean };
+        if (!state.hasOwner) return go("setup");
+        const session = (await (await fetch("/api/session", { cache: "no-store" })).json()) as { signedIn?: boolean };
+        go(session.signedIn === true ? "stage" : "login");
+      } catch {
+        go("login");
+      }
+    })();
+    return () => {
+      live = false;
+    };
   }, []);
 
   if (phase === "loading") return <div className="boot" aria-busy="true" />;
