@@ -43,7 +43,7 @@ const PARSERS: Record<string, (v: string) => unknown> = {
     return n;
   },
   provider: (v) => {
-    if (v !== "claude" && v !== "ollama" && v !== "claude-code") throw new Error("Provider must be claude, ollama or claude-code");
+    if (v !== "claude" && v !== "ollama" && v !== "claude-code" && v !== "openai") throw new Error("Provider must be claude, ollama, claude-code or openai");
     return v;
   },
   roots: list,
@@ -73,6 +73,24 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
       return v;
     },
   },
+  openai: {
+    url: (v) => {
+      let u: URL;
+      try {
+        u = new URL(v.trim());
+      } catch {
+        throw new Error("Expected a URL that ends in /v1, such as http://localhost:20128/v1");
+      }
+      if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("The URL must start with http:// or https://");
+      return (u.origin + u.pathname).replace(/\/+$/, "");
+    },
+    model: (v) => {
+      if (!/^[A-Za-z0-9][\w.:/-]*$/.test(v.trim())) throw new Error("Expected a model name without spaces, such as auto");
+      return v.trim();
+    },
+    apiKey: (v) => (v.trim() === "" ? null : v.trim()),
+    vision: bool,
+  },
   ollama: {
     url: httpUrl,
     model: nonEmpty,
@@ -89,7 +107,7 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
 export const KEY_HELP: Record<string, string> = {
   apiKey: "Anthropic API key, used when the model is \"claude\"",
   model: "Claude model name, used with the API key",
-  provider: "which model answers: claude (API key), claude-code (your Claude subscription) or ollama (on this PC)",
+  provider: "which model answers: claude (API key), claude-code (your Claude subscription), ollama (on this PC) or openai (any OpenAI-compatible server, such as OmniRoute)",
   bind: "address Friend listens on: 127.0.0.1 is this PC only, 0.0.0.0 is your whole network (easier: friend lan on)",
   port: "the web port (easier: friend lan port N)",
   https: "true serves a secure https:// address (Friend makes its own certificate), so a phone may use the microphone (easier: friend lan https on)",
@@ -109,6 +127,10 @@ export const KEY_HELP: Record<string, string> = {
   "ollama.model": "the local model, for example qwen2.5:7b",
   "ollama.vision": "true or false: the local model can look at pictures",
   "ollama.contextTokens": "how much the local model remembers at once (1024 to 131072)",
+  "openai.url": "address of an OpenAI-compatible server, ending in /v1; OmniRoute is http://localhost:20128/v1",
+  "openai.model": "the model name that server knows; OmniRoute answers to auto",
+  "openai.apiKey": "the server's API key, or empty when it asks for none (stored in your private config file)",
+  "openai.vision": "true or false: that model can look at pictures",
   "claudeCode.model": "model for your Claude subscription: sonnet, haiku, opus or a full name",
   "claudeCode.command": "the command that starts Claude Code, if it is not on the PATH",
   "claudeCode.fallback": "ollama or none: what to use when Claude is unavailable",
@@ -140,7 +162,7 @@ export async function configCommand(args: string[], io: IO): Promise<number> {
       io.err(`Unknown setting "${key}". Settings: ${allKeys().join(", ")}`);
       return 1;
     }
-    (cfg[group as "voice" | "ollama" | "claudeCode"] as unknown as Record<string, unknown>)[field] = parse(value);
+    (cfg[group as "voice" | "ollama" | "openai" | "claudeCode"] as unknown as Record<string, unknown>)[field] = parse(value);
   } else {
     const parse = PARSERS[key];
     if (!parse) {

@@ -20,6 +20,8 @@ export interface Config {
   /** Which model backend answers: Claude (needs an API key) or a local Ollama server. */
   provider: ProviderName;
   ollama: OllamaConfig;
+  /** Any server that speaks the OpenAI chat API, such as OmniRoute, LM Studio or OpenRouter. */
+  openai: OpenAiConfig;
   claudeCode: ClaudeCodeConfig;
   voice: VoiceConfig;
   /** What the screen shows besides the AI's pictures: minimal, companion (status line and clock) or workspace (also chat and schedule). */
@@ -28,7 +30,19 @@ export interface Config {
   dataDir: string;
 }
 
-export type ProviderName = "claude" | "ollama" | "claude-code";
+export type ProviderName = "claude" | "ollama" | "claude-code" | "openai";
+
+export interface OpenAiConfig {
+  /** Ends in /v1, for example http://localhost:20128/v1 for OmniRoute. */
+  url: string;
+  /** The model name the server knows; OmniRoute answers to "auto". */
+  model: string;
+  /** Secret: never sent to the screen. Not every server asks for one. */
+  apiKey: string | null;
+  vision?: boolean;
+}
+
+export const DEFAULT_OPENAI: OpenAiConfig = { url: "http://localhost:20128/v1", model: "auto", apiKey: null, vision: false };
 
 /** Using the Claude Code program (and so a Claude subscription) as the model, with no API key. */
 export interface ClaudeCodeConfig {
@@ -183,6 +197,7 @@ const defaults = (dataDir: string): Config => ({
   apiKey: null,
   provider: "claude",
   ollama: { ...DEFAULT_OLLAMA },
+  openai: { ...DEFAULT_OPENAI },
   claudeCode: { ...DEFAULT_CLAUDE_CODE },
   voice: { ...DEFAULT_VOICE },
   view: "companion",
@@ -223,6 +238,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     https: stored.https === true,
     destructivePatterns,
     ollama: { ...DEFAULT_OLLAMA, ...stored.ollama },
+    openai: { ...DEFAULT_OPENAI, ...stored.openai },
     claudeCode: sanitizeClaudeCode(stored.claudeCode),
     voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
     view: stored.view === "minimal" || stored.view === "workspace" ? stored.view : "companion",

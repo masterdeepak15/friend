@@ -9,7 +9,7 @@ const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*
 /** Everything the owner may change from the screen. Network, folders and safety rules stay in the terminal on purpose. */
 export const SettingsPatch = z
   .object({
-    provider: z.enum(["claude", "claude-code", "ollama"]),
+    provider: z.enum(["claude", "claude-code", "ollama", "openai"]),
     model: modelName,
     /** Empty means "leave the saved key alone". */
     apiKey: z.string().trim().max(400),
@@ -34,6 +34,16 @@ export const SettingsPatch = z
         model: z.string().trim().min(1).max(100),
         vision: z.boolean(),
         contextTokens: z.number().int().min(1024).max(131072),
+      })
+      .partial()
+      .strict(),
+    openai: z
+      .object({
+        url: z.string().trim().max(300),
+        model: modelName,
+        /** Empty means "leave the saved key alone". */
+        apiKey: z.string().trim().max(400),
+        vision: z.boolean(),
       })
       .partial()
       .strict(),
@@ -70,6 +80,8 @@ export interface SettingsView {
   view: Config["view"];
   look: Config["look"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
+  /** The key itself is never sent to the screen. */
+  openai: { url: string; model: string; vision: boolean; apiKeySet: boolean };
   claudeCode: Config["claudeCode"];
   voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "ttsVoice" | "sttModel">;
 }
@@ -82,6 +94,7 @@ export function settingsView(c: Config): SettingsView {
     view: c.view,
     look: { ...c.look },
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
+    openai: { url: c.openai.url, model: c.openai.model, vision: !!c.openai.vision, apiKeySet: !!c.openai.apiKey },
     claudeCode: { ...c.claudeCode },
     voice: {
       enabled: c.voice.enabled,
@@ -101,7 +114,8 @@ export class SettingsError extends Error {}
 export function refuseForAgent(raw: unknown): void {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const cc = (r.claudeCode && typeof r.claudeCode === "object" ? r.claudeCode : {}) as Record<string, unknown>;
-  if ("apiKey" in r) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
+  const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
+  if ("apiKey" in r || "apiKey" in oa) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
   if ("command" in cc) throw new SettingsError("The Claude Code command can only be changed by the owner on the settings screen.");
 }
 
@@ -114,7 +128,7 @@ export interface Applied {
   restart: string[];
 }
 
-const PROVIDER_KEYS = new Set(["provider", "model", "apiKey", "ollama", "claudeCode"]);
+const PROVIDER_KEYS = new Set(["provider", "model", "apiKey", "ollama", "openai", "claudeCode"]);
 const RESTART_VOICE = ["enabled", "sttModel"];
 
 /** Checks the patch against the current config and applies it in place. Nothing changes when it is refused. */
@@ -136,6 +150,18 @@ export function applySettings(config: Config, raw: unknown): Applied {
     }
     if (u.protocol !== "http:" && u.protocol !== "https:") throw new SettingsError("ollama.url: The URL must start with http:// or https://");
     p.ollama!.url = u.origin;
+  }
+
+  const openaiUrl = p.openai?.url;
+  if (openaiUrl !== undefined) {
+    let u: URL;
+    try {
+      u = new URL(openaiUrl);
+    } catch {
+      throw new SettingsError("openai.url: Expected a URL such as http://localhost:20128/v1");
+    }
+    if (u.protocol !== "http:" && u.protocol !== "https:") throw new SettingsError("openai.url: The URL must start with http:// or https://");
+    p.openai!.url = (u.origin + u.pathname).replace(/\/+$/, ""); // keeps the path (/v1), drops a trailing slash, query and fragment
   }
 
   const next = {
@@ -162,6 +188,11 @@ export function applySettings(config: Config, raw: unknown): Applied {
   if (p.model) config.model = p.model;
   if (p.apiKey) config.apiKey = p.apiKey;
   if (p.ollama) Object.assign(config.ollama, p.ollama);
+  if (p.openai) {
+    const { apiKey, ...rest } = p.openai;
+    Object.assign(config.openai, rest);
+    if (apiKey) config.openai.apiKey = apiKey;
+  }
   if (p.claudeCode) Object.assign(config.claudeCode, p.claudeCode);
   if (p.voice) {
     const safe = next.voice;

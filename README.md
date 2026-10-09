@@ -127,10 +127,11 @@ Connectors (Gmail, Chrome control, any MCP service) are managed inside the app, 
 
 | Key | What it is |
 |---|---|
-| `provider` | Which model answers: `claude` (API key), `claude-code` (your subscription) or `ollama` (this PC). |
+| `provider` | Which model answers: `claude` (API key), `claude-code` (your subscription), `ollama` (this PC) or `openai` (any OpenAI-compatible server, such as OmniRoute). |
 | `apiKey`, `model` | The Anthropic API key and the Claude model used with it. |
 | `claudeCode.model`, `claudeCode.command`, `claudeCode.fallback` | The subscription route: model (`sonnet`, `haiku`, `opus`), the command that starts Claude Code, and `ollama` or `none` for what to use when Claude is unavailable. |
 | `ollama.url`, `ollama.model`, `ollama.vision`, `ollama.contextTokens` | The local model: server address, model name, whether it can see pictures, and how much it remembers at once. |
+| `openai.url`, `openai.model`, `openai.apiKey`, `openai.vision` | An OpenAI-compatible server: its address (ending in `/v1`), the model name it knows, its API key (or empty), and whether the model can see pictures. For OmniRoute (https://github.com/diegosouzapw/OmniRoute) run `npm install -g omniroute` and `omniroute`, then `friend config set provider openai` (the defaults are OmniRoute's: `http://localhost:20128/v1` and model `auto`). Also works with LM Studio, LiteLLM, vLLM and OpenRouter. |
 | `voice.enabled`, `voice.sttModel`, `voice.ttsVoice`, `voice.language`, `voice.speakTyped`, `voice.accept`, `voice.challenge` | Speech on or off, the listening model, the speaking voice, a forced language, speaking typed replies, and the two thresholds for recognising your voice. |
 | `bind`, `port` | Where Friend listens (easier: `friend lan`). |
 | `https` | `true` serves a secure `https://` address with a certificate Friend makes for itself, so a phone may use the microphone (easier: `friend lan https on`). |

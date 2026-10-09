@@ -33,6 +33,7 @@ import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
 import { applySettings, clientLook, COSMETIC_KEYS, refuseForAgent, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
+import { OpenAiProvider } from "./provider/openai";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
 import { ensureTlsCert } from "./tls";
@@ -102,6 +103,7 @@ export async function createApp(opts: AppOptions) {
       return config.claudeCode.fallback === "ollama" ? new FallbackProvider(cc, new OllamaProvider({ ...config.ollama }), (reason) => tellFallback(reason)) : cc;
     }
     if (config.provider === "ollama") return new OllamaProvider({ ...config.ollama });
+    if (config.provider === "openai") return new OpenAiProvider({ ...config.openai });
     return config.apiKey ? new ClaudeProvider({ apiKey: config.apiKey, model: config.model }) : new MissingKeyProvider();
   };
   const switchable = opts.provider ? null : new SwitchableProvider(makeProvider());

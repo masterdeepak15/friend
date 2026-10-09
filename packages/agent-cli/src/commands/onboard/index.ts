@@ -287,7 +287,7 @@ async function model(c: Ctx): Promise<Result> {
     io.out("No model is ready yet. Finish one of: `friend claude setup --use`, `friend ollama setup --use`, or `friend config set apiKey <key>`.");
     return "later";
   }
-  io.out(`Friend will think with: ${cfg.provider === "claude-code" ? `Claude (${cfg.claudeCode.model}) through your subscription${cfg.claudeCode.fallback === "ollama" ? ", with the local model as a safety net" : ""}` : cfg.provider === "claude" ? "Claude with your API key" : `${cfg.ollama.model} on this PC`}.`);
+  io.out(`Friend will think with: ${cfg.provider === "claude-code" ? `Claude (${cfg.claudeCode.model}) through your subscription${cfg.claudeCode.fallback === "ollama" ? ", with the local model as a safety net" : ""}` : cfg.provider === "claude" ? "Claude with your API key" : cfg.provider === "openai" ? `${cfg.openai.model} through ${cfg.openai.url}` : `${cfg.ollama.model} on this PC`}.`);
   return "done";
 }
 
@@ -408,7 +408,7 @@ function summary(cfg: Config, c: Ctx): string[] {
   }
   return [
     `  Assistant:  ${owner}`,
-    `  Thinks with: ${cfg.provider === "claude-code" ? `Claude (${cfg.claudeCode.model}), your subscription` : cfg.provider === "claude" ? (cfg.apiKey ? "Claude, API key" : "Claude, API key missing") : `${cfg.ollama.model} on this PC`}`,
+    `  Thinks with: ${cfg.provider === "claude-code" ? `Claude (${cfg.claudeCode.model}), your subscription` : cfg.provider === "claude" ? (cfg.apiKey ? "Claude, API key" : "Claude, API key missing") : cfg.provider === "openai" ? `${cfg.openai.model} through ${cfg.openai.url}` : `${cfg.ollama.model} on this PC`}`,
     `  Voice:      ${has(c, "voice") ? voiceLabel(cfg.voice.ttsVoice) : "off"}`,
     `  Workspace:  ${cfg.roots[0] ?? "none (every file action asks)"}`,
     `  Address:    ${u.local}${u.network.length ? ` and ${u.network.join(", ")}` : ""}`,

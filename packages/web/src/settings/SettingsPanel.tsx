@@ -18,6 +18,7 @@ const PROVIDERS: { id: ProviderName; label: string; note: string }[] = [
   { id: "claude-code", label: "Claude subscription (Claude Code)", note: "Uses the Claude Code app you are signed in to. No API key." },
   { id: "claude", label: "Claude API key", note: "Pay per use with an Anthropic API key." },
   { id: "ollama", label: "Local model (Ollama)", note: "Runs on this PC. Free and private, but slower." },
+  { id: "openai", label: "OpenAI-compatible server (OmniRoute, LM Studio…)", note: "Any server that speaks the OpenAI chat API. OmniRoute is one address that routes to many models, many of them free." },
 ];
 
 const RESTART_LABEL: Record<string, string> = { "voice.enabled": "Speech on/off", "voice.ttsVoice": "Voice", "voice.sttModel": "Listening model" };
@@ -41,6 +42,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
   const [draft, setDraft] = useState<SettingsView | null>(null);
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [apiKey, setApiKey] = useState("");
+  const [openaiKey, setOpenaiKey] = useState("");
   const [asking, setAsking] = useState(false);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -93,7 +95,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
     );
   }
 
-  const patch = diffSettings(saved, draft, apiKey);
+  const patch = diffSettings(saved, draft, apiKey, openaiKey);
   const dirty = Object.keys(patch).length > 0;
   const set = <G extends "ollama" | "claudeCode" | "voice" | "look">(group: G, field: keyof SettingsView[G], value: unknown) =>
     setDraft({ ...draft, [group]: { ...draft[group], [field]: value } });
@@ -108,6 +110,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       setSaved(r.settings);
       setDraft(structuredClone(r.settings));
       setApiKey("");
+      setOpenaiKey("");
       setAsking(false);
       const newVoice = patch.voice && (patch.voice as Record<string, unknown>).ttsVoice !== undefined;
       setNote(
@@ -214,6 +217,23 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           <Field label="API key" hint={saved.apiKeySet ? "A key is saved. Type a new one only to replace it." : "No key saved yet."}>
             <input type="password" autoComplete="off" placeholder={saved.apiKeySet ? "saved" : "sk-ant-…"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
           </Field>
+        </>
+      )}
+
+      {draft.provider === "openai" && draft.openai && (
+        <>
+          <Field label="Server address" hint="Ends in /v1. OmniRoute: http://localhost:20128/v1 (install it with npm install -g omniroute, then run omniroute).">
+            <input value={draft.openai.url} onChange={(e) => setDraft({ ...draft, openai: { ...draft.openai!, url: e.target.value } })} />
+          </Field>
+          <Field label="Model" hint="The name that server knows. OmniRoute answers to auto.">
+            <input value={draft.openai.model} onChange={(e) => setDraft({ ...draft, openai: { ...draft.openai!, model: e.target.value } })} />
+          </Field>
+          <Field label="API key" hint={saved.openai?.apiKeySet ? "A key is saved. Type a new one only to replace it." : "Leave empty if the server asks for none."}>
+            <input type="password" autoComplete="off" placeholder={saved.openai?.apiKeySet ? "saved" : ""} value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} />
+          </Field>
+          <label className="settings-check">
+            <input type="checkbox" checked={draft.openai.vision} onChange={(e) => setDraft({ ...draft, openai: { ...draft.openai!, vision: e.target.checked } })} /> This model can look at pictures
+          </label>
         </>
       )}
 
@@ -456,6 +476,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
             onClick={() => {
               setDraft(structuredClone(saved));
               setApiKey("");
+              setOpenaiKey("");
             }}
           >
             Undo changes

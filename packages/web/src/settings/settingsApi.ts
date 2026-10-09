@@ -1,4 +1,4 @@
-export type ProviderName = "claude" | "claude-code" | "ollama";
+export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
 
 export interface SettingsView {
   provider: ProviderName;
@@ -8,6 +8,8 @@ export interface SettingsView {
   view: "minimal" | "companion" | "workspace";
   look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
+  /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
+  openai?: { url: string; model: string; vision: boolean; apiKeySet: boolean };
   claudeCode: { model: string; command: string; fallback: "ollama" | "none" };
   voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; ttsVoice: string; sttModel: string };
 }
@@ -103,7 +105,7 @@ export async function playVoicePreview(voice: string): Promise<void> {
 }
 
 /** Only what the owner actually changed, in the shape the server accepts. `apiKey` is sent only when something was typed. */
-export function diffSettings(before: SettingsView, after: SettingsView, apiKey: string): Record<string, unknown> {
+export function diffSettings(before: SettingsView, after: SettingsView, apiKey: string, openaiKey = ""): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   if (after.provider !== before.provider) patch.provider = after.provider;
   if (after.model !== before.model) patch.model = after.model;
@@ -116,6 +118,12 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
       if (a !== (before[group] as Record<string, unknown>)[k]) changed[k] = group === "voice" && k === "language" ? (a ?? "") : a;
     }
     if (Object.keys(changed).length) patch[group] = changed;
+  }
+  if (before.openai && after.openai) {
+    const changed: Record<string, unknown> = {};
+    for (const k of ["url", "model", "vision"] as const) if (after.openai[k] !== before.openai[k]) changed[k] = after.openai[k];
+    if (openaiKey.trim()) changed.apiKey = openaiKey.trim();
+    if (Object.keys(changed).length) patch.openai = changed;
   }
   return patch;
 }
