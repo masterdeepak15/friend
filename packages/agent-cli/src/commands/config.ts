@@ -62,6 +62,14 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
     enabled: bool,
     sttModel: nonEmpty,
     ttsVoice: nonEmpty,
+    hindiVoice: (v) => {
+      if (!/^[A-Za-z0-9_-]*$/.test(v.trim())) throw new Error("A Piper voice name such as hi_IN-priyamvada-medium, or empty to use the main voice");
+      return v.trim();
+    },
+    marathiVoice: (v) => {
+      if (!/^[A-Za-z0-9_-]*$/.test(v.trim())) throw new Error("A Piper voice name such as mr_IN-google-medium, or empty to use the main voice");
+      return v.trim();
+    },
     language: (v) => (v.trim() === "" ? null : v.trim()),
     speakTyped: bool,
     accept: unit,
@@ -125,7 +133,9 @@ export const KEY_HELP: Record<string, string> = {
   "voice.enabled": "true or false: use speech at all",
   "voice.sttModel": "listening model: tiny, base, small, … (bigger is more accurate and slower)",
   "voice.ttsVoice": "speaking voice (easier: friend voice setup, or Settings)",
-  "voice.language": "force a spoken language such as en or hi, or empty to detect it",
+  "voice.language": "force a spoken language such as en, hi or mr, or empty to detect it (empty is best when you mix languages)",
+  "voice.hindiVoice": "the voice that reads Hindi (Devanagari) text: hi_IN-priyamvada-medium, hi_IN-pratham-medium or hi_IN-rohan-medium; empty uses the main voice",
+  "voice.marathiVoice": "the voice that reads Marathi (Devanagari) text: mr_IN-google-medium; empty uses the main voice",
   "voice.speakTyped": "true or false: also speak the replies to typed messages",
   "voice.accept": "0 to 1: a voice at or above this match is you",
   "voice.challenge": "0 to 1: a voice between this and accept must be confirmed with your PIN",

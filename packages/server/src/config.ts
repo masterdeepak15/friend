@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import type { PresenceStyle, ViewPreset } from "@friend/protocol";
+import { DEFAULT_HINDI_VOICE, DEFAULT_MARATHI_VOICE, type PresenceStyle, type ViewPreset } from "@friend/protocol";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -136,6 +136,10 @@ export interface VoiceConfig {
   accept: number;
   /** Speaker match at or above this but below `accept` asks for the PIN; below it the voice is a guest. */
   challenge: number;
+  /** The voice for Hindi text (Devanagari). Empty: the main voice reads it. */
+  hindiVoice: string;
+  /** The voice for Marathi text (Devanagari). Empty: the main voice reads it. */
+  marathiVoice: string;
 }
 
 export const DEFAULT_VOICE: VoiceConfig = {
@@ -146,6 +150,8 @@ export const DEFAULT_VOICE: VoiceConfig = {
   speakTyped: true,
   accept: 0.72,
   challenge: 0.58,
+  hindiVoice: DEFAULT_HINDI_VOICE,
+  marathiVoice: DEFAULT_MARATHI_VOICE,
 };
 
 /** Bad thresholds in an edited config must never make strangers look like the owner, so they fall back to the defaults. */

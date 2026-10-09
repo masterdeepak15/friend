@@ -134,6 +134,7 @@ Connectors (Gmail, Chrome control, any MCP service) are managed inside the app, 
 | `claudeCode.model`, `claudeCode.command`, `claudeCode.fallback` | The subscription route: model (`sonnet`, `haiku`, `opus`), the command that starts Claude Code, and `ollama` or `none` for what to use when Claude is unavailable. |
 | `ollama.url`, `ollama.model`, `ollama.vision`, `ollama.contextTokens` | The local model: server address, model name, whether it can see pictures, and how much it remembers at once. |
 | `openai.url`, `openai.model`, `openai.apiKey`, `openai.vision` | An OpenAI-compatible server: its address (ending in `/v1`), the model name it knows, its API key (or empty), and whether the model can see pictures. For OmniRoute (https://github.com/diegosouzapw/OmniRoute) run `npm install -g omniroute` and `omniroute`, then `friend config set provider openai` (the defaults are OmniRoute's: `http://localhost:20128/v1` and model `auto`). Also works with LM Studio, LiteLLM, vLLM and OpenRouter. |
+| `voice.hindiVoice`, `voice.marathiVoice` | The voices that read Hindi and Marathi (Devanagari) text: `hi_IN-priyamvada-medium`, `hi_IN-pratham-medium`, `hi_IN-rohan-medium`, `mr_IN-google-medium`. Empty makes the main voice read that language. See "Hindi, Marathi and English together". |
 | `voice.enabled`, `voice.sttModel`, `voice.ttsVoice`, `voice.language`, `voice.speakTyped`, `voice.accept`, `voice.challenge` | Speech on or off, the listening model, the speaking voice, a forced language, speaking typed replies, and the two thresholds for recognising your voice. |
 | `bind`, `port` | Where Friend listens (easier: `friend lan`). |
 | `https` | `true` serves a secure `https://` address with a certificate Friend makes for itself, so a phone may use the microphone (easier: `friend lan https on`). |
@@ -285,6 +286,16 @@ Press **Esc** (or long-press the top-left corner), choose **Enroll my voice**, r
 - Emergency lock drops any pending challenge and any enrollment in progress.
 - A voice match is a convenience, not a lock: a recording or a cloned voice can fool any speaker model. That is why a borderline match needs the PIN and risky actions always ask for it.
 - Python tests for the speech engine: `cd packages/voice && python -m venv .venv && .venv/Scripts/pip install -e .[dev] && .venv/Scripts/python -m pytest`.
+
+## Hindi, Marathi and English together
+
+Speak or type in English, Hindi, Marathi, or a mix of them in one sentence ("आज का weather बताओ"). Friend answers in the language you used.
+
+- **Understanding you.** Leave `voice.language` empty so each request is understood in the language you spoke. When it hears Hindi or Marathi it listens a second time with a hint that writes those in Devanagari and keeps English words in Latin letters. The default listening model (`base`) mishears Hindi and Marathi a lot: use `friend config set voice.sttModel small` (about 460 MB, a bit slower), run `friend voice setup` once, and restart.
+- **Answering you.** The assistant is told to write Hindi and Marathi in Devanagari and English in Latin letters. Friend then says each piece with the right voice: Hindi with `voice.hindiVoice` (Priyamvada by default, or Pratham or Rohan), Marathi with `voice.marathiVoice`, English words with your main voice. Hindi or Marathi is told apart by the words used. The first time a voice is used it downloads about 64 MB (Settings → Voice picks them and starts the download). If one cannot be loaded, the main voice reads that language instead of staying silent.
+- **Typed text** works the same: Devanagari in, Devanagari out, spoken with the Hindi or Marathi voice. Roman-letter Hindi ("kya haal hai") is understood by the model but is read by the English voice, so ask for Devanagari when you want it spoken well.
+- Notes: the Hindi voices Priyamvada and Pratham are free for personal use but not for commercial use. A small local model (Ollama) writes Hindi and especially Marathi much worse than Claude does.
+- Other languages are not set up with voices yet: the assistant may answer in them, but they are spoken by the English voice.
 
 ## Your screen: it knows what it draws on, and you can keep widgets
 

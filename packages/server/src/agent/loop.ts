@@ -22,6 +22,7 @@ import { z } from "zod";
 import { runStageTool, type StageState } from "../stage";
 import { getToolDef, lexicalInsideRoots, pathArg, toolSpecs } from "../tools/registry";
 import { loadHistory, repairDangling, saveMessage } from "./history";
+import { languageNote } from "../voice/lang";
 import { promptParts } from "./prompt";
 
 export const MAX_STEPS = 20;
@@ -85,6 +86,8 @@ export interface TurnCtx {
   ip: string;
   /** Who is speaking, when trust is "member" (a recognized person of the household). */
   person?: { id: number; name: string };
+  /** The language the speech recognizer heard (for example "hi" or "mr"), when the request was spoken. */
+  spoken?: string;
 }
 
 /** What a household member said and was answered in the last while, kept in memory only: it is never written to disk. */
@@ -201,6 +204,7 @@ export class Agent {
           isolated ? undefined : d.plugins?.skills(),
           isolated ? undefined : d.mcp?.summary(),
           member ? ctx.person!.name : undefined,
+          languageNote(text, ctx.spoken),
         );
         for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: isolated ? "guest" : "owner", messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {

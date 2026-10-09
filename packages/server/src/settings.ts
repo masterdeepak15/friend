@@ -65,6 +65,9 @@ export const SettingsPatch = z
         accept: z.number().min(0).max(1),
         challenge: z.number().min(0).max(1),
         ttsVoice: z.string().trim().min(1).max(80).regex(/^[\w.-]+$/),
+        /** A Piper voice name; empty makes the main voice read Hindi too. */
+        hindiVoice: z.string().trim().max(80).regex(/^[A-Za-z0-9_-]*$/, "A Piper voice name such as hi_IN-priyamvada-medium, or empty"),
+        marathiVoice: z.string().trim().max(80).regex(/^[A-Za-z0-9_-]*$/, "A Piper voice name such as mr_IN-google-medium, or empty"),
         sttModel: z.string().trim().min(1).max(80).regex(/^[\w./-]+$/),
       })
       .partial()
@@ -86,7 +89,7 @@ export interface SettingsView {
   /** The key itself is never sent to the screen. */
   openai: { url: string; model: string; vision: boolean; apiKeySet: boolean };
   claudeCode: Config["claudeCode"];
-  voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "ttsVoice" | "sttModel">;
+  voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "ttsVoice" | "sttModel" | "hindiVoice" | "marathiVoice">;
 }
 
 export function settingsView(c: Config): SettingsView {
@@ -108,6 +111,8 @@ export function settingsView(c: Config): SettingsView {
       challenge: c.voice.challenge,
       ttsVoice: c.voice.ttsVoice,
       sttModel: c.voice.sttModel,
+      hindiVoice: c.voice.hindiVoice,
+      marathiVoice: c.voice.marathiVoice,
     },
   };
 }

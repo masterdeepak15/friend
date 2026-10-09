@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
-import { ORIGINAL_VOICE, VOICE_CHOICES, isCatalogVoice } from "@friend/protocol";
+import { HINDI_VOICES, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, isCatalogVoice } from "@friend/protocol";
 import { DEFAULT_LOOK, diffSettings, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
@@ -263,7 +263,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       <label className="settings-check">
         <input type="checkbox" checked={draft.voice.speakTyped} onChange={(e) => set("voice", "speakTyped", e.target.checked)} /> Also speak the replies to typed messages
       </label>
-      <Field label="Spoken language" hint="Empty detects it automatically. For example en or hi.">
+      <Field label="Spoken language" hint="Leave empty to detect it by itself: best when you mix English, Hindi and Marathi. Or force one: en, hi, mr.">
         <input value={draft.voice.language ?? ""} maxLength={10} onChange={(e) => set("voice", "language", e.target.value.trim() === "" ? null : e.target.value.trim())} />
       </Field>
       <Field label="Speaking voice" hint="Female or male. The first time a voice is used it downloads about 60 MB, then it works without internet.">
@@ -296,6 +296,27 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           )}
         </select>
       </Field>
+      <Field label="Hindi voice" hint="Reads Hindi (Devanagari) text; English words in the same sentence still use the voice above. The first time it downloads about 64 MB.">
+        <select value={draft.voice.hindiVoice ?? ""} onChange={(e) => set("voice", "hindiVoice", e.target.value)}>
+          <option value="">Same as the voice above</option>
+          {HINDI_VOICES.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name} · {v.gender}
+              {v.note ? ` · ${v.note}` : ""}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Marathi voice" hint="Reads Marathi text. Friend tells Marathi from Hindi by the words used.">
+        <select value={draft.voice.marathiVoice ?? ""} onChange={(e) => set("voice", "marathiVoice", e.target.value)}>
+          <option value="">Same as the voice above</option>
+          {MARATHI_VOICES.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+        </select>
+      </Field>
       <div className="voice-hear">
         <button
           type="button"
@@ -318,7 +339,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           </small>
         )}
       </div>
-      <Field label="Listening model" hint="tiny, base, small … Bigger is more accurate but slower. Needs a restart.">
+      <Field label="Listening model" hint="tiny, base, small … Bigger is more accurate but slower. For Hindi and Marathi use small or larger (base mishears them). Needs a restart.">
         <input value={draft.voice.sttModel} onChange={(e) => set("voice", "sttModel", e.target.value)} />
       </Field>
       <h4 className="plugins-heading">Who is speaking</h4>

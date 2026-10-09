@@ -25,6 +25,20 @@ export const VOICE_CHOICES: VoiceChoice[] = [
   { id: "en_GB-northern_english_male-medium", name: "Tom", gender: "male", accent: "Northern English" },
 ];
 
+/**
+ * Voices for the Indian languages. Friend speaks Devanagari text (Hindi, Marathi) with these and English words with the
+ * main voice, so a reply that mixes them is read correctly. Each downloads once, about 64 MB.
+ */
+export const HINDI_VOICES: VoiceChoice[] = [
+  { id: "hi_IN-priyamvada-medium", name: "Priyamvada", gender: "female", accent: "Hindi", note: "for personal use (non-commercial licence)" },
+  { id: "hi_IN-pratham-medium", name: "Pratham", gender: "male", accent: "Hindi", note: "for personal use (non-commercial licence)" },
+  { id: "hi_IN-rohan-medium", name: "Rohan", gender: "male", accent: "Hindi" },
+];
+export const MARATHI_VOICES: VoiceChoice[] = [{ id: "mr_IN-google-medium", name: "Marathi", gender: "female", accent: "Marathi" }];
+
+export const DEFAULT_HINDI_VOICE = "hi_IN-priyamvada-medium";
+export const DEFAULT_MARATHI_VOICE = "mr_IN-google-medium";
+
 /** The voice Friend started with, before anyone chose. It is kept as it is for everyone who never changes it. */
 export const ORIGINAL_VOICE: VoiceChoice | { id: string; name: string; accent: string; note: string; gender?: undefined } = {
   id: "en_US-lessac-medium",

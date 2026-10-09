@@ -1,5 +1,6 @@
 import type { ServerMsg } from "@friend/protocol";
 import type { Audit } from "../audit";
+import { planSpeech } from "./lang";
 import type { VoiceService } from "./service";
 
 /** Largest base64 payload in one audio.chunk message. */
@@ -21,7 +22,7 @@ export function speechText(markdown: string): string {
     .map((line) => line.replace(/^\s{0,3}(?:#{1,6}|[-*+]|\d+[.)]|>)\s+/, "").replace(/[*~]+/g, "").trim())
     .filter(Boolean);
   return lines
-    .map((l) => (/[.!?:;]$/.test(l) ? l : l + "."))
+    .map((l) => (/[.!?:;।॥]$/.test(l) ? l : l + "."))
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
@@ -51,7 +52,7 @@ function breakLong(sentence: string): string[] {
 
 export function splitSentences(text: string): string[] {
   const merged: string[] = [];
-  for (const piece of text.split(/(?<=[.!?])\s+/)) {
+  for (const piece of text.split(/(?<=[.!?।॥])\s+/)) {
     const prev = merged[merged.length - 1];
     if (prev !== undefined && ABBREVIATION.test(prev)) merged[merged.length - 1] = `${prev} ${piece}`;
     else merged.push(piece);
@@ -85,7 +86,7 @@ function lastBoundary(text: string): number {
   for (let i = text.length - 2; i >= 0; i--) {
     const c = text[i]!;
     const lineEnd = c === "\n" && text.slice(0, i).trim() !== "";
-    const sentenceEnd = (c === "." || c === "!" || c === "?") && /\s/.test(text[i + 1]!) && !ABBREVIATION.test(text.slice(0, i + 1));
+    const sentenceEnd = (c === "." || c === "!" || c === "?" || c === "।" || c === "॥") && /\s/.test(text[i + 1]!) && !ABBREVIATION.test(text.slice(0, i + 1));
     if ((lineEnd || sentenceEnd) && fenceCount(text.slice(0, i + 1)) % 2 === 0) return i + 1;
   }
   return 0;
@@ -97,7 +98,13 @@ export class Speaker {
   private active = false;
 
   /** `voiceName` may be a function, so a change of voice in the settings is used by the very next sentence. */
-  constructor(private voice: VoiceService, private audit: Audit, private voiceName?: string | (() => string | undefined)) {}
+  constructor(
+    private voice: VoiceService,
+    private audit: Audit,
+    private voiceName?: string | (() => string | undefined),
+    /** The voices for Hindi and Marathi; a sentence in Devanagari is said with them, and English words with the main voice. */
+    private languages?: () => { hindi?: string | undefined; marathi?: string | undefined },
+  ) {}
 
   /** Says a whole text, sentence by sentence. */
   async speak(text: string, emit: (m: ServerMsg) => void): Promise<void> {
@@ -132,17 +139,26 @@ export class Speaker {
         if (!alive()) return; // interrupted or replaced: send nothing more
         const sentence = queue.shift();
         if (sentence === undefined) return; // the reply ended and everything was said
-        let wav: Buffer;
-        try {
-          wav = await this.voice.synthesize(sentence, typeof this.voiceName === "function" ? this.voiceName() : this.voiceName);
-        } catch (e) {
-          this.audit.log("voice", "voice.tts_failed", { message: (e as Error).message });
-          continue;
+        const main = typeof this.voiceName === "function" ? this.voiceName() : this.voiceName;
+        // a sentence that mixes Hindi or Marathi with English is said in pieces, each with the voice for its language
+        for (const part of planSpeech(sentence, { main, ...(this.languages?.() ?? {}) })) {
+          let wav: Buffer;
+          try {
+            wav = await this.voice.synthesize(part.text, part.voice);
+          } catch (e) {
+            this.audit.log("voice", "voice.tts_failed", { message: (e as Error).message });
+            if (part.voice === main) continue;
+            try {
+              wav = await this.voice.synthesize(part.text, main); // that language's voice is not available: the main voice, rather than silence
+            } catch {
+              continue;
+            }
+          }
+          if (!alive()) return; // interrupted while synthesizing
+          const chunks = chunkBase64(wav);
+          const id = `${job}-${clip++}`;
+          chunks.forEach((data, seq) => emit({ type: "audio.chunk", id, seq, last: seq === chunks.length - 1, mime: "audio/wav", data }));
         }
-        if (!alive()) return; // interrupted while synthesizing
-        const chunks = chunkBase64(wav);
-        const id = `${job}-${clip++}`;
-        chunks.forEach((data, seq) => emit({ type: "audio.chunk", id, seq, last: seq === chunks.length - 1, mime: "audio/wav", data }));
       }
     })().finally(() => {
       if (alive()) this.active = false;

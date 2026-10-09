@@ -13,7 +13,7 @@ export interface SettingsView {
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
   openai?: { url: string; model: string; vision: boolean; apiKeySet: boolean };
   claudeCode: { model: string; command: string; fallback: "ollama" | "none" };
-  voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; ttsVoice: string; sttModel: string };
+  voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; ttsVoice: string; sttModel: string; hindiVoice?: string; marathiVoice?: string };
 }
 
 export type PresenceStyleName = "sphere" | "orb" | "ring";

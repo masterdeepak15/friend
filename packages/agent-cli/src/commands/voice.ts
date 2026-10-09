@@ -169,7 +169,12 @@ export async function voiceSetupCommand(io: IO, deps: VoiceSetupDeps = {}, args:
 
   io.out(`3/3 Downloading the speech models (${cfg.voice.sttModel}, ${cfg.voice.ttsVoice})…`);
   const models = p.models.replace(/\\/g, "/");
-  const code = `from friend_voice.models import load_engines; load_engines(${JSON.stringify(models)}, ${JSON.stringify(cfg.voice.sttModel)}, ${JSON.stringify(cfg.voice.ttsVoice)}); print("models ready")`;
+  // The Hindi and Marathi voices come too, so the first reply in those languages does not wait for a download. They are optional: a failure only prints a note.
+  const extra = [cfg.voice.hindiVoice, cfg.voice.marathiVoice].filter((v) => /^[A-Za-z0-9_-]+$/.test(v));
+  const code =
+    `from friend_voice.models import load_engines; load_engines(${JSON.stringify(models)}, ${JSON.stringify(cfg.voice.sttModel)}, ${JSON.stringify(cfg.voice.ttsVoice)}); print("models ready")\n` +
+    `from pathlib import Path\nfrom friend_voice.tts import ensure_voice\n` +
+    `for v in ${JSON.stringify(extra)}:\n    try:\n        ensure_voice(v, Path(${JSON.stringify(models)}) / "piper"); print("voice ready", v)\n    except Exception as e:\n        print("note: could not download the voice", v, "-", e, "(it downloads when first used)")`;
   const dl = await run(p.python, ["-c", code], { cwd: voiceDir, onLine });
   if (dl.code !== 0) {
     io.err(`Could not download the speech models.\n${tail(dl.stdout)}`);

@@ -147,6 +147,8 @@ export async function createApp(opts: AppOptions) {
       else swap();
     }
     if (applied.changed.includes("voice.ttsVoice")) void warmVoice(config.voice.ttsVoice, voiceBefore);
+    if (applied.changed.includes("voice.hindiVoice")) void warmLanguageVoice(config.voice.hindiVoice);
+    if (applied.changed.includes("voice.marathiVoice")) void warmLanguageVoice(config.voice.marathiVoice);
     if (applied.changed.some((k) => k === "view" || k === "ownerName" || k.startsWith("look."))) {
       if (applied.changed.some((k) => k.startsWith("look."))) for (const command of stage.setLook(config.look)) broadcast({ type: "stage", command });
       broadcast(uiMsg());
@@ -173,6 +175,19 @@ export async function createApp(opts: AppOptions) {
         saveConfig(saved);
       }
       broadcast({ type: "alert", level: "warn", text: `Could not load the voice ${wanted} (it needs internet the first time). Using ${voiceLabel(previous)} again.` });
+    }
+  }
+
+  /** The voice for Hindi or Marathi is loaded in the background when the owner picks it, so the first sentence does not wait for the download. */
+  async function warmLanguageVoice(wanted: string): Promise<void> {
+    if (!wanted || !voice || !voiceAvailable()) return;
+    broadcast({ type: "alert", level: "info", text: `Loading the voice ${voiceLabel(wanted)}. The first time it downloads about 64 MB.` });
+    try {
+      await voice.synthesize("Ready.", wanted);
+      broadcast({ type: "alert", level: "info", text: `The voice ${voiceLabel(wanted)} is ready.` });
+    } catch (e) {
+      audit.log("system", "voice.load_failed", { voice: wanted, message: (e as Error).message });
+      broadcast({ type: "alert", level: "warn", text: `Could not load the voice ${wanted} (it needs internet the first time). That language is read by the main voice for now.` });
     }
   }
 
@@ -228,7 +243,9 @@ export async function createApp(opts: AppOptions) {
     broadcast({ type: "alert", level: "info", text: `${reason} Using the local model for now.` });
   };
   const voice = opts.voice;
-  const speaker = voice ? new Speaker(voice, audit, () => config.voice.ttsVoice) : null;
+  const speaker = voice
+    ? new Speaker(voice, audit, () => config.voice.ttsVoice, () => ({ hindi: config.voice.hindiVoice || undefined, marathi: config.voice.marathiVoice || undefined }))
+    : null;
   const voiceAvailable = () => !!voice && voice.available();
   // The owner's voiceprint: encrypted at rest, key in a private file next to the database.
   const voiceKey = voice ? loadOrCreateKey(join(opts.dataDir, "voice.key")) : null;
@@ -311,14 +328,14 @@ export async function createApp(opts: AppOptions) {
   }
 
   /** Runs the turn for something that was said, then speaks the reply. Guests get the isolated guest turn. */
-  async function runVoiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" | "member" = "owner", person?: { id: number; name: string }): Promise<void> {
+  async function runVoiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" | "member" = "owner", person?: { id: number; name: string }, spoken?: string): Promise<void> {
     // the voice keeps pace with the captions: each sentence is spoken as soon as it has been written
     const talk = speaker?.stream(broadcast);
     const emit = (m: ServerMsg) => {
       if (m.type === "caption.delta" && epoch === lockEpoch) talk?.push(m.text); // locked meanwhile: stay silent
       broadcast(m);
     };
-    await agent.runTurn(text, { trust, emit, ip, ...(person ? { person } : {}) });
+    await agent.runTurn(text, { trust, emit, ip, ...(person ? { person } : {}), ...(spoken ? { spoken } : {}) });
     await talk?.end();
   }
 
@@ -473,10 +490,12 @@ export async function createApp(opts: AppOptions) {
       const enrolled = voiceprint?.exists() ?? false; // the owner's voice must be known before anyone else's matters
       let heard: string;
       let embedding: number[] | null = null;
+      let spoken: string | undefined;
       try {
         const t = await voice.transcribe(audio, mime, config.voice.language, { embed: enrolled });
         heard = t.text.trim();
         embedding = t.embedding ?? null;
+        spoken = t.language; // the language the recognizer heard, so the reply can be in it
       } catch (e) {
         // our own voice errors carry no internal detail and can be shown; anything else stays in the audit log
         if (e instanceof VoiceError) throw new HttpError(502, e.message);
@@ -493,7 +512,7 @@ export async function createApp(opts: AppOptions) {
         const person = { id: who.person.id, name: who.person.name };
         broadcast({ type: "voice.heard", text: heard, trust: "member", speaker: person.name });
         audit.log("system", "voice.member", { person: person.id }); // never the words: a family member's talk is not logged
-        void runVoiceTurn(heard, ip, epoch, "member", person).catch(crash);
+        void runVoiceTurn(heard, ip, epoch, "member", person, spoken).catch(crash);
       } else if (trust === "challenge") {
         // close, but not sure enough: nothing runs unless the owner confirms with the PIN
         const { challenge, replaced } = challenges.open(heard, ip);
@@ -506,7 +525,7 @@ export async function createApp(opts: AppOptions) {
         void runVoiceTurn(heard, ip, epoch, "guest").catch(crash);
       } else {
         broadcast({ type: "voice.heard", text: heard, trust: trust === "owner" ? "owner" : "unverified" });
-        void runVoiceTurn(heard, ip, epoch).catch(crash);
+        void runVoiceTurn(heard, ip, epoch, "owner", undefined, spoken).catch(crash);
       }
       return { text: heard };
     },
