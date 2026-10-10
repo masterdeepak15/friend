@@ -5,7 +5,7 @@ import { rootCertificates } from "node:tls";
 export interface AlexaRequestBody {
   version: string;
   session?: { new?: boolean; sessionId?: string; user?: { userId?: string }; application?: { applicationId?: string } };
-  context?: { System?: { application?: { applicationId?: string }; user?: { userId?: string }; device?: { deviceId?: string } } };
+  context?: { System?: { application?: { applicationId?: string }; user?: { userId?: string }; device?: { deviceId?: string }; apiEndpoint?: string; apiAccessToken?: string } };
   request: {
     type: string;
     requestId?: string;

@@ -38,7 +38,7 @@ export class AlexaEngine {
 
   constructor(private d: EngineDeps) {}
 
-  async handle(req: AlexaRequestBody, deviceKey: string): Promise<AlexaReply> {
+  async handle(req: AlexaRequestBody, deviceKey: string, progressive?: (speech: string) => void): Promise<AlexaReply> {
     const lang = langOf(req.request.locale);
     const locale = req.request.locale ?? "en-IN";
     const stop: AlexaReply = { speech: "", end: true };
@@ -65,7 +65,7 @@ export class AlexaEngine {
     if ((LEAD_INTENTS as readonly string[]).includes(name)) {
       const q = slots.q;
       if (!q) return { speech: say(lang, "whatDo"), reprompt: say(lang, "whatDo"), end: false };
-      return this.open(`${LEAD_INS[name as LeadIntent][lang]} ${q}`, locale, deviceKey, lang);
+      return this.open(`${LEAD_INS[name as LeadIntent][lang]} ${q}`, locale, deviceKey, lang, progressive ?? this.d.progressive);
     }
     return { speech: say(lang, "unknown"), end: true };
   }
@@ -91,12 +91,12 @@ export class AlexaEngine {
     return slot.text === null ? { speech: say(lang, "failed"), end: true } : this.spoken(slot.text);
   }
 
-  private async open(text: string, locale: string, key: string, lang: Lang): Promise<AlexaReply> {
+  private async open(text: string, locale: string, key: string, lang: Lang, progressive?: (speech: string) => void): Promise<AlexaReply> {
     const existing = this.slots.get(key);
     if (existing?.pending) return { speech: say(lang, "working"), end: false };
     this.slots.delete(key);
     try {
-      this.d.progressive?.(letMeCheck(lang));
+      progressive?.(letMeCheck(lang));
     } catch {
       /* a failed "let me check" must not stop the answer */
     }

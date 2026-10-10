@@ -14,8 +14,9 @@ export const LEAD_INS: Record<LeadIntent, Record<Lang, string>> = {
   PleaseIntent: { en: "please", hi: "कृपया" },
 };
 
-export type SayKey = "greet" | "greetAgain" | "help" | "unknown" | "failed" | "working" | "nothing" | "unavailable" | "whatDo" | "busy";
+export type SayKey = "notAllowed" | "greet" | "greetAgain" | "help" | "unknown" | "failed" | "working" | "nothing" | "unavailable" | "whatDo" | "busy";
 const SAY: Record<SayKey, Record<Lang, string>> = {
+  notAllowed: { en: "I do not know this Echo yet. Allow it in Friend, under Plugins, Alexa.", hi: "मैं इस इको को अभी नहीं पहचानता। फ्रेंड में प्लगइन्स, अलेक्सा में इसे अनुमति दीजिए।" },
   greet: { en: "Friend here. Ask me about your portfolio, the weather, your tasks, or anything else.", hi: "फ्रेंड यहाँ है। मुझसे अपने पोर्टफोलियो, मौसम, कामों या कुछ भी पूछिए।" },
   greetAgain: { en: "What would you like to know?", hi: "आप क्या जानना चाहते हैं?" },
   help: { en: "You can ask how my portfolio is doing, what the weather is, what my tasks are, or for the status. You can also say how, what, tell me, or show me, and then your question.", hi: "आप पूछ सकते हैं कि मेरा पोर्टफोलियो कैसा है, मौसम कैसा है, मेरे काम क्या हैं, या स्थिति क्या है। आप कैसे, क्या, मुझे बताओ, या मुझे दिखाओ कहकर अपना सवाल भी पूछ सकते हैं।" },
