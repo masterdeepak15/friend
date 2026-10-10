@@ -1,7 +1,7 @@
 import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
-import { phoneNumber, sanitizeLook, sanitizeVoice } from "./config";
+import { isValidTimeZone, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
 const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
@@ -42,6 +42,24 @@ export const SettingsPatch = z
       })
       .partial()
       .strict(),
+    /** Stock broker accounts. The secret is write-only; empty means "leave the saved one alone". Needs the PIN. */
+    brokers: z
+      .object({
+        zerodha: z
+          .object({
+            apiKey: z.string().trim().max(64).regex(/^[A-Za-z0-9]*$/, "An API key is letters and digits only"),
+            apiSecret: z.string().trim().max(100),
+          })
+          .partial()
+          .strict(),
+        timezone: z.string().trim().min(1).max(60),
+        skipDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A date like 2026-10-02")).max(100),
+        loginReminderMinutes: z.number().int().min(0).max(120),
+      })
+      .partial()
+      .strict(),
+    /** What the assistant may do with money. Only "read" exists in this version; any other level is refused. */
+    trading: z.object({ level: z.enum(["read"]) }).partial().strict(),
     look: z
       .object({
         style: PresenceStyle,
@@ -116,6 +134,9 @@ export interface SettingsView {
     telegram: { installed: boolean; enabled: boolean; tokenSet: boolean; linked: boolean };
     twilio: { installed: boolean; enabled: boolean; accountSid: string; tokenSet: boolean; smsFrom: string; whatsappFrom: string; ownerNumber: string };
   };
+  /** The secret itself is never sent to the screen. */
+  brokers: { zerodha: { installed: boolean; enabled: boolean; apiKey: string; secretSet: boolean }; timezone: string; skipDates: string[]; loginReminderMinutes: number };
+  trading: { level: "read" };
   look: Config["look"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** The key itself is never sent to the screen. */
@@ -136,6 +157,13 @@ export function settingsView(c: Config): SettingsView {
       telegram: { installed: c.channels.telegram.installed, enabled: c.channels.telegram.enabled, tokenSet: !!c.channels.telegram.botToken, linked: c.channels.telegram.ownerChatId !== null },
       twilio: { installed: c.channels.twilio.installed, enabled: c.channels.twilio.enabled, accountSid: c.channels.twilio.accountSid, tokenSet: !!c.channels.twilio.authToken, smsFrom: c.channels.twilio.smsFrom, whatsappFrom: c.channels.twilio.whatsappFrom, ownerNumber: c.channels.twilio.ownerNumber },
     },
+    brokers: {
+      zerodha: { installed: c.brokers.zerodha.installed, enabled: c.brokers.zerodha.enabled, apiKey: c.brokers.zerodha.apiKey, secretSet: !!c.brokers.zerodha.apiSecret },
+      timezone: c.brokers.timezone,
+      skipDates: [...c.brokers.skipDates],
+      loginReminderMinutes: c.brokers.loginReminderMinutes,
+    },
+    trading: { level: c.trading.level },
     look: { ...c.look },
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
     openai: { url: c.openai.url, model: c.openai.model, vision: !!c.openai.vision, apiKeySet: !!c.openai.apiKey },
@@ -161,6 +189,7 @@ export function refuseForAgent(raw: unknown): void {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const cc = (r.claudeCode && typeof r.claudeCode === "object" ? r.claudeCode : {}) as Record<string, unknown>;
   const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
+  if ("brokers" in r || "trading" in r) throw new SettingsError("Broker accounts and the trading level can only be changed by the owner on the settings screen.");
   if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
   if ("apiKey" in r || "apiKey" in oa) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
@@ -187,6 +216,8 @@ export function applySettings(config: Config, raw: unknown): Applied {
     throw new SettingsError(issue ? `${issue.path.join(".") || "settings"}: ${issue.message}` : "Invalid settings");
   }
   const p = parsed.data;
+
+  if (p.brokers?.timezone !== undefined && !isValidTimeZone(p.brokers.timezone)) throw new SettingsError("brokers.timezone: That is not a time zone, try one like Asia/Kolkata.");
 
   const ollamaUrl = p.ollama?.url;
   if (ollamaUrl !== undefined) {
@@ -232,6 +263,19 @@ export function applySettings(config: Config, raw: unknown): Applied {
 
   config.provider = next.provider;
   if (p.view) config.view = p.view;
+  if (p.trading?.level) config.trading.level = p.trading.level;
+  if (p.brokers) {
+    const { zerodha, ...rest } = p.brokers;
+    if (zerodha) {
+      const z = config.brokers.zerodha;
+      z.installed = true; // configuring it is installing it
+      if (zerodha.apiKey !== undefined) z.apiKey = zerodha.apiKey;
+      if (zerodha.apiSecret) z.apiSecret = zerodha.apiSecret;
+    }
+    if (rest.timezone !== undefined) config.brokers.timezone = rest.timezone;
+    if (rest.skipDates !== undefined) config.brokers.skipDates = sanitizeBrokers({ skipDates: rest.skipDates }).skipDates;
+    if (rest.loginReminderMinutes !== undefined) config.brokers.loginReminderMinutes = rest.loginReminderMinutes;
+  }
   if (p.approvals) config.approvals = p.approvals;
   if (p.channels) {
     const { telegram, twilio } = p.channels;
@@ -267,7 +311,11 @@ export function applySettings(config: Config, raw: unknown): Applied {
     for (const k of Object.keys(p.voice) as (keyof Config["voice"])[]) (config.voice as unknown as Record<string, unknown>)[k] = safe[k];
   }
 
-  const changed = Object.entries(p).flatMap(([k, v]) => (v && typeof v === "object" ? Object.keys(v).map((f) => `${k}.${f}`) : [k]));
+  const changed = Object.entries(p).flatMap(([k, v]) => {
+    // broker settings are listed one level deeper (brokers.zerodha.apiKey): names only, never values
+    if (k === "brokers" && v && typeof v === "object") return Object.entries(v).flatMap(([bk, bv]) => (bv && typeof bv === "object" && !Array.isArray(bv) ? Object.keys(bv).map((f) => `brokers.${bk}.${f}`) : [`brokers.${bk}`]));
+    return v && typeof v === "object" ? Object.keys(v).map((f) => `${k}.${f}`) : [k];
+  });
   return { changed, providerChanged: changed.some((k) => PROVIDER_KEYS.has(k.split(".")[0]!)), restart };
 }
 

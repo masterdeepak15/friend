@@ -33,7 +33,62 @@ export interface Config {
   approvals: ApprovalMode;
   /** Messaging channels: Telegram, and SMS and WhatsApp through Twilio. The tokens are secrets and never go to the screen. */
   channels: ChannelsConfig;
+  /** Stock brokers the owner can read their account from (Zerodha first). */
+  brokers: BrokersConfig;
+  /** What the assistant may do with money. Only "read" exists in this version. */
+  trading: TradingConfig;
   dataDir: string;
+}
+
+export interface BrokersConfig {
+  /** `installed`: added from the plugins screen (or configured by an earlier version). `enabled`: switched on. The secret is write-only. */
+  zerodha: { installed: boolean; enabled: boolean; apiKey: string; apiSecret: string | null };
+  /** The owner's time zone, for report times. */
+  timezone: string;
+  /** Dates (YYYY-MM-DD) with no scheduled reports: market holidays, the owner's own days off. */
+  skipDates: string[];
+  /** Minutes before the first report of the day to send the broker login link (0: never). */
+  loginReminderMinutes: number;
+}
+
+export interface TradingConfig {
+  level: "read";
+}
+
+export const DEFAULT_TIMEZONE = "Asia/Kolkata";
+
+export const isValidTimeZone = (z: unknown): z is string => {
+  if (typeof z !== "string" || !z) return false;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: z });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const realDate = (s: unknown): s is string => {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+};
+
+export function sanitizeBrokers(raw: unknown): BrokersConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const z = (r.zerodha && typeof r.zerodha === "object" ? r.zerodha : {}) as Record<string, unknown>;
+  const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const reminder = typeof r.loginReminderMinutes === "number" && Number.isFinite(r.loginReminderMinutes) ? Math.min(120, Math.max(0, Math.round(r.loginReminderMinutes))) : 15;
+  return {
+    zerodha: {
+      installed: z.installed === true || (z.installed === undefined && (z.enabled === true || !!str(z.apiKey, 64))),
+      enabled: z.enabled === true,
+      apiKey: str(z.apiKey, 64),
+      apiSecret: str(z.apiSecret, 100) || null,
+    },
+    timezone: isValidTimeZone(r.timezone) ? r.timezone : DEFAULT_TIMEZONE,
+    skipDates: [...new Set((Array.isArray(r.skipDates) ? r.skipDates : []).filter(realDate))].sort().slice(0, 100),
+    loginReminderMinutes: reminder,
+  };
 }
 
 export interface ChannelsConfig {
@@ -259,6 +314,8 @@ const defaults = (dataDir: string): Config => ({
   ownerName: "",
   approvals: "manual",
   channels: sanitizeChannels(DEFAULT_CHANNELS),
+  brokers: sanitizeBrokers({}),
+  trading: { level: "read" },
   dataDir,
 });
 
@@ -303,6 +360,8 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",
     approvals: stored.approvals === "edits" || stored.approvals === "auto" ? stored.approvals : "manual",
     channels: sanitizeChannels(stored.channels),
+    brokers: sanitizeBrokers(stored.brokers),
+    trading: { level: "read" }, // any other level in the file is read as read: orders do not exist in this version
     dataDir,
   };
 }
