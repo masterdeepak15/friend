@@ -121,10 +121,10 @@ describe("the plugins screen's routes", () => {
     return { dir, api, list, save: (settings: unknown) => api("/api/settings", { method: "PUT", body: JSON.stringify({ pin: owner.pin, settings }) }) };
   }
 
-  it("lists Telegram and Twilio next to the other plugins, not installed", async () => {
+  it("lists Telegram, Twilio and Zerodha next to the other plugins, not installed", async () => {
     const { list } = await boot();
     const l = await list();
-    expect(l.map((v) => [v.id, v.installed, v.state])).toEqual([["telegram", false, "not-installed"], ["twilio", false, "not-installed"]]);
+    expect(l.map((v) => [v.id, v.installed, v.state])).toEqual([["telegram", false, "not-installed"], ["twilio", false, "not-installed"], ["zerodha", false, "not-installed"]]);
   });
 
   it("installs with the PIN, is saved, and shows what to do next", async () => {
@@ -136,6 +136,19 @@ describe("the plugins screen's routes", () => {
     const [tg] = await list();
     expect(tg).toMatchObject({ installed: true, state: "needs-setup", detail: expect.stringMatching(/bot token/) });
     expect(loadConfig(dir).channels.telegram.installed).toBe(true);
+  });
+
+  it("installs Zerodha with the PIN, saves it, and removing it forgets the key and secret", async () => {
+    const { api, list, save, dir } = await boot();
+    const post = (body: unknown) => api("/api/plugins/install", { method: "POST", body: JSON.stringify(body) });
+    expect((await post({ id: "zerodha", pin: "000000" })).status).toBe(403);
+    expect((await post({ id: "zerodha", pin: owner.pin })).status).toBe(200);
+    expect((await list()).find((v) => v.id === "zerodha")).toMatchObject({ installed: true, state: "needs-setup", detail: expect.stringMatching(/Kite API key and secret/) });
+    expect(loadConfig(dir).brokers.zerodha.installed).toBe(true);
+    expect((await save({ brokers: { zerodha: { apiKey: "abc123", apiSecret: "SECRET123" } } })).status).toBe(200);
+    expect(JSON.stringify(await list())).not.toContain("SECRET123");
+    expect((await api("/api/plugins/zerodha", { method: "DELETE" })).status).toBe(200);
+    expect(loadConfig(dir).brokers.zerodha).toEqual({ installed: false, enabled: false, apiKey: "", apiSecret: null });
   });
 
   it("switches on only after the token is saved, and switching on asks for the PIN", async () => {

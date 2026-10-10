@@ -15,7 +15,8 @@ import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
 import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
-import { changeIntegration, integrationSummary, integrationViews, isIntegrationId } from "./integrations";
+import { BrokerHub } from "./brokers/hub";
+import { changeBroker, changeIntegration, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -64,6 +65,10 @@ export interface AppOptions {
   approvalTimeoutMs?: number;
   /** How long a camera request waits for the browser's picture. */
   cameraTimeoutMs?: number;
+  /** How Zerodha is reached (tests hand in a fake). */
+  brokerFetch?: typeof fetch;
+  /** How often the broker reports and the login reminder are looked at. */
+  brokerTickMs?: number;
   /** How long after start the Hindi and Marathi voices are made ready in the background (tests use a long time so it never happens). */
   warmLanguagesAfterMs?: number;
   /** How often the heartbeat looks for reminders that have come due. */
@@ -140,6 +145,9 @@ export async function createApp(opts: AppOptions) {
       return reply.trim();
     },
   });
+  // Stock brokers (Zerodha first): the daily login, reading the account, and the scheduled reports.
+  const brokerHub = new BrokerHub({ config, dataDir: opts.dataDir, db, audit, channels: channelHub, fetch: opts.brokerFetch, publicBase: () => config.publicUrl ?? null });
+  brokerHub.apply();
   const memory = new Memory(db);
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
@@ -154,6 +162,19 @@ export async function createApp(opts: AppOptions) {
     channelHub.apply();
     return null;
   };
+  /** The same for the brokers' part of the saved file. */
+  const changeBrokers = (fn: (b: Config["brokers"]) => string | null): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.brokers);
+    if (err) return err;
+    fn(config.brokers);
+    saveConfig(saved);
+    brokerHub.apply();
+    return null;
+  };
+  /** Install, switch on or off, or remove one integration, wherever it keeps its settings. */
+  const changeAny = (id: IntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null =>
+    id === "zerodha" ? changeBrokers((b) => changeBroker(b, id, change, (gone) => brokerHub.forget(gone))) : changeChannels((c) => changeIntegration(c, id, change));
   const admin = makeAdmin({
     hub,
     plugins,
@@ -170,19 +191,19 @@ export async function createApp(opts: AppOptions) {
       },
     },
     integrations: {
-      views: () => integrationViews(config, channelHub),
-      install: (id) => changeChannels((c) => changeIntegration(c, id, { install: true })),
-      remove: (id) => changeChannels((c) => changeIntegration(c, id, { remove: true })),
+      views: () => integrationViews(config, channelHub, brokerHub),
+      install: (id) => changeAny(id, { install: true }),
+      remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!config.channels[id].installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {
             return (e as Error).message;
           }
         }
-        return enabled === undefined ? null : changeChannels((c) => changeIntegration(c, id, { enabled }));
+        return enabled === undefined ? null : changeAny(id, { enabled });
       },
     },
   });
@@ -206,6 +227,7 @@ export async function createApp(opts: AppOptions) {
     }
     audit.log(how.actor, "settings.changed", { changed: applied.changed, ...(how.ip ? { ip: how.ip } : {}) });
     if (applied.changed.some((k) => k.startsWith("channels"))) channelHub.apply();
+    if (applied.changed.some((k) => k.startsWith("brokers"))) brokerHub.apply();
     if (applied.providerChanged && switchable) {
       const swap = () => {
         const old = switchable.swap(makeProvider());
@@ -318,7 +340,7 @@ export async function createApp(opts: AppOptions) {
     },
     media,
     channels: channelHub,
-    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub)) },
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub)) },
   });
 
   const clients = new Set<ClientConn>();
@@ -466,12 +488,12 @@ export async function createApp(opts: AppOptions) {
     list: () => {
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub) };
     },
     install: async (id, pin, ip) => {
       if (isIntegrationId(id)) {
         await requirePin(pin, ip);
-        const err = changeChannels((c) => changeIntegration(c, id, { install: true }));
+        const err = changeAny(id, { install: true });
         if (err) throw new HttpError(400, err);
         audit.log("owner", "plugin.installed", { id, integration: true, ip });
         return { id, upgraded: false };
@@ -490,7 +512,7 @@ export async function createApp(opts: AppOptions) {
           if (!pin) throw new HttpError(400, "Enter your PIN to switch a plugin on.");
           await requirePin(pin, ip);
         }
-        const err = changeChannels((c) => changeIntegration(c, id, { enabled }));
+        const err = changeAny(id, { enabled });
         if (err) throw new HttpError(400, err);
         audit.log("owner", enabled ? "plugin.enabled" : "plugin.disabled", { id, integration: true, ip });
         return;
@@ -509,7 +531,7 @@ export async function createApp(opts: AppOptions) {
     },
     remove: (id) => {
       if (isIntegrationId(id)) {
-        changeChannels((c) => changeIntegration(c, id, { remove: true }));
+        changeAny(id, { remove: true });
         audit.log("owner", "plugin.removed", { id, integration: true });
         return;
       }

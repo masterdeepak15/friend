@@ -1,9 +1,11 @@
+import type { BrokerHub } from "./brokers/hub";
 import type { ChannelHub } from "./channels/hub";
-import { DEFAULT_CHANNELS, type ChannelsConfig, type Config } from "./config";
+import { DEFAULT_CHANNELS, type BrokersConfig, type ChannelsConfig, type Config } from "./config";
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
-export type IntegrationId = "telegram" | "twilio";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio"];
+export type ChannelIntegrationId = "telegram" | "twilio";
+export type IntegrationId = ChannelIntegrationId | "zerodha";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -32,19 +34,23 @@ export interface IntegrationView {
 const META: Record<IntegrationId, { name: string; description: string }> = {
   telegram: { name: "Telegram", description: "Talk to Friend from your phone through Telegram, and let it message people for you. Needs a free bot token from @BotFather." },
   twilio: { name: "WhatsApp and SMS (Twilio)", description: "Talk to Friend by WhatsApp or SMS, and let it message people for you. Needs a Twilio account and a public address for Friend." },
+  zerodha: { name: "Zerodha", description: "Read-only look at your Zerodha portfolio: ask Friend how it is doing, or have a report sent to Telegram or WhatsApp every morning and at market close. Friend cannot place orders. Needs a free Kite Connect app." },
 };
 
 /** What can be changed without a secret. The AI may set these (with the owner's PIN); tokens only the owner types on the screen. */
 export const PUBLIC_SETTINGS: Record<IntegrationId, readonly string[]> = {
   telegram: [],
   twilio: ["accountSid", "smsFrom", "whatsappFrom", "ownerNumber"],
+  zerodha: [],
 };
 
-export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">): IntegrationView[] {
+export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">): IntegrationView[] {
   const status = hub.status();
   const t = config.channels.telegram;
   const w = config.channels.twilio;
   const publicUrl = config.publicUrl;
+  const z = config.brokers.zerodha;
+  const zs = brokers?.status("zerodha");
 
   const tgSteps: IntegrationStep[] = [
     { text: "Create a bot: open Telegram, talk to @BotFather, send /newbot, and copy the token it gives you.", done: !!t.botToken },
@@ -59,6 +65,20 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { text: "Give Friend a public address (friend config set publicUrl https://…) and set it as the \"a message comes in\" webhook in Twilio.", done: !!publicUrl },
     { text: "Switch the plugin on.", done: w.enabled },
   ];
+
+  const zSteps: IntegrationStep[] = [
+    { text: "Create a free Kite Connect app at developers.kite.trade and set its redirect URL to the address shown in Configure.", done: !!z.apiKey && !!z.apiSecret },
+    { text: "Paste the app's API key and secret in Configure and save.", done: !!z.apiKey && !!z.apiSecret },
+    { text: "Switch the plugin on.", done: z.enabled },
+    { text: "Log in to Zerodha with the link in Configure. Zerodha ends the login every morning, so this is once a day.", done: !!zs?.loggedIn },
+  ];
+  const zState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!z.installed) return { state: "not-installed", detail: "" };
+    if (!z.apiKey || !z.apiSecret) return { state: "needs-setup", detail: "Add your Kite API key and secret (press Configure)." };
+    if (!z.enabled) return { state: "off", detail: "Switched off." };
+    if (!zs?.loggedIn) return { state: "needs-setup", detail: "Log in to Zerodha (press Configure). Zerodha asks for this once a day." };
+    return { state: "online", detail: "Logged in until 06:00 tomorrow. Friend can read your portfolio, never trade." };
+  };
 
   const tgState = (): Pick<IntegrationView, "state" | "detail"> => {
     if (!t.installed) return { state: "not-installed", detail: "" };
@@ -91,14 +111,15 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
       settings: { accountSid: w.accountSid, smsFrom: w.smsFrom, whatsappFrom: w.whatsappFrom, ownerNumber: w.ownerNumber },
       secrets: { authToken: !!w.authToken },
     },
+    { id: "zerodha", ...META.zerodha, kind: "integration", installed: z.installed, enabled: z.enabled, ...zState(), steps: zSteps, settings: { apiKey: z.apiKey }, secrets: { apiSecret: !!z.apiSecret } },
   ];
 }
 
 /** A copy of one integration reset to how a never-installed one looks (this also forgets its tokens). */
-const blank = (id: IntegrationId): ChannelsConfig[IntegrationId] => ({ ...DEFAULT_CHANNELS[id] });
+const blank = (id: ChannelIntegrationId): ChannelsConfig[ChannelIntegrationId] => ({ ...DEFAULT_CHANNELS[id] });
 
 /** Changes one integration in a config object. Returns a sentence when it cannot be done. */
-export function changeIntegration(channels: ChannelsConfig, id: IntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null {
+export function changeIntegration(channels: ChannelsConfig, id: ChannelIntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null {
   if ("install" in change) {
     channels[id].installed = true;
     return null;
@@ -113,6 +134,24 @@ export function changeIntegration(channels: ChannelsConfig, id: IntegrationId, c
     if (id === "twilio" && (!channels.twilio.accountSid || !channels.twilio.authToken)) return "Add the Twilio account SID and auth token first (Configure), then switch it on.";
   }
   channels[id].enabled = change.enabled;
+  return null;
+}
+
+/** The same for a broker. Removing forgets its key and secret and calls `onRemove` (to delete the saved login); the owner's other broker settings stay. */
+export function changeBroker(brokers: BrokersConfig, id: "zerodha", change: { install: true } | { remove: true } | { enabled: boolean }, onRemove?: (id: "zerodha") => void): string | null {
+  const z = brokers[id];
+  if ("install" in change) {
+    z.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    brokers[id] = { installed: false, enabled: false, apiKey: "", apiSecret: null };
+    onRemove?.(id);
+    return null;
+  }
+  if (!z.installed) return `${META[id].name} is not installed yet.`;
+  if (change.enabled && (!z.apiKey || !z.apiSecret)) return "Add the Kite API key and secret first (Configure), then switch it on.";
+  z.enabled = change.enabled;
   return null;
 }
 
