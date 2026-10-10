@@ -16,6 +16,8 @@ import { CameraBroker } from "./camera";
 import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
 import { BrokerHub } from "./brokers/hub";
+
+const PORTFOLIO_SKILL = "portfolio-assistant";
 import { changeBroker, changeIntegration, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
@@ -174,8 +176,14 @@ export async function createApp(opts: AppOptions) {
     return null;
   };
   /** Install, switch on or off, or remove one integration, wherever it keeps its settings. */
-  const changeAny = (id: IntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null =>
-    id === "zerodha" ? changeBrokers((b) => changeBroker(b, id, change, (gone) => brokerHub.forget(gone))) : changeChannels((c) => changeIntegration(c, id, change));
+  const changeAny = (id: IntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null => {
+    if (id !== "zerodha") return changeChannels((c) => changeIntegration(c, id, change));
+    const err = changeBrokers((b) => changeBroker(b, id, change, (gone) => brokerHub.forget(gone)));
+    // the portfolio skill comes and goes with the integration
+    if (!err && "install" in change && listCatalog(catalogDir).some((c) => c.id === PORTFOLIO_SKILL)) plugins.install(join(catalogDir, PORTFOLIO_SKILL));
+    if (!err && "remove" in change) plugins.remove(PORTFOLIO_SKILL);
+    return err;
+  };
   const admin = makeAdmin({
     hub,
     plugins,
@@ -341,6 +349,7 @@ export async function createApp(opts: AppOptions) {
     },
     media,
     channels: channelHub,
+    brokers: brokerHub,
     integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub)) },
   });
 

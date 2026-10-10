@@ -2,7 +2,7 @@ import type { Audit } from "../audit";
 import type { ChannelHub } from "../channels/hub";
 import type { Config } from "../config";
 import type { Db } from "../db";
-import { Portfolio } from "./portfolio";
+import { Portfolio, type PortfolioSnapshot } from "./portfolio";
 import { buildReport, type ReportKind } from "./report";
 import { localDay, localTime, localWeekday, ReportScheduler, type Schedule } from "./scheduler";
 import { ReportSchedules } from "./schedules";
@@ -34,6 +34,7 @@ export interface BrokerStatus {
 }
 
 export type ReportResult = { ok: true; text: string } | { ok: false; error: string; sessionExpired?: boolean };
+export type SnapshotResult = { ok: true; snapshot: PortfolioSnapshot; caps: Capabilities; broker: string; zone: string } | { ok: false; error: string; sessionExpired?: boolean };
 export type LoginResult = { ok: true } | { ok: false; error: string };
 
 const NAMES: Record<string, string> = { zerodha: "Zerodha" };
@@ -146,11 +147,12 @@ export class BrokerHub {
     return { ok: true };
   }
 
-  /** Builds the report text from the live account. Never sends it. */
-  async report(id: string, kind: ReportKind = "custom"): Promise<ReportResult> {
+  /** The account as it is now, or why it cannot be read (a login that has ended is cleaned up here, once, for every caller). */
+  async snapshot(id: string): Promise<SnapshotResult> {
     const entry = this.providers.get(id);
     if (!entry) return { ok: false, error: `${this.name(id)} is not installed or not switched on.` };
-    if (!entry.provider.sessionExpiresAt()) return { ok: false, error: "Login needed: the Zerodha login has ended.", sessionExpired: true };
+    const ended: SnapshotResult = { ok: false, error: `Login needed: the ${this.name(id)} login has ended.`, sessionExpired: true };
+    if (!entry.provider.sessionExpiresAt()) return ended;
     const snapshot = await entry.portfolio.snapshot();
     const sections = [snapshot.holdings, snapshot.positions, snapshot.funds, snapshot.orders];
     if (sections.some((s) => !s.ok && s.kind === "session")) {
@@ -158,9 +160,16 @@ export class BrokerHub {
       entry.provider.setSession(null);
       entry.portfolio.invalidate();
       this.d.audit.log("system", "broker.session_ended", { broker: id });
-      return { ok: false, error: "Login needed: the Zerodha login has ended.", sessionExpired: true };
+      return ended;
     }
-    const text = buildReport({ snapshot, kind, caps: entry.provider.capabilities, now: new Date(this.now()), broker: this.name(id), zone: this.d.config.brokers.timezone });
+    return { ok: true, snapshot, caps: entry.provider.capabilities, broker: this.name(id), zone: this.d.config.brokers.timezone };
+  }
+
+  /** Builds the report text from the live account. Never sends it. */
+  async report(id: string, kind: ReportKind = "custom"): Promise<ReportResult> {
+    const got = await this.snapshot(id);
+    if (!got.ok) return got;
+    const text = buildReport({ snapshot: got.snapshot, kind, caps: got.caps, now: new Date(this.now()), broker: got.broker, zone: got.zone });
     this.d.audit.log("system", "broker.report", { broker: id, kind, lines: text.split("\n").length });
     return { ok: true, text };
   }

@@ -4,6 +4,8 @@ import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
 import type { CodeBox } from "../codebox";
 import type { MediaStore } from "../media";
+import type { BrokerHub } from "../brokers/hub";
+import { partText } from "../brokers/tooltext";
 import type { ChannelHub } from "../channels/hub";
 import { createHash } from "node:crypto";
 import type { Plugins } from "../plugins";
@@ -54,6 +56,8 @@ export interface AgentDeps {
   media?: Pick<MediaStore, "present">;
   /** Sends messages and reads the inbox. Without it the message tools report they are unavailable. */
   channels?: Pick<ChannelHub, "send" | "inbox">;
+  /** The owner's stock broker (Zerodha), read only. Without it the portfolio and report tools report they are unavailable. */
+  brokers?: Pick<BrokerHub, "status" | "snapshot" | "report" | "schedules" | "loginLink">;
   /** One line about which integrations (Telegram, WhatsApp/SMS) are installed and how far they are, for the model's context. */
   integrations?: { summary(): string };
   /** The owner's saved notes. Without it the memory tools report they are unavailable. */
@@ -349,6 +353,63 @@ export class Agent {
     return { ok: false, text: `Unknown tool: ${name}` };
   }
 
+  /** Portfolio and report tools. The figures come from the broker through the hub; nothing here makes a number up. */
+  private async runBrokerTool(name: string, args: Record<string, unknown>, _who: "owner" | "other"): Promise<{ ok: boolean; text: string }> {
+    const b = this.deps.brokers!;
+    const ended = "The Zerodha login has ended (Zerodha ends it every morning). Tell the owner, and offer to send them the login link on their phone: call reports.run with send true.";
+    const zone = this.deps.config.brokers.timezone;
+    switch (name) {
+      case "portfolio.status": {
+        const s = b.status("zerodha");
+        return { ok: true, text: `Zerodha: ${s.detail}${s.loggedIn ? "" : " Offer to send the login link: reports.run with send true."}` };
+      }
+      case "portfolio.summary":
+      case "reports.run": {
+        const kind = name === "reports.run" ? ((args.kind as "morning" | "close" | "custom" | undefined) ?? "custom") : "custom";
+        const send = name === "reports.run" && args.send === true;
+        const channel = b.schedules.list()[0]?.channel ?? "telegram";
+        const r = await b.report("zerodha", kind);
+        if (!r.ok) {
+          if (!r.sessionExpired) return { ok: false, text: r.error };
+          if (!send) return { ok: false, text: ended };
+          const url = b.loginLink("zerodha");
+          if (!url || !this.deps.channels) return { ok: false, text: ended };
+          const sent = await this.deps.channels.send(channel, "me", "Login needed: log in to Zerodha, then ask for the report again.\n" + url);
+          return sent.ok ? { ok: true, text: "The Zerodha login had ended, so I sent the owner the login link on their phone. Tell them to open it and sign in, then ask again." } : { ok: false, text: sent.error };
+        }
+        if (!send) return { ok: true, text: r.text };
+        if (!this.deps.channels) return { ok: false, text: "Messaging is not available." };
+        const sent = await this.deps.channels.send(channel, "me", r.text);
+        return sent.ok ? { ok: true, text: `The report was sent to the owner's phone (${channel}).` } : { ok: false, text: sent.error };
+      }
+      case "portfolio.holdings":
+      case "portfolio.positions":
+      case "portfolio.funds":
+      case "portfolio.orders": {
+        const got = await b.snapshot("zerodha");
+        if (!got.ok) return { ok: false, text: got.sessionExpired ? ended : got.error };
+        return { ok: true, text: partText(name.slice("portfolio.".length) as "holdings", got.snapshot, zone) };
+      }
+      case "reports.list": {
+        const all = b.schedules.list();
+        if (!all.length) return { ok: true, text: "No report schedules." };
+        return { ok: true, text: all.map((x) => `#${x.id} "${x.name}" ${x.kind} at ${x.time} on days ${x.days.join(",")} to ${x.channel}${x.enabled ? "" : " (off)"}; last sent ${x.lastRunDay ?? "never"}`).join("\n") };
+      }
+      case "reports.schedule": {
+        try {
+          const made = b.schedules.add({ broker: "zerodha", name: String(args.name), kind: args.kind as "morning", time: String(args.time), days: (args.days as number[] | undefined) ?? [1, 2, 3, 4, 5], channel: args.channel as "telegram", commentary: args.commentary === true, enabled: true });
+          return { ok: true, text: `Scheduled #${made.id} "${made.name}" at ${made.time} to ${made.channel}. It sends only when the Zerodha login is active; otherwise the owner gets the login link.` };
+        } catch (e) {
+          return { ok: false, text: (e as Error).message };
+        }
+      }
+      case "reports.remove":
+        return b.schedules.remove(Number(args.id)) ? { ok: true, text: "Removed." } : { ok: false, text: "There is no such schedule." };
+      default:
+        return { ok: false, text: `Unknown tool: ${name}` };
+    }
+  }
+
   private runMemoryTool(name: string, args: Record<string, unknown>): { ok: boolean; text: string } {
     const { memory, audit } = this.deps;
     if (!memory) return { ok: false, text: "Memory is not available." };
@@ -413,6 +474,11 @@ export class Agent {
     }
     if (call.name === "file.present" && !d.media) return fail("Showing files is not available.");
     if (call.name.startsWith("message.") && !d.channels) return fail("Messaging is not available.");
+    if ((call.name.startsWith("portfolio.") || call.name.startsWith("reports.")) && !d.brokers) return fail("The portfolio is not available.");
+    if (d.brokers && (call.name.startsWith("portfolio.") ? call.name !== "portfolio.status" : call.name === "reports.run")) {
+      const z = d.brokers.status("zerodha");
+      if (!z.installed || !z.enabled || !z.keySet || !z.secretSet) return fail("Zerodha is not set up yet. Check integrations.status zerodha and help the owner finish it; you cannot enter their key or secret.");
+    }
     if (call.name === "camera.snap") {
       // refuse before bothering the owner with a card for a picture that could not be used
       if (!d.camera) return fail("The camera is not available.");
@@ -524,6 +590,12 @@ export class Agent {
       const shot = await d.screen!.request(ctx.emit, signal);
       d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: shot.ok });
       return shot.ok ? { text: "Picture of the Friend screen taken. Sandbox pages, video and PDFs appear empty in it, whatever they really show.", isError: false, image: { mime: shot.mime, data: shot.data } } : fail(shot.error);
+    }
+
+    if (call.name.startsWith("portfolio.") || call.name.startsWith("reports.")) {
+      const out = await this.runBrokerTool(call.name, args, ctx.trust === "owner" ? "owner" : "other");
+      d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "reports.schedule" ? { kind: args.kind, time: args.time, channel: args.channel } : {}, tier, ok: out.ok });
+      return out.ok ? { text: out.text, isError: false } : fail(out.text);
     }
 
     if (call.name === "message.send") {

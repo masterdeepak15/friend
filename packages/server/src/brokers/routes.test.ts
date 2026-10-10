@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import { FakeProvider } from "../provider/fake";
@@ -13,10 +14,10 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function boot(setup = true) {
+async function boot(setup = true, catalog?: string) {
   const dir = mkdtempSync(join(tmpdir(), "friend-brokerapi-"));
   const kite = new FakeKite();
-  app = await createApp({ dataDir: dir, provider: new FakeProvider([]), config: { port: 0, roots: [] }, pluginCatalogDir: join(dir, "no-catalog"), brokerFetch: kite.fetch, brokerTickMs: 3_600_000 });
+  app = await createApp({ dataDir: dir, provider: new FakeProvider([]), config: { port: 0, roots: [] }, pluginCatalogDir: catalog ?? join(dir, "no-catalog"), brokerFetch: kite.fetch, brokerTickMs: 3_600_000 });
   const { port } = await app.start();
   const base = `http://127.0.0.1:${port}`;
   const j = { "content-type": "application/json" };
@@ -116,6 +117,19 @@ describe("schedules", () => {
     expect((await t.api(`/api/brokers/schedules/${made.id}`, { method: "DELETE" })).status).toBe(200);
     expect(((await t.json("/api/brokers/schedules")) as { schedules: unknown[] }).schedules).toHaveLength(0);
     expect((await t.api("/api/brokers/schedules/99999", { method: "DELETE" })).status).toBe(404);
+  });
+});
+
+describe("the portfolio skill", () => {
+  it("is installed with Zerodha and removed with it", async () => {
+    const catalog = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../plugins");
+    const t = await boot(false, catalog);
+    const installed = async () => ((await t.json("/api/plugins")).installed as { id: string }[]).map((p) => p.id);
+    expect(await installed()).not.toContain("portfolio-assistant");
+    await t.api("/api/plugins/install", { method: "POST", body: JSON.stringify({ id: "zerodha", pin: owner.pin }) });
+    expect(await installed()).toContain("portfolio-assistant");
+    await t.api("/api/plugins/zerodha", { method: "DELETE" });
+    expect(await installed()).not.toContain("portfolio-assistant");
   });
 });
 

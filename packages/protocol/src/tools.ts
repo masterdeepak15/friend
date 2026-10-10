@@ -232,6 +232,83 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "portfolio.status",
+    description: "Whether Zerodha is ready: installed, switched on, and logged in today. No figures. If the login has ended, offer to send the owner the login link (reports.run with send true).",
+    input: z.object({}).strict(),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "portfolio.summary",
+    description: "The worked-out summary: value, invested, profit and loss, today's change, biggest movers, and how concentrated it is. Reads the owner's Zerodha account (read only: Friend cannot place orders). Report only these figures and say how fresh they are; never tell the owner to buy or sell.",
+    input: z.object({}).strict(),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
+    name: "portfolio.holdings",
+    description: "The stocks the owner holds, with quantity, average price, last price and profit and loss. Reads the owner's Zerodha account (read only: Friend cannot place orders). Report only these figures and say how fresh they are; never tell the owner to buy or sell.",
+    input: z.object({}).strict(),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
+    name: "portfolio.positions",
+    description: "Open positions for today (intraday and derivatives). Reads the owner's Zerodha account (read only: Friend cannot place orders). Report only these figures and say how fresh they are; never tell the owner to buy or sell.",
+    input: z.object({}).strict(),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
+    name: "portfolio.funds",
+    description: "Cash available and used. Reads the owner's Zerodha account (read only: Friend cannot place orders). Report only these figures and say how fresh they are; never tell the owner to buy or sell.",
+    input: z.object({}).strict(),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
+    name: "portfolio.orders",
+    description: "Today's orders and their status. Reads the owner's Zerodha account (read only: Friend cannot place orders). Report only these figures and say how fresh they are; never tell the owner to buy or sell.",
+    input: z.object({}).strict(),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
+    name: "reports.run",
+    description: "Build the portfolio report now (kind: morning, close or custom). With send true it goes to the owner's phone instead of being read out (Telegram, or the channel of their first schedule); if the Zerodha login has ended it sends the login link instead. Only when the owner asks.",
+    input: z.object({ kind: z.enum(["morning", "close", "custom"]).optional(), send: z.boolean().optional() }).strict(),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
+    name: "reports.schedule",
+    description: "Set up a repeating portfolio report sent to the owner's phone, only when they ask. time is local 24 hour HH:MM (like 09:30); days are 1 (Monday) to 7 (Sunday), default Monday to Friday; channel: telegram, whatsapp or sms. The owner approves with their PIN because it sends their figures to a messaging app.",
+    input: z.object({
+      name: z.string().min(1).max(60),
+      kind: z.enum(["morning", "close", "custom"]),
+      time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      days: z.array(z.number().int().min(1).max(7)).min(1).max(7).optional(),
+      channel: z.enum(["telegram", "whatsapp", "sms"]),
+      commentary: z.boolean().optional(),
+    }).strict(),
+    baseTier: "T3",
+    target: "gateway",
+  },
+  {
+    name: "reports.list",
+    description: "The owner's portfolio report schedules (id, name, time, days, channel) and when each last ran.",
+    input: z.object({}).strict(),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "reports.remove",
+    description: "Delete a portfolio report schedule by its id (see reports.list). Only when the owner asks; they approve with their PIN.",
+    input: z.object({ id: z.number().int().min(1) }).strict(),
+    baseTier: "T3",
+    target: "gateway",
+  },
+  {
     name: "settings.get",
     description: "Read the owner's current settings (model provider and model names, fallback, Ollama address, voice options, the view). The API key is never included.",
     input: z.object({}),
@@ -516,6 +593,21 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return `Send a ${visible(String(a.channel ?? ""))} message to ${visible(String(a.to ?? ""))}:\n${visible(clip(String(a.text ?? ""), 600))}`;
     case "message.inbox":
       return "Read the messages other people sent you";
+    case "portfolio.summary":
+    case "portfolio.holdings":
+    case "portfolio.positions":
+    case "portfolio.funds":
+    case "portfolio.orders":
+      return `Read your Zerodha ${String(name).slice("portfolio.".length)} (read only)`;
+    case "reports.run":
+      return a.send === true ? "Build your portfolio report and send it to your phone" : "Build your portfolio report";
+    case "reports.schedule": {
+      const label = { telegram: "Telegram", whatsapp: "WhatsApp", sms: "SMS" }[String(a.channel)] ?? visible(String(a.channel ?? ""));
+      const days = Array.isArray(a.days) ? a.days.map((d) => ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][Number(d)] ?? "?").join(", ") : "Mon to Fri";
+      return `Schedule the ${visible(String(a.kind ?? ""))} report "${visible(clip(String(a.name ?? ""), 60))}" at ${visible(String(a.time ?? ""))} (${days}). It sends your portfolio figures to ${label}.`;
+    }
+    case "reports.remove":
+      return `Delete the report schedule #${visible(String(a.id ?? ""))}`;
     case "file.present":
       return `Show the file ${visible(String(a.path ?? ""))} on your screen (Friend reads it from this PC and shows it to you)`;
     case "screen.look":

@@ -1,0 +1,13 @@
+{
+  "id": "portfolio-assistant",
+  "name": "Portfolio assistant",
+  "version": "1.0.0",
+  "description": "How to talk about the owner's Zerodha portfolio: figures from the tools only, plain words, no trading advice.",
+  "skills": [
+    {
+      "name": "portfolio",
+      "description": "Answer questions about the owner's portfolio, funds, positions and orders, and set up or send portfolio reports, using only the portfolio and reports tools",
+      "file": "skills/portfolio.md"
+    }
+  ]
+}
