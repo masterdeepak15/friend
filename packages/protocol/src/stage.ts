@@ -29,6 +29,8 @@ export const StageObject = z.object({
   placement: Placement,
   ttl: z.number().positive().max(3600).optional(),
   style: z.enum(["glass", "alert"]).optional(),
+  /** "overlay": floats in the middle over a dimmed screen without moving anything, and goes away by itself. */
+  layer: z.enum(["base", "overlay"]).optional(),
   /** A widget: it stays (and keeps the place the owner gave it) across refreshes, logins and restarts, until it is removed on purpose. */
   pinned: z.boolean().optional(),
 });

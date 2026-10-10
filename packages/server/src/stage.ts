@@ -10,10 +10,13 @@ import {
   type ToolResult,
 } from "@friend/protocol";
 
+import { GUIDE_TOPICS, screenGuide, type GuideTopic } from "./agent/guide";
 import { describeScreen, placeObject, type PanelName } from "./agent/layout";
 import type { LookConfig } from "./config";
 
 const MAX_OBJECTS = 12;
+/** How long an overlay stays when the AI gives no time. */
+export const OVERLAY_TTL_S = 30;
 /** Largest page the agent may draw in a sandbox object. */
 export const MAX_SANDBOX_HTML = 100_000;
 
@@ -150,9 +153,10 @@ export class StageState {
           return { ok: false, error: `There are ${MAX_PINNED} pinned widgets already. Unpin one first (only if the owner agrees).` };
         }
         const obj: StageObject = pinned
-          ? { ...cmd.object, pinned: true, ...(existing?.obj.pinned ? { placement: existing.obj.placement } : {}) }
+          ? { ...(({ layer: _layer, ...rest }) => rest)(cmd.object), pinned: true, ...(existing?.obj.pinned ? { placement: existing.obj.placement } : {}) } // a widget is never an overlay
           : (({ pinned: _drop, ...rest }) => rest)(cmd.object);
-        const expiresAt = !pinned && cmd.object.ttl ? now + cmd.object.ttl * 1000 : null;
+        const overlay = !pinned && cmd.object.layer === "overlay";
+        const expiresAt = !pinned && (cmd.object.ttl || overlay) ? now + (cmd.object.ttl ?? OVERLAY_TTL_S) * 1000 : null;
         this.objects.set(obj.id, { obj, expiresAt });
         if (pinned) this.persist();
         return { ok: true };
@@ -285,6 +289,11 @@ export function runStageTool(
   stage: StageState,
   emit: (m: ServerMsg) => void,
 ): ToolResult {
+  if (name === "stage.guide") {
+    const topic = (args as { topic?: GuideTopic } | null | undefined)?.topic;
+    if (topic !== undefined && !GUIDE_TOPICS.includes(topic)) return { ok: false, error: `Unknown topic. Use one of: ${GUIDE_TOPICS.join(", ")}.` };
+    return { ok: true, output: screenGuide(topic), truncated: false };
+  }
   const def = TOOL_DEFS.find((t) => t.name === name && t.target === "gateway");
   if (!def) return { ok: false, error: `Unknown stage tool: ${name}` };
   const input = def.input.safeParse(args ?? {});
@@ -303,7 +312,10 @@ export function runStageTool(
       note = fixed;
     }
   }
-  if (command.cmd === "show") {
+  if (command.cmd === "show" && command.object.layer === "overlay" && !command.object.pinned) {
+    // an overlay floats over everything: it takes no place on the stage and moves nothing
+    command = { cmd: "show", object: { ...command.object, placement: "center" } };
+  } else if (command.cmd === "show") {
     // never let a new object land on top of another one or on the always-visible parts of the screen
     const placed = placeObject(command.object, stage.snapshot().objects, stage.openPanels(), stage.screenInfo());
     command = { cmd: "show", object: placed.object };

@@ -112,21 +112,23 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu }: StageProp
   const stageRef = useRef<HTMLDivElement>(null);
   const dragger = useObjectDrag(send, dispatch, () => stageRef.current);
   const entries = useGhosts(state.objects, prefersReducedMotion() ? 0 : EXIT_MS);
-  const autos = entries.filter((e) => e.object.placement === "auto");
-  const fixed = entries.filter((e) => e.object.placement !== "auto");
+  const overlays = entries.filter((e) => e.object.layer === "overlay");
+  const autos = entries.filter((e) => e.object.layer !== "overlay" && e.object.placement === "auto");
+  const fixed = entries.filter((e) => e.object.layer !== "overlay" && e.object.placement !== "auto");
 
   const renderObject = ({ object: o, leaving }: GhostEntry) => {
     const View = CATALOG[o.type as keyof typeof CATALOG];
     if (!View) return null;
-    const movable = !narrow && !leaving; // a phone stacks everything in one column: nothing to drag there
+    const overlay = o.layer === "overlay"; // floats over the screen: fixed in the middle, nothing to drag or pin
+    const movable = !narrow && !leaving && !overlay; // a phone stacks everything in one column: nothing to drag there
     const live = dragger.preview?.id === o.id ? dragger.preview.box : null;
     const placement = live ? { x: live.x, y: live.y, w: live.w, h: live.h } : o.placement;
     return (
       <section
         key={o.id}
         data-object={o.id}
-        className={`obj glass${o.style === "alert" ? " alert" : ""}${o.pinned ? " pinned" : ""}${live ? " dragging" : ""}${leaving ? " leaving" : ""}`}
-        style={placementToStyle(placement, viewport)}
+        className={`obj glass${o.style === "alert" ? " alert" : ""}${overlay ? " overlay" : ""}${o.pinned ? " pinned" : ""}${live ? " dragging" : ""}${leaving ? " leaving" : ""}`}
+        style={overlay ? undefined : placementToStyle(placement, viewport)}
       >
         {movable && (
           <div
@@ -141,7 +143,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu }: StageProp
             onKeyDown={(e) => dragger.key(e, o)}
           />
         )}
-        <button
+        {!overlay && <button
           className={`obj-pin${o.pinned ? " on" : ""}`}
           aria-label={o.pinned ? `Unpin ${o.id}` : `Pin ${o.id} to the screen`}
           aria-pressed={!!o.pinned}
@@ -152,7 +154,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu }: StageProp
           <svg width="14" height="14" viewBox="0 0 24 24" fill={o.pinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 17v5M9 3h6l-1 7 3 3H7l3-3-1-7z" />
           </svg>
-        </button>
+        </button>}
         <button
           className="obj-close"
           aria-label={`Dismiss ${o.id}`}
@@ -208,6 +210,20 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu }: StageProp
         {autos.length > 0 && <div className="auto-grid">{autos.map(renderObject)}</div>}
         {fixed.map(renderObject)}
       </div>
+      {overlays.length > 0 && (
+        <div className="overlay-layer" data-testid="overlay">
+          <div
+            className="overlay-backdrop"
+            onClick={() =>
+              overlays.forEach(({ object }) => {
+                send({ type: "stage.event", objectId: object.id, event: "dismiss" });
+                dispatch({ type: "object.dismiss", id: object.id });
+              })
+            }
+          />
+          {overlays.map(renderObject)}
+        </div>
+      )}
       {state.look.captions && state.captions && (
         <p className={`captions captions-${state.look.captionSize}${state.captionDone ? " done" : ""}`} aria-live="polite">
           {state.captions}
