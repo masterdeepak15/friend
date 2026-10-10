@@ -57,6 +57,11 @@ Noted as the owner sent them. Nothing here is built yet; each item has a first p
 - DONE: `npm install -g friend-assistant` then `friend onboard` (10 steps, resumable, installs prerequisites one by one after asking), `friend doctor`, bundled package (program, web app, plugins, Python voice code).
 - Later: a one-line installer script for Windows/macOS/Linux that installs Node.js too; a background service so Friend starts with the PC (`friend service install`); `friend update` that checks npm for a newer version; signed releases; a check for the C++ build tools when the native part has to be compiled.
 
+## 11. Portfolio assistant skill: make it broker-neutral (noted 2026-10-10, do later)
+- The `portfolio-assistant` skill (plugins/portfolio-assistant) is meant to be common to every broker, but its text and description still say "Zerodha" in places, and the portfolio.* / reports.* tools look up the "zerodha" provider directly.
+- It also shows in the plugin catalog as a separate "Available" entry although installing Zerodha installs it (and removing Zerodha removes it).
+- Later: reword the skill to "your broker"; hide it from the catalog list while it is tied to a broker; let the tools take a broker id (default: the one that is logged in) when a second broker (Angel One, Upstox) is added.
+
 ## Suggested order
 1. PIN with keyboard, and the slash-command bar (both small, both useful at once; the commands become the base for items 2 and 4).
 2. Screen model + design rules for the AI, with the placement validator (item 3).
