@@ -315,6 +315,16 @@ Speak or type in English, Hindi, Marathi, or a mix of them in one sentence ("आ
 - **The assistant has a manual for the screen.** It can read it any time (the `stage.guide` tool): every widget with its props, how to arrange them, the theme, files and ready recipes. It also knows what to do when the screen already has things on it: a short explanation goes **on top** as an overlay (it floats over a dimmed screen, moves nothing underneath, and leaves by itself after 30 seconds, or when you click away); something **important** clears the screen first (your pinned widgets stay) and is shown alone; a new topic replaces the old one; more of the same topic updates what is there.
 - **The theme.** Friend is a HUD: a near-black blue background, glass panels with a thin glowing edge, one accent colour, small letter-spaced labels and monospace numbers. The assistant is told the exact colours and your current accent, and the pages it draws in a sandbox use your colours automatically (`var(--accent)`, `var(--ink)` and so on).
 
+## Telegram, WhatsApp and SMS
+
+Settings → **Channels** (saved with your PIN). Two things come out of it: you can **talk to Friend from your phone**, and Friend can **message people for you and read their replies**.
+
+- **Telegram** needs no public address. Create a bot with **@BotFather** (`/newbot`), paste the token, switch it on and save. Then press **Get a link code** (needs your PIN) and send `/link CODE` to your bot from your own Telegram. That chat is now yours: what you write there is answered like on your PC, in the same chat.
+- **SMS and WhatsApp** use one **Twilio** account (account SID, auth token, your Twilio SMS number and WhatsApp sender, and your own phone number). Twilio delivers incoming messages to `https://your-public-address/api/channels/twilio` (set it in Twilio as the "a message comes in" webhook, HTTP POST), so Friend needs a public address (`friend config set publicUrl https://…`). Every request is checked against Twilio's signature, and a message Twilio sends twice is run once.
+- **Who counts as you.** Only your linked Telegram chat and your own phone number. Everyone else who writes to your bot or number goes to an **inbox** as untrusted mail: nothing runs, nothing is answered, you get a notice on the screen, and you can ask Friend "did anyone reply?" (it reads them as data, never as instructions).
+- **Sending.** "Message Anu on WhatsApp that I am late" uses the same approval rule as everything else (Settings → Approvals): in **manual** you read the recipient and the text and approve; in **auto** it goes without asking. Risky actions asked for from a phone are still decided on the PC.
+- **Safe by design.** Tokens are write-only (never shown again, never sent to the screen), the AI cannot change channel settings, one sender cannot flood you (limits per sender and per minute), and a link code works once, for ten minutes, and dies after five wrong guesses. Calls are not built yet.
+
 ## Pictures first: weather, stats and graphics
 
 Friend is meant to show answers, not only say them. It controls the whole screen and picks the object that fits (gauge, chart, table, timeline, graph, or its own animated page).

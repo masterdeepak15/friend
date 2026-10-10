@@ -1,0 +1,391 @@
+import type { ServerMsg } from "@friend/protocol";
+import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import type { Audit } from "../audit";
+import { loadConfig, phoneNumber, saveConfig, type Config } from "../config";
+import type { Db } from "../db";
+
+export type ChannelId = "telegram" | "sms" | "whatsapp";
+export const CHANNEL_LABEL: Record<ChannelId, string> = { telegram: "Telegram", sms: "SMS", whatsapp: "WhatsApp" };
+
+export interface InboxRow {
+  id: number;
+  channel: ChannelId;
+  direction: "in" | "out";
+  peer: string;
+  name: string;
+  text: string;
+  ts: number;
+  read: boolean;
+}
+
+export type SendResult = { ok: true; summary: string } | { ok: false; error: string };
+
+export interface HubDeps {
+  config: Config;
+  db: Db;
+  audit: Audit;
+  /** Runs one request that came from the owner's own chat and resolves with the reply to send back. */
+  ask(text: string, via: ChannelId): Promise<string>;
+  /** Tells every open screen something (for example that a message arrived). */
+  notify(m: ServerMsg): void;
+  fetch?: typeof fetch;
+  clock?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  /** How long Telegram holds a poll open waiting for news (seconds). */
+  pollSeconds?: number;
+}
+
+export interface ChannelStatus {
+  telegram: { enabled: boolean; tokenSet: boolean; linked: boolean; state: "off" | "connecting" | "online" | "error"; detail: string; bot: string | null };
+  twilio: { enabled: boolean; tokenSet: boolean; ownerSet: boolean; sms: boolean; whatsapp: boolean; webhook: string | null };
+}
+
+interface TelegramUpdate {
+  update_id: number;
+  message?: { text?: string; chat: { id: number }; from?: { username?: string; first_name?: string } };
+}
+
+const LINK_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const LINK_TTL_MS = 10 * 60_000;
+const LINK_MAX_FAILS = 5;
+const INBOX_KEEP = 500;
+const TELEGRAM_CHUNK = 4000;
+const SMS_MAX = 1500;
+/** The owner's own chat may send this many messages in a window; others are only stored, a few per hour per sender. */
+const OWNER_LIMIT = { max: 20, windowMs: 5 * 60_000 };
+const STRANGER_LIMIT = { max: 20, windowMs: 3600_000 };
+
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
+const plain = (s: string) => s.replace(/[\u0000-\u001f\u007f‪-‮⁦-⁩]/g, " ");
+const digits = (s: string) => s.replace(/\D/g, "");
+
+/** Telegram, SMS and WhatsApp: reads what comes in, hands the owner's own messages to the assistant, and sends on its behalf. */
+export class ChannelHub {
+  private f: typeof fetch;
+  private now: () => number;
+  private sleep: (ms: number) => Promise<void>;
+  private tgGen = 0;
+  private tgAbort: AbortController | null = null;
+  private tgOffset = 0;
+  private tgState: ChannelStatus["telegram"]["state"] = "off";
+  private tgDetail = "";
+  private tgBot: string | null = null;
+  private link: { code: string; expires: number; fails: number } | null = null;
+  private seen: string[] = [];
+  private hits = new Map<string, number[]>();
+
+  constructor(private deps: HubDeps) {
+    this.f = deps.fetch ?? fetch;
+    this.now = deps.clock ?? Date.now;
+    this.sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  }
+
+  private get cfg() {
+    return this.deps.config.channels;
+  }
+
+  // ---- lifecycle -----------------------------------------------------------------------------------------------
+
+  /** (Re)starts what the settings ask for. Call it at start and after the channel settings change. */
+  apply(): void {
+    this.tgGen++;
+    this.tgAbort?.abort();
+    this.tgAbort = null;
+    this.tgBot = null;
+    const t = this.cfg.telegram;
+    if (!t.enabled || !t.botToken) {
+      this.tgState = "off";
+      this.tgDetail = "";
+      return;
+    }
+    this.tgState = "connecting";
+    this.tgDetail = "";
+    this.tgAbort = new AbortController();
+    void this.pollTelegram(this.tgGen, this.tgAbort.signal);
+  }
+
+  stop(): void {
+    this.tgGen++;
+    this.tgAbort?.abort();
+    this.tgAbort = null;
+    this.tgState = "off";
+  }
+
+  status(): ChannelStatus {
+    const t = this.cfg.telegram;
+    const w = this.cfg.twilio;
+    return {
+      telegram: { enabled: t.enabled, tokenSet: !!t.botToken, linked: t.ownerChatId !== null, state: this.tgState, detail: this.tgDetail, bot: this.tgBot },
+      twilio: { enabled: w.enabled, tokenSet: !!w.authToken && !!w.accountSid, ownerSet: !!w.ownerNumber, sms: !!w.smsFrom, whatsapp: !!w.whatsappFrom, webhook: this.deps.config.publicUrl ? `${this.deps.config.publicUrl.replace(/\/+$/, "")}/api/channels/twilio` : null },
+    };
+  }
+
+  // ---- the inbox -----------------------------------------------------------------------------------------------
+
+  private record(channel: ChannelId, direction: "in" | "out", peer: string, name: string, text: string): void {
+    this.deps.db.prepare("insert into channel_messages (channel, direction, peer, name, text, ts, read) values (?, ?, ?, ?, ?, ?, ?)").run(channel, direction, peer, name, clip(text, 4000), this.now(), direction === "out" ? 1 : 0);
+    this.deps.db.prepare("delete from channel_messages where id <= (select max(id) from channel_messages) - ?").run(INBOX_KEEP);
+  }
+
+  /** The newest messages (oldest first), and what was unread is now read. */
+  inbox(opts: { channel?: ChannelId | undefined; unread?: boolean | undefined; limit?: number | undefined } = {}): InboxRow[] {
+    const limit = Math.min(Math.max(opts.limit ?? 10, 1), 20);
+    const where = ["direction = 'in'"];
+    const args: unknown[] = [];
+    if (opts.channel) {
+      where.push("channel = ?");
+      args.push(opts.channel);
+    }
+    if (opts.unread) where.push("read = 0");
+    const rows = this.deps.db.prepare(`select id, channel, direction, peer, name, text, ts, read from channel_messages where ${where.join(" and ")} order by id desc limit ?`).all(...args, limit) as (Omit<InboxRow, "read"> & { read: number })[];
+    for (const r of rows) this.deps.db.prepare("update channel_messages set read = 1 where id = ?").run(r.id);
+    return rows.reverse().map((r) => ({ ...r, read: r.read === 1 }));
+  }
+
+  unreadCount(): number {
+    return (this.deps.db.prepare("select count(*) n from channel_messages where direction = 'in' and read = 0").get() as { n: number }).n;
+  }
+
+  private allowed(key: string, limit: { max: number; windowMs: number }): boolean {
+    const now = this.now();
+    const recent = (this.hits.get(key) ?? []).filter((t) => now - t < limit.windowMs);
+    if (recent.length >= limit.max) {
+      this.hits.set(key, recent);
+      return false;
+    }
+    recent.push(now);
+    this.hits.set(key, recent);
+    return true;
+  }
+
+  // ---- telegram ------------------------------------------------------------------------------------------------
+
+  private mask(message: string): string {
+    const token = this.cfg.telegram.botToken;
+    return token ? message.split(token).join("***") : message;
+  }
+
+  private async tg<T>(method: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+    const token = this.cfg.telegram.botToken;
+    if (!token) throw new Error("No Telegram bot token is set.");
+    const res = await this.f(`https://api.telegram.org/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      ...(signal ? { signal } : {}),
+    });
+    const json = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: T; description?: string };
+    if (!json.ok) throw new Error(json.description ?? `Telegram answered ${res.status}`);
+    return json.result as T;
+  }
+
+  private async pollTelegram(gen: number, signal: AbortSignal): Promise<void> {
+    let backoff = 1000;
+    while (gen === this.tgGen && !signal.aborted) {
+      try {
+        if (!this.tgBot) {
+          const me = await this.tg<{ username?: string }>("getMe", {}, signal);
+          this.tgBot = me.username ?? null;
+        }
+        const updates = await this.tg<TelegramUpdate[]>("getUpdates", { offset: this.tgOffset, timeout: this.deps.pollSeconds ?? 25, allowed_updates: ["message"] }, signal);
+        if (gen !== this.tgGen) return;
+        this.tgState = "online";
+        this.tgDetail = "";
+        backoff = 1000;
+        for (const u of updates) {
+          this.tgOffset = Math.max(this.tgOffset, u.update_id + 1);
+          try {
+            await this.onTelegram(u);
+          } catch (e) {
+            this.deps.audit.log("system", "channel.telegram_handler_failed", { message: this.mask((e as Error).message).slice(0, 200) });
+          }
+        }
+        if (updates.length === 0 && (this.deps.pollSeconds ?? 25) === 0) await this.sleep(10); // a test poll that returns at once must not spin
+      } catch (e) {
+        if (signal.aborted || gen !== this.tgGen) return;
+        this.tgState = "error";
+        this.tgDetail = this.mask((e as Error).message).slice(0, 160);
+        await this.sleep(backoff);
+        backoff = Math.min(backoff * 2, 60_000);
+      }
+    }
+  }
+
+  /** A one-time code to send to the bot as /link CODE. Whoever does it from their Telegram becomes the owner's chat. */
+  linkTelegram(): { code: string; bot: string | null; expiresInSeconds: number } {
+    const code = Array.from({ length: 8 }, () => LINK_ALPHABET[randomInt(LINK_ALPHABET.length)]).join("");
+    this.link = { code, expires: this.now() + LINK_TTL_MS, fails: 0 };
+    return { code, bot: this.tgBot, expiresInSeconds: LINK_TTL_MS / 1000 };
+  }
+
+  /** Remembers which chat is the owner's, in memory and in the saved file (only this value: nothing else in memory reaches the file). */
+  private setOwnerChat(chat: number | null): void {
+    this.cfg.telegram.ownerChatId = chat;
+    const saved = loadConfig(this.deps.config.dataDir);
+    saved.channels.telegram.ownerChatId = chat;
+    saveConfig(saved);
+  }
+
+  unlinkTelegram(): void {
+    this.setOwnerChat(null);
+    this.link = null;
+    this.deps.audit.log("owner", "channel.telegram_unlinked", {});
+  }
+
+  private async onTelegram(u: TelegramUpdate): Promise<void> {
+    const m = u.message;
+    if (!m || typeof m.text !== "string" || !m.text.trim()) return;
+    const chat = m.chat.id;
+    const text = m.text.trim().slice(0, 4000);
+    const name = plain(m.from?.username ?? m.from?.first_name ?? String(chat)).slice(0, 60);
+    const t = this.cfg.telegram;
+
+    const linkTry = /^\/link\s+(\S+)$/i.exec(text);
+    if (linkTry) return this.tryLink(chat, linkTry[1]!);
+
+    if (t.ownerChatId !== null && chat === t.ownerChatId) {
+      if (/^\/start\b/i.test(text)) return void (await this.sendRaw("telegram", String(chat), "I am here. Talk to me like you would on your PC."));
+      if (!this.allowed(`owner:${chat}`, OWNER_LIMIT)) return void (await this.sendRaw("telegram", String(chat), "Slow down a little: too many messages in a short time."));
+      return this.respond("telegram", String(chat), text);
+    }
+
+    // anyone else: kept as untrusted data for the owner to read, never run, never answered
+    if (!this.allowed(`stranger:telegram:${chat}`, STRANGER_LIMIT)) return;
+    this.record("telegram", "in", String(chat), name, text);
+    this.deps.audit.log("system", "channel.message_in", { channel: "telegram", from: name });
+    this.deps.notify({ type: "alert", level: "info", text: `New Telegram message from ${name}: ${clip(plain(text), 80)}` });
+  }
+
+  private async tryLink(chat: number, code: string): Promise<void> {
+    const l = this.link;
+    if (!l || l.expires <= this.now()) {
+      this.link = null;
+      return void (await this.sendRaw("telegram", String(chat), "There is no link code waiting. Create one on the Friend screen: Settings, Channels."));
+    }
+    const a = Buffer.from(code.toUpperCase());
+    const b = Buffer.from(l.code);
+    if (a.length === b.length && timingSafeEqual(a, b)) {
+      this.setOwnerChat(chat);
+      this.link = null;
+      this.deps.audit.log("owner", "channel.telegram_linked", {});
+      this.deps.notify({ type: "alert", level: "info", text: "Telegram is linked. You can talk to Friend from there now." });
+      return void (await this.sendRaw("telegram", String(chat), "Linked. You can talk to me here now."));
+    }
+    l.fails++;
+    this.deps.audit.log("system", "channel.link_failed", { fails: l.fails });
+    if (l.fails >= LINK_MAX_FAILS) this.link = null; // too many wrong guesses: the code is gone
+    await this.sendRaw("telegram", String(chat), "That code is not right.");
+  }
+
+  // ---- asking the assistant ------------------------------------------------------------------------------------
+
+  private async respond(channel: ChannelId, peer: string, text: string): Promise<void> {
+    this.record(channel, "in", peer, "owner", text);
+    this.deps.audit.log("owner", "channel.message_in", { channel, via: "owner" });
+    if (channel === "telegram") await this.tg("sendChatAction", { chat_id: Number(peer), action: "typing" }).catch(() => {});
+    let reply: string;
+    try {
+      reply = (await this.deps.ask(text, channel)).trim();
+    } catch (e) {
+      this.deps.audit.log("system", "channel.ask_failed", { message: (e as Error).message.slice(0, 200) });
+      reply = "Something went wrong on my side. Try again in a moment.";
+    }
+    await this.sendRaw(channel, peer, reply || "Done.");
+  }
+
+  // ---- sending -------------------------------------------------------------------------------------------------
+
+  private async sendRaw(channel: ChannelId, to: string, text: string): Promise<void> {
+    if (channel === "telegram") {
+      for (let i = 0; i < text.length; i += TELEGRAM_CHUNK) await this.tg("sendMessage", { chat_id: Number(to), text: text.slice(i, i + TELEGRAM_CHUNK) });
+    } else {
+      await this.twilioSend(to, text, channel === "whatsapp");
+    }
+    this.record(channel, "out", to, "", text);
+  }
+
+  /** Sends a message on the owner's behalf. `to` is "me", a Telegram chat id, or a phone number in international form. */
+  async send(channel: ChannelId, to: string, text: string): Promise<SendResult> {
+    const body = text.trim();
+    if (!body) return { ok: false, error: "There is no message text." };
+    try {
+      if (channel === "telegram") {
+        const t = this.cfg.telegram;
+        if (!t.enabled || !t.botToken) return { ok: false, error: "Telegram is not switched on. The owner sets it up in Settings, Channels." };
+        const target = to === "me" || to === "owner" ? t.ownerChatId : /^-?\d{3,15}$/.test(to) ? Number(to) : null;
+        if (target === null) return { ok: false, error: to === "me" || to === "owner" ? "Telegram is not linked to the owner yet." : "A Telegram recipient is a chat number, or \"me\"." };
+        await this.sendRaw("telegram", String(target), body);
+        return { ok: true, summary: `Sent on Telegram${to === "me" || to === "owner" ? " to the owner" : ""}.` };
+      }
+      const w = this.cfg.twilio;
+      if (!w.enabled || !w.authToken || !w.accountSid) return { ok: false, error: `${CHANNEL_LABEL[channel]} is not switched on. The owner sets it up in Settings, Channels.` };
+      const number = to === "me" || to === "owner" ? w.ownerNumber : phoneNumber(to);
+      if (!number) return { ok: false, error: "A phone number is needed, in international form such as +919800000000." };
+      await this.sendRaw(channel, number, body);
+      this.deps.audit.log("agent", "channel.message_out", { channel });
+      return { ok: true, summary: `Sent by ${CHANNEL_LABEL[channel]} to ${number}.` };
+    } catch (e) {
+      return { ok: false, error: this.mask((e as Error).message).slice(0, 200) };
+    }
+  }
+
+  // ---- twilio (SMS and WhatsApp) -------------------------------------------------------------------------------
+
+  private async twilioSend(to: string, text: string, whatsapp: boolean): Promise<void> {
+    const w = this.cfg.twilio;
+    if (!w.accountSid || !w.authToken) throw new Error("Twilio is not set up.");
+    const from = whatsapp ? w.whatsappFrom : w.smsFrom;
+    if (!from) throw new Error(`No ${whatsapp ? "WhatsApp" : "SMS"} number is set.`);
+    const prefix = whatsapp ? "whatsapp:" : "";
+    const body = new URLSearchParams({ To: `${prefix}${to}`, From: `${prefix}${from}`, Body: text.slice(0, SMS_MAX) });
+    const res = await this.f(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(w.accountSid)}/Messages.json`, {
+      method: "POST",
+      headers: { authorization: `Basic ${Buffer.from(`${w.accountSid}:${w.authToken}`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    if (!res.ok) {
+      const j = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new Error(`Twilio: ${j.message ?? res.status}`);
+    }
+  }
+
+  /** What Twilio signs: the full address, then every form field name and value in name order. */
+  static twilioSignature(token: string, url: string, params: Record<string, string>): string {
+    const data = url + Object.keys(params).sort().map((k) => k + params[k]).join("");
+    return createHmac("sha1", token).update(data).digest("base64");
+  }
+
+  /** A message arrived from Twilio. Returns "forbidden" for a wrong signature, "off" when Twilio is not switched on. */
+  handleTwilio(url: string, params: Record<string, string>, signature: string | undefined): "ok" | "forbidden" | "off" {
+    const w = this.cfg.twilio;
+    if (!w.enabled || !w.authToken) return "off";
+    const expected = Buffer.from(ChannelHub.twilioSignature(w.authToken, url, params));
+    const given = Buffer.from(signature ?? "");
+    if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
+      this.deps.audit.log("system", "channel.twilio_refused", {});
+      return "forbidden";
+    }
+    const sid = params.MessageSid;
+    if (sid) {
+      if (this.seen.includes(sid)) return "ok"; // Twilio tries again when it is slow: never run one message twice
+      this.seen.push(sid);
+      if (this.seen.length > 200) this.seen.shift();
+    }
+    const from = params.From ?? "";
+    const whatsapp = from.startsWith("whatsapp:");
+    const channel: ChannelId = whatsapp ? "whatsapp" : "sms";
+    const number = from.replace(/^whatsapp:/, "");
+    const text = (params.Body ?? "").trim().slice(0, 1600);
+    if (!text) return "ok";
+    if (w.ownerNumber && digits(number) === digits(w.ownerNumber)) {
+      if (!this.allowed(`owner:${channel}`, OWNER_LIMIT)) return "ok";
+      void this.respond(channel, number, text).catch((e) => this.deps.audit.log("system", "channel.respond_failed", { message: (e as Error).message.slice(0, 200) }));
+      return "ok";
+    }
+    if (!this.allowed(`stranger:${channel}:${digits(number)}`, STRANGER_LIMIT)) return "ok";
+    this.record(channel, "in", number, plain(number), text);
+    this.deps.audit.log("system", "channel.message_in", { channel, via: "contact" });
+    this.deps.notify({ type: "alert", level: "info", text: `New ${CHANNEL_LABEL[channel]} message from ${plain(number)}: ${clip(plain(text), 80)}` });
+    return "ok";
+  }
+}

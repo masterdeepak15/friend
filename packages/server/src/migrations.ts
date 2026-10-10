@@ -143,4 +143,20 @@ create table media (
 );
 `,
   },
+  {
+    id: 9,
+    sql: `
+create table channel_messages (
+  id integer primary key autoincrement,
+  channel text not null,
+  direction text not null,
+  peer text not null,
+  name text not null default '',
+  text text not null,
+  ts integer not null,
+  read integer not null default 0
+);
+create index channel_messages_ts on channel_messages (ts);
+`,
+  },
 ];

@@ -31,7 +31,44 @@ export interface Config {
   ownerName: string;
   /** How much Friend asks before acting: manual (asks), edits (files and sandboxed code go ahead) or auto (everything but risky things goes ahead). */
   approvals: ApprovalMode;
+  /** Messaging channels: Telegram, and SMS and WhatsApp through Twilio. The tokens are secrets and never go to the screen. */
+  channels: ChannelsConfig;
   dataDir: string;
+}
+
+export interface ChannelsConfig {
+  telegram: { enabled: boolean; botToken: string | null; /** The one chat that is the owner (set by /link). */ ownerChatId: number | null };
+  twilio: { enabled: boolean; accountSid: string; authToken: string | null; smsFrom: string; whatsappFrom: string; /** The owner's own phone number, in international form. */ ownerNumber: string };
+}
+
+export const DEFAULT_CHANNELS: ChannelsConfig = {
+  telegram: { enabled: false, botToken: null, ownerChatId: null },
+  twilio: { enabled: false, accountSid: "", authToken: null, smsFrom: "", whatsappFrom: "", ownerNumber: "" },
+};
+
+/** A phone number in international form, digits with an optional leading +. Anything else is dropped. */
+export const phoneNumber = (v: unknown): string => (typeof v === "string" && /^\+?[0-9]{6,15}$/.test(v.replace(/[\s()-]/g, "")) ? v.replace(/[\s()-]/g, "") : "");
+
+export function sanitizeChannels(raw: unknown): ChannelsConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as { telegram?: Record<string, unknown>; twilio?: Record<string, unknown> };
+  const t = r.telegram ?? {};
+  const w = r.twilio ?? {};
+  const str = (v: unknown, max = 200) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  return {
+    telegram: {
+      enabled: t.enabled === true,
+      botToken: str(t.botToken) || null,
+      ownerChatId: typeof t.ownerChatId === "number" && Number.isSafeInteger(t.ownerChatId) ? t.ownerChatId : null,
+    },
+    twilio: {
+      enabled: w.enabled === true,
+      accountSid: str(w.accountSid, 64),
+      authToken: str(w.authToken) || null,
+      smsFrom: phoneNumber(w.smsFrom),
+      whatsappFrom: phoneNumber(w.whatsappFrom),
+      ownerNumber: phoneNumber(w.ownerNumber),
+    },
+  };
 }
 
 export type ApprovalMode = "manual" | "edits" | "auto";
@@ -217,6 +254,7 @@ const defaults = (dataDir: string): Config => ({
   look: { ...DEFAULT_LOOK },
   ownerName: "",
   approvals: "manual",
+  channels: sanitizeChannels(DEFAULT_CHANNELS),
   dataDir,
 });
 
@@ -260,6 +298,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     look: sanitizeLook(stored.look),
     ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",
     approvals: stored.approvals === "edits" || stored.approvals === "auto" ? stored.approvals : "manual",
+    channels: sanitizeChannels(stored.channels),
     dataDir,
   };
 }

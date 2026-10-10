@@ -14,6 +14,7 @@ import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
 import { MediaStore } from "./media";
+import { ChannelHub } from "./channels/hub";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -118,6 +119,24 @@ export async function createApp(opts: AppOptions) {
   const media = new MediaStore(db, config.dataDir);
   // files shown earlier are kept while a widget still uses them; the rest are forgotten after a day
   media.prune(new Set(JSON.stringify(stage.snapshot().objects).match(/(?<=\/api\/media\/)[0-9a-f]{32}/g) ?? []));
+  // Telegram, SMS and WhatsApp. What the owner writes from their own chat is answered by the same assistant as at the PC.
+  const channelHub = new ChannelHub({
+    config,
+    db,
+    audit,
+    notify: (m) => broadcast(m),
+    ask: async (text, via) => {
+      if (agent.isBusy()) return "I am busy with another request. Try again in a moment.";
+      let reply = "";
+      const emit = (m: ServerMsg) => {
+        broadcast(m);
+        if (m.type === "caption.delta") reply += m.text;
+        else if (m.type === "caption.end") reply += "\n";
+      };
+      await agent.runTurn(text, { trust: "owner", emit, ip: `channel:${via}` });
+      return reply.trim();
+    },
+  });
   const memory = new Memory(db);
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
@@ -142,6 +161,7 @@ export async function createApp(opts: AppOptions) {
       throw e;
     }
     audit.log(how.actor, "settings.changed", { changed: applied.changed, ...(how.ip ? { ip: how.ip } : {}) });
+    if (applied.changed.some((k) => k.startsWith("channels"))) channelHub.apply();
     if (applied.providerChanged && switchable) {
       const swap = () => {
         const old = switchable.swap(makeProvider());
@@ -244,6 +264,7 @@ export async function createApp(opts: AppOptions) {
       },
     },
     media,
+    channels: channelHub,
   });
 
   const clients = new Set<ClientConn>();
@@ -690,6 +711,23 @@ export async function createApp(opts: AppOptions) {
       return out;
     },
     media: { lookup: (id) => media.lookup(id) },
+    channels: {
+      status: () => ({ ...channelHub.status(), unread: channelHub.unreadCount() }),
+      link: async (pin, ip) => {
+        if (!pin) throw new HttpError(400, "Enter your PIN to link Telegram");
+        await requirePin(pin, ip);
+        if (!config.channels.telegram.enabled || !config.channels.telegram.botToken) throw new HttpError(400, "Switch Telegram on and save the bot token first");
+        audit.log("owner", "channel.link_started", { ip });
+        return channelHub.linkTelegram();
+      },
+      unlink: async (pin, ip) => {
+        if (!pin) throw new HttpError(400, "Enter your PIN to unlink Telegram");
+        await requirePin(pin, ip);
+        channelHub.unlinkTelegram();
+        return { ok: true };
+      },
+      twilioInbound: (url, params, signature) => channelHub.handleTwilio(url, params, signature),
+    },
     onClientConnect: (_session, conn) => {
       clients.add(conn);
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
@@ -810,6 +848,8 @@ export async function createApp(opts: AppOptions) {
     voiceprint,
     challenges,
     camera,
+    /** Telegram, SMS and WhatsApp. */
+    channels: channelHub,
     memory,
     tasks,
     plugins,
@@ -820,6 +860,7 @@ export async function createApp(opts: AppOptions) {
     async start(): Promise<{ port: number }> {
       heartbeat.start();
       hub.startAll(); // connectors that were on come back in the background; Friend does not wait for them
+      channelHub.apply(); // Telegram starts listening when it is switched on
       timer = setInterval(() => {
         const gone = stage.expire();
         for (const id of gone) broadcast({ type: "stage", command: { cmd: "hide", id } });
@@ -830,6 +871,7 @@ export async function createApp(opts: AppOptions) {
     async stop(): Promise<void> {
       stopped = true;
       heartbeat.stop();
+      channelHub.stop();
       if (timer) clearInterval(timer);
       challenges.clear();
       camera.cancelAll(broadcast);

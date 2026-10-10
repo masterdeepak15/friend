@@ -57,11 +57,21 @@ export interface GatewayDeps {
   onCameraFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
   /** A picture of the Friend screen arrived for a screen.look request. */
   onScreenFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
+  /** Telegram, SMS and WhatsApp: status and linking for the owner's screen, and Twilio's inbound messages. */
+  channels?: ChannelsApi;
   /** Files the owner approved to be shown (file.present); the media route answers 404 without it. */
   media?: { lookup(id: string): { path: string; mime: string; size: number } | null };
 }
 
 export const MAX_CAMERA_FRAME_BYTES = 2 * 1024 * 1024;
+
+/** What the channel routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
+export interface ChannelsApi {
+  status(): unknown;
+  link(pin: string | undefined, ip: string): Promise<unknown>;
+  unlink(pin: string | undefined, ip: string): Promise<unknown>;
+  twilioInbound(url: string, params: Record<string, string>, signature: string | undefined): "ok" | "forbidden" | "off";
+}
 
 /** What the settings routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
 export interface SettingsApi {
@@ -434,6 +444,53 @@ export function createGateway(deps: GatewayDeps) {
       return reply.code(206).header("content-range", `bytes ${start}-${end}/${size}`).header("content-length", end - start + 1).type(grant.mime).send(createReadStream(grant.path, { start, end }));
     }
     return reply.header("content-length", size).type(grant.mime).send(createReadStream(grant.path));
+  });
+
+  // ---- Telegram, SMS and WhatsApp ----
+  const channelWindow = new SlidingWindow(20, 60_000);
+  const channelGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    if (!token || !auth.resolveSession(token)) return reply.code(401).send({ error: "Unauthorized" });
+    if (!channelWindow.allow(`ch:${req.ip}`)) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+    if (!deps.channels) return reply.code(503).send({ error: "Messaging is not available" });
+  };
+  app.get("/api/channels", { onRequest: channelGuard }, async (_req, reply) => {
+    reply.header("cache-control", "no-store");
+    return deps.channels!.status();
+  });
+  for (const action of ["link", "unlink"] as const) {
+    app.post(`/api/channels/telegram/${action}`, { onRequest: channelGuard }, async (req, reply) => {
+      reply.header("cache-control", "no-store");
+      const body = z.object({ pin: z.string().max(32).optional() }).safeParse(req.body ?? {});
+      if (!body.success) return reply.code(400).send({ error: "Invalid input" });
+      try {
+        return await deps.channels![action](body.data.pin, req.ip);
+      } catch (e) {
+        if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+        if (e instanceof LockoutError) return reply.code(429).header("retry-after", Math.ceil(e.retryAfterMs / 1000)).send({ error: "Too many wrong PINs. Wait a moment." });
+        throw e;
+      }
+    });
+  }
+  // Twilio posts a form here for every message that arrives. It has no cookie: its signature, made with your auth token, is the proof.
+  app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string", bodyLimit: 16 * 1024 }, (_req, body, done) => {
+    try {
+      done(null, Object.fromEntries(new URLSearchParams(String(body))));
+    } catch (e) {
+      done(e as Error);
+    }
+  });
+  const twilioWindow = new SlidingWindow(60, 60_000);
+  app.post("/api/channels/twilio", async (req, reply) => {
+    if (!deps.channels) return reply.code(404).send();
+    if (!twilioWindow.allow(`tw:${req.ip}`)) return reply.code(429).send();
+    if (!config.publicUrl) return reply.code(503).send({ error: "Set the public address first" });
+    const params = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, string>;
+    const url = `${config.publicUrl.replace(/\/+$/, "")}/api/channels/twilio`;
+    const out = deps.channels.twilioInbound(url, params, String(req.headers["x-twilio-signature"] ?? ""));
+    if (out === "forbidden") return reply.code(403).send();
+    if (out === "off") return reply.code(404).send();
+    return reply.code(200).type("text/xml").send("<Response></Response>");
   });
 
   // ---- plugins (owner session only) ----

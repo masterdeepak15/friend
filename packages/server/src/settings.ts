@@ -1,7 +1,7 @@
 import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
-import { sanitizeLook, sanitizeVoice } from "./config";
+import { phoneNumber, sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
 const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
@@ -18,6 +18,30 @@ export const SettingsPatch = z
     ownerName: z.string().trim().max(40),
     /** How much Friend asks before acting. Loosening it is a change that needs the PIN. */
     approvals: z.enum(["manual", "edits", "auto"]),
+    /** Telegram, SMS and WhatsApp. Empty tokens mean "leave the saved one alone". Needs the PIN. */
+    channels: z
+      .object({
+        telegram: z
+          .object({
+            enabled: z.boolean(),
+            botToken: z.string().trim().max(200).regex(/^(\d{6,12}:[A-Za-z0-9_-]{20,})?$/, "A bot token from @BotFather looks like 123456789:ABC..."),
+          })
+          .partial()
+          .strict(),
+        twilio: z
+          .object({
+            enabled: z.boolean(),
+            accountSid: z.string().trim().max(64).regex(/^(AC[0-9a-fA-F]{20,})?$/, "A Twilio account SID starts with AC"),
+            authToken: z.string().trim().max(200),
+            smsFrom: z.string().trim().max(30).regex(/^(\+?[0-9 ()-]{6,20})?$/, "A phone number in international form such as +14155550123, or empty"),
+            whatsappFrom: z.string().trim().max(30).regex(/^(\+?[0-9 ()-]{6,20})?$/, "A phone number in international form such as +14155550123, or empty"),
+            ownerNumber: z.string().trim().max(30).regex(/^(\+?[0-9 ()-]{6,20})?$/, "Your own phone number in international form such as +919800000000, or empty"),
+          })
+          .partial()
+          .strict(),
+      })
+      .partial()
+      .strict(),
     look: z
       .object({
         style: PresenceStyle,
@@ -87,6 +111,11 @@ export interface SettingsView {
   view: Config["view"];
   ownerName: string;
   approvals: Config["approvals"];
+  /** The tokens themselves are never sent to the screen. */
+  channels: {
+    telegram: { enabled: boolean; tokenSet: boolean; linked: boolean };
+    twilio: { enabled: boolean; accountSid: string; tokenSet: boolean; smsFrom: string; whatsappFrom: string; ownerNumber: string };
+  };
   look: Config["look"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** The key itself is never sent to the screen. */
@@ -103,6 +132,10 @@ export function settingsView(c: Config): SettingsView {
     view: c.view,
     ownerName: c.ownerName,
     approvals: c.approvals,
+    channels: {
+      telegram: { enabled: c.channels.telegram.enabled, tokenSet: !!c.channels.telegram.botToken, linked: c.channels.telegram.ownerChatId !== null },
+      twilio: { enabled: c.channels.twilio.enabled, accountSid: c.channels.twilio.accountSid, tokenSet: !!c.channels.twilio.authToken, smsFrom: c.channels.twilio.smsFrom, whatsappFrom: c.channels.twilio.whatsappFrom, ownerNumber: c.channels.twilio.ownerNumber },
+    },
     look: { ...c.look },
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
     openai: { url: c.openai.url, model: c.openai.model, vision: !!c.openai.vision, apiKeySet: !!c.openai.apiKey },
@@ -128,6 +161,7 @@ export function refuseForAgent(raw: unknown): void {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const cc = (r.claudeCode && typeof r.claudeCode === "object" ? r.claudeCode : {}) as Record<string, unknown>;
   const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
+  if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
   if ("apiKey" in r || "apiKey" in oa) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
   if ("command" in cc) throw new SettingsError("The Claude Code command can only be changed by the owner on the settings screen.");
@@ -199,6 +233,22 @@ export function applySettings(config: Config, raw: unknown): Applied {
   config.provider = next.provider;
   if (p.view) config.view = p.view;
   if (p.approvals) config.approvals = p.approvals;
+  if (p.channels) {
+    const { telegram, twilio } = p.channels;
+    if (telegram) {
+      if (telegram.enabled !== undefined) config.channels.telegram.enabled = telegram.enabled;
+      if (telegram.botToken) config.channels.telegram.botToken = telegram.botToken;
+    }
+    if (twilio) {
+      const t = config.channels.twilio;
+      if (twilio.enabled !== undefined) t.enabled = twilio.enabled;
+      if (twilio.accountSid !== undefined) t.accountSid = twilio.accountSid;
+      if (twilio.authToken) t.authToken = twilio.authToken;
+      if (twilio.smsFrom !== undefined) t.smsFrom = phoneNumber(twilio.smsFrom);
+      if (twilio.whatsappFrom !== undefined) t.whatsappFrom = phoneNumber(twilio.whatsappFrom);
+      if (twilio.ownerNumber !== undefined) t.ownerNumber = phoneNumber(twilio.ownerNumber);
+    }
+  }
   if (p.ownerName !== undefined) config.ownerName = p.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
   if (p.look) config.look = sanitizeLook({ ...config.look, ...p.look });
   if (p.model) config.model = p.model;
