@@ -48,6 +48,21 @@ Use the Alexa devices at home as another way to talk to Friend, like Telegram an
 
 **Safety.** Signature check first, before any parsing of the body; raw body size limit (a few KB); the endpoint never echoes request text into logs beyond a short clip; Alexa-origin text is treated as the owner's words only if the device is allowed, but it is still "untrusted for actions": it cannot reach any tool outside the allowed list. Audit records the intent and device, not the spoken text.
 
+## Can Friend message Alexa or stream media? (checked 2026-10-10)
+
+The rule behind every row: Amazon lets a skill answer when the user speaks to it. It does not let a skill start talking through an Echo by itself.
+
+| Idea | Official way | Verdict |
+|---|---|---|
+| Friend makes an Echo **say any text** on its own ("your report is ready") | None for a custom skill. | **Not possible officially.** |
+| Friend **notifies** an Echo | Proactive Events API: the Echo's light ring turns yellow and the user asks "Alexa, what are my notifications". Amazon's fixed templates only (for example `AMAZON.MessageAlert.Activated`: "you have a message from <name>"); the skill needs the notifications permission and the user turns Notifications on for it in the Alexa app. Works for a skill in development. Amazon limits notifications per day. | **Possible, small.** Friend can say "1 new message from Friend"; the real text is then read out when the owner asks Friend. Optional. |
+| **Scheduled** spoken reports ("every morning at 9:30, say my portfolio") | An **Alexa Routine** in the Alexa app with a time trigger and the action "ask <invocation name> for my portfolio report". The Echo speaks Friend's answer. | **Possible, and the best fit.** No code beyond the normal skill; the owner makes the routine once. (To be confirmed on the owner's Echo; Routines can start custom skills.) |
+| **Reminders** that Alexa speaks | Alexa Reminders API (permission `alexa::alerts:reminders:skill:readwrite`, granted in the Alexa app). A skill can create a reminder while the owner is talking to it ("remind me to ..."). | **Possible only during a conversation.** Friend's own reminders keep going to the PC and Telegram. Optional. |
+| **Stream media** to an Echo ("play my briefing", "play the radio") | AudioPlayer interface: the skill answers a spoken request with one HTTPS stream (port 443, CA-signed certificate) and Alexa plays it. Friend can serve its own audio (a spoken briefing made with its local voices, or an audio file the owner chose) at a short-lived link, or point at an internet radio URL. Pause, resume, stop work by voice. | **Possible, but only when the owner asks.** Friend cannot start playing on its own. Stream format details (codec, redirects) are in Amazon's long-form audio rules and are checked while building it. |
+| **Start music** on an Echo from the PC without speaking | Only through Amazon's unofficial web interface (what some home-automation add-ons use): it needs the owner's Amazon login cookie stored on this PC, is against Amazon's terms in spirit, breaks when Amazon changes things, and gives full control of the Amazon account if the cookie leaks. | **Not recommended.** If ever added: a separate, clearly marked advanced plugin, off by default, owner-supplied cookie only. |
+
+So, for the first version: voice in, answers out, plus **Routines for scheduled spoken reports** (documented in the setup guide). **Media streaming on request** is a second step after the basic skill works. Notifications and reminders are optional extras after that.
+
 ## Testing without Alexa
 
 A fake Alexa signs requests with a test certificate that the verifier is told to trust, so signature, timestamp, application, user and device checks are all tested. Intent flows are tested against the real agent with a fake model. The first real Echo test is done together with the owner in the console.
