@@ -61,6 +61,8 @@ export interface GatewayDeps {
   channels?: ChannelsApi;
   /** Stock brokers: the login return, the owner's status and schedules. */
   brokers?: BrokersApi;
+  /** Alexa: the skill's endpoint (called by Amazon) and the owner's device list. */
+  alexa?: AlexaApi;
   /** Files the owner approved to be shown (file.present); the media route answers 404 without it. */
   media?: { lookup(id: string): { path: string; mime: string; size: number } | null };
 }
@@ -85,6 +87,16 @@ export interface BrokersApi {
   addSchedule(input: unknown, pin: string, ip: string): Promise<unknown>;
   removeSchedule(id: number): boolean;
   run(kind: string | undefined, send: boolean): Promise<{ status: number; body: unknown }>;
+}
+
+/** What the Alexa routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
+export interface AlexaApi {
+  /** Amazon's request: the raw body and headers. The answer is the status and JSON Alexa should get. */
+  handle(raw: Buffer, headers: Record<string, string | string[] | undefined>): Promise<{ status: number; body: unknown }>;
+  status(): unknown;
+  allow(short: string, name: string, pin: string, ip: string): Promise<unknown>;
+  forget(short: string): boolean;
+  packageFile(name: string): { type: string; text: string } | null;
 }
 
 /** What the settings routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -581,6 +593,55 @@ export function createGateway(deps: GatewayDeps) {
     } catch (e) {
       return brokerError(reply, e);
     }
+  });
+
+  // ---- Alexa ----
+  // Amazon calls this with a signed JSON body. The signature covers the exact bytes, so it is read as raw bytes (32 KB at most).
+  const alexaWindow = new SlidingWindow(60, 60_000);
+  void app.register(async (inst) => {
+    inst.removeContentTypeParser("application/json");
+    inst.addContentTypeParser("application/json", { parseAs: "buffer", bodyLimit: 32 * 1024 }, (_req, body, done) => done(null, body));
+    inst.addHook("onRequest", async (req, reply) => {
+      if (!alexaWindow.allow(`alexa:${req.ip}`)) return reply.code(429).header("retry-after", 30).send();
+    });
+    inst.post("/api/alexa", async (req, reply) => {
+      if (!deps.alexa) return reply.code(404).send();
+      const out = await deps.alexa.handle(req.body as Buffer, req.headers).catch((e: Error) => {
+        audit.log("anonymous", "alexa.failed", { message: e.message.slice(0, 200) });
+        return { status: 500, body: { error: "That did not work." } };
+      });
+      return reply.code(out.status).header("cache-control", "no-store").send(out.body);
+    });
+  });
+  const alexaOwnerWindow = new SlidingWindow(30, 60_000);
+  const alexaGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    const session = token ? auth.resolveSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "Unauthorized" });
+    if (!alexaOwnerWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+    if (!deps.alexa) return reply.code(503).send({ error: "Alexa is not available" });
+    reply.header("cache-control", "no-store");
+  };
+  app.get("/api/alexa", { onRequest: alexaGuard }, async () => deps.alexa!.status());
+  app.post("/api/alexa/devices/allow", { onRequest: alexaGuard }, async (req, reply) => {
+    const body = z.object({ id: z.string().length(8), name: z.string().max(40).optional(), pin: z.string().min(1).max(32) }).strict().safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Choose the Echo and enter your PIN." });
+    try {
+      return await deps.alexa!.allow(body.data.id, body.data.name ?? "", body.data.pin, req.ip);
+    } catch (e) {
+      if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+      if (e instanceof LockoutError) return reply.code(429).header("retry-after", Math.ceil(e.retryAfterMs / 1000)).send({ error: "Too many wrong PINs. Wait a moment." });
+      throw e;
+    }
+  });
+  app.delete<{ Params: { id: string } }>("/api/alexa/devices/:id", { onRequest: alexaGuard }, async (req, reply) => {
+    if (!deps.alexa!.forget(req.params.id)) return reply.code(404).send({ error: "There is no such Echo." });
+    return { ok: true };
+  });
+  app.get<{ Params: { file: string } }>("/api/alexa/package/:file", { onRequest: alexaGuard }, async (req, reply) => {
+    const file = deps.alexa!.packageFile(req.params.file);
+    if (!file) return reply.code(404).send({ error: "There is no such file." });
+    return reply.header("content-disposition", `attachment; filename="${req.params.file.replace(/[^A-Za-z0-9._-]/g, "_")}"`).type(file.type).send(file.text);
   });
 
   // ---- plugins (owner session only) ----

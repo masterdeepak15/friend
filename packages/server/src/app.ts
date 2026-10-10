@@ -15,15 +15,18 @@ import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
 import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
+import { AlexaHub, fetchAmazonCert } from "./alexa/hub";
+import { portfolioSpeech, statusSpeech, tasksSpeech } from "./alexa/fast";
+import { summarize } from "./brokers/portfolio";
 import { BrokerHub } from "./brokers/hub";
 
 const PORTFOLIO_SKILL = "portfolio-assistant";
-import { changeBroker, changeIntegration, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
+import { changeAlexa, changeBroker, changeIntegration, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
-import { WeatherService } from "./weather";
+import { WeatherService, weatherSummary } from "./weather";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Tasks } from "./tasks";
@@ -69,6 +72,10 @@ export interface AppOptions {
   cameraTimeoutMs?: number;
   /** How Zerodha is reached (tests hand in a fake). */
   brokerFetch?: typeof fetch;
+  /** How Amazon's signing certificate is downloaded (tests hand in their own). */
+  alexaFetchCert?: (url: string) => Promise<string>;
+  /** The roots Amazon's certificate must lead to (tests hand in their own). Defaults to the ones Node knows. */
+  alexaRoots?: string[];
   /** How often the broker reports and the login reminder are looked at. */
   brokerTickMs?: number;
   /** How long after start the Hindi and Marathi voices are made ready in the background (tests use a long time so it never happens). */
@@ -136,6 +143,8 @@ export async function createApp(opts: AppOptions) {
     audit,
     notify: (m) => broadcast(m),
     ask: async (text, via) => {
+      // a plain yes or no from the owner may be the answer to something Alexa asked for permission to do
+      if (alexaHub.tryApprove(text)) return "Okay.";
       if (agent.isBusy()) return "I am busy with another request. Try again in a moment.";
       let reply = "";
       const emit = (m: ServerMsg) => {
@@ -176,7 +185,17 @@ export async function createApp(opts: AppOptions) {
     return null;
   };
   /** Install, switch on or off, or remove one integration, wherever it keeps its settings. */
+  /** The same for the Alexa part of the saved file. */
+  const changeAlexaConfig = (fn: (a: Config["alexa"]) => string | null | void): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.alexa);
+    if (typeof err === "string") return err;
+    fn(config.alexa);
+    saveConfig(saved);
+    return null;
+  };
   const changeAny = (id: IntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null => {
+    if (id === "alexa") return changeAlexaConfig((a) => changeAlexa(a, change));
     if (id !== "zerodha") return changeChannels((c) => changeIntegration(c, id, change));
     const err = changeBrokers((b) => changeBroker(b, id, change, (gone) => brokerHub.forget(gone)));
     // the portfolio skill comes and goes with the integration
@@ -200,12 +219,12 @@ export async function createApp(opts: AppOptions) {
       },
     },
     integrations: {
-      views: () => integrationViews(config, channelHub, brokerHub),
+      views: () => integrationViews(config, channelHub, brokerHub, alexaHub),
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!(id === "zerodha" ? config.brokers.zerodha : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (id !== "zerodha" && Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && id !== "alexa" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {
@@ -317,6 +336,7 @@ export async function createApp(opts: AppOptions) {
     },
   };
 
+  const weatherService = opts.weather ?? new WeatherService();
   const agent = new Agent({
     settings: agentSettings,
     mcp: hub,
@@ -333,7 +353,7 @@ export async function createApp(opts: AppOptions) {
     memory,
     tasks,
     plugins,
-    weather: opts.weather ?? new WeatherService(),
+    weather: weatherService,
     code: opts.codeBox ?? new CodeBox(),
     camera: {
       request: (emit, signal) => {
@@ -350,13 +370,49 @@ export async function createApp(opts: AppOptions) {
     media,
     channels: channelHub,
     brokers: brokerHub,
-    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub)) },
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub)) },
   });
 
   const clients = new Set<ClientConn>();
   const broadcast = (m: ServerMsg) => {
     for (const c of clients) c.send(m);
   };
+  // Alexa: the owner's own skill talks to this endpoint; fixed questions are answered from the tools, the rest by the assistant.
+  const alexaHub = new AlexaHub({
+    config,
+    store: { config: () => config.alexa, update: (fn) => void changeAlexaConfig(fn) },
+    verify: { fetchCert: opts.alexaFetchCert ?? fetchAmazonCert, roots: opts.alexaRoots },
+    clock: Date.now,
+    agent: { isBusy: () => agent.isBusy(), runTurn: (text, ctx) => agent.runTurn(text, ctx) },
+    broadcast,
+    screenOpen: () => clients.size > 0,
+    fast: {
+      PortfolioIntent: async (locale) => {
+        const got = await brokerHub.snapshot("zerodha");
+        if (!got.ok) return got.sessionExpired ? "Zerodha needs you to log in first." : got.error;
+        if (!got.snapshot.holdings.ok) return "I could not read your holdings just now.";
+        return portfolioSpeech(summarize(got.snapshot.holdings.data), locale.startsWith("hi") ? "hi" : "en");
+      },
+      WeatherIntent: async (_locale, slots) => {
+        if (!slots.city) return "Tell me which city, for example: what is the weather in Pune.";
+        const r = await weatherService.get(slots.city);
+        return r.ok ? weatherSummary(r.weather) : r.error;
+      },
+      TasksIntent: async (locale) => tasksSpeech(tasks.list(), locale.startsWith("hi") ? "hi" : "en"),
+      StatusIntent: async (locale) => {
+        const z = brokerHub.status("zerodha");
+        return statusSpeech({ openTasks: tasks.list().length, brokerLoggedIn: z.installed && z.enabled ? z.loggedIn : null }, locale.startsWith("hi") ? "hi" : "en");
+      },
+    },
+    channels: channelHub,
+    linked: () => [
+      ...(config.channels.telegram.enabled && config.channels.telegram.ownerChatId !== null ? (["telegram"] as const) : []),
+      ...(config.channels.twilio.enabled && config.channels.twilio.whatsappFrom && config.channels.twilio.ownerNumber ? (["whatsapp"] as const) : []),
+    ],
+    respondApproval: (id, approve) => void approvals.respond({ id, decision: approve ? "approve" : "deny" }, "alexa").catch(() => {}),
+    audit,
+    publicBase: () => config.publicUrl ?? null,
+  });
   tellFallback = (reason) => {
     audit.log("system", "provider.fallback", { reason: reason.slice(0, 300) });
     broadcast({ type: "alert", level: "info", text: `${reason} Using the local model for now.` });
@@ -498,7 +554,7 @@ export async function createApp(opts: AppOptions) {
     list: () => {
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub) };
     },
     install: async (id, pin, ip) => {
       if (isIntegrationId(id)) {
@@ -835,6 +891,22 @@ export async function createApp(opts: AppOptions) {
         return { ok: true };
       },
       twilioInbound: (url, params, signature) => channelHub.handleTwilio(url, params, signature),
+    },
+    alexa: {
+      handle: (raw, headers) => alexaHub.handle(raw, headers),
+      status: () => alexaHub.status(),
+      allow: async (short, name, pin, ip) => {
+        await requirePin(pin, ip);
+        if (!alexaHub.devices.allow(short, name)) throw new HttpError(404, "That Echo is not waiting, or the list is full.");
+        audit.log("owner", "alexa.allowed", { ip });
+        return { ok: true };
+      },
+      forget: (short) => {
+        const gone = alexaHub.devices.forget(short);
+        if (gone) audit.log("owner", "alexa.forgotten", {});
+        return gone;
+      },
+      packageFile: () => null,
     },
     brokers: {
       status: () => ({ zerodha: brokerHub.status("zerodha"), schedules: brokerHub.schedules.list(), redirectUrl: brokerHub.redirectUrl("zerodha"), timezone: config.brokers.timezone }),

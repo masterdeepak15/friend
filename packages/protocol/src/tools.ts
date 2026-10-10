@@ -183,7 +183,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "integrations.status",
     description: "How far each integration (telegram, twilio = WhatsApp and SMS) is: installed, on, working, what is missing, and the steps left. Use it to tell the owner what to do next. Tokens are never shown, only whether they are set.",
-    input: z.object({ id: z.enum(["telegram", "twilio", "zerodha"]).optional() }),
+    input: z.object({ id: z.enum(["telegram", "twilio", "zerodha", "alexa"]).optional() }),
     baseTier: "T0",
     target: "gateway",
   },
@@ -191,7 +191,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "integrations.configure",
     description: "Change the settings of an installed integration that are not secret: enabled (switch on/off), and for twilio accountSid, smsFrom, whatsappFrom, ownerNumber (phone numbers in international form). The owner approves with their PIN. You can never enter a token or password: the owner pastes those on the screen (integrations.open shows them where).",
     input: z.object({
-      id: z.enum(["telegram", "twilio", "zerodha"]),
+      id: z.enum(["telegram", "twilio", "zerodha", "alexa"]),
       enabled: z.boolean().optional(),
       accountSid: z.string().max(64).optional(),
       smsFrom: z.string().max(30).optional(),
@@ -204,14 +204,14 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "integrations.remove",
     description: "Remove an integration and forget its tokens. Only when the owner asks; they approve.",
-    input: z.object({ id: z.enum(["telegram", "twilio", "zerodha"]) }),
+    input: z.object({ id: z.enum(["telegram", "twilio", "zerodha", "alexa"]) }),
     baseTier: "T2",
     target: "gateway",
   },
   {
     name: "integrations.open",
     description: "Open the plugins screen on the owner's display at that integration's Configure page, so they can paste a token or press Get a link code. Say in one sentence what they should do there.",
-    input: z.object({ id: z.enum(["telegram", "twilio", "zerodha"]) }),
+    input: z.object({ id: z.enum(["telegram", "twilio", "zerodha", "alexa"]) }),
     baseTier: "T0",
     target: "gateway",
   },

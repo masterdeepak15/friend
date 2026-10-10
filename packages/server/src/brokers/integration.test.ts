@@ -16,9 +16,9 @@ const brokers = (over: Partial<BrokerStatus> = {}) => ({ status: (): BrokerStatu
 const zerodha = (c: Config, b?: ReturnType<typeof brokers>) => integrationViews(c, channels, b).find((v) => v.id === "zerodha")!;
 
 describe("Zerodha in the plugins list", () => {
-  it("is the third integration and starts not installed", () => {
+  it("is the third integration (Alexa follows) and starts not installed", () => {
     const views = integrationViews(config(), channels);
-    expect(views.map((v) => v.id)).toEqual(["telegram", "twilio", "zerodha"]);
+    expect(views.map((v) => v.id)).toEqual(["telegram", "twilio", "zerodha", "alexa"]);
     expect(views[2]).toMatchObject({ name: "Zerodha", kind: "integration", installed: false, enabled: false, state: "not-installed" });
     expect(views[2]!.steps).toHaveLength(4);
     expect(isIntegrationId("zerodha")).toBe(true);

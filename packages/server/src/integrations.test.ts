@@ -121,10 +121,10 @@ describe("the plugins screen's routes", () => {
     return { dir, api, list, save: (settings: unknown) => api("/api/settings", { method: "PUT", body: JSON.stringify({ pin: owner.pin, settings }) }) };
   }
 
-  it("lists Telegram, Twilio and Zerodha next to the other plugins, not installed", async () => {
+  it("lists Telegram, Twilio, Zerodha and Alexa next to the other plugins, not installed", async () => {
     const { list } = await boot();
     const l = await list();
-    expect(l.map((v) => [v.id, v.installed, v.state])).toEqual([["telegram", false, "not-installed"], ["twilio", false, "not-installed"], ["zerodha", false, "not-installed"]]);
+    expect(l.map((v) => [v.id, v.installed, v.state])).toEqual([["telegram", false, "not-installed"], ["twilio", false, "not-installed"], ["zerodha", false, "not-installed"], ["alexa", false, "not-installed"]]);
   });
 
   it("installs with the PIN, is saved, and shows what to do next", async () => {

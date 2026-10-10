@@ -1,11 +1,12 @@
+import type { AlexaHub } from "./alexa/hub";
 import type { BrokerHub } from "./brokers/hub";
 import type { ChannelHub } from "./channels/hub";
-import { DEFAULT_CHANNELS, type BrokersConfig, type ChannelsConfig, type Config } from "./config";
+import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type Config } from "./config";
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
 export type ChannelIntegrationId = "telegram" | "twilio";
-export type IntegrationId = ChannelIntegrationId | "zerodha";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha"];
+export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -34,6 +35,7 @@ export interface IntegrationView {
 const META: Record<IntegrationId, { name: string; description: string }> = {
   telegram: { name: "Telegram", description: "Talk to Friend from your phone through Telegram, and let it message people for you. Needs a free bot token from @BotFather." },
   twilio: { name: "WhatsApp and SMS (Twilio)", description: "Talk to Friend by WhatsApp or SMS, and let it message people for you. Needs a Twilio account and a public address for Friend." },
+  alexa: { name: "Alexa", description: "Talk to Friend from your Echo devices with a free skill of your own: ask by voice and hear the answer. Anything risky is refused, or asked on your phone first." },
   zerodha: { name: "Zerodha", description: "Read-only look at your Zerodha portfolio: ask Friend how it is doing, or have a report sent to Telegram or WhatsApp every morning and at market close. Friend cannot place orders. Needs a free Kite Connect app." },
 };
 
@@ -42,15 +44,32 @@ export const PUBLIC_SETTINGS: Record<IntegrationId, readonly string[]> = {
   telegram: [],
   twilio: ["accountSid", "smsFrom", "whatsappFrom", "ownerNumber"],
   zerodha: [],
+  alexa: [],
 };
 
-export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">): IntegrationView[] {
+export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">): IntegrationView[] {
   const status = hub.status();
   const t = config.channels.telegram;
   const w = config.channels.twilio;
   const publicUrl = config.publicUrl;
   const z = config.brokers.zerodha;
   const zs = brokers?.status("zerodha");
+  const al = config.alexa;
+  const as = alexa?.status();
+  const aSteps: IntegrationStep[] = [
+    { text: "Create a free skill in the Alexa developer console: custom model, provision your own.", done: !!al.skillId },
+    { text: "Download the skill files in Configure, paste them in the console, and set the endpoint shown there.", done: !!al.skillId && !!al.invocationName },
+    { text: "Enter the Skill ID and the invocation name in Configure and save.", done: !!al.skillId && !!al.invocationName },
+    { text: "Switch the plugin on.", done: al.enabled },
+    { text: "Say \"Alexa, ask <your name>\" on your Echo once, then press Allow next to it in Configure.", done: al.allowedUsers.length > 0 },
+  ];
+  const alState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!al.installed) return { state: "not-installed", detail: "" };
+    if (!al.skillId || !al.invocationName) return { state: "needs-setup", detail: "Add the skill id and the invocation name (press Configure)." };
+    if (!al.enabled) return { state: "off", detail: "Switched off." };
+    if (!al.allowedUsers.length) return { state: "needs-setup", detail: `Say "Alexa, ask ${al.invocationName}" once, then allow your Echo (press Configure).${as && as.waiting.length ? " One is waiting." : ""}` };
+    return { state: "online", detail: `Ready. Say "Alexa, ask ${al.invocationName}".` };
+  };
 
   const tgSteps: IntegrationStep[] = [
     { text: "Create a bot: open Telegram, talk to @BotFather, send /newbot, and copy the token it gives you.", done: !!t.botToken },
@@ -112,6 +131,7 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
       secrets: { authToken: !!w.authToken },
     },
     { id: "zerodha", ...META.zerodha, kind: "integration", installed: z.installed, enabled: z.enabled, ...zState(), steps: zSteps, settings: { apiKey: z.apiKey }, secrets: { apiSecret: !!z.apiSecret } },
+    { id: "alexa", ...META.alexa, kind: "integration", installed: al.installed, enabled: al.enabled, ...alState(), steps: aSteps, settings: { skillId: al.skillId, invocationName: al.invocationName }, secrets: {} },
   ];
 }
 
@@ -152,6 +172,22 @@ export function changeBroker(brokers: BrokersConfig, id: "zerodha", change: { in
   if (!z.installed) return `${META[id].name} is not installed yet.`;
   if (change.enabled && (!z.apiKey || !z.apiSecret)) return "Add the Kite API key and secret first (Configure), then switch it on.";
   z.enabled = change.enabled;
+  return null;
+}
+
+/** The same for Alexa. Removing forgets the skill id, the name and every allowed Echo. */
+export function changeAlexa(alexa: AlexaConfig, change: { install: true } | { remove: true } | { enabled: boolean }): string | null {
+  if ("install" in change) {
+    alexa.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    Object.assign(alexa, { installed: false, enabled: false, skillId: "", invocationName: "", allowedUsers: [] });
+    return null;
+  }
+  if (!alexa.installed) return `${META.alexa.name} is not installed yet.`;
+  if (change.enabled && (!alexa.skillId || !alexa.invocationName)) return "Add the skill id and the invocation name first (Configure), then switch it on.";
+  alexa.enabled = change.enabled;
   return null;
 }
 
