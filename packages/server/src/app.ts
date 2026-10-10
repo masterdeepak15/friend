@@ -16,6 +16,7 @@ import { CameraBroker } from "./camera";
 import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
 import { AlexaHub, fetchAmazonCert } from "./alexa/hub";
+import { buildSkillPackage, PACKAGE_FILES, type PackageFile } from "./alexa/package";
 import { portfolioSpeech, statusSpeech, tasksSpeech } from "./alexa/fast";
 import { summarize } from "./brokers/portfolio";
 import { BrokerHub } from "./brokers/hub";
@@ -906,7 +907,15 @@ export async function createApp(opts: AppOptions) {
         if (gone) audit.log("owner", "alexa.forgotten", {});
         return gone;
       },
-      packageFile: () => null,
+      packageFile: (name) => {
+        const endpoint = alexaHub.endpoint();
+        if (!(PACKAGE_FILES as readonly string[]).includes(name) || !endpoint || !config.alexa.invocationName) return null;
+        try {
+          return { type: "application/json", text: buildSkillPackage({ invocationName: config.alexa.invocationName, endpoint })[name as PackageFile] };
+        } catch {
+          return null;
+        }
+      },
     },
     brokers: {
       status: () => ({ zerodha: brokerHub.status("zerodha"), schedules: brokerHub.schedules.list(), redirectUrl: brokerHub.redirectUrl("zerodha"), timezone: config.brokers.timezone }),

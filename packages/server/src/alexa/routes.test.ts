@@ -17,13 +17,13 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function boot(setup = true) {
+async function boot(setup = true, publicUrl?: string) {
   const signer: TestSigner = await testAlexaSigner();
   const dir = mkdtempSync(join(tmpdir(), "friend-alexaapi-"));
   app = await createApp({
     dataDir: dir,
     provider: new FakeProvider(Array.from({ length: 6 }, () => [{ type: "text_delta", text: "Your portfolio is fine." }, { type: "done" }]) as never),
-    config: { port: 0, roots: [] },
+    config: { port: 0, roots: [], ...(publicUrl ? { publicUrl } : {}) },
     pluginCatalogDir: join(dir, "no-catalog"),
     alexaFetchCert: async () => signer.chainPem,
     alexaRoots: [signer.rootPem],
@@ -113,7 +113,8 @@ describe("the owner's routes", () => {
     const t = await boot();
     const status = await t.json("/api/alexa");
     expect(status).toMatchObject({ installed: true, enabled: true, skillIdSet: true, invocationName: "jarvis assistant" });
-    expect("endpoint" in status).toBe(true);
+    expect(status.endpoint).toBeNull(); // no public address yet
+    expect((await t.api("/api/alexa/package/skill.json")).status).toBe(404); // so there are no files to paste yet
   });
 
   it("allow needs a PIN in the body, and an Echo that is not waiting cannot be allowed", async () => {
@@ -121,6 +122,22 @@ describe("the owner's routes", () => {
     expect((await t.api("/api/alexa/devices/allow", { method: "POST", body: JSON.stringify({ id: "ZZZZZZZZ", name: "x" }) })).status).toBe(400);
     expect((await t.api("/api/alexa/devices/allow", { method: "POST", body: JSON.stringify({ id: "ZZZZZZZZ", name: "x", pin: owner.pin }) })).status).toBe(404);
     expect((await t.api("/api/alexa/devices/ZZZZZZZZ", { method: "DELETE" })).status).toBe(404);
+  });
+});
+
+describe("the skill files to paste into the Alexa console", () => {
+  it("are served to the owner with the current public address, and nothing without one", async () => {
+    const t = await boot(true, "https://friend.example.com");
+    const skill = await t.api("/api/alexa/package/skill.json");
+    expect(skill.status).toBe(200);
+    expect(skill.headers.get("content-disposition")).toMatch(/attachment; filename="skill.json"/);
+    expect(JSON.stringify(await skill.json())).toContain("https://friend.example.com/api/alexa");
+    expect(((await (await t.api("/api/alexa/package/en-IN.json")).json()) as any).interactionModel.languageModel.invocationName).toBe("jarvis assistant");
+    expect((await t.api("/api/alexa/package/other.json")).status).toBe(404);
+    expect((await t.json("/api/alexa")).endpoint).toBe("https://friend.example.com/api/alexa");
+    const anon = await fetch(`${(await t.api("/api/alexa")).url.replace("/api/alexa", "")}/api/alexa/package/skill.json`);
+    expect(anon.status).toBe(401);
+
   });
 });
 
