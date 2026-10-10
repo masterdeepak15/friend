@@ -1,3 +1,5 @@
+import { captureSession } from "./audioSession";
+
 const MIME_PREFERENCE = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
 /** If the browser never reports the recorder stopped, give up waiting after this long. */
 const STOP_TIMEOUT_MS = 3000;
@@ -28,6 +30,7 @@ export class Recorder {
   private analyser: AnalyserNode | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private starting = false;
+  private leaveSession: (() => void) | null = null;
 
   constructor(private opts: RecorderOptions = {}) {}
 
@@ -44,9 +47,12 @@ export class Recorder {
     if (!Recorder.supported()) throw new Error("This browser cannot record audio here (use localhost or HTTPS).");
     this.starting = true;
     try {
+      this.leaveSession = captureSession(); // on an iPhone the microphone can not open while the audio is "playback only"
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       } catch (e) {
+        this.leaveSession?.();
+        this.leaveSession = null;
         throw friendlyError(e);
       }
       try {
@@ -158,5 +164,7 @@ export class Recorder {
     this.ctx = null;
     this.analyser = null;
     this.chunks = [];
+    this.leaveSession?.(); // the microphone is closed: sound goes back to playing through the silent switch
+    this.leaveSession = null;
   }
 }

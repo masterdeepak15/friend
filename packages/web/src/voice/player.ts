@@ -1,3 +1,5 @@
+import { playbackSession } from "./audioSession";
+
 export interface AudioChunk {
   id: string;
   seq: number;
@@ -43,13 +45,7 @@ export class AudioPlayer {
 
   /** Create/resume the audio context. Call it from a user gesture (a key press) so playback is allowed. */
   unlock(): void {
-    // iPhone and iPad: play through the speaker even when the silent switch is on, as a call or a video would
-    try {
-      const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
-      if (session) session.type = "playback";
-    } catch {
-      /* not supported here */
-    }
+    playbackSession(); // iPhone and iPad: play through the speaker even when the silent switch is on (never while the microphone is open)
     const ctx = this.ensureContext();
     if (ctx.state !== "running") void ctx.resume().catch(() => {});
   }
