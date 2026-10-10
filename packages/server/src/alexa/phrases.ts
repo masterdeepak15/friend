@@ -1,0 +1,31 @@
+/** The words Alexa says and the lead-ins its sentences start with, in each language the skill supports. */
+export type Lang = "en" | "hi";
+export const langOf = (locale: string | undefined): Lang => (locale?.toLowerCase().startsWith("hi") ? "hi" : "en");
+
+/** Open questions: the intent, and the word that starts the sentence ("how" ... "my portfolio is doing"). */
+export type LeadIntent = "HowIntent" | "WhatIntent" | "TellMeIntent" | "ShowMeIntent" | "RemindMeIntent" | "PleaseIntent";
+export const LEAD_INTENTS: readonly LeadIntent[] = ["HowIntent", "WhatIntent", "TellMeIntent", "ShowMeIntent", "RemindMeIntent", "PleaseIntent"];
+export const LEAD_INS: Record<LeadIntent, Record<Lang, string>> = {
+  HowIntent: { en: "how", hi: "कैसे" },
+  WhatIntent: { en: "what", hi: "क्या" },
+  TellMeIntent: { en: "tell me", hi: "मुझे बताओ" },
+  ShowMeIntent: { en: "show me", hi: "मुझे दिखाओ" },
+  RemindMeIntent: { en: "remind me", hi: "मुझे याद दिलाओ" },
+  PleaseIntent: { en: "please", hi: "कृपया" },
+};
+
+export type SayKey = "greet" | "greetAgain" | "help" | "unknown" | "failed" | "working" | "nothing" | "unavailable" | "whatDo" | "busy";
+const SAY: Record<SayKey, Record<Lang, string>> = {
+  greet: { en: "Friend here. Ask me about your portfolio, the weather, your tasks, or anything else.", hi: "फ्रेंड यहाँ है। मुझसे अपने पोर्टफोलियो, मौसम, कामों या कुछ भी पूछिए।" },
+  greetAgain: { en: "What would you like to know?", hi: "आप क्या जानना चाहते हैं?" },
+  help: { en: "You can ask how my portfolio is doing, what the weather is, what my tasks are, or for the status. You can also say how, what, tell me, or show me, and then your question.", hi: "आप पूछ सकते हैं कि मेरा पोर्टफोलियो कैसा है, मौसम कैसा है, मेरे काम क्या हैं, या स्थिति क्या है। आप कैसे, क्या, मुझे बताओ, या मुझे दिखाओ कहकर अपना सवाल भी पूछ सकते हैं।" },
+  unknown: { en: "Sorry, I did not understand that.", hi: "माफ़ कीजिए, मैं यह समझ नहीं पाया।" },
+  failed: { en: "Sorry, I could not do that just now.", hi: "माफ़ कीजिए, मैं अभी यह नहीं कर सका।" },
+  working: { en: "Still working on it. Ask me if it is ready.", hi: "अभी काम चल रहा है। पूछिए कि क्या तैयार है।" },
+  nothing: { en: "There is nothing waiting for you.", hi: "आपके लिए कुछ भी इंतज़ार में नहीं है।" },
+  unavailable: { en: "That is not available right now.", hi: "यह अभी उपलब्ध नहीं है।" },
+  whatDo: { en: "What do you want to know?", hi: "आप क्या जानना चाहते हैं?" },
+  busy: { en: "I am busy with another request. Try again in a moment.", hi: "मैं दूसरे काम में व्यस्त हूँ। थोड़ी देर में फिर कोशिश कीजिए।" },
+};
+export const say = (lang: Lang, key: SayKey): string => SAY[key][lang];
+export const letMeCheck = (lang: Lang): string => (lang === "hi" ? "ठीक है, देखता हूँ।" : "Let me check.");
