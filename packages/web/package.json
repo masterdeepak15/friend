@@ -11,6 +11,7 @@
   "dependencies": {
     "@friend/protocol": "workspace:*",
     "dompurify": "^3.4.16",
+    "html-to-image": "1.11.13",
     "marked": "^18.1.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

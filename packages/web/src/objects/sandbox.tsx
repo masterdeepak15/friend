@@ -14,18 +14,32 @@ const POLICY = [
   "base-uri 'none'",
 ].join("; ");
 
-const BASE_STYLE = "html,body{margin:0;min-height:100%;background:#050b10;color:#d8f6ff;font:15px/1.5 system-ui,sans-serif}";
+const BASE_STYLE = "html,body{margin:0;min-height:100%;background:#050b10;color:var(--ink,#d8f6ff);font:15px/1.5 var(--ui,system-ui,sans-serif)}";
+
+const THEME_VARS = ["--accent", "--ink", "--muted", "--ok", "--warn", "--bad", "--glass", "--edge", "--ui", "--mono"];
+const PLAIN_VALUE = /^[\w\s#().,%'"/-]+$/;
+
+/**
+ * The screen's theme as CSS variables, so a page the agent wrote can use var(--accent) and the like and always match the
+ * owner's colours. Only plain colour and font values are passed on.
+ */
+export function themeCss(): string {
+  if (typeof document === "undefined") return "";
+  const style = getComputedStyle(document.documentElement);
+  const decls = THEME_VARS.map((name) => [name, style.getPropertyValue(name).trim()] as const).filter(([, v]) => v && PLAIN_VALUE.test(v));
+  return decls.length ? `:root{${decls.map(([k, v]) => `${k}:${v}`).join(";")}}` : "";
+}
 
 /**
  * The whole document the frame shows. The policy comes first and is a constant, so nothing the agent wrote can
  * come before it or change it (a second policy in the agent's page can only tighten, never loosen).
  */
-export function buildSandboxDoc(html: string): string {
+export function buildSandboxDoc(html: string, theme = ""): string {
   return (
     `<!doctype html><html><head><meta charset="utf-8">` +
     `<meta http-equiv="Content-Security-Policy" content="${POLICY}">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1">` +
-    `<style>${BASE_STYLE}</style></head><body>${html}</body></html>`
+    `<style>${theme}${BASE_STYLE}</style></head><body>${html}</body></html>`
   );
 }
 
@@ -37,7 +51,7 @@ export function buildSandboxDoc(html: string): string {
 export function Sandbox({ props }: { props: Record<string, unknown> }) {
   const html = typeof props.html === "string" ? props.html : "";
   const title = typeof props.title === "string" ? props.title : "";
-  const doc = useMemo(() => buildSandboxDoc(html), [html]);
+  const doc = useMemo(() => buildSandboxDoc(html, themeCss()), [html]);
   return (
     <div className="obj-sandbox">
       {title && <h3 className="obj-title">{title}</h3>}

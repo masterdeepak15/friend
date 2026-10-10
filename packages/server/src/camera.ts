@@ -10,6 +10,12 @@ const DENIED: Record<string, string> = {
   busy: "The camera is in use by another app.",
 };
 
+const SCREEN_DENIED: Record<string, string> = {
+  unsupported: "This browser cannot take a picture of the Friend screen.",
+  failed: "The screen could not be captured.",
+  busy: "Another picture of the screen is being taken.",
+};
+
 const isJpeg = (b: Buffer) => b.length >= 4 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
 
 interface Pending {
@@ -18,26 +24,36 @@ interface Pending {
   finish: (r: CameraResult) => void;
 }
 
-/** Hands one picture request at a time to the browser and waits for the answer. */
+/**
+ * Hands one picture request at a time to the browser and waits for the answer. The same broker serves the camera and the
+ * picture of the Friend screen (kind "screen"); they differ only in the messages they send and the words they use.
+ */
 export class CameraBroker {
   private pending: Pending | null = null;
+  private what: string;
 
-  constructor(private timeoutMs = 20_000) {}
+  constructor(private timeoutMs = 20_000, private kind: "camera" | "screen" = "camera") {
+    this.what = kind === "camera" ? "camera" : "screen picture";
+  }
+
+  private msg(type: "request" | "cancel", id: string): ServerMsg {
+    return { type: `${this.kind}.${type}`, id } as ServerMsg;
+  }
 
   pendingId(): string | null {
     return this.pending?.id ?? null;
   }
 
   request(emit: (m: ServerMsg) => void, signal: AbortSignal): Promise<CameraResult> {
-    if (this.pending) return Promise.resolve({ ok: false, error: "The camera is already in use." });
-    if (signal.aborted) return Promise.resolve({ ok: false, error: "The camera request was cancelled." });
+    if (this.pending) return Promise.resolve({ ok: false, error: `The ${this.what} is already in use.` });
+    if (signal.aborted) return Promise.resolve({ ok: false, error: `The ${this.what} request was cancelled.` });
     const id = randomUUID();
     return new Promise<CameraResult>((resolve) => {
       let done = false;
-      const timer = setTimeout(() => finish({ ok: false, error: "The camera did not answer in time." }), this.timeoutMs);
+      const timer = setTimeout(() => finish({ ok: false, error: `The ${this.what} did not answer in time.` }), this.timeoutMs);
       const onAbort = () => {
-        emit({ type: "camera.cancel", id });
-        finish({ ok: false, error: "The camera request was cancelled." });
+        emit(this.msg("cancel", id));
+        finish({ ok: false, error: `The ${this.what} request was cancelled.` });
       };
       const finish = (r: CameraResult) => {
         if (done) return;
@@ -49,7 +65,7 @@ export class CameraBroker {
       };
       signal.addEventListener("abort", onAbort, { once: true });
       this.pending = { id, emit, finish };
-      emit({ type: "camera.request", id });
+      emit(this.msg("request", id));
     });
   }
 
@@ -66,7 +82,8 @@ export class CameraBroker {
   deny(id: string, reason: string): boolean {
     const p = this.pending;
     if (!p || p.id !== id) return false;
-    p.finish({ ok: false, error: DENIED[reason] ?? "The camera could not be used." });
+    const table = this.kind === "camera" ? DENIED : SCREEN_DENIED;
+    p.finish({ ok: false, error: table[reason] ?? `The ${this.what} could not be used.` });
     return true;
   }
 
@@ -74,7 +91,7 @@ export class CameraBroker {
   cancelAll(emit: (m: ServerMsg) => void): void {
     const p = this.pending;
     if (!p) return;
-    emit({ type: "camera.cancel", id: p.id });
-    p.finish({ ok: false, error: "The camera request was cancelled." });
+    emit(this.msg("cancel", p.id));
+    p.finish({ ok: false, error: `The ${this.what} request was cancelled.` });
   }
 }

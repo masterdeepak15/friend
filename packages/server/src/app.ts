@@ -13,6 +13,7 @@ import { Approvals } from "./approvals";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
+import { MediaStore } from "./media";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -113,6 +114,10 @@ export async function createApp(opts: AppOptions) {
   const switchable = opts.provider ? null : new SwitchableProvider(makeProvider());
   const provider: Provider = opts.provider ?? switchable!;
   const camera = new CameraBroker(opts.cameraTimeoutMs);
+  const screenShot = new CameraBroker(opts.cameraTimeoutMs, "screen");
+  const media = new MediaStore(db, config.dataDir);
+  // files shown earlier are kept while a widget still uses them; the rest are forgotten after a day
+  media.prune(new Set(JSON.stringify(stage.snapshot().objects).match(/(?<=\/api\/media\/)[0-9a-f]{32}/g) ?? []));
   const memory = new Memory(db);
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
@@ -232,6 +237,13 @@ export async function createApp(opts: AppOptions) {
         return camera.request(emit, signal);
       },
     },
+    screen: {
+      request: (emit, signal) => {
+        audit.log("agent", "screen.requested", {});
+        return screenShot.request(emit, signal);
+      },
+    },
+    media,
   });
 
   const clients = new Set<ClientConn>();
@@ -667,6 +679,17 @@ export async function createApp(opts: AppOptions) {
       }
       return out;
     },
+    onScreenFrame: (id, jpeg) => {
+      const out = screenShot.deliver(id, jpeg);
+      if (out === "ok") {
+        audit.log("owner", "screen.frame", { bytes: jpeg.length }); // size only, never pixels
+        broadcast({ type: "screen.cancel", id });
+      } else {
+        audit.log("owner", "screen.frame_ignored", { reason: out, bytes: jpeg.length });
+      }
+      return out;
+    },
+    media: { lookup: (id) => media.lookup(id) },
     onClientConnect: (_session, conn) => {
       clients.add(conn);
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
@@ -703,6 +726,12 @@ export async function createApp(opts: AppOptions) {
           if (camera.deny(msg.id, msg.reason)) {
             audit.log("owner", "camera.denied", { reason: msg.reason });
             broadcast({ type: "camera.cancel", id: msg.id });
+          }
+          break;
+        case "screen.denied":
+          if (screenShot.deny(msg.id, msg.reason)) {
+            audit.log("owner", "screen.denied", { reason: msg.reason });
+            broadcast({ type: "screen.cancel", id: msg.id });
           }
           break;
         case "voice.cancel":
@@ -755,6 +784,7 @@ export async function createApp(opts: AppOptions) {
       if (dropped) broadcast({ type: "voice.challenge.end", id: dropped });
       enrollment?.cancel();
       camera.cancelAll(broadcast);
+      screenShot.cancelAll(broadcast);
       agent.cancel();
       speaker?.interrupt(broadcast);
       approvals.denyAll("Emergency lock");
@@ -803,6 +833,7 @@ export async function createApp(opts: AppOptions) {
       if (timer) clearInterval(timer);
       challenges.clear();
       camera.cancelAll(broadcast);
+      screenShot.cancelAll(broadcast);
       agent.cancel();
       approvals.denyAll("Shutting down");
       // connectors, the provider and the web server close side by side, so the slowest one sets the time, not their sum

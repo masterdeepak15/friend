@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { createSocket, type FriendSocket } from "./socket";
 import { initialState, reduce, type LocalAction, type StageViewState } from "./store";
 import { CameraController } from "./camera/controller";
+import { ScreenController } from "./screen/capture";
 import { postUtterance } from "./voice/api";
 import { VoiceController } from "./voice/controller";
 
@@ -54,11 +55,20 @@ export function useFriend(onUnauthorized: () => void): {
       },
     });
     camera.current = cam;
+    const scr = new ScreenController({
+      send: (m) => s.send(m),
+      dispatch: (a) => dispatch(a),
+      upload: async (id, jpeg) => {
+        const res = await fetch(`/api/screen/frame/${encodeURIComponent(id)}`, { method: "POST", headers: { "content-type": "image/jpeg" }, body: jpeg });
+        if (!res.ok) throw new Error(`upload failed (${res.status})`);
+      },
+    });
     const offMsg = s.onMessage((m) => {
       dispatch(m);
       const type = (m as { type?: string; id?: unknown } | null)?.type;
       const id = (m as { id?: unknown } | null)?.id;
       if ((type === "camera.request" || type === "camera.cancel") && typeof id === "string") void cam.handle({ type, id });
+      if ((type === "screen.request" || type === "screen.cancel") && typeof id === "string") void scr.handle({ type, id });
       if (type === "audio.chunk" || type === "audio.stop") ctl.handleServer(m as Parameters<VoiceController["handleServer"]>[0]);
     });
     const offState = s.onState((v) => {
@@ -67,6 +77,7 @@ export function useFriend(onUnauthorized: () => void): {
       if (v === "elsewhere") {
         ctl.blur(); // another window has Friend now: this one stops listening and speaking
         cam.dispose();
+        scr.dispose();
       }
     });
     return () => {
@@ -74,6 +85,7 @@ export function useFriend(onUnauthorized: () => void): {
       offState();
       ctl.dispose();
       cam.dispose();
+      scr.dispose();
       s.close();
       controller.current = null;
       camera.current = null;

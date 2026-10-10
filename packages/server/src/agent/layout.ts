@@ -118,9 +118,10 @@ export function describeScreen(
   panels: PanelName[] = [],
   screen: ScreenInfo | null = null,
   view?: string,
+  accent?: string,
 ): string {
   const open = panels.length ? `; the owner has open: ${panels.map((p) => PANEL_TEXT[p]).join(", ")}, so keep clear of them` : "";
-  const known = [screen ? describeDevice(screen) : "", view ? `view=${view}` : ""].filter(Boolean);
+  const known = [screen ? describeDevice(screen) : "", view ? `view=${view}` : "", accent ? `accent=${accent}` : ""].filter(Boolean);
   const device = known.length ? `${known.join("; ")}; ` : "";
   const phone = screen?.kind === "phone";
   const taken = panelObjects(panels);
@@ -149,4 +150,7 @@ export const LAYOUT_GUIDE = `Screen layout (follow this when you decide where th
 - Pick the object by the data: one number gauge or stat, a few numbers side by side stat, a trend chart, items with details table, a to-do or schedule list or timeline, relationships graph, a short note card, anything else a sandbox page. Keep text short; the pictures carry the answer and your voice adds one or two sentences.
 - The owner can open a chat panel (right edge) and a schedule panel (upper left); the request's screen description lists them when open. Keep your pictures out of their way and do not repeat what they already show. The owner arranges the corner widgets and panels themselves; never try to move them. Change what the screen shows with view.set only when the owner asks for a cleaner or fuller screen.
 - The look of the voice presence (style, colour, brightness, size) belongs to the owner. If stage.presence or stage.mood say the look is fixed, accept it. Use look.set only when the owner asks you to change it.
+- The theme is a HUD, like the screens in science-fiction films: a near-black blue background, translucent glass panels with thin glowing edges, one bright accent colour, small upper-case letter-spaced labels, and monospace for numbers and code. Nothing is white, nothing is solid or rounded and cheerful. The colours are: accent (the current one is in each request as accent=#rrggbb; default cyan #3fd8ff), ink #d4ecf7 for text, muted #7fa3b6 for labels, ok #5ef0b0 for good, warn #ffb454 for caution, bad #ff6b7a for errors, background #050b10, glass rgba(6,20,28,0.62). Use warn and bad only for real warnings. Do not invent other colours, and never put dark text on a dark background. In a sandbox page do not write colours at all: use var(--accent), var(--ink), var(--muted), var(--ok), var(--warn), var(--bad), var(--glass), var(--edge), var(--ui) and var(--mono); they follow the owner's theme and accent exactly. Draw with thin lines (1px), a soft glow (box-shadow or drop-shadow of var(--accent)) and transparent backgrounds.
+- Fewer, richer objects. Do not make one card per fact. Put related things in ONE group (a dashboard of stat, gauge, progress, list and kv parts) or ONE tabs object (views of the same subject); use a gallery for several pictures or clips; use markdown for a formatted explanation; use checklist, progress, kv and countdown instead of a card of text when the data has that shape.
+- Showing the owner's files: use file.present with the full path (the owner approves each file with their PIN). It shows images and GIFs, video and sound, PDFs, Markdown, text, CSV (as a table) and code. After you arrange the screen you may use screen.look (PIN) to see the result yourself, but only when it helps: check that nothing overlaps and text is readable, then fix what is wrong. Never take a picture of the screen unless it is needed.
 - Schedules and to-dos: get them with the task tools (never guess), show them as a timeline (times) or list (to-dos) on the right, and keep them until the owner dismisses them.`;

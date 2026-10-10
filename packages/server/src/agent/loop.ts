@@ -3,6 +3,8 @@ import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
 import type { CodeBox } from "../codebox";
+import type { MediaStore } from "../media";
+import { createHash } from "node:crypto";
 import type { Plugins } from "../plugins";
 import { statsScene } from "../stats";
 import { weatherScene, weatherSummary, type WeatherService } from "../weather";
@@ -45,6 +47,10 @@ export interface AgentDeps {
   assistantName: () => string;
   /** Takes one picture through the owner's browser. Without it the camera tool reports it is unavailable. */
   camera?: Pick<CameraBroker, "request">;
+  /** Takes one picture of the owner's Friend screen through their browser. Without it screen.look reports it is unavailable. */
+  screen?: Pick<CameraBroker, "request">;
+  /** Opens a file the owner approved so the screen can show it. Without it file.present reports it is unavailable. */
+  media?: Pick<MediaStore, "present">;
   /** The owner's saved notes. Without it the memory tools report they are unavailable. */
   memory?: Memory;
   /** The owner's to-dos and reminders. Without it the task tools report they are unavailable. */
@@ -396,6 +402,11 @@ export class Agent {
       return fail("This action is not allowed.");
     }
     if ((call.name === "code.run" || plugin) && !d.code) return fail("Running code is not available.");
+    if (call.name === "screen.look") {
+      if (!d.screen) return fail("Looking at the screen is not available.");
+      if (!d.provider.vision) return fail("This model cannot look at pictures. Use a vision model (Claude, or an Ollama vision model with ollama.vision true).");
+    }
+    if (call.name === "file.present" && !d.media) return fail("Showing files is not available.");
     if (call.name === "camera.snap") {
       // refuse before bothering the owner with a card for a picture that could not be used
       if (!d.camera) return fail("The camera is not available.");
@@ -494,6 +505,23 @@ export class Agent {
     if (call.name.startsWith("memory.") || call.name.startsWith("task.")) {
       const out = call.name.startsWith("memory.") ? this.runMemoryTool(call.name, args) : this.runTaskTool(call.name, args);
       return out.ok ? { text: out.text, isError: false } : fail(out.text);
+    }
+
+    if (call.name === "screen.look") {
+      const shot = await d.screen!.request(ctx.emit, signal);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: shot.ok });
+      return shot.ok ? { text: "Picture of the Friend screen taken. Sandbox pages, video and PDFs appear empty in it, whatever they really show.", isError: false, image: { mime: shot.mime, data: shot.data } } : fail(shot.error);
+    }
+
+    if (call.name === "file.present") {
+      const { path, id, title, placement } = args as { path: string; id?: string; title?: string; placement?: unknown };
+      const shown = await d.media!.present(path, title);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { path: path.slice(0, 300) }, tier, ok: shown.ok });
+      if (!shown.ok) return fail(shown.error);
+      const objectId = id ?? `file-${createHash("sha1").update(path).digest("hex").slice(0, 8)}`;
+      const out = runStageTool("stage.show", { object: { id: objectId, type: shown.type, props: shown.props, placement: placement ?? "auto" } }, d.stage, ctx.emit);
+      if (!out.ok) return fail(out.error);
+      return { text: `${shown.summary} It is on the screen as "${objectId}".`, isError: false };
     }
 
     if (call.name === "camera.snap") {

@@ -307,6 +307,13 @@ Speak or type in English, Hindi, Marathi, or a mix of them in one sentence ("आ
 - **Move and resize.** On a computer or tablet, drag an object by the bar at its top and resize it by its bottom-right corner (or focus the bar and use the arrow keys; hold Shift to resize). Objects stay inside the part of the screen that is free of the menu, captions, status line and clock.
 - **The profile badge.** A shield in the corner shows your name (`friend config set ownerName "Your name"`, or Settings → Voice presence) while you are signed in. When Friend recognizes a family member's voice the badge shows their name; an unrecognized voice shows Guest. Drag it where you like; it is hidden in the Minimal view.
 
+## Showing files, and looking at its own screen
+
+- **Widgets.** Besides card, stat, gauge, list, table, code, chart, timeline, graph and sandbox, Friend can show **markdown** (formatted text with tables), **progress** bars, **checklists**, **key-value** lists, a **countdown**, **image**, **video** (sound too), **pdf** and a **gallery** of pictures and clips. A **group** puts several of them into one object (a dashboard) and **tabs** put several views into one, so it does not need a card per fact.
+- **Your files.** Ask "show me C:\\Users\\me\\Pictures\\trip.jpg" or "open my notes.md". Friend shows images and GIFs, video and sound, PDFs, Markdown, text, CSV (as a table) and code. **Every file needs your PIN**, and the approval card shows the full path. The file is served only to your signed-in browser, under a random address; nothing inside Friend's own data folder can be shown. A web address can never be used as a picture or clip, so a page or file cannot make Friend send data out through an image link.
+- **Looking at its own screen.** The assistant can take a picture of the Friend screen to check its layout, **after you enter the PIN**, with no plugin and no screen-sharing prompt. It needs a model that can see pictures. Sandbox pages, video and PDFs appear empty in that picture. Pictures are never kept in the conversation.
+- **The theme.** Friend is a HUD: a near-black blue background, glass panels with a thin glowing edge, one accent colour, small letter-spaced labels and monospace numbers. The assistant is told the exact colours and your current accent, and the pages it draws in a sandbox use your colours automatically (`var(--accent)`, `var(--ink)` and so on).
+
 ## Pictures first: weather, stats and graphics
 
 Friend is meant to show answers, not only say them. It controls the whole screen and picks the object that fits (gauge, chart, table, timeline, graph, or its own animated page).

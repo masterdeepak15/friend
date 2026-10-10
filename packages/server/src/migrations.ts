@@ -131,4 +131,16 @@ create table widgets (
 );
 `,
   },
+  {
+    id: 8,
+    sql: `
+create table media (
+  id text primary key,
+  path text not null,
+  mime text not null,
+  size integer not null,
+  created_at integer not null
+);
+`,
+  },
 ];

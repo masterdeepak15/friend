@@ -128,7 +128,7 @@ describe("knowing the screen", () => {
 
   it("is left out when unknown, so nothing else about the summary changes", () => {
     const s = new StageState();
-    expect(s.summary(0)).toBe("scene=conversation; presence=idle; the stage is empty; free regions: center, left, right, top, bottom");
+    expect(s.summary(0)).toBe("accent=#3fd8ff; scene=conversation; presence=idle; the stage is empty; free regions: center, left, right, top, bottom");
   });
 
   it("makes everything a stacked, automatic placement on a phone, and says so", () => {

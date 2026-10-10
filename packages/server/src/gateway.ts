@@ -2,7 +2,7 @@ import fastifyCookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import { ClientMsg, type ServerMsg } from "@friend/protocol";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from "fastify";
-import { existsSync } from "node:fs";
+import { createReadStream, existsSync, promises as fsp } from "node:fs";
 import { isIP } from "node:net";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
@@ -55,6 +55,10 @@ export interface GatewayDeps {
   data?: DataApi;
   /** A picture arrived for a camera request: "unknown" when nobody is waiting for that id, "invalid" when it is not a JPEG. */
   onCameraFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
+  /** A picture of the Friend screen arrived for a screen.look request. */
+  onScreenFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
+  /** Files the owner approved to be shown (file.present); the media route answers 404 without it. */
+  media?: { lookup(id: string): { path: string; mime: string; size: number } | null };
 }
 
 export const MAX_CAMERA_FRAME_BYTES = 2 * 1024 * 1024;
@@ -385,6 +389,52 @@ export function createGateway(deps: GatewayDeps) {
       return { ok: true };
     },
   );
+
+  // ---- pictures of the Friend screen (screen.look), uploaded like camera pictures ----
+  app.post<{ Params: { id: string } }>(
+    "/api/screen/frame/:id",
+    {
+      bodyLimit: MAX_CAMERA_FRAME_BYTES * 4,
+      onRequest: async (req, reply) => {
+        const token = req.cookies[COOKIE_NAME];
+        const session = token ? auth.resolveSession(token) : null;
+        if (!session) return reply.code(401).send({ error: "Unauthorized" });
+        if (!cameraWindow.allow(`screen:${session.id}`)) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+        if (!deps.onScreenFrame) return reply.code(503).send({ error: "Looking at the screen is not available" });
+      },
+    },
+    async (req, reply) => {
+      const body = req.body;
+      if (!Buffer.isBuffer(body)) return reply.code(415).send({ error: "Send the picture as image/jpeg" });
+      const out = deps.onScreenFrame!(req.params.id, body);
+      if (out === "unknown") return reply.code(404).send({ error: "Nobody is waiting for that picture" });
+      if (out === "invalid") return reply.code(400).send({ error: "That is not a JPEG picture" });
+      return { ok: true };
+    },
+  );
+
+  // ---- files the owner approved to be shown (images, video, PDF): signed-in browsers only, with byte ranges so video can seek ----
+  app.get<{ Params: { id: string } }>("/api/media/:id", async (req, reply) => {
+    const token = req.cookies[COOKIE_NAME];
+    if (!token || !auth.resolveSession(token)) return reply.code(401).send({ error: "Unauthorized" });
+    const grant = /^[0-9a-f]{32}$/.test(req.params.id) ? deps.media?.lookup(req.params.id) : null;
+    if (!grant) return reply.code(404).send({ error: "Not found" });
+    const stat = await fsp.stat(grant.path).catch(() => null);
+    if (!stat || !stat.isFile()) return reply.code(404).send({ error: "The file is gone" });
+    const size = stat.size;
+    reply.header("accept-ranges", "bytes").header("x-content-type-options", "nosniff").header("cache-control", "private, max-age=300");
+    if (grant.mime === "image/svg+xml") reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    if (range && (range[1] || range[2])) {
+      let start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      let end = range[1] && range[2] ? Number(range[2]) : size - 1;
+      end = Math.min(end, size - 1);
+      if (!(start <= end) || start >= size) return reply.code(416).header("content-range", `bytes */${size}`).send();
+      start = Math.max(0, start);
+      return reply.code(206).header("content-range", `bytes ${start}-${end}/${size}`).header("content-length", end - start + 1).type(grant.mime).send(createReadStream(grant.path, { start, end }));
+    }
+    return reply.header("content-length", size).type(grant.mime).send(createReadStream(grant.path));
+  });
 
   // ---- plugins (owner session only) ----
   const pluginWindow = new SlidingWindow(30, 60_000);

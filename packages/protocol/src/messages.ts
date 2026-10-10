@@ -85,6 +85,9 @@ export const ServerMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("camera.request"), id: z.string() }),
   /** Stop: the request was answered elsewhere, timed out, or the emergency lock fired. */
   z.object({ type: z.literal("camera.cancel"), id: z.string() }),
+  /** The owner approved a look at the screen: draw this page into a picture and upload it. */
+  z.object({ type: z.literal("screen.request"), id: z.string() }),
+  z.object({ type: z.literal("screen.cancel"), id: z.string() }),
   z.object({ type: z.literal("snapshot"), stage: StageSnapshot, pendingApproval: PendingApproval.nullable().optional() }),
   z.object({ type: z.literal("error"), message: z.string() }),
 ]);
@@ -106,6 +109,7 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("voice.confirm"), id: z.string(), pin: z.string().max(32) }),
   z.object({ type: z.literal("voice.cancel"), id: z.string() }),
   z.object({ type: z.literal("camera.denied"), id: z.string(), reason: z.enum(["off", "no-camera", "permission", "busy"]) }),
+  z.object({ type: z.literal("screen.denied"), id: z.string(), reason: z.enum(["unsupported", "failed", "busy"]) }),
   /** Which side panels the owner has open, so the AI keeps its pictures out of their way. */
   z.object({ type: z.literal("ui.panels"), open: z.array(z.enum(["chat", "tasks"])).max(2) }),
   /** What this screen is: its size in CSS pixels, the kind of device, and how it is held, so the AI can lay things out for it. */

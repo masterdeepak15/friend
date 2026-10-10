@@ -18,7 +18,7 @@ export function sanitizeMarkdown(src: string): string {
   ensureHook();
   const html = marked.parse(src, { async: false, breaks: true }) as string;
   return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ["p", "br", "strong", "em", "code", "pre", "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "blockquote", "hr", "del"],
+    ALLOWED_TAGS: ["p", "br", "strong", "em", "code", "pre", "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "hr", "del", "table", "thead", "tbody", "tr", "th", "td"],
     ALLOWED_ATTR: ["href", "rel", "target"],
     ALLOWED_URI_REGEXP: /^(?:https?:|mailto:)/i,
   });
