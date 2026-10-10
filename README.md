@@ -325,6 +325,17 @@ These are **plugins**: Esc → **Plugins**. **Telegram** and **WhatsApp and SMS 
 - **Sending.** "Message Anu on WhatsApp that I am late" uses the same approval rule as everything else (Settings → Approvals): in **manual** you read the recipient and the text and approve; in **auto** it goes without asking. Risky actions asked for from a phone are still decided on the PC.
 - **Safe by design.** Tokens are write-only (never shown again, never sent to the screen), the AI cannot change channel settings, one sender cannot flood you (limits per sender and per minute), and a link code works once, for ten minutes, and dies after five wrong guesses. Calls are not built yet.
 
+## Portfolio and brokers (Zerodha)
+
+A plugin: Esc → **Plugins** → **Zerodha** → **Install** (PIN) → **Configure**. Friend reads your Zerodha account through Zerodha's Kite Connect API and answers "how is my portfolio doing?", on screen or by voice, or sends a **report** to Telegram or WhatsApp at the times you choose (for example 9:30 and 3:45 on weekdays). The full walk-through, including the first live login, is in [docs/guides/zerodha-setup.md](docs/guides/zerodha-setup.md).
+
+- **Read only.** Friend can look at holdings, positions, funds and orders. It cannot place, change or cancel orders, never tells you what to buy or sell and never predicts prices. Settings → **Trading** shows *Read only*; the order levels are shown as "later version" and are locked. The assistant cannot change the broker settings or this level, even with your PIN.
+- **Cost.** Nothing extra: no third-party service, Friend talks to Zerodha from your PC. Zerodha's free *Personal* API plan covers everything used here (live streaming and history are on their paid plan, which Friend does not need).
+- **Login.** You sign in on Zerodha's own page, once a day (Zerodha ends the login about 6 am). Your password and 2FA never reach Friend. The API key and secret are write-only; the day's token is kept in a file only you can read. If the login has ended when a report is due, you get the login link on your phone instead, and the report follows once you sign in.
+- **Reports.** Add them on the Configure page (PIN) or ask in chat. Every figure is worked out by Friend from your account, never written by the AI model; a restart never sends one twice. Time zone, market-holiday dates and the login reminder (minutes before the first report) are on the same page. They are also settings: `brokers.timezone`, `brokers.skipDates`, `brokers.loginReminderMinutes`, and `trading.level` (only `read`), all changed from the Settings screen.
+- **Privacy.** The figures you ask about pass through the AI model you chose (Claude from Anthropic, or Ollama on this PC); a report goes to the messaging app you pick (Telegram or WhatsApp). The audit log records that a report was made, never the amounts.
+- **More brokers.** A broker is one file implementing the `BrokerProvider` contract plus the shared contract tests (`runBrokerContract`); reports, tools and screens do not change.
+
 ## Pictures first: weather, stats and graphics
 
 Friend is meant to show answers, not only say them. It controls the whole screen and picks the object that fits (gauge, chart, table, timeline, graph, or its own animated page).
