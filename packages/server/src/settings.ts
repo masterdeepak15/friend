@@ -1,6 +1,7 @@
 import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
+import { invocationNameProblem } from "./alexa/invocation";
 import { isValidTimeZone, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
@@ -55,6 +56,14 @@ export const SettingsPatch = z
         timezone: z.string().trim().min(1).max(60),
         skipDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A date like 2026-10-02")).max(100),
         loginReminderMinutes: z.number().int().min(0).max(120),
+      })
+      .partial()
+      .strict(),
+    /** The owner's Alexa skill. The skill id is not a secret; both need the PIN to change. */
+    alexa: z
+      .object({
+        skillId: z.string().trim().max(100).regex(/^(amzn1\.ask\.skill\.[A-Za-z0-9-]{8,80})?$/, "A skill id like amzn1.ask.skill.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"),
+        invocationName: z.string().trim().max(60),
       })
       .partial()
       .strict(),
@@ -137,6 +146,8 @@ export interface SettingsView {
   /** The secret itself is never sent to the screen. */
   brokers: { zerodha: { installed: boolean; enabled: boolean; apiKey: string; secretSet: boolean }; timezone: string; skipDates: string[]; loginReminderMinutes: number };
   trading: { level: "read" };
+  /** The ids of allowed Amazon accounts are shown shortened. */
+  alexa: { installed: boolean; enabled: boolean; skillId: string; invocationName: string; allowed: { id: string; name: string }[] };
   look: Config["look"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** The key itself is never sent to the screen. */
@@ -164,6 +175,13 @@ export function settingsView(c: Config): SettingsView {
       loginReminderMinutes: c.brokers.loginReminderMinutes,
     },
     trading: { level: c.trading.level },
+    alexa: {
+      installed: c.alexa.installed,
+      enabled: c.alexa.enabled,
+      skillId: c.alexa.skillId,
+      invocationName: c.alexa.invocationName,
+      allowed: c.alexa.allowedUsers.map((u) => ({ id: "…" + u.id.slice(-8), name: u.name })),
+    },
     look: { ...c.look },
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
     openai: { url: c.openai.url, model: c.openai.model, vision: !!c.openai.vision, apiKeySet: !!c.openai.apiKey },
@@ -190,6 +208,7 @@ export function refuseForAgent(raw: unknown): void {
   const cc = (r.claudeCode && typeof r.claudeCode === "object" ? r.claudeCode : {}) as Record<string, unknown>;
   const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
   if ("brokers" in r || "trading" in r) throw new SettingsError("Broker accounts and the trading level can only be changed by the owner on the settings screen.");
+  if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
   if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
   if ("apiKey" in r || "apiKey" in oa) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
@@ -218,6 +237,11 @@ export function applySettings(config: Config, raw: unknown): Applied {
   const p = parsed.data;
 
   if (p.brokers?.timezone !== undefined && !isValidTimeZone(p.brokers.timezone)) throw new SettingsError("brokers.timezone: That is not a time zone, try one like Asia/Kolkata.");
+
+  if (p.alexa?.invocationName) {
+    const problem = invocationNameProblem(p.alexa.invocationName);
+    if (problem) throw new SettingsError(`alexa.invocationName: ${problem}`);
+  }
 
   const ollamaUrl = p.ollama?.url;
   if (ollamaUrl !== undefined) {
@@ -275,6 +299,11 @@ export function applySettings(config: Config, raw: unknown): Applied {
     if (rest.timezone !== undefined) config.brokers.timezone = rest.timezone;
     if (rest.skipDates !== undefined) config.brokers.skipDates = sanitizeBrokers({ skipDates: rest.skipDates }).skipDates;
     if (rest.loginReminderMinutes !== undefined) config.brokers.loginReminderMinutes = rest.loginReminderMinutes;
+  }
+  if (p.alexa) {
+    config.alexa.installed = true; // configuring it is installing it
+    if (p.alexa.skillId !== undefined) config.alexa.skillId = p.alexa.skillId;
+    if (p.alexa.invocationName !== undefined) config.alexa.invocationName = p.alexa.invocationName;
   }
   if (p.approvals) config.approvals = p.approvals;
   if (p.channels) {

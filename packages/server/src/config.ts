@@ -1,3 +1,4 @@
+import { invocationNameProblem } from "./alexa/invocation";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { DEFAULT_HINDI_VOICE, DEFAULT_MARATHI_VOICE, type PresenceStyle, type ViewPreset } from "@friend/protocol";
 import { homedir } from "node:os";
@@ -37,7 +38,43 @@ export interface Config {
   brokers: BrokersConfig;
   /** What the assistant may do with money. Only "read" exists in this version. */
   trading: TradingConfig;
+  /** The owner's own Alexa skill (custom, in development) and which Amazon accounts may use it. */
+  alexa: AlexaConfig;
   dataDir: string;
+}
+
+export interface AlexaConfig {
+  /** `installed`: added from the plugins screen (or set up earlier). `enabled`: switched on. */
+  installed: boolean;
+  enabled: boolean;
+  /** The skill's id from the Alexa developer console (amzn1.ask.skill...). Not a secret. */
+  skillId: string;
+  /** What the owner says after "Alexa, ask": two or more lower-case words. */
+  invocationName: string;
+  /** Amazon accounts allowed to talk to Friend through Alexa. */
+  allowedUsers: { id: string; name: string; addedAt: number }[];
+}
+
+const SKILL_ID = /^amzn1\.ask\.skill\.[A-Za-z0-9-]{8,80}$/;
+const AMAZON_USER = /^amzn1\.ask\.account\.[A-Za-z0-9._-]{8,500}$/;
+
+export function sanitizeAlexa(raw: unknown): AlexaConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const skillId = typeof r.skillId === "string" && SKILL_ID.test(r.skillId.trim()) ? r.skillId.trim() : "";
+  const name = typeof r.invocationName === "string" && invocationNameProblem(r.invocationName.trim()) === null ? r.invocationName.trim() : "";
+  const users = (Array.isArray(r.allowedUsers) ? r.allowedUsers : []).flatMap((u): AlexaConfig["allowedUsers"] => {
+    const x = (u && typeof u === "object" ? u : {}) as Record<string, unknown>;
+    if (typeof x.id !== "string" || !AMAZON_USER.test(x.id)) return [];
+    const label = typeof x.name === "string" ? x.name.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "";
+    return [{ id: x.id, name: label || "Echo", addedAt: typeof x.addedAt === "number" && Number.isFinite(x.addedAt) ? x.addedAt : 0 }];
+  });
+  return {
+    installed: r.installed === true || (r.installed === undefined && (r.enabled === true || skillId !== "")),
+    enabled: r.enabled === true,
+    skillId,
+    invocationName: name,
+    allowedUsers: users.slice(0, 10),
+  };
 }
 
 export interface BrokersConfig {
@@ -316,6 +353,7 @@ const defaults = (dataDir: string): Config => ({
   channels: sanitizeChannels(DEFAULT_CHANNELS),
   brokers: sanitizeBrokers({}),
   trading: { level: "read" },
+  alexa: sanitizeAlexa({}),
   dataDir,
 });
 
@@ -362,6 +400,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     channels: sanitizeChannels(stored.channels),
     brokers: sanitizeBrokers(stored.brokers),
     trading: { level: "read" }, // any other level in the file is read as read: orders do not exist in this version
+    alexa: sanitizeAlexa(stored.alexa),
     dataDir,
   };
 }
