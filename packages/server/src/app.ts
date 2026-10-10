@@ -148,6 +148,7 @@ export async function createApp(opts: AppOptions) {
   // Stock brokers (Zerodha first): the daily login, reading the account, and the scheduled reports.
   const brokerHub = new BrokerHub({ config, dataDir: opts.dataDir, db, audit, channels: channelHub, fetch: opts.brokerFetch, publicBase: () => config.publicUrl ?? null });
   brokerHub.apply();
+  let brokerTimer: ReturnType<typeof setInterval> | undefined;
   const memory = new Memory(db);
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
@@ -826,6 +827,44 @@ export async function createApp(opts: AppOptions) {
       },
       twilioInbound: (url, params, signature) => channelHub.handleTwilio(url, params, signature),
     },
+    brokers: {
+      status: () => ({ zerodha: brokerHub.status("zerodha"), schedules: brokerHub.schedules.list(), redirectUrl: brokerHub.redirectUrl("zerodha"), timezone: config.brokers.timezone }),
+      callback: async (params) => (await brokerHub.completeLogin(params)).ok,
+      loginLink: async (send) => {
+        const url = brokerHub.loginLink("zerodha");
+        if (!url) throw new HttpError(400, "Install Zerodha, add the API key and secret, and switch it on first.");
+        if (!send) return { url };
+        const channel = brokerHub.schedules.list()[0]?.channel ?? "telegram";
+        const sent = await channelHub.send(channel, "me", `Log in to Zerodha:\n${url}`);
+        if (!sent.ok) throw new HttpError(400, sent.error);
+        return { sent: true, via: channel };
+      },
+      schedules: () => brokerHub.schedules.list(),
+      addSchedule: async (input, pin, ip) => {
+        await requirePin(pin, ip);
+        try {
+          const made = brokerHub.schedules.add({ broker: "zerodha", days: [1, 2, 3, 4, 5], commentary: false, enabled: true, ...(input as object) } as Parameters<typeof brokerHub.schedules.add>[0]);
+          audit.log("owner", "broker.schedule_added", { name: made.name, kind: made.kind, time: made.time, channel: made.channel, ip });
+          return made;
+        } catch (e) {
+          throw new HttpError(400, (e as Error).message);
+        }
+      },
+      removeSchedule: (id) => {
+        const gone = brokerHub.schedules.remove(id);
+        if (gone) audit.log("owner", "broker.schedule_removed", { id });
+        return gone;
+      },
+      run: async (kind, send) => {
+        const r = await brokerHub.report("zerodha", (kind ?? "custom") as "morning" | "close" | "custom");
+        if (!r.ok) return { status: r.sessionExpired ? 409 : 400, body: { error: r.error, ...(r.sessionExpired ? { sessionExpired: true } : {}) } };
+        if (send) {
+          const sent = await channelHub.send(brokerHub.schedules.list()[0]?.channel ?? "telegram", "me", r.text);
+          if (!sent.ok) return { status: 400, body: { error: sent.error } };
+        }
+        return { status: 200, body: { text: r.text } };
+      },
+    },
     onClientConnect: (_session, conn) => {
       clients.add(conn);
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
@@ -959,6 +998,8 @@ export async function createApp(opts: AppOptions) {
       heartbeat.start();
       hub.startAll(); // connectors that were on come back in the background; Friend does not wait for them
       channelHub.apply(); // Telegram starts listening when it is switched on
+      brokerTimer = setInterval(() => void brokerHub.tick(new Date()).catch(() => {}), opts.brokerTickMs ?? 60_000);
+      brokerTimer.unref?.();
       languageWarm = setTimeout(warmLanguagesQuietly, opts.warmLanguagesAfterMs ?? 20_000);
       timer = setInterval(() => {
         const gone = stage.expire();
@@ -971,6 +1012,7 @@ export async function createApp(opts: AppOptions) {
       stopped = true;
       heartbeat.stop();
       channelHub.stop();
+      if (brokerTimer) clearInterval(brokerTimer);
       if (languageWarm) clearTimeout(languageWarm);
       if (timer) clearInterval(timer);
       challenges.clear();

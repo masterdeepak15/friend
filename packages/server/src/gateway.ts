@@ -59,6 +59,8 @@ export interface GatewayDeps {
   onScreenFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
   /** Telegram, SMS and WhatsApp: status and linking for the owner's screen, and Twilio's inbound messages. */
   channels?: ChannelsApi;
+  /** Stock brokers: the login return, the owner's status and schedules. */
+  brokers?: BrokersApi;
   /** Files the owner approved to be shown (file.present); the media route answers 404 without it. */
   media?: { lookup(id: string): { path: string; mime: string; size: number } | null };
 }
@@ -71,6 +73,18 @@ export interface ChannelsApi {
   link(pin: string | undefined, ip: string): Promise<unknown>;
   unlink(pin: string | undefined, ip: string): Promise<unknown>;
   twilioInbound(url: string, params: Record<string, string>, signature: string | undefined): "ok" | "forbidden" | "off";
+}
+
+/** What the broker routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
+export interface BrokersApi {
+  status(): unknown;
+  /** The broker's redirect after the owner logged in. True when the login was accepted. */
+  callback(params: Record<string, string>): Promise<boolean>;
+  loginLink(send: boolean): Promise<unknown>;
+  schedules(): unknown;
+  addSchedule(input: unknown, pin: string, ip: string): Promise<unknown>;
+  removeSchedule(id: number): boolean;
+  run(kind: string | undefined, send: boolean): Promise<{ status: number; body: unknown }>;
 }
 
 /** What the settings routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -491,6 +505,82 @@ export function createGateway(deps: GatewayDeps) {
     if (out === "forbidden") return reply.code(403).send();
     if (out === "off") return reply.code(404).send();
     return reply.code(200).type("text/xml").send("<Response></Response>");
+  });
+
+  // ---- stock brokers ----
+  // The broker sends the owner's browser here after login. There is no cookie to check: the one-time code Friend made is the proof.
+  const brokerReturnWindow = new SlidingWindow(20, 60_000);
+  const brokerPage = (ok: boolean) =>
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Friend</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#05080d;color:#bfefff;font-family:system-ui,sans-serif}p{padding:24px;border:1px solid #1d4f66;border-radius:8px;max-width:340px;text-align:center}</style></head><body><p>${ok ? "Logged in. You can close this tab." : "That did not work. Start again from Friend."}</p></body></html>`;
+  app.get("/api/brokers/zerodha/callback", async (req, reply) => {
+    if (!deps.brokers) return reply.code(404).send();
+    if (!brokerReturnWindow.allow(`br:${req.ip}`)) return reply.code(429).header("retry-after", 30).send();
+    const params: Record<string, string> = {};
+    for (const [k, v] of Object.entries((req.query ?? {}) as Record<string, unknown>)) if (typeof v === "string" && k.length <= 40 && v.length <= 200) params[k] = v;
+    const ok = await deps.brokers.callback(params).catch(() => false);
+    return reply.code(200).header("cache-control", "no-store").header("referrer-policy", "no-referrer").type("text/html").send(brokerPage(ok));
+  });
+  const brokerWindow = new SlidingWindow(30, 60_000);
+  const brokerGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    const session = token ? auth.resolveSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "Unauthorized" });
+    if (!brokerWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+    if (!deps.brokers) return reply.code(503).send({ error: "Brokers are not available" });
+    reply.header("cache-control", "no-store");
+  };
+  const brokerError = (reply: FastifyReply, e: unknown) => {
+    if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+    if (e instanceof LockoutError) return reply.code(429).header("retry-after", Math.ceil(e.retryAfterMs / 1000)).send({ error: "Too many wrong PINs. Wait a moment." });
+    audit.log("owner", "broker.failed", { message: (e as Error).message });
+    return reply.code(500).send({ error: "That did not work. Try again." });
+  };
+  app.get("/api/brokers", { onRequest: brokerGuard }, async () => deps.brokers!.status());
+  app.post("/api/brokers/zerodha/login-link", { onRequest: brokerGuard }, async (req, reply) => {
+    const body = z.object({ send: z.boolean().optional() }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "Invalid input" });
+    try {
+      return await deps.brokers!.loginLink(body.data.send === true);
+    } catch (e) {
+      return brokerError(reply, e);
+    }
+  });
+  app.get("/api/brokers/schedules", { onRequest: brokerGuard }, async () => ({ schedules: deps.brokers!.schedules() }));
+  app.post("/api/brokers/schedules", { onRequest: brokerGuard }, async (req, reply) => {
+    const body = z
+      .object({
+        pin: z.string().min(1).max(32),
+        name: z.string().max(60),
+        kind: z.enum(["morning", "close", "custom"]),
+        time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        days: z.array(z.number().int().min(1).max(7)).min(1).max(7).optional(),
+        channel: z.enum(["telegram", "whatsapp", "sms"]),
+        commentary: z.boolean().optional(),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Check the name, time (like 09:30), days and channel, and enter your PIN." });
+    const { pin, ...input } = body.data;
+    try {
+      return await deps.brokers!.addSchedule(input, pin, req.ip);
+    } catch (e) {
+      return brokerError(reply, e);
+    }
+  });
+  app.delete<{ Params: { id: string } }>("/api/brokers/schedules/:id", { onRequest: brokerGuard }, async (req, reply) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || !deps.brokers!.removeSchedule(id)) return reply.code(404).send({ error: "There is no such schedule." });
+    return { ok: true };
+  });
+  app.post("/api/brokers/run", { onRequest: brokerGuard }, async (req, reply) => {
+    const body = z.object({ kind: z.enum(["morning", "close", "custom"]).optional(), send: z.boolean().optional() }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "Invalid input" });
+    try {
+      const out = await deps.brokers!.run(body.data.kind, body.data.send === true);
+      return reply.code(out.status).send(out.body);
+    } catch (e) {
+      return brokerError(reply, e);
+    }
   });
 
   // ---- plugins (owner session only) ----
