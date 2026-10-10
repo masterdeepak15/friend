@@ -1,4 +1,4 @@
-import { playbackSession } from "./audioSession";
+import { playbackSession, watchCapture } from "./audioSession";
 
 export interface AudioChunk {
   id: string;
@@ -41,6 +41,7 @@ export class AudioPlayer {
   private busy = false;
   private gen = 0;
   private isPlaying = false;
+  private unwatch: (() => void) | null = null;
   private listeners = new Set<(playing: boolean) => void>();
 
   /** Create/resume the audio context. Call it from a user gesture (a key press) so playback is allowed. */
@@ -112,6 +113,8 @@ export class AudioPlayer {
   dispose(): void {
     this.stop();
     void this.ctx?.close().catch(() => {});
+    this.unwatch?.();
+    this.unwatch = null;
     this.ctx = null;
     this.analyser = null;
   }
@@ -142,6 +145,13 @@ export class AudioPlayer {
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 1024;
       this.analyser.connect(this.ctx.destination);
+      const ctx = this.ctx;
+      // a running output keeps an iPhone in playback mode: let it rest while the microphone is open
+      this.unwatch?.();
+      this.unwatch = watchCapture((on) => {
+        if (on && ctx.state === "running") void ctx.suspend().catch(() => {});
+        else if (!on && ctx.state !== "running" && ctx.state !== "closed") void ctx.resume().catch(() => {});
+      });
     }
     return this.ctx;
   }

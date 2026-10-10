@@ -1,4 +1,6 @@
-import { captureSession } from "./audioSession";
+import { captureSession, isSessionError } from "./audioSession";
+
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const MIME_PREFERENCE = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
 /** If the browser never reports the recorder stopped, give up waiting after this long. */
@@ -49,7 +51,16 @@ export class Recorder {
     try {
       this.leaveSession = captureSession(); // on an iPhone the microphone can not open while the audio is "playback only"
       try {
-        this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        const open = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        try {
+          this.stream = await open();
+        } catch (first) {
+          if (!isSessionError(first)) throw first;
+          await wait(250); // the phone is still switching its audio mode
+          this.leaveSession?.();
+          this.leaveSession = captureSession();
+          this.stream = await open();
+        }
       } catch (e) {
         this.leaveSession?.();
         this.leaveSession = null;
