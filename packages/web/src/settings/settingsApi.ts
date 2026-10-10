@@ -5,6 +5,13 @@ export interface ChannelsView {
   telegram: { installed: boolean; enabled: boolean; tokenSet: boolean; linked: boolean };
   twilio: { installed: boolean; enabled: boolean; accountSid: string; tokenSet: boolean; smsFrom: string; whatsappFrom: string; ownerNumber: string };
 }
+/** The stock-broker settings as the screen sees them: the secret itself is never sent, only whether one is saved. */
+export interface BrokersView {
+  zerodha: { installed: boolean; enabled: boolean; apiKey: string; secretSet: boolean };
+  timezone: string;
+  skipDates: string[];
+  loginReminderMinutes: number;
+}
 export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
 
 export interface SettingsView {
@@ -18,6 +25,9 @@ export interface SettingsView {
   /** How much Friend asks before acting. */
   approvals?: ApprovalMode;
   channels?: ChannelsView;
+  brokers?: BrokersView;
+  /** What Friend may do with money. Only "read" exists in this version. */
+  trading?: { level: "read" };
   look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */

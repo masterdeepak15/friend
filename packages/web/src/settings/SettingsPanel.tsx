@@ -3,17 +3,19 @@ import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
 import { SecurityTab } from "./SecurityTab";
+import { TradingTab } from "./TradingTab";
 import { HINDI_VOICES, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, isCatalogVoice } from "@friend/protocol";
 import { DEFAULT_LOOK, diffSettings, type ApprovalMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
-export type SettingsTab = "model" | "voice" | "look" | "approvals" | "security";
+export type SettingsTab = "model" | "voice" | "look" | "approvals" | "trading" | "security";
 
 const TABS: { id: SettingsTab; label: string; note: string }[] = [
   { id: "model", label: "Model", note: "Where Friend thinks" },
   { id: "voice", label: "Voice", note: "Speaking and listening" },
   { id: "look", label: "Voice presence", note: "How it looks" },
   { id: "approvals", label: "Approvals", note: "How much it asks" },
+  { id: "trading", label: "Trading", note: "What Friend may do with money" },
   { id: "security", label: "Security", note: "Password and PIN" },
 ];
 
@@ -502,6 +504,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           {tab === "voice" && voiceTab}
           {tab === "look" && lookTab}
           {tab === "approvals" && approvalsTab}
+          {tab === "trading" && <TradingTab level={draft.trading?.level ?? "read"} />}
           {tab === "security" && <SecurityTab />}
         </div>
       </div>
