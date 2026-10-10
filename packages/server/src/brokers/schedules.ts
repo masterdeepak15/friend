@@ -85,6 +85,11 @@ export class ReportSchedules {
     this.db.prepare("update report_schedules set last_run_day = ? where id = ?").run(day, id);
   }
 
+  /** Gives every schedule its three tries again today (after the owner logs in to the broker). */
+  resetAttempts(): void {
+    this.db.prepare("update report_schedules set attempts = 0").run();
+  }
+
   /** Counts one try for this schedule on this local day and returns how many there have been today (including this one). */
   noteAttempt(id: number, day: string): number {
     const row = this.db.prepare("select attempt_day d, attempts n from report_schedules where id = ?").get(id) as { d: string | null; n: number } | undefined;
