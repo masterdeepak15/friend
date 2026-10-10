@@ -142,6 +142,52 @@ export class Auth {
     return ok;
   }
 
+  /** Checks a new password and/or PIN the same way setup does. Returns the problem, or null when both are fine. */
+  static checkNewSecrets(input: { newPassword?: string | undefined; newPin?: string | undefined }): string | null {
+    if (input.newPassword === undefined && input.newPin === undefined) return "Give a new password or a new PIN.";
+    if (input.newPin !== undefined && !/^\d{6,}$/.test(input.newPin)) return "PIN must be at least 6 digits";
+    if (input.newPassword !== undefined && input.newPassword.length < 8) return "Password must be at least 8 characters";
+    return null;
+  }
+
+  private async store(input: { newPassword?: string | undefined; newPin?: string | undefined }): Promise<void> {
+    if (input.newPassword !== undefined) this.db.prepare("update owner set password_hash = ? where id = 1").run(await hashSecret(input.newPassword));
+    if (input.newPin !== undefined) this.db.prepare("update owner set pin_hash = ? where id = 1").run(await hashSecret(input.newPin));
+  }
+
+  /**
+   * Changes the password and/or PIN of a signed-in owner who proves it with the current password. Wrong guesses count toward
+   * the same sign-in lock. A new password signs every other browser out (the one in `keepToken` stays signed in).
+   */
+  async changeSecrets(input: { current: string; newPassword?: string | undefined; newPin?: string | undefined }, ip: string, keepToken?: string): Promise<void> {
+    const problem = Auth.checkNewSecrets(input);
+    if (problem) throw new Error(problem);
+    const succeeded = this.begin("login", ip);
+    const row = this.db.prepare("select password_hash h from owner where id = 1").get() as { h: string } | undefined;
+    const ok = row ? await verifySecret(input.current, row.h) : false;
+    if (!ok) {
+      this.audit.log("owner", "secrets.fail", { ip });
+      throw new Error("Invalid credentials");
+    }
+    succeeded();
+    await this.store(input);
+    if (input.newPassword !== undefined) {
+      if (keepToken) this.db.prepare("update sessions set revoked = 1 where token_hash != ?").run(sha256(keepToken));
+      else this.db.prepare("update sessions set revoked = 1").run();
+    }
+    this.audit.log("owner", "secrets.changed", { password: input.newPassword !== undefined, pin: input.newPin !== undefined });
+  }
+
+  /** For `friend password` / `friend pin` run on this PC: no current password needed (being on the PC is the proof). Signs everyone out. */
+  async resetSecrets(input: { newPassword?: string | undefined; newPin?: string | undefined }): Promise<void> {
+    if (!this.hasOwner()) throw new Error("There is no owner yet. Run: friend setup");
+    const problem = Auth.checkNewSecrets(input);
+    if (problem) throw new Error(problem);
+    await this.store(input);
+    if (input.newPassword !== undefined) this.db.prepare("update sessions set revoked = 1").run();
+    this.audit.log("system", "secrets.reset", { password: input.newPassword !== undefined, pin: input.newPin !== undefined });
+  }
+
   createPairCode(): string {
     const code = randomBytes(5).toString("hex").toUpperCase();
     this.db

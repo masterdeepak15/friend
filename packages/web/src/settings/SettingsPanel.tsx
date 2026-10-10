@@ -2,16 +2,18 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
+import { SecurityTab } from "./SecurityTab";
 import { HINDI_VOICES, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, isCatalogVoice } from "@friend/protocol";
 import { DEFAULT_LOOK, diffSettings, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
-export type SettingsTab = "model" | "voice" | "look";
+export type SettingsTab = "model" | "voice" | "look" | "security";
 
 const TABS: { id: SettingsTab; label: string; note: string }[] = [
   { id: "model", label: "Model", note: "Where Friend thinks" },
   { id: "voice", label: "Voice", note: "Speaking and listening" },
   { id: "look", label: "Voice presence", note: "How it looks" },
+  { id: "security", label: "Security", note: "Password and PIN" },
 ];
 
 const PROVIDERS: { id: ProviderName; label: string; note: string }[] = [
@@ -474,6 +476,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           {tab === "model" && modelTab}
           {tab === "voice" && voiceTab}
           {tab === "look" && lookTab}
+          {tab === "security" && <SecurityTab />}
         </div>
       </div>
 

@@ -13,6 +13,7 @@ import { ollamaCommand } from "./commands/ollama";
 import { claudeCommand } from "./commands/claude";
 import { voiceCommand } from "./commands/voice";
 import { setupCommand } from "./commands/setup";
+import { secretCommand } from "./commands/secret";
 import { startCommand } from "./commands/start";
 import { statusCommand } from "./commands/status";
 
@@ -35,6 +36,8 @@ export const USAGE = `Usage: friend <command>
   onboard                    guided setup, step by step: checks this PC, installs what is missing, asks what you want
   doctor                     check what this PC has and what is missing (changes nothing)
   setup                      create the owner account (password, PIN, assistant name)
+  password                   change the sign-in password (signs every browser out)
+  pin                        change the PIN for risky actions
   start                      run the gateway and a local device node
   daemon start|stop|restart|status  run Friend in the background (no terminal needed), stop it, or see if it is running
   upgrade [--force]          stop the background Friend, install the newest version, start it again
@@ -61,6 +64,10 @@ export async function run(argv: string[], io: IO): Promise<number> {
     switch (cmd) {
       case "setup":
         return await setupCommand(io);
+      case "password":
+        return await secretCommand("password", io);
+      case "pin":
+        return await secretCommand("pin", io);
       case "start":
         return await startCommand(io);
       case "daemon":

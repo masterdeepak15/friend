@@ -85,6 +85,8 @@ Every command starts with `friend`. If you run Friend from the source code, writ
 
 | Command | What it does | Use it when |
 |---|---|---|
+| `friend password` | Sets a new sign-in password (asks twice, nothing is shown while you type). The old one is not needed, because you are at this PC, so it is also the way back in if you forgot it. Every browser and phone is signed out. | You forgot the password, or want a new one. From the screen: Esc → Settings → Security. |
+| `friend pin` | Sets a new PIN, the number Friend asks for before risky actions. | You forgot the PIN, or want a new one. |
 | `friend daemon start` | Runs Friend in the background, with no terminal window needed. Prints the address, keeps a log in the data folder (`friend.log`). | You want Friend always available, even after you close the terminal. |
 | `friend daemon stop` | Stops the background Friend and the speech engine with it. | Shutting it down. |
 | `friend daemon restart` | Stops it and starts it again. | After changing a setting such as `friend lan on` or a different model. |

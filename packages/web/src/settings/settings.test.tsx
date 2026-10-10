@@ -64,7 +64,7 @@ describe("the tabs", () => {
     await userEvent.keyboard("{ArrowDown}");
     expect(screen.getByRole("tab", { name: /^Voice\s*Speaking/ }).getAttribute("aria-selected")).toBe("true");
     await userEvent.keyboard("{End}");
-    expect(screen.getByRole("tab", { name: /Voice presence/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /Security/ }).getAttribute("aria-selected")).toBe("true");
     await userEvent.keyboard("{ArrowDown}");
     expect(screen.getByRole("tab", { name: /Model/ }).getAttribute("aria-selected")).toBe("true");
   });

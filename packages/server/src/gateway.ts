@@ -278,6 +278,34 @@ export function createGateway(deps: GatewayDeps) {
     return { ok: true };
   });
 
+  // Change the password and/or PIN. Needs a signed-in browser and the current password; wrong guesses share the sign-in lock.
+  app.post("/api/account/secret", async (req, reply) => {
+    reply.header("cache-control", "no-store");
+    const token = req.cookies[COOKIE_NAME];
+    if (!token || !auth.resolveSession(token)) return reply.code(401).send({ error: "Please sign in again." });
+    const body = z
+      .object({ current: z.string().min(1).max(1024), newPassword: z.string().max(1024).optional(), newPin: z.string().max(128).optional() })
+      .safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Invalid input" });
+    const { current, newPassword, newPin } = body.data;
+    try {
+      await auth.changeSecrets({ current, newPassword, newPin }, req.ip, token);
+      return { ok: true, signedOutOthers: newPassword !== undefined };
+    } catch (e) {
+      if (e instanceof LockoutError) {
+        const seconds = Math.max(1, Math.ceil(e.retryAfterMs / 1000));
+        return reply.code(429).header("retry-after", seconds).send({ error: `Too many wrong passwords. Try again in ${waitText(seconds)}.`, retryAfterSeconds: seconds });
+      }
+      if ((e as Error).message === "Invalid credentials") {
+        const state = auth.loginState(req.ip);
+        const seconds = Math.ceil(state.retryAfterMs / 1000);
+        if (seconds > 0) return reply.code(401).send({ error: `Wrong password. Locked for ${waitText(seconds)}.`, triesLeft: 0, retryAfterSeconds: seconds });
+        return reply.code(401).send({ error: "The current password is wrong.", triesLeft: state.triesLeft });
+      }
+      return reply.code(400).send({ error: (e as Error).message });
+    }
+  });
+
   const pairLimiter = new RateLimiter(Date.now);
   app.post("/api/pair", async (req, reply) => {
     const body = z.object({ code: z.string().min(1).max(64), name: z.string().min(1).max(64) }).safeParse(req.body);
