@@ -159,4 +159,23 @@ create table channel_messages (
 create index channel_messages_ts on channel_messages (ts);
 `,
   },
+  {
+    id: 10,
+    sql: `
+create table report_schedules (
+  id integer primary key autoincrement,
+  name text not null,
+  broker text not null,
+  kind text not null,
+  time text not null,
+  days text not null,
+  channel text not null,
+  commentary integer not null default 0,
+  enabled integer not null default 1,
+  last_run_day text,
+  attempt_day text,
+  attempts integer not null default 0
+);
+`,
+  },
 ];
