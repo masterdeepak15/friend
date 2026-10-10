@@ -103,7 +103,7 @@ button { cursor: pointer; }
 .obj-doc th { color: var(--accent); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; }
 .obj-doc pre { overflow: auto; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); background: rgba(63, 216, 255, 0.05); font: 0.86rem/1.5 var(--mono); }
 .obj-doc blockquote { margin: 0.6em 0; padding-left: 12px; border-left: 2px solid var(--edge); color: var(--muted); }
-.obj-progress { display: grid; gap: 6px; min-width: 180px; }
+.obj-progress { display: grid; gap: 6px; min-width: 0; }
 .obj-progress-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .obj-progress-pct { font: 1.1rem var(--mono); font-variant-numeric: tabular-nums; }
 .obj-progress-bar { height: 8px; border: 1px solid var(--edge); background: rgba(63, 216, 255, 0.07); }
@@ -122,8 +122,8 @@ button { cursor: pointer; }
 .obj-countdown-time { font: 300 clamp(2rem, 6vw, 3.4rem) var(--mono); font-variant-numeric: tabular-nums; text-shadow: 0 0 14px var(--accent); }
 .obj-countdown.done .obj-countdown-time { color: var(--warn); text-shadow: 0 0 14px var(--warn); }
 .obj-media { display: flex; flex-direction: column; gap: 6px; width: 100%; max-height: 100%; }
-.obj-media img, .obj-media video { display: block; max-width: 100%; max-height: 62vh; margin: 0 auto; object-fit: contain; border: 1px solid var(--edge); background: #050b10; }
-.obj-pdf iframe { width: min(720px, 80vw); height: min(520px, 62vh); border: 1px solid var(--edge); background: #050b10; }
+.obj-media img, .obj-media video { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto; object-fit: contain; border: 1px solid var(--edge); background: #050b10; }
+.obj-pdf iframe { width: 100%; min-width: 0; height: min(520px, 62vh); border: 1px solid var(--edge); background: #050b10; }
 .obj-open { color: var(--accent); font-size: 0.82rem; letter-spacing: 0.1em; text-transform: uppercase; }
 .obj-gallery-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .obj-gallery-bar span { display: grid; justify-items: center; font-size: 0.86rem; color: var(--ink); }
