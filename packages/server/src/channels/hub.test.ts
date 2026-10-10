@@ -58,8 +58,8 @@ afterEach(() => {
 function make(setup: (c: Config) => void = () => {}, ask: (t: string, via: ChannelId) => Promise<string> = async (t) => `echo: ${t}`) {
   const dir = mkdtempSync(join(tmpdir(), "friend-channels-"));
   const config = loadConfig(dir);
-  config.channels.telegram = { enabled: true, botToken: TOKEN, ownerChatId: null };
-  config.channels.twilio = { enabled: true, accountSid: SID, authToken: AUTH, smsFrom: "+14155550100", whatsappFrom: "+14155550101", ownerNumber: "+919800000000" };
+  config.channels.telegram = { installed: true, enabled: true, botToken: TOKEN, ownerChatId: null };
+  config.channels.twilio = { installed: true, enabled: true, accountSid: SID, authToken: AUTH, smsFrom: "+14155550100", whatsappFrom: "+14155550101", ownerNumber: "+919800000000" };
   config.publicUrl = "https://friend.example.com";
   setup(config);
   const db = openDb(dir);

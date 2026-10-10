@@ -25,7 +25,7 @@ import { z } from "zod";
 import { runStageTool, type StageState } from "../stage";
 import { getToolDef, lexicalInsideRoots, pathArg, toolSpecs } from "../tools/registry";
 import { loadHistory, repairDangling, saveMessage } from "./history";
-import { languageNote } from "../voice/lang";
+import { devanagariLanguage, languageNote, voiceGender } from "../voice/lang";
 import { promptParts } from "./prompt";
 
 export const MAX_STEPS = 20;
@@ -54,6 +54,8 @@ export interface AgentDeps {
   media?: Pick<MediaStore, "present">;
   /** Sends messages and reads the inbox. Without it the message tools report they are unavailable. */
   channels?: Pick<ChannelHub, "send" | "inbox">;
+  /** One line about which integrations (Telegram, WhatsApp/SMS) are installed and how far they are, for the model's context. */
+  integrations?: { summary(): string };
   /** The owner's saved notes. Without it the memory tools report they are unavailable. */
   memory?: Memory;
   /** The owner's to-dos and reminders. Without it the task tools report they are unavailable. */
@@ -211,9 +213,9 @@ export class Agent {
           notes,
           localIso(new Date(d.tasks?.now() ?? Date.now())),
           isolated ? undefined : d.plugins?.skills(),
-          isolated ? undefined : d.mcp?.summary(),
+          isolated ? undefined : [d.mcp?.summary(), d.integrations?.summary()].filter(Boolean).join("\n") || undefined,
           member ? ctx.person!.name : undefined,
-          languageNote(text, ctx.spoken),
+          languageNote(text, ctx.spoken, voiceGender(devanagariLanguage(text) === "mr" || ctx.spoken?.toLowerCase().startsWith("mr") ? "mr" : "hi", { main: d.config.voice.ttsVoice, hindi: d.config.voice.hindiVoice || undefined, marathi: d.config.voice.marathiVoice || undefined })),
         );
         for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: isolated ? "guest" : "owner", messages, tools, signal: abort.signal })) {
           if (ev.type === "text_delta") {
@@ -438,7 +440,14 @@ export class Agent {
       return r.isError ? fail(text) : { text, isError: false };
     }
 
-    if (call.name.startsWith("connectors.") || call.name.startsWith("plugins.")) {
+    if (call.name === "integrations.open") {
+      const which = String(args.id);
+      ctx.emit({ type: "ui.open", panel: "plugins", integration: which });
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { id: which }, tier, ok: true });
+      return { text: `The plugins screen is open on the owner's display at ${which}, ready to configure. Tell them in one sentence what to do there.`, isError: false };
+    }
+
+    if (call.name.startsWith("connectors.") || call.name.startsWith("plugins.") || call.name.startsWith("integrations.")) {
       if (!d.admin) return fail("Managing connectors and plugins is not available.");
       try {
         const text = await d.admin.run(call.name, args);

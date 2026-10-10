@@ -4,6 +4,8 @@
  * voice. This works because the assistant is told to write Hindi and Marathi in Devanagari and English in Latin letters.
  */
 
+import { HINDI_VOICES, MARATHI_VOICES, VOICE_CHOICES } from "@friend/protocol";
+
 export type Script = "latin" | "devanagari";
 
 export interface Run {
@@ -89,11 +91,26 @@ export function planSpeech(sentence: string, voices: SpeechVoices): Part[] {
   return parts;
 }
 
+export type VoiceGender = "female" | "male";
+
+/** Whether the voice that speaks a language is a woman's or a man's, from the voices the owner chose (undefined when it is not known). */
+export function voiceGender(lang: "hi" | "mr" | "en", voices: { main?: string | undefined; hindi?: string | undefined; marathi?: string | undefined }): VoiceGender | undefined {
+  const id = (lang === "hi" ? voices.hindi : lang === "mr" ? voices.marathi : undefined) || voices.main;
+  return [...VOICE_CHOICES, ...HINDI_VOICES, ...MARATHI_VOICES].find((v) => v.id === id)?.gender;
+}
+
+/** How a speaker of that gender talks about themselves: Hindi and Marathi verbs change with it ("I am doing": करती / करता). */
+const SELF_FORMS: Record<"hi" | "mr", Record<VoiceGender, string>> = {
+  hi: { female: "मैं कर रही हूँ, मैं बता सकती हूँ, मैं गई, मैं थकी हूँ", male: "मैं कर रहा हूँ, मैं बता सकता हूँ, मैं गया, मैं थका हूँ" },
+  mr: { female: "मी करत आहे, मी सांगू शकते, मी गेले, मी थकले आहे", male: "मी करत आहे, मी सांगू शकतो, मी गेलो, मी थकलो आहे" },
+};
+
 /**
  * A line for the model about the language to answer in, or null when it is plain English. `spoken` is the language the
- * speech recognizer heard (for example "hi" or "mr"); typed text is judged by its script.
+ * speech recognizer heard (for example "hi" or "mr"); typed text is judged by its script. `gender` is the gender of the
+ * assistant's own voice: Hindi and Marathi verbs follow it, so a woman's voice must not say "मैं कर रहा हूँ".
  */
-export function languageNote(text: string, spoken?: string): string | null {
+export function languageNote(text: string, spoken?: string, gender?: VoiceGender): string | null {
   const dev = text.match(/[ऀ-ॿ]/g)?.length ?? 0;
   const latin = text.match(/[A-Za-z]/g)?.length ?? 0;
   const code = (spoken ?? "").toLowerCase().slice(0, 2);
@@ -101,7 +118,8 @@ export function languageNote(text: string, spoken?: string): string | null {
   if (!lang) return null;
   const name = lang === "mr" ? "Marathi" : "Hindi";
   const mixed = dev > 0 && latin > 0;
+  const self = gender ? ` Your voice is ${gender === "female" ? "a woman's" : "a man's"}, so always speak about yourself in the ${gender === "female" ? "feminine" : "masculine"} form (${SELF_FORMS[lang][gender]}), never the ${gender === "female" ? "masculine" : "feminine"}.` : "";
   return mixed
-    ? `Language: the owner is mixing ${name} and English. Answer the same way: ${name} in Devanagari script, English words in Latin letters.`
-    : `Language: the owner is speaking ${name}. Answer in ${name}, written in Devanagari script (not Roman letters), so your voice can read it. Keep English names and technical words in Latin letters.`;
+    ? `Language: the owner is mixing ${name} and English. Answer the same way: ${name} in Devanagari script, English words in Latin letters.${self}`
+    : `Language: the owner is speaking ${name}. Answer in ${name}, written in Devanagari script (not Roman letters), so your voice can read it. Keep English names and technical words in Latin letters.${self}`;
 }

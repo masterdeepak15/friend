@@ -15,6 +15,7 @@ import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
 import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
+import { changeIntegration, integrationSummary, integrationViews, isIntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -63,6 +64,8 @@ export interface AppOptions {
   approvalTimeoutMs?: number;
   /** How long a camera request waits for the browser's picture. */
   cameraTimeoutMs?: number;
+  /** How long after start the Hindi and Marathi voices are made ready in the background (tests use a long time so it never happens). */
+  warmLanguagesAfterMs?: number;
   /** How often the heartbeat looks for reminders that have come due. */
   heartbeatMs?: number;
   /** Where the agent's programs run. Defaults to throwaway Docker containers. */
@@ -141,7 +144,48 @@ export async function createApp(opts: AppOptions) {
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
   const hub = new McpHub(new ConnectorStore(opts.dataDir));
-  const admin = makeAdmin({ hub, plugins, dataDir: opts.dataDir, audit: (what, detail) => audit.log("agent", what, detail) });
+  /** Changes the integrations in memory and in the saved file (only this change reaches the file), then restarts what needs it. Returns the reason it could not be done. */
+  const changeChannels = (fn: (c: Config["channels"]) => string | null): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.channels);
+    if (err) return err;
+    fn(config.channels);
+    saveConfig(saved);
+    channelHub.apply();
+    return null;
+  };
+  const admin = makeAdmin({
+    hub,
+    plugins,
+    dataDir: opts.dataDir,
+    audit: (what, detail) => audit.log("agent", what, detail),
+    catalog: {
+      list: () => {
+        const have = new Set(plugins.list().map((p) => p.id));
+        return listCatalog(catalogDir).map((c) => ({ id: c.id, name: c.name, version: c.version, description: c.description, installed: have.has(c.id), error: c.error }));
+      },
+      install: (id) => {
+        if (!listCatalog(catalogDir).some((c) => c.id === id)) return { ok: false, error: "That plugin is not in the catalog." };
+        return plugins.install(join(catalogDir, id));
+      },
+    },
+    integrations: {
+      views: () => integrationViews(config, channelHub),
+      install: (id) => changeChannels((c) => changeIntegration(c, id, { install: true })),
+      remove: (id) => changeChannels((c) => changeIntegration(c, id, { remove: true })),
+      configure: (id, { enabled, settings }) => {
+        if (!config.channels[id].installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (Object.keys(settings).length) {
+          try {
+            commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
+          } catch (e) {
+            return (e as Error).message;
+          }
+        }
+        return enabled === undefined ? null : changeChannels((c) => changeIntegration(c, id, { enabled }));
+      },
+    },
+  });
   /** Validates, applies and saves a settings change, then tells the screens. Used by the settings screen and by the AI. */
   function commitSettings(patch: unknown, how: { actor: "owner" | "agent"; ip?: string; deferSwap?: boolean }): Applied {
     let applied: Applied;
@@ -216,6 +260,15 @@ export async function createApp(opts: AppOptions) {
     }
   }
 
+  /** At start the Hindi and Marathi voices are made ready quietly (a voice whose download was cut off is repaired here), so the first reply in that language does not wait. */
+  let languageWarm: NodeJS.Timeout | null = null;
+  const warmLanguagesQuietly = () => {
+    for (const wanted of [config.voice.hindiVoice, config.voice.marathiVoice]) {
+      if (!wanted || !voice || !voiceAvailable()) continue;
+      void voice.synthesize("Ready.", wanted).catch((e: Error) => audit.log("system", "voice.load_failed", { voice: wanted, message: e.message }));
+    }
+  };
+
   const agentSettings: AgentSettings = {
     get: () => settingsView(config),
     setView: (view) => {
@@ -265,6 +318,7 @@ export async function createApp(opts: AppOptions) {
     },
     media,
     channels: channelHub,
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub)) },
   });
 
   const clients = new Set<ClientConn>();
@@ -412,9 +466,16 @@ export async function createApp(opts: AppOptions) {
     list: () => {
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub) };
     },
     install: async (id, pin, ip) => {
+      if (isIntegrationId(id)) {
+        await requirePin(pin, ip);
+        const err = changeChannels((c) => changeIntegration(c, id, { install: true }));
+        if (err) throw new HttpError(400, err);
+        audit.log("owner", "plugin.installed", { id, integration: true, ip });
+        return { id, upgraded: false };
+      }
       if (!isPluginId(id)) throw new HttpError(400, "That is not a plugin name.");
       if (!listCatalog(catalogDir).some((c) => c.id === id)) throw new HttpError(404, "That plugin is not in the catalog.");
       await requirePin(pin, ip);
@@ -424,6 +485,16 @@ export async function createApp(opts: AppOptions) {
       return { id: r.id, upgraded: r.upgraded };
     },
     setEnabled: async (id, enabled, pin, ip) => {
+      if (isIntegrationId(id)) {
+        if (enabled) {
+          if (!pin) throw new HttpError(400, "Enter your PIN to switch a plugin on.");
+          await requirePin(pin, ip);
+        }
+        const err = changeChannels((c) => changeIntegration(c, id, { enabled }));
+        if (err) throw new HttpError(400, err);
+        audit.log("owner", enabled ? "plugin.enabled" : "plugin.disabled", { id, integration: true, ip });
+        return;
+      }
       if (!isPluginId(id) || !plugins.list().some((p) => p.id === id)) throw new HttpError(404, "There is no such plugin.");
       if (enabled) {
         if (!pin) throw new HttpError(400, "Enter your PIN to switch a plugin on.");
@@ -437,6 +508,11 @@ export async function createApp(opts: AppOptions) {
       audit.log("owner", "plugin.reloaded", {});
     },
     remove: (id) => {
+      if (isIntegrationId(id)) {
+        changeChannels((c) => changeIntegration(c, id, { remove: true }));
+        audit.log("owner", "plugin.removed", { id, integration: true });
+        return;
+      }
       if (!isPluginId(id) || !plugins.remove(id)) throw new HttpError(404, "There is no such plugin.");
       audit.log("owner", "plugin.removed", { id });
     },
@@ -861,6 +937,7 @@ export async function createApp(opts: AppOptions) {
       heartbeat.start();
       hub.startAll(); // connectors that were on come back in the background; Friend does not wait for them
       channelHub.apply(); // Telegram starts listening when it is switched on
+      languageWarm = setTimeout(warmLanguagesQuietly, opts.warmLanguagesAfterMs ?? 20_000);
       timer = setInterval(() => {
         const gone = stage.expire();
         for (const id of gone) broadcast({ type: "stage", command: { cmd: "hide", id } });
@@ -872,6 +949,7 @@ export async function createApp(opts: AppOptions) {
       stopped = true;
       heartbeat.stop();
       channelHub.stop();
+      if (languageWarm) clearTimeout(languageWarm);
       if (timer) clearInterval(timer);
       challenges.clear();
       camera.cancelAll(broadcast);

@@ -21,9 +21,24 @@ export interface CatalogPlugin {
   installed: boolean;
 }
 
+/** A built-in integration (Telegram, WhatsApp and SMS): added from the plugins screen, then configured. */
+export interface IntegrationEntry {
+  id: string;
+  name: string;
+  description: string;
+  installed: boolean;
+  enabled: boolean;
+  /** not-installed, needs-setup, off, connecting, online or error. */
+  state: "not-installed" | "needs-setup" | "off" | "connecting" | "online" | "error";
+  /** What is wrong or what to do next, in one line. */
+  detail: string;
+  steps: { text: string; done: boolean }[];
+}
+
 export interface PluginList {
   installed: InstalledPlugin[];
   catalog: CatalogPlugin[];
+  integrations?: IntegrationEntry[];
 }
 
 export interface PluginsApi {

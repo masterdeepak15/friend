@@ -73,6 +73,8 @@ export interface StageViewState {
   speaker: { name: string | null; trust: "owner" | "member" | "guest" | "unverified"; seq: number } | null;
   /** What the profile badge calls the owner (empty: "Owner"). */
   ownerName: string;
+  /** The assistant asked for the plugins screen to be opened (at one integration's Configure page). `n` changes with every request. */
+  uiOpen: { n: number; integration?: string } | null;
 }
 
 export const DEFAULT_CLIENT_LOOK: ClientLook = { size: 1, reactivity: 0.7, ambient: true, captions: true, captionSize: "medium" };
@@ -100,6 +102,7 @@ export const initialState: StageViewState = {
   camera: { enabled: false, stream: null },
   speaker: null,
   ownerName: "",
+  uiOpen: null,
 };
 
 export interface ChatLine {
@@ -208,6 +211,8 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return applyStage(state, m.command);
     case "chat.user":
       return { ...state, chat: capChat([...state.chat, { role: "user", text: m.text }]), chatLive: false };
+    case "ui.open":
+      return { ...state, uiOpen: { n: (state.uiOpen?.n ?? 0) + 1, ...(m.integration ? { integration: m.integration } : {}) } };
     case "ui":
       return { ...state, view: m.view, look: m.look ?? state.look, ownerName: m.ownerName ?? state.ownerName, viewKnown: true };
     case "caption.delta": {

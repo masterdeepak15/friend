@@ -79,6 +79,14 @@ describe("answering in the owner's language", () => {
     expect(provider.calls[0]!.context).toMatch(/Language: the owner is speaking Hindi\. Answer in Hindi, written in Devanagari script/);
   });
 
+  it("tells the model its voice is a woman's when the Hindi voice is, so it does not say मैं कर रहा हूँ", async () => {
+    const { provider, send } = await boot([[{ type: "text_delta", text: "ठीक है।" }, done]]);
+    send({ type: "chat.send", text: "आज मौसम कैसा है" });
+    await until(() => provider.calls.length === 1);
+    expect(provider.calls[0]!.context).toMatch(/Your voice is a woman's, so always speak about yourself in the feminine form \(मैं कर रही हूँ/);
+    expect(provider.calls[0]!.system).toMatch(/talk about yourself in the gender of your voice/);
+  });
+
   it("adds the mixing line when the owner mixes, and speaks the reply with the right voices", async () => {
     const { provider, voice, send } = await boot([[{ type: "text_delta", text: "आज का weather बहुत अच्छा है।" }, done]]);
     send({ type: "chat.send", text: "आज का weather बताओ" });

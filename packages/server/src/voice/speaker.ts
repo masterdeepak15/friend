@@ -142,18 +142,23 @@ export class Speaker {
         const main = typeof this.voiceName === "function" ? this.voiceName() : this.voiceName;
         // a sentence that mixes Hindi or Marathi with English is said in pieces, each with the voice for its language
         for (const part of planSpeech(sentence, { main, ...(this.languages?.() ?? {}) })) {
-          let wav: Buffer;
-          try {
-            wav = await this.voice.synthesize(part.text, part.voice);
-          } catch (e) {
-            this.audit.log("voice", "voice.tts_failed", { message: (e as Error).message });
-            if (part.voice === main) continue;
+          const attempt = async (voice: string | undefined): Promise<Buffer | null> => {
             try {
-              wav = await this.voice.synthesize(part.text, main); // that language's voice is not available: the main voice, rather than silence
-            } catch {
-              continue;
+              return await this.voice.synthesize(part.text, voice);
+            } catch (e) {
+              this.audit.log("voice", "voice.tts_failed", { message: (e as Error).message, voice: voice ?? "default" });
+              return null;
             }
+          };
+          let wav = await attempt(part.voice);
+          if (!wav && part.voice !== main) {
+            // that language's voice is not available: the other Devanagari voice reads the script far better than an English one, and anything beats silence
+            const langs = this.languages?.() ?? {};
+            const sibling = part.voice === langs.hindi ? langs.marathi : part.voice === langs.marathi ? langs.hindi : undefined;
+            if (sibling && sibling !== part.voice) wav = await attempt(sibling);
+            if (!wav) wav = await attempt(main);
           }
+          if (!wav) continue;
           if (!alive()) return; // interrupted while synthesizing
           const chunks = chunkBase64(wav);
           const id = `${job}-${clip++}`;

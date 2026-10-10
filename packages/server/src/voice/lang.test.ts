@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Audit } from "../audit";
 import { openDb } from "../db";
-import { devanagariLanguage, languageNote, planSpeech, splitRuns } from "./lang";
+import { devanagariLanguage, languageNote, planSpeech, splitRuns, voiceGender } from "./lang";
 import { FakeVoice } from "./service";
 import { Speaker, speechText, splitSentences } from "./speaker";
 
@@ -107,6 +107,31 @@ describe("telling the model which language to answer in", () => {
   });
 });
 
+describe("the gender of the assistant's own voice", () => {
+  it("comes from the voice that speaks the language", () => {
+    const voices = { main: "en_US-ryan-medium", hindi: "hi_IN-priyamvada-medium", marathi: "mr_IN-google-medium" };
+    expect(voiceGender("hi", voices)).toBe("female"); // the Hindi voice, not the male English one
+    expect(voiceGender("mr", voices)).toBe("female");
+    expect(voiceGender("en", voices)).toBe("male");
+    expect(voiceGender("hi", { main: "en_US-amy-medium", hindi: "hi_IN-rohan-medium" })).toBe("male");
+    expect(voiceGender("hi", { main: "en_US-amy-medium" })).toBe("female"); // no Hindi voice: the main voice reads it
+    expect(voiceGender("hi", { main: "en_US-lessac-medium" })).toBeUndefined(); // the original voice has no stated gender
+  });
+
+  it("is told to the model in the Hindi and Marathi note, with the right verb forms", () => {
+    const hi = languageNote("आज मौसम कैसा है", "hi", "female")!;
+    expect(hi).toMatch(/Your voice is a woman's.*feminine form.*मैं कर रही हूँ.*never the masculine/);
+    expect(languageNote("आज मौसम कैसा है", "hi", "male")!).toMatch(/man's.*masculine form.*मैं कर रहा हूँ.*never the feminine/);
+    expect(languageNote("आज हवामान कसे आहे?", undefined, "female")!).toMatch(/feminine form.*मी सांगू शकते/);
+    expect(languageNote("आज का weather बताओ", undefined, "female")!).toMatch(/mixing Hindi and English.*feminine form/);
+  });
+
+  it("adds nothing when the gender is not known, and nothing for English", () => {
+    expect(languageNote("आज मौसम कैसा है", "hi")).not.toMatch(/Your voice is/);
+    expect(languageNote("open my files", "en", "female")).toBeNull();
+  });
+});
+
 describe("the end of a Hindi sentence", () => {
   it("is the danda, which splits sentences like a full stop", () => {
     expect(splitSentences("आज मौसम अच्छा है। कल बारिश होगी। Okay.")).toEqual(["आज मौसम अच्छा है।", "कल बारिश होगी।", "Okay."]);
@@ -147,11 +172,20 @@ describe("speaking a mixed reply", () => {
     expect(voice.voicesUsed).toEqual(["mr_IN-google-medium"]);
   });
 
-  it("reads Hindi with the main voice rather than staying silent when the Hindi voice cannot be loaded", async () => {
+  it("reads Hindi with the Marathi voice, the other Devanagari voice, when the Hindi voice cannot be loaded", async () => {
     const voice = new FakeVoice({ failVoices: ["hi_IN-priyamvada-medium"] });
     await run(voice, "आज मौसम अच्छा है।");
-    expect(voice.voicesUsed).toEqual(["en_US-amy-medium"]);
+    expect(voice.voicesUsed).toEqual(["mr_IN-google-medium"]);
     expect(voice.synthesized).toEqual(["आज मौसम अच्छा है।"]);
+  });
+
+  it("reads Hindi with the main voice rather than staying silent when no Devanagari voice can be loaded", async () => {
+    const voice = new FakeVoice({ failVoices: ["hi_IN-priyamvada-medium", "mr_IN-google-medium"] });
+    await run(voice, "आज मौसम अच्छा है।");
+    expect(voice.voicesUsed).toEqual(["en_US-amy-medium"]);
+    const only = new FakeVoice({ failVoices: ["hi_IN-priyamvada-medium"] });
+    await run(only, "आज मौसम अच्छा है।", { hindi: "hi_IN-priyamvada-medium" });
+    expect(only.voicesUsed).toEqual(["en_US-amy-medium"]);
   });
 
   it("uses the main voice for everything when no language voices are set", async () => {

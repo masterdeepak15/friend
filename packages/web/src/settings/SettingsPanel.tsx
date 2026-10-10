@@ -3,19 +3,17 @@ import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
 import { SecurityTab } from "./SecurityTab";
-import { ChannelsTab, type ChannelSecrets } from "./ChannelsTab";
 import { HINDI_VOICES, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, isCatalogVoice } from "@friend/protocol";
 import { DEFAULT_LOOK, diffSettings, type ApprovalMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
-export type SettingsTab = "model" | "voice" | "look" | "approvals" | "channels" | "security";
+export type SettingsTab = "model" | "voice" | "look" | "approvals" | "security";
 
 const TABS: { id: SettingsTab; label: string; note: string }[] = [
   { id: "model", label: "Model", note: "Where Friend thinks" },
   { id: "voice", label: "Voice", note: "Speaking and listening" },
   { id: "look", label: "Voice presence", note: "How it looks" },
   { id: "approvals", label: "Approvals", note: "How much it asks" },
-  { id: "channels", label: "Channels", note: "Telegram, WhatsApp, SMS" },
   { id: "security", label: "Security", note: "Password and PIN" },
 ];
 
@@ -54,7 +52,6 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [apiKey, setApiKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
-  const [channelSecrets, setChannelSecrets] = useState<ChannelSecrets>({ telegramToken: "", twilioToken: "" });
   const [asking, setAsking] = useState(false);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -108,7 +105,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
     );
   }
 
-  const patch = diffSettings(saved, draft, apiKey, openaiKey, channelSecrets);
+  const patch = diffSettings(saved, draft, apiKey, openaiKey);
   const dirty = Object.keys(patch).length > 0;
   const set = <G extends "ollama" | "claudeCode" | "voice" | "look">(group: G, field: keyof SettingsView[G], value: unknown) =>
     setDraft({ ...draft, [group]: { ...draft[group], [field]: value } });
@@ -134,7 +131,6 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       setDraft(structuredClone(r.settings));
       setApiKey("");
       setOpenaiKey("");
-      setChannelSecrets({ telegramToken: "", twilioToken: "" });
       setAsking(false);
       const newVoice = patch.voice && (patch.voice as Record<string, unknown>).ttsVoice !== undefined;
       setNote(
@@ -506,7 +502,6 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           {tab === "voice" && voiceTab}
           {tab === "look" && lookTab}
           {tab === "approvals" && approvalsTab}
-          {tab === "channels" && <ChannelsTab draft={draft} setDraft={setDraft} secrets={channelSecrets} setSecrets={setChannelSecrets} />}
           {tab === "security" && <SecurityTab />}
         </div>
       </div>

@@ -2,8 +2,8 @@ export type ApprovalMode = "manual" | "edits" | "auto";
 
 /** Telegram, SMS and WhatsApp as the screen sees them: the tokens themselves are never sent here. */
 export interface ChannelsView {
-  telegram: { enabled: boolean; tokenSet: boolean; linked: boolean };
-  twilio: { enabled: boolean; accountSid: string; tokenSet: boolean; smsFrom: string; whatsappFrom: string; ownerNumber: string };
+  telegram: { installed: boolean; enabled: boolean; tokenSet: boolean; linked: boolean };
+  twilio: { installed: boolean; enabled: boolean; accountSid: string; tokenSet: boolean; smsFrom: string; whatsappFrom: string; ownerNumber: string };
 }
 export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
 
@@ -117,25 +117,13 @@ export async function playVoicePreview(voice: string): Promise<void> {
 }
 
 /** Only what the owner actually changed, in the shape the server accepts. `apiKey` is sent only when something was typed. */
-export function diffSettings(before: SettingsView, after: SettingsView, apiKey: string, openaiKey = "", channelSecrets = { telegramToken: "", twilioToken: "" }): Record<string, unknown> {
+export function diffSettings(before: SettingsView, after: SettingsView, apiKey: string, openaiKey = ""): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   if (after.provider !== before.provider) patch.provider = after.provider;
   if (after.model !== before.model) patch.model = after.model;
   if (after.view !== before.view) patch.view = after.view;
   if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
   if ((after.approvals ?? "manual") !== (before.approvals ?? "manual")) patch.approvals = after.approvals ?? "manual";
-  if (before.channels && after.channels) {
-    const telegram: Record<string, unknown> = {};
-    if (after.channels.telegram.enabled !== before.channels.telegram.enabled) telegram.enabled = after.channels.telegram.enabled;
-    if (channelSecrets.telegramToken.trim()) telegram.botToken = channelSecrets.telegramToken.trim();
-    const twilio: Record<string, unknown> = {};
-    for (const k of ["enabled", "accountSid", "smsFrom", "whatsappFrom", "ownerNumber"] as const) if (after.channels.twilio[k] !== before.channels.twilio[k]) twilio[k] = after.channels.twilio[k];
-    if (channelSecrets.twilioToken.trim()) twilio.authToken = channelSecrets.twilioToken.trim();
-    const channels: Record<string, unknown> = {};
-    if (Object.keys(telegram).length) channels.telegram = telegram;
-    if (Object.keys(twilio).length) channels.twilio = twilio;
-    if (Object.keys(channels).length) patch.channels = channels;
-  }
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
   for (const group of ["ollama", "claudeCode", "voice", "look"] as const) {
     const changed: Record<string, unknown> = {};

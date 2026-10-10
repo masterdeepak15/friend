@@ -41,8 +41,8 @@ describe("setting channels up from the screen", () => {
     expect(body).not.toContain(TOKEN);
     expect(body).not.toContain("secret-auth");
     expect(JSON.parse(body).settings.channels).toEqual({
-      telegram: { enabled: true, tokenSet: true, linked: false },
-      twilio: { enabled: true, accountSid: SID, tokenSet: true, smsFrom: "+14155550100", whatsappFrom: "", ownerNumber: "+919800000000" },
+      telegram: { installed: true, enabled: true, tokenSet: true, linked: false },
+      twilio: { installed: true, enabled: true, accountSid: SID, tokenSet: true, smsFrom: "+14155550100", whatsappFrom: "", ownerNumber: "+919800000000" },
     });
     // saved in the file, and the status route shows no secrets either
     expect(loadConfig(dir).channels.telegram.botToken).toBe(TOKEN);

@@ -37,13 +37,14 @@ export interface Config {
 }
 
 export interface ChannelsConfig {
-  telegram: { enabled: boolean; botToken: string | null; /** The one chat that is the owner (set by /link). */ ownerChatId: number | null };
-  twilio: { enabled: boolean; accountSid: string; authToken: string | null; smsFrom: string; whatsappFrom: string; /** The owner's own phone number, in international form. */ ownerNumber: string };
+  /** `installed`: the owner added it from the plugins screen (or an earlier version configured it). `enabled`: it is switched on. */
+  telegram: { installed: boolean; enabled: boolean; botToken: string | null; /** The one chat that is the owner (set by /link). */ ownerChatId: number | null };
+  twilio: { installed: boolean; enabled: boolean; accountSid: string; authToken: string | null; smsFrom: string; whatsappFrom: string; /** The owner's own phone number, in international form. */ ownerNumber: string };
 }
 
 export const DEFAULT_CHANNELS: ChannelsConfig = {
-  telegram: { enabled: false, botToken: null, ownerChatId: null },
-  twilio: { enabled: false, accountSid: "", authToken: null, smsFrom: "", whatsappFrom: "", ownerNumber: "" },
+  telegram: { installed: false, enabled: false, botToken: null, ownerChatId: null },
+  twilio: { installed: false, enabled: false, accountSid: "", authToken: null, smsFrom: "", whatsappFrom: "", ownerNumber: "" },
 };
 
 /** A phone number in international form, digits with an optional leading +. Anything else is dropped. */
@@ -56,11 +57,14 @@ export function sanitizeChannels(raw: unknown): ChannelsConfig {
   const str = (v: unknown, max = 200) => (typeof v === "string" ? v.trim().slice(0, max) : "");
   return {
     telegram: {
+      // anything an earlier version already set up counts as installed
+      installed: t.installed === true || (t.installed === undefined && (t.enabled === true || !!str(t.botToken))),
       enabled: t.enabled === true,
       botToken: str(t.botToken) || null,
       ownerChatId: typeof t.ownerChatId === "number" && Number.isSafeInteger(t.ownerChatId) ? t.ownerChatId : null,
     },
     twilio: {
+      installed: w.installed === true || (w.installed === undefined && (w.enabled === true || !!str(w.authToken) || !!str(w.accountSid))),
       enabled: w.enabled === true,
       accountSid: str(w.accountSid, 64),
       authToken: str(w.authToken) || null,

@@ -99,6 +99,8 @@ button { cursor: pointer; }
 .obj-table th, .obj-table td { padding: 6px 10px; border-bottom: 1px solid rgba(63, 216, 255, 0.18); font-variant-numeric: tabular-nums; }
 .obj-code { margin: 0; overflow: auto; font: 0.86rem/1.5 var(--mono); }
 .obj-empty { margin: 0; color: var(--muted); }
+.integration-steps { margin: 4px 0 10px; padding-left: 1.2rem; display: grid; gap: 4px; font-size: 0.86rem; color: var(--muted); }
+.integration-steps li.done { color: var(--ok); }
 .obj-doc { max-height: 70vh; overflow: auto; }
 .obj-doc h1, .obj-doc h2, .obj-doc h3, .obj-doc h4 { color: var(--accent); letter-spacing: 0.06em; font-weight: 500; }
 .obj-doc table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }

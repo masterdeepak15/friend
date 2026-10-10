@@ -16,7 +16,7 @@ export const MEMBER_TOOLS = new Set(["weather.get", "stage.scene", "stage.show",
 const EDIT_TOOLS = new Set(["fs.list", "fs.read", "fs.write", "code.run"]);
 
 /** Tools that widen what Friend can do (connectors, plugins). They always ask, in every approval mode. */
-const isAdminTool = (tool: string) => tool.startsWith("connectors.") || tool.startsWith("plugins.");
+const isAdminTool = (tool: string) => tool.startsWith("connectors.") || tool.startsWith("plugins.") || tool.startsWith("integrations.");
 
 export type Decision = "allow" | "ask" | "ask_with_pin" | "deny";
 

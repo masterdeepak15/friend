@@ -93,7 +93,7 @@ export class ChannelHub {
     this.tgAbort = null;
     this.tgBot = null;
     const t = this.cfg.telegram;
-    if (!t.enabled || !t.botToken) {
+    if (!t.installed || !t.enabled || !t.botToken) {
       this.tgState = "off";
       this.tgDetail = "";
       return;
@@ -260,7 +260,7 @@ export class ChannelHub {
     const l = this.link;
     if (!l || l.expires <= this.now()) {
       this.link = null;
-      return void (await this.sendRaw("telegram", String(chat), "There is no link code waiting. Create one on the Friend screen: Settings, Channels."));
+      return void (await this.sendRaw("telegram", String(chat), "There is no link code waiting. Create one on the Friend screen: Plugins, Telegram, Configure."));
     }
     const a = Buffer.from(code.toUpperCase());
     const b = Buffer.from(l.code);
@@ -311,14 +311,16 @@ export class ChannelHub {
     try {
       if (channel === "telegram") {
         const t = this.cfg.telegram;
-        if (!t.enabled || !t.botToken) return { ok: false, error: "Telegram is not switched on. The owner sets it up in Settings, Channels." };
+        if (!t.installed) return { ok: false, error: "Telegram is not installed. The owner (or you, with their PIN) can install it from the plugins screen." };
+        if (!t.enabled || !t.botToken) return { ok: false, error: "Telegram is not switched on. The owner finishes setting it up in Plugins, Telegram, Configure." };
         const target = to === "me" || to === "owner" ? t.ownerChatId : /^-?\d{3,15}$/.test(to) ? Number(to) : null;
         if (target === null) return { ok: false, error: to === "me" || to === "owner" ? "Telegram is not linked to the owner yet." : "A Telegram recipient is a chat number, or \"me\"." };
         await this.sendRaw("telegram", String(target), body);
         return { ok: true, summary: `Sent on Telegram${to === "me" || to === "owner" ? " to the owner" : ""}.` };
       }
       const w = this.cfg.twilio;
-      if (!w.enabled || !w.authToken || !w.accountSid) return { ok: false, error: `${CHANNEL_LABEL[channel]} is not switched on. The owner sets it up in Settings, Channels.` };
+      if (!w.installed) return { ok: false, error: `${CHANNEL_LABEL[channel]} is not installed. The owner (or you, with their PIN) can install "WhatsApp and SMS (Twilio)" from the plugins screen.` };
+      if (!w.enabled || !w.authToken || !w.accountSid) return { ok: false, error: `${CHANNEL_LABEL[channel]} is not switched on. The owner finishes setting it up in Plugins, WhatsApp and SMS, Configure.` };
       const number = to === "me" || to === "owner" ? w.ownerNumber : phoneNumber(to);
       if (!number) return { ok: false, error: "A phone number is needed, in international form such as +919800000000." };
       await this.sendRaw(channel, number, body);
@@ -358,7 +360,7 @@ export class ChannelHub {
   /** A message arrived from Twilio. Returns "forbidden" for a wrong signature, "off" when Twilio is not switched on. */
   handleTwilio(url: string, params: Record<string, string>, signature: string | undefined): "ok" | "forbidden" | "off" {
     const w = this.cfg.twilio;
-    if (!w.enabled || !w.authToken) return "off";
+    if (!w.installed || !w.enabled || !w.authToken) return "off";
     const expected = Buffer.from(ChannelHub.twilioSignature(w.authToken, url, params));
     const given = Buffer.from(signature ?? "");
     if (expected.length !== given.length || !timingSafeEqual(expected, given)) {

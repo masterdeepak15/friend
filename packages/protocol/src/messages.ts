@@ -86,6 +86,8 @@ export const ServerMsg = z.discriminatedUnion("type", [
   /** Stop: the request was answered elsewhere, timed out, or the emergency lock fired. */
   z.object({ type: z.literal("camera.cancel"), id: z.string() }),
   /** The owner approved a look at the screen: draw this page into a picture and upload it. */
+  /** Opens a panel on the owner's screen (the assistant sends it so the owner can finish a step, such as pasting a token). */
+  z.object({ type: z.literal("ui.open"), panel: z.literal("plugins"), integration: z.string().max(40).optional() }),
   z.object({ type: z.literal("screen.request"), id: z.string() }),
   z.object({ type: z.literal("screen.cancel"), id: z.string() }),
   z.object({ type: z.literal("snapshot"), stage: StageSnapshot, pendingApproval: PendingApproval.nullable().optional() }),

@@ -35,6 +35,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [enrolling, setEnrolling] = useState(false);
   const [household, setHousehold] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);
+  const [pluginFocus, setPluginFocus] = useState<string | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState<null | "model" | "look">(null);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [menuRequest, setMenuRequest] = useState(0);
@@ -65,6 +66,15 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     }
     if (!seen) dispatch({ type: "alert.add", level: "info", text: "Hold the round mic button to talk, or tap it once to start and again to send. The keyboard button types; the menu button opens settings." });
   }, [coarse, state.connection, dispatch]);
+
+  // The assistant can open the plugins screen at one integration's Configure page (to paste a token, for example).
+  const openN = state.uiOpen?.n ?? 0;
+  const openTarget = state.uiOpen?.integration;
+  useEffect(() => {
+    if (openN === 0) return;
+    setPluginFocus(openTarget);
+    setManagingPlugins(true);
+  }, [openN, openTarget]);
 
   // The earlier conversation, loaded once the connection is up, for the chat panel.
   const seeded = useRef(false);
@@ -155,7 +165,15 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         {state.viewKnown && panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
         {household && <HouseholdPanel onClose={() => setHousehold(false)} />}
-        {managingPlugins && <PluginsPanel onClose={() => setManagingPlugins(false)} />}
+        {managingPlugins && (
+          <PluginsPanel
+            {...(pluginFocus ? { initialConfigure: pluginFocus } : {})}
+            onClose={() => {
+              setManagingPlugins(false);
+              setPluginFocus(undefined);
+            }}
+          />
+        )}
         {settingsOpen && <SettingsPanel initialTab={settingsOpen} onClose={() => setSettingsOpen(null)} />}
         {connectorsOpen && <ConnectorsPanel onClose={() => setConnectorsOpen(false)} />}
         {help && <HelpPanel commands={help} onClose={() => setHelp(null)} />}

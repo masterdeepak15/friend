@@ -113,8 +113,8 @@ export interface SettingsView {
   approvals: Config["approvals"];
   /** The tokens themselves are never sent to the screen. */
   channels: {
-    telegram: { enabled: boolean; tokenSet: boolean; linked: boolean };
-    twilio: { enabled: boolean; accountSid: string; tokenSet: boolean; smsFrom: string; whatsappFrom: string; ownerNumber: string };
+    telegram: { installed: boolean; enabled: boolean; tokenSet: boolean; linked: boolean };
+    twilio: { installed: boolean; enabled: boolean; accountSid: string; tokenSet: boolean; smsFrom: string; whatsappFrom: string; ownerNumber: string };
   };
   look: Config["look"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
@@ -133,8 +133,8 @@ export function settingsView(c: Config): SettingsView {
     ownerName: c.ownerName,
     approvals: c.approvals,
     channels: {
-      telegram: { enabled: c.channels.telegram.enabled, tokenSet: !!c.channels.telegram.botToken, linked: c.channels.telegram.ownerChatId !== null },
-      twilio: { enabled: c.channels.twilio.enabled, accountSid: c.channels.twilio.accountSid, tokenSet: !!c.channels.twilio.authToken, smsFrom: c.channels.twilio.smsFrom, whatsappFrom: c.channels.twilio.whatsappFrom, ownerNumber: c.channels.twilio.ownerNumber },
+      telegram: { installed: c.channels.telegram.installed, enabled: c.channels.telegram.enabled, tokenSet: !!c.channels.telegram.botToken, linked: c.channels.telegram.ownerChatId !== null },
+      twilio: { installed: c.channels.twilio.installed, enabled: c.channels.twilio.enabled, accountSid: c.channels.twilio.accountSid, tokenSet: !!c.channels.twilio.authToken, smsFrom: c.channels.twilio.smsFrom, whatsappFrom: c.channels.twilio.whatsappFrom, ownerNumber: c.channels.twilio.ownerNumber },
     },
     look: { ...c.look },
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
@@ -236,11 +236,13 @@ export function applySettings(config: Config, raw: unknown): Applied {
   if (p.channels) {
     const { telegram, twilio } = p.channels;
     if (telegram) {
+      config.channels.telegram.installed = true; // configuring it is installing it
       if (telegram.enabled !== undefined) config.channels.telegram.enabled = telegram.enabled;
       if (telegram.botToken) config.channels.telegram.botToken = telegram.botToken;
     }
     if (twilio) {
       const t = config.channels.twilio;
+      t.installed = true;
       if (twilio.enabled !== undefined) t.enabled = twilio.enabled;
       if (twilio.accountSid !== undefined) t.accountSid = twilio.accountSid;
       if (twilio.authToken) t.authToken = twilio.authToken;

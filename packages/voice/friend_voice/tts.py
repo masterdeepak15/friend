@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import shutil
+import tempfile
 import threading
 from pathlib import Path
 from typing import Optional
@@ -24,11 +26,21 @@ def ensure_voice(voice: str, download_dir: Path) -> Path:
     """Return the path to a voice's .onnx model, downloading it first if it is missing."""
     check_voice_name(voice)
     model = download_dir / f"{voice}.onnx"
-    if not model.exists():
-        from piper.download_voices import download_voice
+    config = download_dir / f"{voice}.onnx.json"
+    if model.exists() and config.exists():
+        return model
+    from piper.download_voices import download_voice
 
-        download_dir.mkdir(parents=True, exist_ok=True)
-        download_voice(voice, download_dir)
+    download_dir.mkdir(parents=True, exist_ok=True)
+    # An earlier download that was cut off (the program stopped, the network dropped) leaves a half model, or a model
+    # without its config. Download into a scratch folder and move the finished files in, so that never stays behind.
+    staging = Path(tempfile.mkdtemp(prefix=f"{voice}.", dir=download_dir))
+    try:
+        download_voice(voice, staging)
+        (staging / f"{voice}.onnx").replace(model)
+        (staging / f"{voice}.onnx.json").replace(config)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     return model
 
 
