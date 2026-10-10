@@ -12,6 +12,14 @@ export interface BrokersView {
   skipDates: string[];
   loginReminderMinutes: number;
 }
+/** The Alexa settings as the screen sees them: allowed Echo ids are shortened. */
+export interface AlexaView {
+  installed: boolean;
+  enabled: boolean;
+  skillId: string;
+  invocationName: string;
+  allowed: { id: string; name: string }[];
+}
 export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
 
 export interface SettingsView {
@@ -28,6 +36,7 @@ export interface SettingsView {
   brokers?: BrokersView;
   /** What Friend may do with money. Only "read" exists in this version. */
   trading?: { level: "read" };
+  alexa?: AlexaView;
   look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */

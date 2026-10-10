@@ -898,7 +898,7 @@ export async function createApp(opts: AppOptions) {
       status: () => alexaHub.status(),
       allow: async (short, name, pin, ip) => {
         await requirePin(pin, ip);
-        if (!alexaHub.devices.allow(short, name)) throw new HttpError(404, "That Echo is not waiting, or the list is full.");
+        if (!alexaHub.devices.allow(short, name || `Echo ${short.slice(-4)}`)) throw new HttpError(404, "That Echo is not waiting, or the list is full.");
         audit.log("owner", "alexa.allowed", { ip });
         return { ok: true };
       },

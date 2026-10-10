@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { TelegramForm, TwilioForm, httpChannelsApi, type ChannelStatus, type ChannelsApi } from "../settings/ChannelsTab";
-import { httpSettingsApi, type BrokersView, type ChannelsView, type SettingsApi } from "../settings/settingsApi";
+import { httpSettingsApi, type AlexaView, type BrokersView, type ChannelsView, type SettingsApi } from "../settings/settingsApi";
+import { AlexaForm, alexaProblem, httpAlexaApi, type AlexaApi } from "./AlexaForm";
 import { ZerodhaForm, httpBrokersApi, type BrokersApi } from "./ZerodhaForm";
 import type { IntegrationEntry } from "./pluginsApi";
 
@@ -12,6 +13,8 @@ const EMPTY: ChannelsView = {
 };
 
 const EMPTY_BROKERS: BrokersView = { zerodha: { installed: false, enabled: false, apiKey: "", secretSet: false }, timezone: "Asia/Kolkata", skipDates: [], loginReminderMinutes: 15 };
+
+const EMPTY_ALEXA: AlexaView = { installed: false, enabled: false, skillId: "", invocationName: "", allowed: [] };
 
 /**
  * The Configure page of one integration. What is typed here is saved with the owner's PIN, like every other setting; the
@@ -23,17 +26,21 @@ export function IntegrationConfig({
   settingsApi = httpSettingsApi,
   channelsApi = httpChannelsApi,
   brokersApi = httpBrokersApi,
+  alexaApi = httpAlexaApi,
 }: {
   integration: IntegrationEntry;
   onBack: () => void;
   settingsApi?: SettingsApi;
   channelsApi?: ChannelsApi;
   brokersApi?: BrokersApi;
+  alexaApi?: AlexaApi;
 }) {
   const [saved, setSaved] = useState<ChannelsView | null>(null);
   const [draft, setDraft] = useState<ChannelsView>(EMPTY);
   const [savedB, setSavedB] = useState<BrokersView | null>(null);
   const [draftB, setDraftB] = useState<BrokersView>(EMPTY_BROKERS);
+  const [savedA, setSavedA] = useState<AlexaView | null>(null);
+  const [draftA, setDraftA] = useState<AlexaView>(EMPTY_ALEXA);
   const [secret, setSecret] = useState("");
   const [status, setStatus] = useState<ChannelStatus | null>(null);
   const [asking, setAsking] = useState(false);
@@ -44,6 +51,7 @@ export function IntegrationConfig({
   const alive = useRef(true);
   const isTelegram = integration.id === "telegram";
   const isZerodha = integration.id === "zerodha";
+  const isAlexa = integration.id === "alexa";
 
   useEffect(() => {
     alive.current = true;
@@ -57,6 +65,9 @@ export function IntegrationConfig({
         const br = s.brokers ?? EMPTY_BROKERS;
         setSavedB(br);
         setDraftB(structuredClone(br));
+        const al = s.alexa ?? EMPTY_ALEXA;
+        setSavedA(al);
+        setDraftA(structuredClone(al));
       })
       .catch((e: Error) => alive.current && setError(e.message));
     channelsApi.status().then((s) => alive.current && setStatus(s)).catch(() => {});
@@ -67,6 +78,13 @@ export function IntegrationConfig({
 
   // only what was changed goes to the server
   const patch = (): Record<string, unknown> => {
+    if (isAlexa) {
+      if (!savedA) return {};
+      const a: Record<string, unknown> = {};
+      if (draftA.skillId.trim() !== savedA.skillId) a.skillId = draftA.skillId.trim();
+      if (draftA.invocationName.trim() !== savedA.invocationName) a.invocationName = draftA.invocationName.trim();
+      return Object.keys(a).length ? { alexa: a } : {};
+    }
     if (isZerodha) {
       if (!savedB) return {};
       const z: Record<string, unknown> = {};
@@ -101,6 +119,9 @@ export function IntegrationConfig({
       const br = r.settings.brokers ?? EMPTY_BROKERS;
       setSavedB(br);
       setDraftB(structuredClone(br));
+      const al = r.settings.alexa ?? EMPTY_ALEXA;
+      setSavedA(al);
+      setDraftA(structuredClone(al));
       setSecret("");
       setAsking(false);
       setNote(isTelegram && !integration.enabled ? "Saved. Now press Turn on in the plugins list." : "Saved.");
@@ -155,8 +176,10 @@ export function IntegrationConfig({
           </li>
         ))}
       </ol>
+      {isAlexa && savedA && <AlexaForm view={draftA} setView={setDraftA} api={alexaApi} />}
       {isZerodha && savedB && <ZerodhaForm view={draftB} setView={setDraftB} secret={secret} setSecret={setSecret} api={brokersApi} />}
       {!isZerodha &&
+        !isAlexa &&
         saved &&
         (isTelegram ? (
           <TelegramForm view={{ ...draft.telegram, enabled: integration.enabled }} secret={secret} setSecret={setSecret} api={channelsApi} />
@@ -170,7 +193,7 @@ export function IntegrationConfig({
         </p>
       )}
       <div className="approval-actions">
-        <button type="button" style={touch} className="primary" disabled={!dirty || busy} onClick={() => setAsking(true)}>
+        <button type="button" style={touch} className="primary" disabled={!dirty || busy || (isAlexa && alexaProblem(draftA) !== null)} onClick={() => setAsking(true)}>
           {dirty ? "Save…" : "Save"}
         </button>
         <button type="button" style={touch} onClick={onBack}>
