@@ -49,7 +49,7 @@ describe("plugin routes", () => {
     const cookie = await boot();
     const before = (await (await api(cookie, "GET", "")).json()) as { installed: unknown[]; catalog: { id: string; installed: boolean; tools: number; skills: number }[] };
     expect(before.installed).toEqual([]);
-    expect(before.catalog.map((c) => c.id).sort()).toEqual(["rubber-duck", "standup-writer", "unit-converter"]);
+    expect(before.catalog.map((c) => c.id).sort()).toEqual(["portfolio-assistant", "rubber-duck", "standup-writer", "unit-converter"]);
     expect(before.catalog.every((c) => !c.installed)).toBe(true);
     expect(before.catalog.find((c) => c.id === "unit-converter")).toMatchObject({ tools: 1, skills: 0, name: "Unit converter" });
   });

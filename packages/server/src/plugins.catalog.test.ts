@@ -10,8 +10,8 @@ const catalog = resolve(dirname(fileURLToPath(import.meta.url)), "../../../plugi
 const ids = readdirSync(catalog);
 
 describe("bundled catalog", () => {
-  it("contains the three example plugins", () => {
-    expect(ids.sort()).toEqual(["rubber-duck", "standup-writer", "unit-converter"]);
+  it("contains the example plugins and the portfolio skill", () => {
+    expect(ids.sort()).toEqual(["portfolio-assistant", "rubber-duck", "standup-writer", "unit-converter"]);
   });
 
   it.each(ids)("%s is a valid plugin and its folder name is its id", (id) => {
