@@ -4,16 +4,23 @@ import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
 import { SecurityTab } from "./SecurityTab";
 import { HINDI_VOICES, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, isCatalogVoice } from "@friend/protocol";
-import { DEFAULT_LOOK, diffSettings, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
+import { DEFAULT_LOOK, diffSettings, type ApprovalMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
-export type SettingsTab = "model" | "voice" | "look" | "security";
+export type SettingsTab = "model" | "voice" | "look" | "approvals" | "security";
 
 const TABS: { id: SettingsTab; label: string; note: string }[] = [
   { id: "model", label: "Model", note: "Where Friend thinks" },
   { id: "voice", label: "Voice", note: "Speaking and listening" },
   { id: "look", label: "Voice presence", note: "How it looks" },
+  { id: "approvals", label: "Approvals", note: "How much it asks" },
   { id: "security", label: "Security", note: "Password and PIN" },
+];
+
+const APPROVAL_CHOICES: { id: ApprovalMode; label: string; note: string }[] = [
+  { id: "manual", label: "Ask me (manual)", note: "Friend asks before anything that changes your PC or leaves the safe zone. The most careful." },
+  { id: "edits", label: "Auto-approve file work (edits)", note: "Reading and writing files, and the sandboxed code runner, go ahead without asking. Commands still ask." },
+  { id: "auto", label: "Auto-approve everything safe (auto)", note: "Commands, files and tools go ahead without asking. The most convenient, and the most trust: Friend acts on its own." },
 ];
 
 const PROVIDERS: { id: ProviderName; label: string; note: string }[] = [
@@ -451,6 +458,24 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
     </div>
   );
 
+  const mode = draft.approvals ?? "manual";
+  const approvalsTab = (
+    <div className="settings-section" role="radiogroup" aria-label="How much Friend asks before acting">
+      <h3>How much should Friend ask?</h3>
+      {APPROVAL_CHOICES.map((c) => (
+        <label key={c.id} className="settings-check" style={{ alignItems: "flex-start" }}>
+          <input type="radio" name="approvals" value={c.id} checked={mode === c.id} onChange={() => setDraft({ ...draft, approvals: c.id })} />
+          <span>
+            <b>{c.label}</b>
+            <br />
+            <small className="auth-note">{c.note}</small>
+          </span>
+        </label>
+      ))}
+      <small className="auth-note">Whatever you pick, these still ask: risky commands (they need your PIN), the camera, adding connectors or plugins, and anything in Friend's own data folder. Changing this needs your PIN.</small>
+    </div>
+  );
+
   return shell(
     <>
       <div className="settings-layout">
@@ -476,6 +501,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           {tab === "model" && modelTab}
           {tab === "voice" && voiceTab}
           {tab === "look" && lookTab}
+          {tab === "approvals" && approvalsTab}
           {tab === "security" && <SecurityTab />}
         </div>
       </div>

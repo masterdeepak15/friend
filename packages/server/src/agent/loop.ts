@@ -387,7 +387,8 @@ export class Agent {
     const p = pathArg(call.name, args);
     const insideRoots = p === undefined ? true : lexicalInsideRoots(p, d.config.roots);
 
-    const decision = d.policy.decide({ tool: call.name, baseTier: tier, args, trust: ctx.trust, insideRoots });
+    const protectedPath = p !== undefined && lexicalInsideRoots(p, [d.config.dataDir]);
+    const decision = d.policy.decide({ tool: call.name, baseTier: tier, args, trust: ctx.trust, insideRoots, protectedPath });
     let approvedOutside = false;
     const device = def.target === "device" ? d.devices.targetName() : null;
     if (decision === "deny") {

@@ -16,6 +16,8 @@ export const SettingsPatch = z
     view: ViewPreset,
     /** What the profile badge calls the owner. Empty clears it. */
     ownerName: z.string().trim().max(40),
+    /** How much Friend asks before acting. Loosening it is a change that needs the PIN. */
+    approvals: z.enum(["manual", "edits", "auto"]),
     look: z
       .object({
         style: PresenceStyle,
@@ -84,6 +86,7 @@ export interface SettingsView {
   apiKeySet: boolean;
   view: Config["view"];
   ownerName: string;
+  approvals: Config["approvals"];
   look: Config["look"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** The key itself is never sent to the screen. */
@@ -99,6 +102,7 @@ export function settingsView(c: Config): SettingsView {
     apiKeySet: !!c.apiKey,
     view: c.view,
     ownerName: c.ownerName,
+    approvals: c.approvals,
     look: { ...c.look },
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
     openai: { url: c.openai.url, model: c.openai.model, vision: !!c.openai.vision, apiKeySet: !!c.openai.apiKey },
@@ -124,6 +128,7 @@ export function refuseForAgent(raw: unknown): void {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const cc = (r.claudeCode && typeof r.claudeCode === "object" ? r.claudeCode : {}) as Record<string, unknown>;
   const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
+  if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
   if ("apiKey" in r || "apiKey" in oa) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
   if ("command" in cc) throw new SettingsError("The Claude Code command can only be changed by the owner on the settings screen.");
 }
@@ -193,6 +198,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
 
   config.provider = next.provider;
   if (p.view) config.view = p.view;
+  if (p.approvals) config.approvals = p.approvals;
   if (p.ownerName !== undefined) config.ownerName = p.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
   if (p.look) config.look = sanitizeLook({ ...config.look, ...p.look });
   if (p.model) config.model = p.model;

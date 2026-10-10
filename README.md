@@ -131,6 +131,7 @@ Connectors (Gmail, Chrome control, any MCP service) are managed inside the app, 
 | Key | What it is |
 |---|---|
 | `provider` | Which model answers: `claude` (API key), `claude-code` (your subscription), `ollama` (this PC) or `openai` (any OpenAI-compatible server, such as OmniRoute). |
+| `approvals` | How much Friend asks before acting: `manual` (asks every time, the default), `edits` (file work and the sandboxed code runner go ahead) or `auto` (commands and tools go ahead too). Risky commands (they need your PIN), the camera, adding connectors or plugins, and Friend's own data folder always ask, in every mode. The AI cannot change this. Easier: Esc → Settings → Approvals. |
 | `ownerName` | Your name, shown on the profile badge (a shield in the corner) while you are signed in; it shows whoever Friend just recognized when they speak. Empty shows "Owner". |
 | `apiKey`, `model` | The Anthropic API key and the Claude model used with it. |
 | `claudeCode.model`, `claudeCode.command`, `claudeCode.fallback` | The subscription route: model (`sonnet`, `haiku`, `opus`), the command that starts Claude Code, and `ollama` or `none` for what to use when Claude is unavailable. |

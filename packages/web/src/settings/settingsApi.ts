@@ -1,3 +1,4 @@
+export type ApprovalMode = "manual" | "edits" | "auto";
 export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
 
 export interface SettingsView {
@@ -8,6 +9,8 @@ export interface SettingsView {
   view: "minimal" | "companion" | "workspace";
   /** What the profile badge calls the owner. */
   ownerName?: string;
+  /** How much Friend asks before acting. */
+  approvals?: ApprovalMode;
   look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
@@ -113,6 +116,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if (after.model !== before.model) patch.model = after.model;
   if (after.view !== before.view) patch.view = after.view;
   if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
+  if ((after.approvals ?? "manual") !== (before.approvals ?? "manual")) patch.approvals = after.approvals ?? "manual";
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
   for (const group of ["ollama", "claudeCode", "voice", "look"] as const) {
     const changed: Record<string, unknown> = {};

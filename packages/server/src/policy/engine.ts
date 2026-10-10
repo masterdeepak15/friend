@@ -12,6 +12,12 @@ export const ASK_EVERY_TIME = new Set(["camera.snap"]);
  */
 export const MEMBER_TOOLS = new Set(["weather.get", "stage.scene", "stage.show", "stage.update", "stage.hide", "stage.presence", "stage.mood"]);
 
+/** What the "edits" approval mode lets through without asking: reading and writing files, and the sandboxed code runner. */
+const EDIT_TOOLS = new Set(["fs.list", "fs.read", "fs.write", "code.run"]);
+
+/** Tools that widen what Friend can do (connectors, plugins). They always ask, in every approval mode. */
+const isAdminTool = (tool: string) => tool.startsWith("connectors.") || tool.startsWith("plugins.");
+
 export type Decision = "allow" | "ask" | "ask_with_pin" | "deny";
 
 export interface DecideInput {
@@ -20,13 +26,22 @@ export interface DecideInput {
   args: unknown;
   trust: Trust;
   insideRoots: boolean;
+  /** The path is inside Friend's own data folder (its database, settings and keys): no approval mode skips the question. */
+  protectedPath?: boolean;
 }
 
 export class PolicyEngine {
   private rules: RuleStore;
 
-  constructor(db: Db, _config: Config) {
+  constructor(db: Db, private config: Config) {
     this.rules = new RuleStore(db);
+  }
+
+  /** Whether the approval mode lets this tool go ahead without a card. Risky (T3) actions never get here. */
+  private modeAllows(tool: string, protectedPath: boolean | undefined): boolean {
+    if (protectedPath || isAdminTool(tool)) return false;
+    const mode = this.config.approvals;
+    return mode === "auto" || (mode === "edits" && EDIT_TOOLS.has(tool));
   }
 
   decide(input: DecideInput): Decision {
@@ -40,7 +55,8 @@ export class PolicyEngine {
         return "allow";
       case "T2":
         if (ASK_EVERY_TIME.has(input.tool)) return "ask";
-        return this.rules.matches(input.tool, input.args) ? "allow" : "ask";
+        if (this.rules.matches(input.tool, input.args)) return "allow";
+        return this.modeAllows(input.tool, input.protectedPath) ? "allow" : "ask";
       case "T3":
         return "ask_with_pin";
     }

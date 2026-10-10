@@ -29,8 +29,13 @@ export interface Config {
   look: LookConfig;
   /** What the profile badge on the screen calls the owner. Empty shows "Owner". */
   ownerName: string;
+  /** How much Friend asks before acting: manual (asks), edits (files and sandboxed code go ahead) or auto (everything but risky things goes ahead). */
+  approvals: ApprovalMode;
   dataDir: string;
 }
+
+export type ApprovalMode = "manual" | "edits" | "auto";
+export const APPROVAL_MODES: readonly ApprovalMode[] = ["manual", "edits", "auto"];
 
 export type ProviderName = "claude" | "ollama" | "claude-code" | "openai";
 
@@ -211,6 +216,7 @@ const defaults = (dataDir: string): Config => ({
   view: "companion",
   look: { ...DEFAULT_LOOK },
   ownerName: "",
+  approvals: "manual",
   dataDir,
 });
 
@@ -253,6 +259,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     view: stored.view === "minimal" || stored.view === "workspace" ? stored.view : "companion",
     look: sanitizeLook(stored.look),
     ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",
+    approvals: stored.approvals === "edits" || stored.approvals === "auto" ? stored.approvals : "manual",
     dataDir,
   };
 }

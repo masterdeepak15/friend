@@ -41,6 +41,10 @@ const PARSERS: Record<string, (v: string) => unknown> = {
     if (name.length > 40) throw new Error("The name can be at most 40 characters");
     return name;
   },
+  approvals: (v) => {
+    if (v !== "manual" && v !== "edits" && v !== "auto") throw new Error("approvals must be manual, edits or auto");
+    return v;
+  },
   https: bool,
   port: (v) => {
     const n = Number(v);
@@ -125,6 +129,7 @@ export const KEY_HELP: Record<string, string> = {
   port: "the web port (easier: friend lan port N)",
   https: "true serves a secure https:// address (Friend makes its own certificate), so a phone may use the microphone (easier: friend lan https on)",
   publicUrl: "the address people use when Friend is behind your own domain, or empty",
+  approvals: "how much Friend asks before acting: manual (asks every time), edits (file work and sandboxed code go ahead) or auto (everything goes ahead except risky commands, the camera and changes to connectors/plugins). Easier: Esc → Settings → Approvals",
   ownerName: "your name, shown on the profile badge (the shield) in the corner of the screen; empty shows Owner",
   roots: "folders Friend may read and write freely, separated by commas",
   allowedOrigins: "extra web addresses allowed to connect, separated by commas",
