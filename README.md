@@ -336,6 +336,15 @@ A plugin: Esc → **Plugins** → **Zerodha** → **Install** (PIN) → **Config
 - **Privacy.** The figures you ask about pass through the AI model you chose (Claude from Anthropic, or Ollama on this PC); a report goes to the messaging app you pick (Telegram or WhatsApp). The audit log records that a report was made, never the amounts.
 - **More brokers.** A broker is one file implementing the `BrokerProvider` contract plus the shared contract tests (`runBrokerContract`); reports, tools and screens do not change.
 
+## Alexa (plugin)
+
+A plugin: Esc → **Plugins** → **Alexa** → **Install** (PIN) → **Configure**. You make a small private skill in your own Amazon developer account (free, left in development mode, never published) and Friend is its server, so "Alexa, ask jarvis assistant how my portfolio is" is answered by Friend, aloud and on the Friend screen if one is open. No AWS account and no paid plan. The full walk-through is in [docs/guides/alexa-setup.md](docs/guides/alexa-setup.md).
+
+- **What it does.** Fixed questions (portfolio, weather, tasks, status) are answered straight from Friend's tools. Open questions ("how...", "what...", "tell me...", "show me...", "remind me...", "please...") go to the assistant. English (India) and Hindi (India); Marathi is not available on Alexa.
+- **What it cannot do.** Alexa cannot make an Echo speak on its own (use an Alexa Routine for a scheduled spoken report), and a slow answer is held ("Still working. Ask me if it is ready.") because Alexa waits only about 8 seconds.
+- **Safe by design.** Every request is checked as really from Amazon (certificate, signature, 150-second timestamp), for your skill, from an Echo you allowed with your PIN. The voice can only read: anything that would ask you is sent to your Telegram or WhatsApp for a YES (or skipped), and anything needing your PIN is refused. The assistant cannot change Alexa settings.
+- **Setup.** Friend needs a public HTTPS address with a real certificate (`friend config set publicUrl https://your-address`). The Configure page shows the endpoint, lets you download the skill files (manifest and English and Hindi models) to paste into the console, and lists your Echo devices. If your address changes later, paste the new endpoint into the console again; nothing else changes.
+
 ## Pictures first: weather, stats and graphics
 
 Friend is meant to show answers, not only say them. It controls the whole screen and picks the object that fits (gauge, chart, table, timeline, graph, or its own animated page).
