@@ -91,18 +91,28 @@ describe("RoutedAudio", () => {
     expect([local.volume, spot.volume]).toEqual([0.8, 0.8]);
   });
 
-  it("passes events from either to the listener, and removes them from both", () => {
+  it("passes events only from the engine that is playing, and removes them from both", () => {
     const { r, local, spot } = make();
     const fn = vi.fn();
     r.addEventListener("ended", fn);
-    r.src = "spotify:4uLU6hMCjMI75M1A2tKUQC"; // the engine is built after the listener was added
     local.emit("ended");
+    expect(fn).toHaveBeenCalledTimes(1);
+    spot.emit("ended"); // not built yet: nothing to hear
+    r.src = "spotify:4uLU6hMCjMI75M1A2tKUQC"; // the engine is built after the listener was added
+    local.emit("ended"); // the folder element is not the one playing now
+    expect(fn).toHaveBeenCalledTimes(1);
     spot.emit("ended");
     expect(fn).toHaveBeenCalledTimes(2);
+    r.src = "/api/music/track/0123456789abcdef";
+    spot.emit("error"); // a late error from Spotify must not skip a folder track
+    spot.emit("ended");
+    expect(fn).toHaveBeenCalledTimes(2);
+    local.emit("ended");
+    expect(fn).toHaveBeenCalledTimes(3);
     r.removeEventListener("ended", fn);
     local.emit("ended");
     spot.emit("ended");
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fn).toHaveBeenCalledTimes(3);
   });
 
   it("clearing the source stops whichever is playing", () => {

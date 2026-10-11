@@ -204,9 +204,11 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
     };
     const meta = () => dispatch({ type: "time", position: a.currentTime || 0, duration: Number.isFinite(a.duration) ? a.duration : 0 });
     const ended = () => dispatch({ type: "ended" });
+    // a file that will not play is skipped; when Spotify cannot play, every track would fail the same way, so it stops and says why
     const failed = () => {
-      setNotice((a as RoutedAudio).error ?? null);
-      dispatch({ type: "failed" });
+      const why = (a as RoutedAudio).error ?? null;
+      setNotice(why);
+      dispatch(why ? { type: "pause" } : { type: "failed" });
     };
     a.addEventListener("timeupdate", time);
     a.addEventListener("loadedmetadata", meta);

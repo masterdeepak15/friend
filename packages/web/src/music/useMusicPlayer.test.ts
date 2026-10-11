@@ -217,6 +217,24 @@ describe("tracks from Spotify", () => {
     expect(result.current.blocked).toBe(false);
   });
 
+  it("stops, instead of skipping through the queue, when Spotify cannot play (every track would fail the same way)", async () => {
+    engine = Object.assign(new FakeAudio(), { error: null as string | null });
+    engine.play = () => {
+      engine.plays++;
+      engine.error = "Spotify Premium is needed to play on this screen.";
+      engine.fire("error");
+      return Promise.reject(new Error(engine.error));
+    };
+    const queue = ["4uLU6hMCjMI75M1A2tKUQC", "7qiZfU4dY1lWllzX7mPBI3", "0VjIjW4GlUZAMYd2vXMi3b"].map(spot);
+    const { result } = renderHook(() => useMusicPlayer({ music, cmd: play(1, queue), send: (m) => sent.push(m), connection: "open", createAudio: () => audio, createSpotify: () => engine }));
+    await act(async () => {});
+    await act(async () => {});
+    expect(engine.plays).toBe(1);
+    expect(result.current.state.playing).toBe(false);
+    expect(result.current.state.index).toBe(0);
+    expect(result.current.notice).toMatch(/Premium/);
+  });
+
   it("reports a Spotify track to the server in a message the server accepts", async () => {
     const { ClientMsg } = await import("@friend/protocol");
     mountWithSpotify(play(1, [spot("4uLU6hMCjMI75M1A2tKUQC")]));

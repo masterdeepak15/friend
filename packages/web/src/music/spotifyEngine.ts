@@ -22,6 +22,8 @@ export interface SpotifyEngineDeps {
   /** The name Spotify shows for this screen in its list of devices. */
   deviceName?: string;
   now?: () => number;
+  /** How long to wait for Spotify's player to say it is ready before giving up (default 15 seconds). */
+  readyTimeoutMs?: number;
 }
 
 export type SpotifyEngine = PlayerAudio & { error: string | null };
@@ -66,8 +68,8 @@ export function createSpotifyEngine(d: SpotifyEngineDeps): SpotifyEngine {
   const now = d.now ?? Date.now;
   const listeners = new Map<string, Set<() => void>>();
   let player: SpotifyPlayer | null = null;
-  let ready: Promise<string> | null = null;
-  let rejectReady: ((e: Error) => void) | null = null;
+  let deviceId: string | null = null;
+  let waiting: { promise: Promise<string>; resolve: (id: string) => void; reject: (e: Error) => void } | null = null;
   let uri: string | null = null;
   let badSrc = false;
   let startedUri: string | null = null;
@@ -140,7 +142,9 @@ export function createSpotifyEngine(d: SpotifyEngineDeps): SpotifyEngine {
     async play() {
       if (badSrc || !uri) throw new Error("That is not a Spotify track.");
       const m = REF.exec(uri)!;
-      const deviceId = await connect();
+      const mine = uri;
+      const device = await connect();
+      if (uri !== mine) return; // another track was chosen while this one was starting: that one starts itself
       if (startedUri === uri) {
         await player?.resume().catch(() => {});
         isPaused = false;
@@ -152,7 +156,7 @@ export function createSpotifyEngine(d: SpotifyEngineDeps): SpotifyEngine {
       if (!token) throw fail("Spotify is not connected. Connect it in Plugins, Spotify.");
       let res: Response;
       try {
-        res = await doFetch(`https://api.spotify.com/v1/me/player/play?device_id=${encodeURIComponent(deviceId)}`, {
+        res = await doFetch(`https://api.spotify.com/v1/me/player/play?device_id=${encodeURIComponent(device)}`, {
           method: "PUT",
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
           body: JSON.stringify({ uris: [`spotify:track:${m[1]}`] }),
@@ -165,7 +169,8 @@ export function createSpotifyEngine(d: SpotifyEngineDeps): SpotifyEngine {
       if (res.status === 404) throw fail("Spotify could not find this screen or that track.");
       if (res.status === 429) throw fail("Spotify is asking Friend to slow down. Try again in a minute.");
       if (!res.ok) throw fail("Spotify could not play that.");
-      startedUri = uri;
+      if (uri !== mine) return; // changed while Spotify was answering: do not mark the new track as started
+      startedUri = mine;
       isPaused = false;
       posAt = now();
       startTicker();
@@ -193,7 +198,9 @@ export function createSpotifyEngine(d: SpotifyEngineDeps): SpotifyEngine {
     stopTicker();
     emit("error");
     const e = new Error(message);
-    rejectReady?.(e);
+    const w = waiting;
+    waiting = null;
+    w?.reject(e);
     return e;
   }
 
@@ -214,41 +221,66 @@ export function createSpotifyEngine(d: SpotifyEngineDeps): SpotifyEngine {
     }
   }
 
+  /**
+   * The id of this screen as a Spotify device, once Spotify's player is ready. One player is made and kept; a failure never makes
+   * another, a later "ready" updates the id, and a player that never answers is given up on after a while.
+   */
   function connect(): Promise<string> {
-    if (ready) return ready;
-    ready = (async () => {
-      let sdk: SpotifySdk;
+    if (deviceId) return Promise.resolve(deviceId);
+    if (waiting) return waiting.promise;
+    let resolve!: (id: string) => void;
+    let reject!: (e: Error) => void;
+    const promise = new Promise<string>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    const w = { promise, resolve, reject };
+    waiting = w;
+    const timer = setTimeout(() => {
+      if (waiting === w) fail("Spotify's player did not start. Check that this browser allows Spotify's player, then try again.");
+    }, d.readyTimeoutMs ?? 15_000);
+    const clear = () => clearTimeout(timer);
+    promise.then(clear, clear);
+    void (async () => {
       try {
-        sdk = await (d.loadSdk ?? loadSpotifySdk)();
+        if (!player) {
+          let sdk: SpotifySdk;
+          try {
+            sdk = await (d.loadSdk ?? loadSpotifySdk)();
+          } catch {
+            if (waiting === w) fail("Spotify's player could not be loaded. Check that nothing blocks sdk.scdn.co.");
+            return;
+          }
+          const p = new sdk.Player({
+            name: d.deviceName ?? "Friend",
+            volume: effective(),
+            getOAuthToken: (cb) => {
+              void d.getToken().then(cb, () => {});
+            },
+          });
+          player = p;
+          p.addListener("ready", ((a: { device_id: string }) => {
+            deviceId = a.device_id;
+            const pending = waiting;
+            waiting = null;
+            pending?.resolve(a.device_id);
+          }) as never);
+          p.addListener("not_ready", (() => {
+            deviceId = null;
+          }) as never);
+          p.addListener("player_state_changed", ((st: SdkState | null) => onState(st)) as never);
+          p.addListener("account_error", (() => void fail(PREMIUM)) as never);
+          p.addListener("authentication_error", (() => void fail("Spotify sign-in has ended. Reconnect Spotify in Plugins, Spotify.")) as never);
+          p.addListener("initialization_error", (() => void fail("Spotify's player does not work in this browser.")) as never);
+          p.addListener("playback_error", (() => void fail("Spotify could not play that.")) as never);
+        }
+        const ok = await player.connect();
+        if (!ok && waiting === w) fail("Spotify's player could not connect.");
       } catch {
-        ready = null;
-        throw fail("Spotify's player could not be loaded. Check that nothing blocks sdk.scdn.co.");
+        if (waiting === w) fail("Spotify's player could not connect.");
       }
-      return new Promise<string>((resolve, reject) => {
-        rejectReady = (e) => {
-          ready = null;
-          reject(e);
-        };
-        const p = new sdk.Player({
-          name: d.deviceName ?? "Friend",
-          volume: effective(),
-          getOAuthToken: (cb) => {
-            void d.getToken().then(cb, () => {});
-          },
-        });
-        player = p;
-        p.addListener("ready", ((a: { device_id: string }) => resolve(a.device_id)) as never);
-        p.addListener("player_state_changed", ((s: SdkState | null) => onState(s)) as never);
-        p.addListener("account_error", (() => void fail(PREMIUM)) as never);
-        p.addListener("authentication_error", (() => void fail("Spotify sign-in has ended. Reconnect Spotify in Plugins, Spotify.")) as never);
-        p.addListener("initialization_error", (() => void fail("Spotify's player does not work in this browser.")) as never);
-        p.addListener("playback_error", (() => void fail("Spotify could not play that.")) as never);
-        void p.connect().then((ok) => {
-          if (!ok) void fail("Spotify's player could not connect.");
-        });
-      });
     })();
-    return ready;
+    return promise;
   }
 
   return engine;

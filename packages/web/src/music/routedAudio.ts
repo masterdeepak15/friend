@@ -11,6 +11,8 @@ export class RoutedAudio implements PlayerAudio {
   private active: PlayerAudio;
   private spotify: PlayerAudio | null = null;
   private listeners = new Map<string, Set<() => void>>();
+  /** The same listener, once for each engine, passing on only what the engine that is playing says. */
+  private wrapped = new Map<() => void, { local: () => void; spot: () => void }>();
   private vol = 1;
   private mute = false;
   private pre = "";
@@ -32,13 +34,29 @@ export class RoutedAudio implements PlayerAudio {
     return (this.active as PlayerAudio & { error?: string | null }).error ?? null;
   }
 
+  private wrap(fn: () => void): { local: () => void; spot: () => void } {
+    let w = this.wrapped.get(fn);
+    if (!w) {
+      w = {
+        local: () => {
+          if (this.active === this.local) fn();
+        },
+        spot: () => {
+          if (this.spotify && this.active === this.spotify) fn();
+        },
+      };
+      this.wrapped.set(fn, w);
+    }
+    return w;
+  }
+
   private spot(): PlayerAudio {
     if (!this.spotify) {
       const s = this.makeSpotify();
       s.volume = this.vol;
       s.muted = this.mute;
       s.preload = this.pre;
-      for (const [type, set] of this.listeners) for (const fn of set) s.addEventListener(type, fn);
+      for (const [type, set] of this.listeners) for (const fn of set) s.addEventListener(type, this.wrap(fn).spot);
       this.spotify = s;
     }
     return this.spotify;
@@ -107,12 +125,14 @@ export class RoutedAudio implements PlayerAudio {
     let set = this.listeners.get(type);
     if (!set) this.listeners.set(type, (set = new Set()));
     set.add(fn);
-    this.local.addEventListener(type, fn);
-    this.spotify?.addEventListener(type, fn);
+    const w = this.wrap(fn);
+    this.local.addEventListener(type, w.local);
+    this.spotify?.addEventListener(type, w.spot);
   }
   removeEventListener(type: string, fn: () => void): void {
     this.listeners.get(type)?.delete(fn);
-    this.local.removeEventListener(type, fn);
-    this.spotify?.removeEventListener(type, fn);
+    const w = this.wrap(fn);
+    this.local.removeEventListener(type, w.local);
+    this.spotify?.removeEventListener(type, w.spot);
   }
 }

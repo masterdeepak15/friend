@@ -27,19 +27,22 @@ class FakePlayer {
   setVolume = async (v: number) => void this.volumeSet.push(v);
 }
 
-function setup(over: { putStatus?: number; putBody?: unknown; autoReady?: boolean } = {}) {
+function setup(over: { putStatus?: number; putBody?: unknown; autoReady?: boolean; holdPut?: boolean; readyTimeoutMs?: number } = {}) {
+  const made: FakePlayer[] = [];
+  const held: (() => void)[] = [];
   autoReady = over.autoReady !== false;
   let player!: FakePlayer;
-  const sdk: SpotifySdk = { Player: class extends FakePlayer { constructor(o: ConstructorParameters<typeof FakePlayer>[0]) { super(o); player = this; } } as never };
+  const sdk: SpotifySdk = { Player: class extends FakePlayer { constructor(o: ConstructorParameters<typeof FakePlayer>[0]) { super(o); player = this; made.push(this); } } as never };
   const loadSdk = vi.fn(async () => sdk);
   const puts: { url: string; body: unknown; auth: string }[] = [];
   const fetchFn = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     puts.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null, auth: String((init?.headers as Record<string, string>)?.authorization ?? "") });
+    if (over.holdPut) await new Promise<void>((r) => held.push(r));
     return new Response(over.putBody ? JSON.stringify(over.putBody) : null, { status: over.putStatus ?? 204 });
   }) as unknown as typeof fetch;
   const getToken = vi.fn(async () => "TOKEN-1");
-  const e = createSpotifyEngine({ loadSdk, getToken, fetch: fetchFn, deviceName: "Friend", now: () => 1_000 });
-  return { e, loadSdk, getToken, puts, player: () => player };
+  const e = createSpotifyEngine({ loadSdk, getToken, fetch: fetchFn, deviceName: "Friend", now: () => 1_000, ...(over.readyTimeoutMs ? { readyTimeoutMs: over.readyTimeoutMs } : {}) });
+  return { e, loadSdk, getToken, puts, player: () => player, made, release: () => held.splice(0).forEach((r) => r()) };
 }
 
 const stateOf = (over: Record<string, unknown> = {}) => ({ paused: false, position: 12_000, duration: 200_000, track_window: { current_track: { id: "4uLU6hMCjMI75M1A2tKUQC" }, previous_tracks: [] }, ...over });
@@ -164,6 +167,59 @@ describe("the Spotify engine", () => {
     const e = createSpotifyEngine({ loadSdk: async () => { throw new Error("blocked"); }, getToken: async () => "T", fetch: (async () => new Response(null, { status: 204 })) as never });
     e.src = "spotify:4uLU6hMCjMI75M1A2tKUQC";
     await expect(e.play()).rejects.toThrow(/Spotify/);
+  });
+
+  it("keeps one player after a failure, and uses the device id Spotify announces last", async () => {
+    const bad = setup({ putStatus: 429 });
+    bad.e.src = "spotify:4uLU6hMCjMI75M1A2tKUQC";
+    await expect(bad.e.play()).rejects.toThrow();
+    bad.e.src = "spotify:7qiZfU4dY1lWllzX7mPBI3";
+    await expect(bad.e.play()).rejects.toThrow();
+    expect(bad.made).toHaveLength(1);
+    expect(bad.loadSdk).toHaveBeenCalledTimes(1);
+
+    const t = setup();
+    t.e.src = "spotify:4uLU6hMCjMI75M1A2tKUQC";
+    await t.e.play();
+    t.player().fire("ready", { device_id: "DEV2" });
+    t.e.src = "spotify:7qiZfU4dY1lWllzX7mPBI3";
+    await t.e.play();
+    expect(t.puts.at(-1)!.url).toContain("device_id=DEV2");
+    expect(t.made).toHaveLength(1);
+  });
+
+  it("a failure after the player was ready does not touch the next play's promise", async () => {
+    const t = setup();
+    t.e.src = "spotify:4uLU6hMCjMI75M1A2tKUQC";
+    await t.e.play();
+    t.player().fire("playback_error", {});
+    t.e.src = "spotify:7qiZfU4dY1lWllzX7mPBI3";
+    await expect(t.e.play()).resolves.toBeUndefined();
+  });
+
+  it("a track chosen while the last one is still starting is started in its own right", async () => {
+    const t = setup({ holdPut: true });
+    t.e.src = "spotify:4uLU6hMCjMI75M1A2tKUQC";
+    const first = t.e.play();
+    await vi.waitFor(() => expect(t.puts).toHaveLength(1));
+    t.e.src = "spotify:7qiZfU4dY1lWllzX7mPBI3";
+    t.release();
+    await first;
+    const second = t.e.play();
+    await vi.waitFor(() => expect(t.puts).toHaveLength(2));
+    t.release();
+    await second;
+    expect(t.puts[1]!.body).toEqual({ uris: ["spotify:track:7qiZfU4dY1lWllzX7mPBI3"] });
+  });
+
+  it("gives up with a sentence when Spotify's player never says it is ready", async () => {
+    const t = setup({ autoReady: false, readyTimeoutMs: 20 });
+    const failed = vi.fn();
+    t.e.addEventListener("error", failed);
+    t.e.src = "spotify:4uLU6hMCjMI75M1A2tKUQC";
+    await expect(t.e.play()).rejects.toThrow(/did not start/i);
+    expect(t.e.error).toMatch(/did not start/i);
+    expect(failed).toHaveBeenCalled();
   });
 
   it("refuses an address that is not a Spotify track ref", async () => {
