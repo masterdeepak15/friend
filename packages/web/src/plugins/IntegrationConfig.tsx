@@ -4,6 +4,7 @@ import { touch } from "../overlay/touch";
 import { TelegramForm, TwilioForm, httpChannelsApi, type ChannelStatus, type ChannelsApi } from "../settings/ChannelsTab";
 import { httpSettingsApi, type AlexaView, type BrokersView, type ChannelsView, type SettingsApi } from "../settings/settingsApi";
 import { AlexaForm, alexaProblem, httpAlexaApi, type AlexaApi } from "./AlexaForm";
+import { SpotifyForm, httpSpotifyApi, type SpotifyApi } from "./SpotifyForm";
 import { ZerodhaForm, httpBrokersApi, type BrokersApi } from "./ZerodhaForm";
 import type { IntegrationEntry } from "./pluginsApi";
 
@@ -32,6 +33,7 @@ export function IntegrationConfig({
   channelsApi = httpChannelsApi,
   brokersApi = httpBrokersApi,
   alexaApi = httpAlexaApi,
+  spotifyApi = httpSpotifyApi,
 }: {
   integration: IntegrationEntry;
   onBack: () => void;
@@ -39,6 +41,7 @@ export function IntegrationConfig({
   channelsApi?: ChannelsApi;
   brokersApi?: BrokersApi;
   alexaApi?: AlexaApi;
+  spotifyApi?: SpotifyApi;
 }) {
   const [saved, setSaved] = useState<ChannelsView | null>(null);
   const [draft, setDraft] = useState<ChannelsView>(EMPTY);
@@ -57,6 +60,7 @@ export function IntegrationConfig({
   const isTelegram = integration.id === "telegram";
   const isZerodha = integration.id === "zerodha";
   const isAlexa = integration.id === "alexa";
+  const isSpotify = integration.id === "spotify";
 
   useEffect(() => {
     alive.current = true;
@@ -83,6 +87,7 @@ export function IntegrationConfig({
 
   // only what was changed goes to the server
   const patch = (): Record<string, unknown> => {
+    if (isSpotify) return {}; // its client id, Connect and Disconnect each ask for the PIN themselves
     if (isAlexa) {
       if (!savedA) return {};
       const a: Record<string, unknown> = changedKeys(draftA, savedA, ALEXA_OPTION_KEYS);
@@ -182,10 +187,12 @@ export function IntegrationConfig({
           </li>
         ))}
       </ol>
+      {isSpotify && <SpotifyForm api={spotifyApi} />}
       {isAlexa && savedA && <AlexaForm view={draftA} setView={setDraftA} api={alexaApi} />}
       {isZerodha && savedB && <ZerodhaForm view={draftB} setView={setDraftB} secret={secret} setSecret={setSecret} api={brokersApi} />}
       {!isZerodha &&
         !isAlexa &&
+        !isSpotify &&
         saved &&
         (isTelegram ? (
           <TelegramForm view={{ ...draft.telegram, enabled: integration.enabled }} secret={secret} setSecret={setSecret} api={channelsApi} />
@@ -199,9 +206,11 @@ export function IntegrationConfig({
         </p>
       )}
       <div className="approval-actions">
-        <button type="button" style={touch} className="primary" disabled={!dirty || busy || (isAlexa && alexaProblem(draftA) !== null)} onClick={() => setAsking(true)}>
-          {dirty ? "Save…" : "Save"}
-        </button>
+        {!isSpotify && (
+          <button type="button" style={touch} className="primary" disabled={!dirty || busy || (isAlexa && alexaProblem(draftA) !== null)} onClick={() => setAsking(true)}>
+            {dirty ? "Save…" : "Save"}
+          </button>
+        )}
         <button type="button" style={touch} onClick={onBack}>
           Back
         </button>

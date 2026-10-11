@@ -26,6 +26,7 @@ import { HouseholdPanel } from "./voice/HouseholdPanel";
 import { QuickLaunch, type LauncherItem } from "./hud/QuickLaunch";
 import { MusicPlayerView } from "./music/MusicPlayer";
 import { commandToAction, useMusicPlayer } from "./music/useMusicPlayer";
+import { musicReturnNotice } from "./music/returnNotice";
 
 type Phase = "loading" | "setup" | "login" | "stage";
 
@@ -103,6 +104,17 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     setPluginFocus(openTarget);
     setManagingPlugins(true);
   }, [openN, openTarget]);
+
+  // Spotify's sign-in sends the owner back here with ?music=connected or ?music=failed: say which, and tidy the address.
+  const returned = useRef(false);
+  useEffect(() => {
+    if (returned.current) return;
+    returned.current = true;
+    const n = musicReturnNotice(window.location.search);
+    if (!n) return;
+    dispatch({ type: "alert.add", level: n.level, text: n.text });
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [dispatch]);
 
   // The earlier conversation, loaded once the connection is up, for the chat panel.
   const seeded = useRef(false);
