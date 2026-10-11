@@ -422,3 +422,37 @@ describe("playing SoundCloud through mpv", () => {
     expect(mpv.loads()).toHaveLength(0);
   });
 });
+
+describe("SoundCloud on the PC when SoundCloud itself is the problem", () => {
+  const sc = (n: number) => ({ id: `soundcloud:${n}`, title: `SC ${n}`, artist: "A", album: "", durationSec: 100 });
+  let streams: Record<string, { ok: true; url: string } | { ok: false; error: string }>;
+  beforeEach(() => {
+    streams = { "1001": { ok: true, url: "https://cf-media.sndcdn.com/a.mp3" }, "1002": { ok: true, url: "https://cf-media.sndcdn.com/b.mp3" } };
+    player.dispose();
+    player = new HostPlayer({
+      library: { ready: async () => {}, resolve: async () => null },
+      mpv: mpv as never,
+      spotify: sp as never,
+      soundcloud: { streamOf: async (id: string) => streams[id] ?? { ok: false as const, error: "SoundCloud does not let this account play that track." } },
+      settings: () => settings,
+      emit: (s) => void emitted.push(s),
+    });
+  });
+
+  it("a failed fetch again does not carry the old position into the next track, nor count one failure twice", async () => {
+    await player.command(play([sc(1001) as never, sc(1002) as never]));
+    mpv.fire({ type: "time", position: 130, duration: 200 });
+    streams["1001"] = { ok: false, error: "SoundCloud could not renew the sign-in just now. Try again in a minute." };
+    mpv.fire({ type: "failed", reason: "mpv could not open or play that file." });
+    await vi.waitFor(() => expect(player.state().trackId).toBe("soundcloud:1002"));
+    expect(mpv.calls.filter((c) => c[0] === "seek")).toHaveLength(0);
+    expect(mpv.loads()).toEqual(["https://cf-media.sndcdn.com/a.mp3", "https://cf-media.sndcdn.com/b.mp3"]);
+  });
+
+  it("a login or connection problem stops playback with SoundCloud's own sentence", async () => {
+    streams["1001"] = { ok: false, error: "Reconnect SoundCloud in Plugins, SoundCloud." };
+    const r = await player.command(play([sc(1001) as never]));
+    expect(r.ok).toBe(false);
+    expect(r.text).toContain("Reconnect SoundCloud");
+  });
+});

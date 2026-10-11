@@ -96,7 +96,7 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
           <option value="local">The music folder</option>
           <option value="spotify">Spotify</option>
           <option value="soundcloud">SoundCloud</option>
-          <option value="any">Both</option>
+          <option value="any">All</option>
         </select>
         <small className="auth-note">Spotify and SoundCloud are added from Plugins. Playing from Spotify needs Spotify Premium on your account.</small>
       </label>

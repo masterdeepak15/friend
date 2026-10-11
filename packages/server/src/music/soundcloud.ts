@@ -147,7 +147,8 @@ export class SoundCloudHub implements MusicSource {
     return freshToken("soundcloud", this.d.tokens, (rt) => this.tokenRequest({ grant_type: "refresh_token", refresh_token: rt }), this.now);
   }
 
-  private async api<T>(path: string, retry = true): Promise<T | null> {
+  /** `forbiddenIsNull`: for one track, a 403 means this account may not play it (blocked, region, plan), not that the login is bad. */
+  private async api<T>(path: string, retry = true, forbiddenIsNull = false): Promise<T | null> {
     const token = await this.accessToken();
     if (!token) {
       if (this.d.tokens.needsReconnect("soundcloud")) throw new Error(RECONNECT);
@@ -157,8 +158,9 @@ export class SoundCloudHub implements MusicSource {
     if (res.status === 401 && retry) {
       const login = this.d.tokens.load("soundcloud");
       if (login) this.d.tokens.save("soundcloud", { ...login, expiresAt: 0 });
-      return this.api<T>(path, false);
+      return this.api<T>(path, false, forbiddenIsNull);
     }
+    if (res.status === 403 && forbiddenIsNull) return null;
     if (res.status === 429) throw new Error("SoundCloud is asking Friend to slow down. Try again in a minute.");
     if (res.status === 404) return null;
     if (res.status === 401 || res.status === 403) throw new Error("SoundCloud refused that request. Reconnect SoundCloud in Plugins, SoundCloud.");
@@ -201,7 +203,7 @@ export class SoundCloudHub implements MusicSource {
 
   async track(id: string): Promise<SourceTrack | null> {
     if (!ID.test(id)) return null;
-    const j = await this.api<ApiTrack>(`/tracks/${id}`);
+    const j = await this.api<ApiTrack>(`/tracks/${id}`, true, true);
     return j ? this.of(j) : null;
   }
 
@@ -209,7 +211,7 @@ export class SoundCloudHub implements MusicSource {
   async streamOf(id: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
     if (!ID.test(id)) return { ok: false, error: "That is not a SoundCloud track." };
     try {
-      const j = await this.api<{ http_mp3_128_url?: unknown }>(`/tracks/${id}/streams`);
+      const j = await this.api<{ http_mp3_128_url?: unknown }>(`/tracks/${id}/streams`, true, true);
       if (!j) return { ok: false, error: "SoundCloud does not let this account play that track." };
       const url = j.http_mp3_128_url;
       if (typeof url !== "string" || !isSoundCloudAddress(url)) return { ok: false, error: "SoundCloud gave no playable address for that track." };
@@ -226,11 +228,20 @@ export class SoundCloudHub implements MusicSource {
       if (!isSoundCloudAddress(next)) return { ok: false, error: "SoundCloud sent the audio somewhere Friend will not follow." };
       let res: Response;
       try {
-        res = await (this.d.fetch ?? fetch)(next, { redirect: "manual", headers: range ? { range } : {}, ...(signal ? { signal } : {}) });
+        // a CDN that never answers must not hold the request open: the headers have eight seconds, the body then streams freely
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), this.d.requestTimeoutMs ?? 8000);
+        const stop = signal ? AbortSignal.any([ctl.signal, signal]) : ctl.signal;
+        try {
+          res = await (this.d.fetch ?? fetch)(next, { redirect: "manual", headers: range ? { range } : {}, signal: stop });
+        } finally {
+          clearTimeout(timer);
+        }
       } catch {
         return { ok: false, error: "Friend could not reach SoundCloud right now." };
       }
       if (res.status >= 300 && res.status < 400) {
+        void res.body?.cancel().catch(() => {});
         const loc = res.headers.get("location");
         if (!loc) return { ok: false, error: "SoundCloud did not answer properly right now." };
         try {

@@ -51,6 +51,16 @@ describe("streamOf", () => {
   });
 });
 
+describe("a track SoundCloud forbids", () => {
+  it("is not playable for this account, and does not tell the owner to reconnect", async () => {
+    const { fake, hub } = await setup();
+    fake.forbidden.add(1001);
+    const r = await hub.streamOf("1001");
+    expect(r).toEqual({ ok: false, error: expect.stringMatching(/does not let this account play/i) });
+    expect(JSON.stringify(r)).not.toMatch(/reconnect/i);
+  });
+});
+
 describe("fetchAudio", () => {
   it("passes a range request through and returns the partial answer", async () => {
     const { fake, hub } = await setup();

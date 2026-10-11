@@ -30,6 +30,9 @@ const NO_DEVICE = "Name the Spotify device to play on in Settings, Widgets.";
  * played by mpv and Spotify's on the Spotify device the owner named. It takes the same commands and reports the same state, so
  * the assistant and the screen treat it like any other player.
  */
+/** What SoundCloud says when the login or the line is the problem (not one track): playback stops with that sentence. */
+const LOGIN_OR_LINE = /reconnect|connect your|slow down|could not reach|could not renew/i;
+
 export class HostPlayer {
   private s: PlayerState;
   private loadedId: string | null = null;
@@ -180,6 +183,7 @@ export class HostPlayer {
       if (!this.d.soundcloud) throw new Error("SoundCloud is not available on this PC.");
       await this.leaveSpotify();
       const s = await this.d.soundcloud.streamOf(p.id);
+      if (!s.ok && LOGIN_OR_LINE.test(s.error)) throw new Error(s.error);
       if (!s.ok || !isSoundCloudAddress(s.url)) return this.skip();
       if (this.disposed) throw new Error("The player has stopped.");
       this.engine = "folder";
@@ -273,9 +277,13 @@ export class HostPlayer {
           this.retried = cur.id;
           const at = this.s.position;
           try {
-            await this.load(cur);
-            if (at > 1) await this.d.mpv.seek(at);
-            return;
+            const again = await this.d.soundcloud?.streamOf(cur.id.slice("soundcloud:".length));
+            if (again?.ok && isSoundCloudAddress(again.url) && !this.disposed) {
+              await this.d.mpv.load(again.url);
+              if (at > 1) await this.d.mpv.seek(at);
+              await this.applyVolume();
+              return;
+            }
           } catch {
             /* falls through to the usual skip */
           }

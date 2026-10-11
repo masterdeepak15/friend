@@ -1070,6 +1070,10 @@ export async function createApp(opts: AppOptions) {
         if (!a.ok) return { ok: false, status: 502, error: a.error };
         const h = a.res.headers;
         const type = h.get("content-type") ?? "";
+        if (type && !/^audio\/|^application\/octet-stream/i.test(type)) {
+          void a.res.body?.cancel().catch(() => {});
+          return { ok: false, status: 502, error: "SoundCloud did not send audio for that track." };
+        }
         const headers: Record<string, string> = { "content-type": type.startsWith("audio/") ? type : "audio/mpeg", "accept-ranges": "bytes", "cache-control": "no-store", "x-content-type-options": "nosniff" };
         for (const k of ["content-range", "content-length"]) if (h.get(k)) headers[k] = h.get(k)!;
         return { ok: true, status: a.res.status, headers, body: a.res.body };

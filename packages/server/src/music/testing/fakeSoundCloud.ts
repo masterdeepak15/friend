@@ -17,6 +17,8 @@ export interface FakeSoundCloud {
   tokensIssued: number;
   /** Ids of tracks whose access is "blocked" or "preview". */
   blocked: Set<number>;
+  /** Track ids whose stream SoundCloud refuses with 403 (blocked in the owner's region). */
+  forbidden: Set<number>;
   preview: Set<number>;
 }
 
@@ -45,6 +47,7 @@ export function fakeSoundCloud(): FakeSoundCloud {
     redirectTo: null,
     tokensIssued: 0,
     blocked: new Set(),
+    forbidden: new Set(),
     preview: new Set(),
     issueCode() {
       const c = `code-${++n}`;
@@ -94,6 +97,7 @@ export function fakeSoundCloud(): FakeSoundCloud {
       const streams = /^\/tracks\/(\d+)\/streams$/.exec(u.pathname);
       if (streams) {
         const t = SC_TRACKS.find((x) => x.id === Number(streams[1]));
+        if (t && f.forbidden.has(t.id)) return json(403, {});
         if (!t || access(t) !== "playable") return json(404, {});
         return json(200, { http_mp3_128_url: f.streamUrl, hls_mp3_128_url: "https://playback.media-streaming.soundcloud.cloud/x/playlist.m3u8" });
       }
