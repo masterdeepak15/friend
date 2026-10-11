@@ -39,7 +39,49 @@ export const PendingApproval = z.object({
 });
 export type PendingApproval = z.infer<typeof PendingApproval>;
 
+/** One track as a screen needs it to show and play it (an id Friend made, never a path). */
+export const MusicTrackRef = z.object({ id: z.string().regex(/^[0-9a-f]{16}$/), title: z.string().max(200), artist: z.string().max(200), album: z.string().max(200), durationSec: z.number().nullable() });
+export type MusicTrackRef = z.infer<typeof MusicTrackRef>;
+
+/** What a screen reports about its player: what is playing, the queue, and whether this is the screen commands should reach. */
+export const MusicState = z.object({
+  playing: z.boolean(),
+  trackId: z.string().max(16).nullable(),
+  title: z.string().max(200),
+  artist: z.string().max(200),
+  album: z.string().max(200),
+  position: z.number().min(0),
+  duration: z.number().min(0),
+  volume: z.number().min(0).max(100),
+  muted: z.boolean(),
+  shuffle: z.boolean(),
+  repeat: z.enum(["off", "all", "one"]),
+  view: z.enum(["mini", "full", "hidden"]),
+  queue: z.array(z.object({ id: z.string().max(16), title: z.string().max(200) })).max(50),
+  index: z.number().int().min(-1),
+  active: z.boolean(),
+});
+export type MusicState = z.infer<typeof MusicState>;
+
+/** What the assistant tells the player to do. Play carries the tracks (found by Friend); the rest are controls. */
+export const MusicCommand = z.object({
+  action: z.enum(["play", "pause", "resume", "toggle", "stop", "next", "previous", "seek", "volume", "mute", "shuffle", "repeat", "view", "queue.remove", "queue.clear"]),
+  tracks: z.array(MusicTrackRef).max(500).optional(),
+  /** For play: replace the queue, add to its end, or play next. For repeat: off, all or one. */
+  mode: z.enum(["replace", "add", "next", "off", "all", "one"]).optional(),
+  shuffle: z.boolean().optional(),
+  seconds: z.number().min(0).optional(),
+  percent: z.number().min(0).max(100).optional(),
+  level: z.number().min(0).max(100).optional(),
+  delta: z.number().min(-100).max(100).optional(),
+  on: z.boolean().optional(),
+  view: z.enum(["mini", "full", "hidden"]).optional(),
+  index: z.number().int().min(0).optional(),
+});
+export type MusicCommand = z.infer<typeof MusicCommand>;
+
 export const ServerMsg = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("music.command") }).merge(MusicCommand),
   z.object({ type: z.literal("stage"), command: StageCommand }),
   z.object({ type: z.literal("caption.delta"), text: z.string() }),
   z.object({ type: z.literal("caption.end") }),
@@ -120,6 +162,7 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stage.move"), objectId: z.string().max(64), rect: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }) }),
   /** The owner pinned an object as a widget, or unpinned it. */
   z.object({ type: z.literal("stage.pin"), objectId: z.string().max(64), pinned: z.boolean() }),
+  z.object({ type: z.literal("music.state"), state: MusicState }),
   z.object({ type: z.literal("ping") }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;

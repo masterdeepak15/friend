@@ -54,24 +54,3 @@ export function launcherProblem(raw: unknown): string | null {
 
 export type RepeatMode = "off" | "all" | "one";
 export const REPEAT_MODES: readonly RepeatMode[] = ["off", "all", "one"];
-
-/** What a screen reports about its player, so the assistant can say what is playing and the owner's other screens can follow. */
-export interface MusicState {
-  playing: boolean;
-  trackId: string | null;
-  title: string;
-  artist: string;
-  album: string;
-  position: number;
-  duration: number;
-  volume: number;
-  muted: boolean;
-  shuffle: boolean;
-  repeat: RepeatMode;
-  view: "mini" | "full" | "hidden";
-  /** The queue, in order (titles and ids of up to 50 tracks) and which one is current. */
-  queue: { id: string; title: string }[];
-  index: number;
-  /** This screen is visible and has been touched, so it is the one commands should reach. */
-  active: boolean;
-}
