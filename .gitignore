@@ -6,3 +6,6 @@ dist
 .voice-smoke
 .vitest
 packages/friend/README.md
+
+# scratch files some tools leave behind
+_tmp_*

@@ -100,6 +100,8 @@ export class MusicHub {
 
   async play(a: PlayArgs): Promise<Result> {
     const words = [a.query, a.title, a.artist, a.album].filter((w): w is string => typeof w === "string" && w.trim() !== "").join(" ");
+    // "play my music" with no words is the folder, whatever the default source is; only a named service needs a word to search for
+    if (!words) return a.source === "spotify" ? { ok: false, text: "Say what to play from Spotify: a song, an artist or a playlist." } : this.playLocal(a, words);
     const source = a.source ?? this.defaultSource();
     return source === "local" ? this.playLocal(a, words) : this.playFrom(a, words, source);
   }

@@ -72,7 +72,7 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     if (!sp.clientId) return { state: "needs-setup", detail: "Add your Spotify client id (press Configure)." };
     if (!sp.enabled) return { state: "off", detail: "Switched off." };
     if (!sps?.connected) return { state: "needs-setup", detail: sps?.needs ?? "Connect your Spotify account (press Configure)." };
-    return { state: "online", detail: sps.needs ?? `Connected as ${sps.account ?? "your account"}.` };
+    return { state: "online", detail: sps.needs ?? "Connected." };
   };
   const aSteps: IntegrationStep[] = [
     { text: "Create a free skill in the Alexa developer console: custom model, provision your own.", done: !!al.skillId },
@@ -226,7 +226,7 @@ export function changeSpotify(spotify: MusicConfig["spotify"], change: { install
   return null;
 }
 
-/** Plain words about every integration, for the assistant's context. */
+/** Plain words about the integrations the assistant can set up, for its context. Spotify is left out: only the owner connects it. */
 export function integrationSummary(views: IntegrationView[]): string {
-  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
+  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.filter((v) => v.id !== "spotify").map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
 }

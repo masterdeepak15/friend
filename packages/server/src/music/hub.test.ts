@@ -310,6 +310,27 @@ describe("playing from other sources", () => {
     expect(c.commands()[0]).toMatchObject({ action: "play", mode: "add" });
   });
 
+  it("play my music with no words plays the whole folder (up to 200) even when the default is Spotify or both", async () => {
+    for (const d of ["spotify", "any"] as const) {
+      const { h, c } = make(spotify(), d);
+      const r = await h.play({});
+      expect(r.ok, d).toBe(true);
+      expect(c.commands()[0]!.tracks!.length, d).toBe(4);
+      expect(c.commands()[0]!.tracks!.every((t) => /^[0-9a-f]{16}$/.test(t.id)), d).toBe(true);
+    }
+  });
+
+  it("asking for Spotify with no words says to name something, and does not call Spotify", async () => {
+    const calls: string[] = [];
+    const s = { ...spotify(), search: async (q: string): Promise<typeof spotTracks> => { calls.push(q); return []; } };
+    const { h, c } = make(s);
+    const r = await h.play({ source: "spotify" });
+    expect(r.ok).toBe(false);
+    expect(r.text).toMatch(/say what to play/i);
+    expect(calls).toHaveLength(0);
+    expect(c.commands()).toHaveLength(0);
+  });
+
   it("an error from a source is one plain sentence and sends nothing", async () => {
     const boom = { ...spotify(), search: async () => { throw new Error("token AT-1 leaked"); } };
     const { h, c } = make(boom);

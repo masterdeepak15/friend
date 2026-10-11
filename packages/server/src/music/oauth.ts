@@ -6,6 +6,10 @@ import { join } from "node:path";
 const STATE_TTL_MS = 10 * 60_000;
 const MAX_STATES = 20;
 const REFRESH_AHEAD_MS = 60_000;
+const TRANSIENT_WAIT_MS = 30_000;
+
+/** The service refused to renew the login (it is no longer good): the owner has to connect again. Anything else is a hiccup. */
+export class RefreshRejected extends Error {}
 
 const b64url = (b: Buffer): string => b.toString("base64url");
 
@@ -51,6 +55,7 @@ export interface SavedLogin {
 /** A service login kept in its own file in the data folder, readable by the owner only. Never sent to a screen and never logged. */
 export class MusicTokens {
   private reconnect = new Set<MusicSourceId>();
+  private generations = new Map<MusicSourceId, number>();
 
   constructor(private dir: string) {}
 
@@ -82,7 +87,13 @@ export class MusicTokens {
     }
   }
 
+  /** Counts how many times a login was forgotten, so a renewal that was under way can tell it must not bring it back. */
+  generation(source: MusicSourceId): number {
+    return this.generations.get(source) ?? 0;
+  }
+
   forget(source: MusicSourceId): void {
+    this.generations.set(source, this.generation(source) + 1);
     rmSync(this.file(source), { force: true });
     this.reconnect.delete(source);
   }
@@ -98,10 +109,12 @@ export class MusicTokens {
 }
 
 const refreshing = new WeakMap<MusicTokens, Map<MusicSourceId, Promise<string | null>>>();
+const waitUntil = new WeakMap<MusicTokens, Map<MusicSourceId, number>>();
 
 /**
  * An access token that is good for at least another minute: the saved one, or a renewed one. Simultaneous callers share one renewal.
- * When renewing fails the source is marked "reconnect needed", nothing is retried, and this gives null until the owner connects again.
+ * When the service refuses to renew, the source is marked "reconnect needed" and this gives null until the owner connects again. A
+ * hiccup (no network, a busy service) gives null without ending the login, and waits 30 seconds before trying again.
  */
 export async function freshToken(
   source: MusicSourceId,
@@ -112,6 +125,10 @@ export async function freshToken(
   const login = tokens.load(source);
   if (!login || tokens.needsReconnect(source)) return null;
   if (login.expiresAt - clock() > REFRESH_AHEAD_MS) return login.accessToken;
+  let waits = waitUntil.get(tokens);
+  if (!waits) waitUntil.set(tokens, (waits = new Map()));
+  if ((waits.get(source) ?? 0) > clock()) return null;
+  const generation = tokens.generation(source);
   let map = refreshing.get(tokens);
   if (!map) refreshing.set(tokens, (map = new Map()));
   const running = map.get(source);
@@ -119,10 +136,13 @@ export async function freshToken(
   const job = (async (): Promise<string | null> => {
     try {
       const next = await refresh(login.refreshToken);
+      if (tokens.generation(source) !== generation) return null; // forgotten while renewing: stay forgotten
       tokens.save(source, { ...login, accessToken: next.accessToken, refreshToken: next.refreshToken ?? login.refreshToken, expiresAt: next.expiresAt });
       return next.accessToken;
-    } catch {
-      tokens.markReconnect(source);
+    } catch (e) {
+      if (tokens.generation(source) !== generation) return null;
+      if (e instanceof RefreshRejected) tokens.markReconnect(source);
+      else waits!.set(source, clock() + TRANSIENT_WAIT_MS);
       return null;
     } finally {
       map!.delete(source);

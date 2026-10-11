@@ -1,6 +1,6 @@
 import { makeRef } from "@friend/protocol";
 import type { Config } from "../config";
-import { freshToken, MusicTokens, OAuthStates, pkcePair } from "./oauth";
+import { freshToken, MusicTokens, OAuthStates, pkcePair, RefreshRejected } from "./oauth";
 import type { MusicSource, SourceStatus, SourceTrack } from "./source";
 
 const AUTH = "https://accounts.spotify.com";
@@ -97,6 +97,7 @@ export class SpotifyHub implements MusicSource {
     } catch {
       /* handled below */
     }
+    if (res.status === 400 || res.status === 401) throw new RefreshRejected("Spotify did not accept the sign-in.");
     if (!res.ok || typeof j.access_token !== "string") throw new Error("Spotify did not accept the sign-in.");
     const seconds = typeof j.expires_in === "number" && j.expires_in > 0 ? j.expires_in : FALLBACK_TTL_S;
     return { accessToken: j.access_token, ...(typeof j.refresh_token === "string" ? { refreshToken: j.refresh_token } : {}), expiresAt: this.now() + seconds * 1000 };
@@ -127,7 +128,10 @@ export class SpotifyHub implements MusicSource {
 
   private async api<T>(path: string, retry = true): Promise<T | null> {
     const token = await this.accessToken();
-    if (!token) throw new Error(this.d.tokens.needsReconnect("spotify") ? RECONNECT : "Connect your Spotify account in Plugins, Spotify.");
+    if (!token) {
+      if (this.d.tokens.needsReconnect("spotify")) throw new Error(RECONNECT);
+      throw new Error(this.d.tokens.load("spotify") ? "Spotify could not renew the sign-in just now. Try again in a minute." : "Connect your Spotify account in Plugins, Spotify.");
+    }
     const res = await this.call(`${API}${path}`, { headers: { authorization: `Bearer ${token}` } });
     if (res.status === 401 && retry) {
       const login = this.d.tokens.load("spotify");

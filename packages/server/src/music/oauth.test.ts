@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { challengeOf, freshToken, MusicTokens, OAuthStates, pkcePair } from "./oauth";
+import { challengeOf, freshToken, MusicTokens, OAuthStates, pkcePair, RefreshRejected } from "./oauth";
 
 const tokens = () => new MusicTokens(mkdtempSync(join(tmpdir(), "friend-musictok-")));
 const saved = (over: Partial<{ accessToken: string; refreshToken: string; expiresAt: number; account: string; premium: boolean | null }> = {}) => ({ accessToken: "AT1", refreshToken: "RT1", expiresAt: 1_000_000, account: "me", premium: true, ...over });
@@ -97,7 +97,7 @@ describe("freshToken", () => {
     const t = tokens();
     t.save("spotify", saved({ expiresAt: 10 }));
     let calls = 0;
-    const refresh = async () => { calls++; throw new Error("invalid_grant AT1 RT1"); };
+    const refresh = async () => { calls++; throw new RefreshRejected("invalid_grant AT1 RT1"); };
     expect(await freshToken("spotify", t, refresh, () => 100)).toBeNull();
     expect(await freshToken("spotify", t, refresh, () => 101)).toBeNull();
     expect(calls).toBe(1);
@@ -106,5 +106,45 @@ describe("freshToken", () => {
   });
   it("is null when nobody has connected", async () => {
     expect(await freshToken("spotify", tokens(), async () => ({ accessToken: "x", expiresAt: 1 }), () => 0)).toBeNull();
+  });
+});
+
+describe("renewing a login: what is permanent and what is not", () => {
+  it("a refused renewal (the service says the login is no longer good) asks for a reconnect", async () => {
+    const t = tokens();
+    t.save("spotify", saved({ expiresAt: 10 }));
+    expect(await freshToken("spotify", t, async () => { throw new RefreshRejected("no"); }, () => 100)).toBeNull();
+    expect(t.needsReconnect("spotify")).toBe(true);
+  });
+
+  it("a network blip or a busy service does not end the login: it waits 30 seconds, then tries once more", async () => {
+    const t = tokens();
+    t.save("spotify", saved({ expiresAt: 10 }));
+    let calls = 0;
+    let fail = true;
+    const refresh = async () => {
+      calls++;
+      if (fail) throw new Error("fetch failed");
+      return { accessToken: "AT2", expiresAt: 9_999_999 };
+    };
+    expect(await freshToken("spotify", t, refresh, () => 100)).toBeNull();
+    expect(t.needsReconnect("spotify")).toBe(false);
+    expect(await freshToken("spotify", t, refresh, () => 20_000)).toBeNull();
+    expect(calls).toBe(1);
+    fail = false;
+    expect(await freshToken("spotify", t, refresh, () => 40_000)).toBe("AT2");
+    expect(calls).toBe(2);
+  });
+
+  it("a login forgotten while it is being renewed stays forgotten", async () => {
+    const t = tokens();
+    t.save("spotify", saved({ expiresAt: 10 }));
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const pending = freshToken("spotify", t, async () => { await gate; return { accessToken: "AT2", expiresAt: 9_999_999 }; }, () => 100);
+    t.forget("spotify");
+    release();
+    expect(await pending).toBeNull();
+    expect(t.load("spotify")).toBeNull();
   });
 });
