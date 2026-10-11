@@ -17,7 +17,7 @@ describe("music track refs", () => {
   });
   it("makes a ref", () => {
     expect(makeRef("local", "0123456789abcdef")).toBe("local:0123456789abcdef");
-    expect(MUSIC_SOURCES).toEqual(["local", "spotify", "soundcloud"]);
+    expect(MUSIC_SOURCES).toEqual(["local", "spotify", "soundcloud", "audius"]);
   });
   it("lets a track carry either form and rejects a bad one", () => {
     const t = { title: "a", artist: "b", album: "c", durationSec: null };
@@ -41,5 +41,15 @@ describe("music track refs", () => {
     expect(DEFAULT_SOURCES).toContain("soundcloud");
     const tool = TOOLS.find((x) => x.name === "music.search")!;
     expect(tool.input.safeParse({ query: "x", source: "soundcloud" }).success).toBe(true);
+  });
+  it("knows Audius refs", () => {
+    expect(parseRef("audius:95wro")).toEqual({ source: "audius", id: "95wro" });
+    for (const bad of ["audius:", "audius:a b", "audius:../x"]) expect(parseRef(bad)).toBeNull();
+    expect(makeRef("audius", "aANABaw")).toBe("audius:aANABaw");
+  });
+  it("lets Audius be the default source and a tool source", () => {
+    expect(DEFAULT_SOURCES).toContain("audius");
+    expect(TOOLS.find((x) => x.name === "music.play")!.input.safeParse({ source: "audius" }).success).toBe(true);
+    expect(TOOLS.find((x) => x.name === "music.search")!.input.safeParse({ query: "x", source: "audius" }).success).toBe(true);
   });
 });

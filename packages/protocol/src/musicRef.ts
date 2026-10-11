@@ -1,5 +1,5 @@
 /** Where a track comes from. A track is addressed by a ref: `<source>:<id>`, or a bare 16-hex id for a file in the music folder. */
-export const MUSIC_SOURCES = ["local", "spotify", "soundcloud"] as const;
+export const MUSIC_SOURCES = ["local", "spotify", "soundcloud", "audius"] as const;
 export type MusicSourceId = (typeof MUSIC_SOURCES)[number];
 
 const LOCAL_ID = /^[0-9a-f]{16}$/;
