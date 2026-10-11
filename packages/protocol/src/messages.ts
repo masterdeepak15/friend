@@ -66,7 +66,7 @@ export type MusicState = z.infer<typeof MusicState>;
 
 /** What the assistant tells the player to do. Play carries the tracks (found by Friend); the rest are controls. */
 export const MusicCommand = z.object({
-  action: z.enum(["play", "pause", "resume", "toggle", "stop", "next", "previous", "seek", "volume", "mute", "shuffle", "repeat", "view", "queue.remove", "queue.clear"]),
+  action: z.enum(["play", "pause", "resume", "toggle", "stop", "next", "previous", "seek", "volume", "mute", "shuffle", "repeat", "view", "queue.remove", "queue.clear", "jump"]),
   tracks: z.array(MusicTrackRef).max(500).optional(),
   /** For play: replace the queue, add to its end, or play next. For repeat: off, all or one. */
   mode: z.enum(["replace", "add", "next", "off", "all", "one"]).optional(),
@@ -93,11 +93,13 @@ export const HudView = z.object({
 export type HudView = z.infer<typeof HudView>;
 
 /** The music player's settings as a screen needs them. The folder itself is not sent, only whether one is chosen. */
-export const MusicView = z.object({ folderSet: z.boolean(), volume: z.number().min(0).max(100), shuffle: z.boolean(), repeat: z.enum(["off", "all", "one"]), visualizer: z.boolean(), startView: z.enum(["mini", "full"]) });
+export const MusicView = z.object({ folderSet: z.boolean(), volume: z.number().min(0).max(100), shuffle: z.boolean(), repeat: z.enum(["off", "all", "one"]), visualizer: z.boolean(), startView: z.enum(["mini", "full"]), output: z.enum(["screen", "host"]).optional() });
 export type MusicView = z.infer<typeof MusicView>;
 
 export const ServerMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("music.command") }).merge(MusicCommand),
+  /** What the PC's own player is doing (sent to every screen while the output is the PC, so they can show it). */
+  z.object({ type: z.literal("music.host"), state: MusicState }),
   z.object({ type: z.literal("stage"), command: StageCommand }),
   z.object({ type: z.literal("caption.delta"), text: z.string() }),
   z.object({ type: z.literal("caption.end") }),
@@ -179,6 +181,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   /** The owner pinned an object as a widget, or unpinned it. */
   z.object({ type: z.literal("stage.pin"), objectId: z.string().max(64), pinned: z.boolean() }),
   z.object({ type: z.literal("music.state"), state: MusicState }),
+  /** A screen's button press for the PC's player (only used while the output is the PC). */
+  z.object({ type: z.literal("music.remote"), command: MusicCommand }),
   z.object({ type: z.literal("ping") }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { commandToAction, initialPlayer, playerReducer, type PlayerState, type Track } from "./musicQueue";
+import { MusicCommand } from "./messages";
+import { actionToCommand, commandToAction, initialPlayer, playerReducer, type PlayerAction, type PlayerState, type Track } from "./musicQueue";
 
 const t = (n: number): Track => ({ id: String(n).padStart(16, "0"), title: `Song ${n}`, artist: "A", album: "B", durationSec: 100 + n });
 const tracks = (n: number) => Array.from({ length: n }, (_, i) => t(i + 1));
@@ -179,5 +180,46 @@ describe("commandToAction", () => {
     expect(commandToAction({ action: "queue.clear" })).toEqual({ type: "clear" });
     expect(commandToAction({ action: "repeat" })).toBeNull();
     expect(commandToAction({ action: "view" })).toBeNull();
+  });
+});
+
+describe("actionToCommand (what a screen sends the PC's player)", () => {
+  const cases: PlayerAction[] = [
+    { type: "play", tracks: [t(1), t(2)], mode: "replace" },
+    { type: "play", tracks: [t(1), t(2)], mode: "replace", start: 1 },
+    { type: "play", tracks: [t(3)], mode: "add" },
+    { type: "play", tracks: [t(3)], mode: "next", shuffle: true },
+    { type: "next" },
+    { type: "previous" },
+    { type: "pause" },
+    { type: "resume" },
+    { type: "toggle" },
+    { type: "stop" },
+    { type: "volume", level: 30 },
+    { type: "volume", delta: -10 },
+    { type: "mute", on: true },
+    { type: "mute" },
+    { type: "seek", seconds: 42 },
+    { type: "seek", percent: 50 },
+    { type: "repeat", mode: "one" },
+    { type: "shuffle", on: false },
+    { type: "shuffle" },
+    { type: "view", view: "full" },
+    { type: "remove", index: 2 },
+    { type: "clear" },
+    { type: "jump", index: 3 },
+  ];
+  it("turns every action a person can make into a command that becomes the same action again", () => {
+    for (const a of cases) {
+      const c = actionToCommand(a);
+      expect(c, JSON.stringify(a)).not.toBeNull();
+      expect(commandToAction(c!), JSON.stringify(a)).toEqual(a);
+    }
+  });
+  it("a command it makes is one the server accepts", () => {
+    for (const a of cases) expect(MusicCommand.safeParse(actionToCommand(a)).success, JSON.stringify(a)).toBe(true);
+  });
+  it("has no command for what only a player does by itself", () => {
+    for (const a of [{ type: "time", position: 1, duration: 2 }, { type: "ended" }, { type: "failed" }] as PlayerAction[]) expect(actionToCommand(a)).toBeNull();
   });
 });

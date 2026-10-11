@@ -337,6 +337,7 @@ export function MusicPlayerView({ player, music, animations }: { player: Player;
             <small className="hud-sub">
               {current ? [current.artist, current.album].filter(Boolean).join(" — ") : "Press play, or ask for some music."}
               {current && isSpotify(current.id) && <em className="hud-source">SPOTIFY</em>}
+              {player.remote && <em className="hud-source">THIS PC</em>}
             </small>
           </div>
           <Timeline player={player} />

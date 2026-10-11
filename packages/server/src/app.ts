@@ -421,6 +421,7 @@ export async function createApp(opts: AppOptions) {
   const broadcast = (m: ServerMsg) => {
     for (const c of clients) c.send(m);
   };
+  hostEmit = (state) => broadcast({ type: "music.host", state });
   // Alexa: the owner's own skill talks to this endpoint; fixed questions are answered from the tools, the rest by the assistant.
   const alexaHub = new AlexaHub({
     config,
@@ -485,7 +486,7 @@ export async function createApp(opts: AppOptions) {
     ownerName: config.ownerName,
     assistantName: auth.assistantName(),
     hud: { terminalLabel: config.hud.terminalLabel, clock: { ...config.hud.clock }, launcher: config.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })), animations: config.hud.animations },
-    music: { folderSet: config.music.folder !== "", volume: config.music.volume, shuffle: config.music.shuffle, repeat: config.music.repeat, visualizer: config.music.visualizer, startView: config.music.startView },
+    music: { folderSet: config.music.folder !== "", volume: config.music.volume, shuffle: config.music.shuffle, repeat: config.music.repeat, visualizer: config.music.visualizer, startView: config.music.startView, output: config.music.output },
   });
   const statusMsg = (): ServerMsg => ({
     type: "status",
@@ -1069,6 +1070,7 @@ export async function createApp(opts: AppOptions) {
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
       conn.send(statusMsg());
       conn.send(uiMsg());
+      conn.send({ type: "music.host", state: hostPlayer.state() });
       const pending = challenges.current();
       if (pending) conn.send({ type: "voice.challenge", id: pending.id, text: pending.text });
       return () => {
@@ -1125,6 +1127,13 @@ export async function createApp(opts: AppOptions) {
           break;
         case "music.state":
           musicHub.onState(conn, msg.state);
+          break;
+        case "music.remote":
+          // a button on a screen, for the PC's own player; only while the owner chose the PC as the output
+          if (config.music.output !== "host") break;
+          void hostPlayer.command(msg.command).then((r) => {
+            if (!r.ok) conn.send({ type: "alert", level: "warn", text: r.text });
+          });
           break;
         case "stage.move": {
           // the owner dragged or resized an object: it keeps the box they left it in, kept inside the safe part of the screen

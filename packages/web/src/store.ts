@@ -9,6 +9,7 @@ import {
   type ClientLook,
   type HudView,
   type MusicCommand,
+  type MusicState,
   type MusicView,
 } from "@friend/protocol";
 
@@ -81,6 +82,8 @@ export interface StageViewState {
   /** The widget settings and the music player's settings, as the server sent them (null until the first "ui" message). */
   hud: HudView | null;
   music: MusicView | null;
+  /** What the PC's own player last said (only meaningful while the output is the PC). */
+  hostMusic: MusicState | null;
   /** The newest command for the music player (n counts them, so the same command twice still runs twice). */
   musicCmd: { n: number; command: MusicCommand } | null;
   /** The assistant asked for the plugins screen to be opened (at one integration's Configure page). `n` changes with every request. */
@@ -115,6 +118,7 @@ export const initialState: StageViewState = {
   assistantName: "",
   hud: null,
   music: null,
+  hostMusic: null,
   musicCmd: null,
   uiOpen: null,
 };
@@ -229,6 +233,8 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return { ...state, uiOpen: { n: (state.uiOpen?.n ?? 0) + 1, ...(m.integration ? { integration: m.integration } : {}) } };
     case "ui":
       return { ...state, view: m.view, look: m.look ?? state.look, ownerName: m.ownerName ?? state.ownerName, assistantName: m.assistantName ?? state.assistantName, hud: m.hud ?? state.hud, music: m.music ?? state.music, viewKnown: true };
+    case "music.host":
+      return { ...state, hostMusic: m.state };
     case "music.command": {
       const { type: _type, ...command } = m;
       return { ...state, musicCmd: { n: (state.musicCmd?.n ?? 0) + 1, command } };

@@ -26,6 +26,7 @@ import { HouseholdPanel } from "./voice/HouseholdPanel";
 import { QuickLaunch, type LauncherItem } from "./hud/QuickLaunch";
 import { MusicPlayerView } from "./music/MusicPlayer";
 import { commandToAction, useMusicPlayer } from "./music/useMusicPlayer";
+import { useRemoteMusic } from "./music/useRemoteMusic";
 import { musicReturnNotice } from "./music/returnNotice";
 
 type Phase = "loading" | "setup" | "login" | "stage";
@@ -46,7 +47,11 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [help, setHelp] = useState<SlashCommand[] | null>(null);
   const panels = usePanels(state.view);
   // The player lives here, not in its panel, so it keeps playing (and the assistant keeps control) while the panel is hidden.
-  const player = useMusicPlayer({ music: state.music, cmd: state.musicCmd, send, connection: state.connection });
+  // When the owner chose the PC's speakers, the PC plays and this player only shows it and sends it the button presses.
+  const remote = state.music?.output === "host";
+  const localPlayer = useMusicPlayer({ music: state.music, cmd: state.musicCmd, send, connection: state.connection, remote });
+  const remotePlayer = useRemoteMusic({ local: localPlayer, host: state.hostMusic, send });
+  const player = remote ? remotePlayer : localPlayer;
   const animations = state.hud?.animations ?? "full";
   const launch = (item: LauncherItem) => {
     const { type, value } = item.action;

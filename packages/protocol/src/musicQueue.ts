@@ -156,7 +156,7 @@ export function playerReducer(s: PlayerState, a: PlayerAction, env: { shuffle?: 
 export function commandToAction(c: MusicCommand): PlayerAction | null {
   switch (c.action) {
     case "play":
-      return { type: "play", tracks: c.tracks ?? [], mode: c.mode === "add" || c.mode === "next" ? c.mode : "replace", ...(c.shuffle ? { shuffle: true } : {}) };
+      return { type: "play", tracks: c.tracks ?? [], mode: c.mode === "add" || c.mode === "next" ? c.mode : "replace", ...(c.shuffle ? { shuffle: true } : {}), ...(c.index !== undefined ? { start: c.index } : {}) };
     case "pause":
     case "resume":
     case "toggle":
@@ -180,6 +180,43 @@ export function commandToAction(c: MusicCommand): PlayerAction | null {
       return c.index !== undefined ? { type: "remove", index: c.index } : null;
     case "queue.clear":
       return { type: "clear" };
+    case "jump":
+      return c.index !== undefined ? { type: "jump", index: c.index } : null;
+    default:
+      return null;
+  }
+}
+
+/** The other way round: what a screen sends the PC's player for a button the person pressed. Null for what a player does by itself. */
+export function actionToCommand(a: PlayerAction): MusicCommand | null {
+  switch (a.type) {
+    case "play":
+      return { action: "play", tracks: a.tracks, mode: a.mode, ...(a.shuffle ? { shuffle: true } : {}), ...(a.start !== undefined ? { index: a.start } : {}) };
+    case "next":
+    case "previous":
+    case "pause":
+    case "resume":
+    case "toggle":
+    case "stop":
+      return { action: a.type };
+    case "volume":
+      return { action: "volume", ...(a.level !== undefined ? { level: a.level } : {}), ...(a.delta !== undefined ? { delta: a.delta } : {}) };
+    case "mute":
+      return { action: "mute", ...(a.on !== undefined ? { on: a.on } : {}) };
+    case "seek":
+      return { action: "seek", ...(a.seconds !== undefined ? { seconds: a.seconds } : {}), ...(a.percent !== undefined ? { percent: a.percent } : {}) };
+    case "repeat":
+      return { action: "repeat", mode: a.mode };
+    case "shuffle":
+      return { action: "shuffle", ...(a.on !== undefined ? { on: a.on } : {}) };
+    case "view":
+      return { action: "view", view: a.view };
+    case "remove":
+      return { action: "queue.remove", index: a.index };
+    case "clear":
+      return { action: "queue.clear" };
+    case "jump":
+      return { action: "jump", index: a.index };
     default:
       return null;
   }

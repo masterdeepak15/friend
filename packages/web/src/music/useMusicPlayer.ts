@@ -28,6 +28,8 @@ export interface MusicPlayerOptions {
   createAudio?: () => PlayerAudio;
   /** For tests: stands in for the Spotify engine (which is only built when a Spotify track is first loaded). */
   createSpotify?: () => PlayerAudio;
+  /** The PC plays the music (the owner's choice): this player builds no audio, loads nothing and reports nothing. */
+  remote?: boolean;
 }
 
 /** Where a track's sound comes from: the folder's files are streamed by Friend; a Spotify track is its own ref, played by Spotify's player. */
@@ -69,7 +71,7 @@ export { commandToAction } from "@friend/protocol";
  * The music player's brain in the browser: the queue (playerCore), the audio element that follows it, the commands the assistant
  * sends, the reports back to the server, the phone's lock-screen controls and the analyser that makes the bars move.
  */
-export function useMusicPlayer({ music, cmd, send, connection, createAudio, createSpotify }: MusicPlayerOptions) {
+export function useMusicPlayer({ music, cmd, send, connection, createAudio, createSpotify, remote = false }: MusicPlayerOptions) {
   const [state, dispatch] = useReducer(reduce, undefined, () => {
     const r = recall();
     return initialPlayer({ volume: r.volume ?? 70, shuffle: r.shuffle ?? false, repeat: r.repeat ?? "all", view: r.view ?? "mini" });
@@ -163,6 +165,7 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
 
   // the audio element and what it tells us
   useEffect(() => {
+    if (remote) return;
     const a = audio();
     let lastTime = 0;
     const time = () => {
@@ -191,16 +194,21 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
       a.removeEventListener("ended", ended);
       a.removeEventListener("error", failed);
       a.pause();
+      // a fresh element (and analyser) is made if the screen plays again later
+      lastTrack.current = null;
+      audioRef.current = null;
+      analyserStarted.current = false;
+      setAnalyser(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [remote]);
 
   const current: Track | null = state.index >= 0 ? (state.queue[state.index] ?? null) : null;
 
   // follow the queue: load the track that is current
   useEffect(() => {
     const a = audioRef.current;
-    if (!a) return;
+    if (remote || !a) return;
     const id = current?.id ?? null;
     if (id === lastTrack.current) return;
     lastTrack.current = id;
@@ -212,15 +220,15 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
     setNotice(null);
     a.src = srcOf(id);
     if (state.playing) tryPlay();
-  }, [current?.id, state.playing, tryPlay]);
+  }, [current?.id, state.playing, tryPlay, remote]);
 
   // follow play and pause (also a repeated track, which stays the same one)
   useEffect(() => {
     const a = audioRef.current;
-    if (!a || !a.src) return;
+    if (remote || !a || !a.src) return;
     if (state.playing && a.paused && !blockedRef.current && !attempting.current) tryPlay();
     else if (!state.playing && !a.paused) a.pause();
-  }, [state.playing, state.position, tryPlay]);
+  }, [state.playing, state.position, tryPlay, remote]);
 
   // follow volume and a seek
   useEffect(() => {
@@ -262,7 +270,7 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
   // tell the server what is going on (so the assistant can say what is playing)
   const reported = useRef(0);
   useEffect(() => {
-    if (connection !== "open") return;
+    if (connection !== "open" || remote) return;
     const report = () => {
       const s = stateRef.current;
       const cur = s.index >= 0 ? s.queue[s.index] : undefined;
@@ -292,12 +300,12 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
     const id = setInterval(() => state.playing && Date.now() - reported.current >= REPORT_MS && report(), REPORT_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connection, current?.id, state.playing, state.volume, state.muted, state.shuffle, state.repeat, state.view, state.queue.length, state.index]);
+  }, [connection, remote, current?.id, state.playing, state.volume, state.muted, state.shuffle, state.repeat, state.view, state.queue.length, state.index]);
 
   // the phone's lock screen and a keyboard's media keys
   useEffect(() => {
     const ms = typeof navigator !== "undefined" ? (navigator as Navigator & { mediaSession?: MediaSession }).mediaSession : undefined;
-    if (!ms) return;
+    if (!ms || remote) return;
     try {
       if (current && typeof MediaMetadata !== "undefined") ms.metadata = new MediaMetadata({ title: current.title, artist: current.artist, album: current.album, artwork: [{ src: `/api/music/cover/${current.id}` }] });
       ms.playbackState = state.playing ? "playing" : current ? "paused" : "none";
@@ -309,9 +317,9 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
     } catch {
       /* this browser has no lock-screen controls */
     }
-  }, [current?.id, state.playing]);
+  }, [current?.id, state.playing, remote]);
 
-  return { state, dispatch, current, blocked, notice, analyser, unlock: tryPlay, audio: audioRef };
+  return { remote: false as boolean, state, dispatch, current, blocked, notice, analyser, unlock: tryPlay, audio: audioRef };
 }
 
 export type MusicPlayer = ReturnType<typeof useMusicPlayer>;
