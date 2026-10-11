@@ -114,6 +114,8 @@ export interface MusicApi {
   /** Needs the owner's PIN. Gives the address to send the owner's browser to. */
   spotifyConnect(pin: string, ip: string): Promise<{ url: string }>;
   spotifyDisconnect(pin: string, ip: string): Promise<{ ok: true }>;
+  /** Needs the owner's PIN. The id of the owner's own Spotify app (not secret). */
+  spotifySetClientId(clientId: string, pin: string, ip: string): Promise<{ ok: true }>;
   /** The return from Spotify. True when the login was completed. */
   spotifyCallback(params: Record<string, string>): Promise<boolean>;
 }
@@ -681,6 +683,16 @@ export function createGateway(deps: GatewayDeps) {
       }
     });
   }
+  app.post("/api/music/spotify/client-id", { onRequest: musicGuard }, async (req, reply) => {
+    reply.header("cache-control", "no-store");
+    const body = z.object({ clientId: z.string().max(200), pin: z.string().min(1).max(32) }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "Enter the client id and your PIN" });
+    try {
+      return await deps.music!.spotifySetClientId(body.data.clientId, body.data.pin, req.ip);
+    } catch (e) {
+      return musicError(reply, e);
+    }
+  });
   // Spotify sends the owner's browser here after they allow Friend. There is no cookie to check: the one-time state Friend made is the proof.
   const musicReturnWindow = new SlidingWindow(20, 60_000);
   app.get("/api/music/oauth/callback", async (req, reply) => {

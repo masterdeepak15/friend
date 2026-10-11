@@ -29,7 +29,7 @@ import { BrokerHub } from "./brokers/hub";
 const PORTFOLIO_SKILL = "portfolio-assistant";
 /** The type each kind of audio file is sent as. */
 const MIME: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", flac: "audio/flac" };
-import { changeAlexa, changeBroker, changeIntegration, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
+import { changeAlexa, changeBroker, changeIntegration, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -211,8 +211,22 @@ export async function createApp(opts: AppOptions) {
     saveConfig(saved);
     return null;
   };
+  /** The same for the Spotify part of the saved file. */
+  const changeSpotifyConfig = (fn: (s: Config["music"]["spotify"]) => string | null | void): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.music.spotify);
+    if (typeof err === "string") return err;
+    fn(config.music.spotify);
+    saveConfig(saved);
+    return null;
+  };
   const changeAny = (id: IntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null => {
     if (id === "alexa") return changeAlexaConfig((a) => changeAlexa(a, change));
+    if (id === "spotify") {
+      const err = changeSpotifyConfig((s) => changeSpotify(s, change));
+      if (!err && "remove" in change) spotifyHub.disconnect();
+      return err;
+    }
     if (id !== "zerodha") return changeChannels((c) => changeIntegration(c, id, change));
     const err = changeBrokers((b) => changeBroker(b, id, change, (gone) => brokerHub.forget(gone)));
     // the portfolio skill comes and goes with the integration
@@ -236,12 +250,12 @@ export async function createApp(opts: AppOptions) {
       },
     },
     integrations: {
-      views: () => integrationViews(config, channelHub, brokerHub, alexaHub),
+      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub),
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (id !== "zerodha" && id !== "alexa" && Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {
@@ -389,7 +403,7 @@ export async function createApp(opts: AppOptions) {
     channels: channelHub,
     brokers: brokerHub,
     music: musicHub,
-    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub)) },
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub)) },
   });
 
   const clients = new Set<ClientConn>();
@@ -581,7 +595,7 @@ export async function createApp(opts: AppOptions) {
     list: () => {
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub) };
     },
     install: async (id, pin, ip) => {
       if (isIntegrationId(id)) {
@@ -948,6 +962,19 @@ export async function createApp(opts: AppOptions) {
         if (!url) throw new HttpError(400, "Add your Spotify client id first, in Plugins, Spotify.");
         audit.log("owner", "music.spotify.connect", { ip });
         return { url };
+      },
+      spotifySetClientId: async (clientId, pin, ip) => {
+        await requirePin(pin, ip);
+        const id = clientId.trim();
+        if (!/^[A-Za-z0-9]{8,64}$/.test(id)) throw new HttpError(400, "A Spotify client id is letters and digits only. Copy it from your app at developer.spotify.com.");
+        if (!config.music.spotify.installed) throw new HttpError(400, "Install Spotify from Plugins first.");
+        const changed = id !== config.music.spotify.clientId;
+        changeSpotifyConfig((s) => {
+          s.clientId = id;
+        });
+        if (changed) spotifyHub.disconnect(); // a login belongs to the app it was made for
+        audit.log("owner", "music.spotify.clientid", { ip });
+        return { ok: true };
       },
       spotifyDisconnect: async (pin, ip) => {
         await requirePin(pin, ip);

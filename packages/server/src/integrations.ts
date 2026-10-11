@@ -1,12 +1,13 @@
 import type { AlexaHub } from "./alexa/hub";
 import type { BrokerHub } from "./brokers/hub";
 import type { ChannelHub } from "./channels/hub";
-import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type Config } from "./config";
+import type { SpotifyHub } from "./music/spotify";
+import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type Config, type MusicConfig } from "./config";
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
 export type ChannelIntegrationId = "telegram" | "twilio";
-export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa"];
+export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -36,6 +37,7 @@ const META: Record<IntegrationId, { name: string; description: string }> = {
   telegram: { name: "Telegram", description: "Talk to Friend from your phone through Telegram, and let it message people for you. Needs a free bot token from @BotFather." },
   twilio: { name: "WhatsApp and SMS (Twilio)", description: "Talk to Friend by WhatsApp or SMS, and let it message people for you. Needs a Twilio account and a public address for Friend." },
   alexa: { name: "Alexa", description: "Talk to Friend from your Echo devices with a free skill of your own: ask by voice and hear the answer. Anything risky is refused, or asked on your phone first." },
+  spotify: { name: "Spotify", description: "Play and search your own Spotify account from Friend: ask for a song, an artist or a playlist. Sign-in is through Spotify's own page. Playing needs Spotify Premium on your account, and a free app of your own at developer.spotify.com." },
   zerodha: { name: "Zerodha", description: "Read-only look at your Zerodha portfolio: ask Friend how it is doing, or have a report sent to Telegram or WhatsApp every morning and at market close. Friend cannot place orders. Needs a free Kite Connect app." },
 };
 
@@ -45,9 +47,10 @@ export const PUBLIC_SETTINGS: Record<IntegrationId, readonly string[]> = {
   twilio: ["accountSid", "smsFrom", "whatsappFrom", "ownerNumber"],
   zerodha: [],
   alexa: [],
+  spotify: [],
 };
 
-export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">): IntegrationView[] {
+export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">): IntegrationView[] {
   const status = hub.status();
   const t = config.channels.telegram;
   const w = config.channels.twilio;
@@ -56,6 +59,21 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
   const zs = brokers?.status("zerodha");
   const al = config.alexa;
   const as = alexa?.status();
+  const sp = config.music.spotify;
+  const sps = spotify?.status();
+  const spSteps: IntegrationStep[] = [
+    { text: "Create a free app at developer.spotify.com/dashboard and add the redirect address shown in Configure.", done: !!sp.clientId },
+    { text: "Paste the app's Client ID in Configure and save.", done: !!sp.clientId },
+    { text: "Switch the plugin on.", done: sp.enabled },
+    { text: "Press Connect in Configure and allow Friend in Spotify.", done: !!sps?.connected },
+  ];
+  const spState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!sp.installed) return { state: "not-installed", detail: "" };
+    if (!sp.clientId) return { state: "needs-setup", detail: "Add your Spotify client id (press Configure)." };
+    if (!sp.enabled) return { state: "off", detail: "Switched off." };
+    if (!sps?.connected) return { state: "needs-setup", detail: sps?.needs ?? "Connect your Spotify account (press Configure)." };
+    return { state: "online", detail: sps.needs ?? `Connected as ${sps.account ?? "your account"}.` };
+  };
   const aSteps: IntegrationStep[] = [
     { text: "Create a free skill in the Alexa developer console: custom model, provision your own.", done: !!al.skillId },
     { text: "Download the skill files in Configure, paste them in the console, and set the endpoint shown there.", done: !!al.skillId && !!al.invocationName },
@@ -131,6 +149,7 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
       secrets: { authToken: !!w.authToken },
     },
     { id: "zerodha", ...META.zerodha, kind: "integration", installed: z.installed, enabled: z.enabled, ...zState(), steps: zSteps, settings: { apiKey: z.apiKey }, secrets: { apiSecret: !!z.apiSecret } },
+    { id: "spotify", ...META.spotify, kind: "integration", installed: sp.installed, enabled: sp.enabled, ...spState(), steps: spSteps, settings: { clientId: sp.clientId }, secrets: {} },
     { id: "alexa", ...META.alexa, kind: "integration", installed: al.installed, enabled: al.enabled, ...alState(), steps: aSteps, settings: { skillId: al.skillId, invocationName: al.invocationName }, secrets: {} },
   ];
 }
@@ -188,6 +207,22 @@ export function changeAlexa(alexa: AlexaConfig, change: { install: true } | { re
   if (!alexa.installed) return `${META.alexa.name} is not installed yet.`;
   if (change.enabled && (!alexa.skillId || !alexa.invocationName)) return "Add the skill id and the invocation name first (Configure), then switch it on.";
   alexa.enabled = change.enabled;
+  return null;
+}
+
+/** The same for Spotify. Removing forgets the client id (the caller also forgets the login). */
+export function changeSpotify(spotify: MusicConfig["spotify"], change: { install: true } | { remove: true } | { enabled: boolean }): string | null {
+  if ("install" in change) {
+    spotify.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    Object.assign(spotify, { installed: false, enabled: false, clientId: "" });
+    return null;
+  }
+  if (!spotify.installed) return `${META.spotify.name} is not installed yet.`;
+  if (change.enabled && !spotify.clientId) return "Add your Spotify client id first (Configure), then switch it on.";
+  spotify.enabled = change.enabled;
   return null;
 }
 
