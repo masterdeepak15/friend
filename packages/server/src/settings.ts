@@ -1,7 +1,7 @@
 import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
-import { AUDIO_EXTENSIONS, LAUNCHER_ACTIONS, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS } from "@friend/protocol";
+import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, LAUNCHER_ACTIONS, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS } from "@friend/protocol";
 import { statSync } from "node:fs";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
@@ -98,6 +98,8 @@ export const SettingsPatch = z
         repeat: z.enum(["off", "all", "one"]),
         visualizer: z.boolean(),
         startView: z.enum(["mini", "full"]),
+        defaultSource: z.enum(DEFAULT_SOURCES),
+        searchLimit: z.number().int().min(MUSIC_LIMITS.searchLimit.min).max(MUSIC_LIMITS.searchLimit.max),
       })
       .partial()
       .strict(),
@@ -258,7 +260,7 @@ export function settingsView(c: Config): SettingsView {
       maxTriesPerDay: c.brokers.maxTriesPerDay,
     },
     trading: { level: c.trading.level },
-    music: { ...c.music, extensions: [...c.music.extensions] },
+    music: { ...c.music, extensions: [...c.music.extensions], spotify: { ...c.music.spotify } },
     hud: { ...c.hud, clock: { ...c.hud.clock }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
     alexa: {
       installed: c.alexa.installed,

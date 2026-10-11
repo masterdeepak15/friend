@@ -48,6 +48,10 @@ export interface MusicSettings {
   repeat: "off" | "all" | "one";
   visualizer: boolean;
   startView: "mini" | "full";
+  defaultSource: "local" | "spotify" | "any";
+  searchLimit: number;
+  /** The Spotify plugin entry; changed only through the plugin, never from the settings screen. */
+  spotify: { installed: boolean; enabled: boolean; clientId: string };
 }
 /** The screen widgets: profile tag, date and time, quick-launch buttons, animations. */
 export interface HudSettings {

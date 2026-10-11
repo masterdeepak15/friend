@@ -7,7 +7,12 @@ export const MUSIC_LIMITS = {
   maxTracks: { min: 100, max: 50_000, def: 5000 },
   scanDepth: { min: 1, max: 12, def: 6 },
   volume: { min: 0, max: 100, def: 70 },
+  searchLimit: { min: 3, max: 50, def: 10 },
 } as const;
+
+/** Which source a search or a play starts from when none is named. */
+export const DEFAULT_SOURCES = ["local", "spotify", "any"] as const;
+export type DefaultSource = (typeof DEFAULT_SOURCES)[number];
 
 /** What a quick-launch button can do. */
 export const LAUNCHER_PANELS = ["chat", "tasks", "plugins", "settings", "music"] as const;

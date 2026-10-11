@@ -13,7 +13,7 @@ const fresh = () => {
 describe("the defaults", () => {
   it("no music folder, the usual audio kinds, a quiet start, and a launcher with the panels", () => {
     const { config } = fresh();
-    expect(config.music).toEqual({ folder: "", extensions: ["mp3", "m4a", "aac", "ogg", "opus", "wav", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini" });
+    expect(config.music).toEqual({ folder: "", extensions: ["mp3", "m4a", "aac", "ogg", "opus", "wav", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, spotify: { installed: false, enabled: false, clientId: "" } });
     expect(config.hud).toMatchObject({ terminalLabel: "TERMINAL", clock: { hour12: true, seconds: false, locale: "" }, animations: "full" });
     expect(config.hud.launcher.map((l) => l.label)).toEqual(["Chat", "Tasks", "Music", "Plugins", "Settings"]);
   });
@@ -54,11 +54,50 @@ describe("what is read back from the saved file", () => {
   });
 });
 
+describe("music sources", () => {
+  it("keeps the search limit and the default source inside their rules", () => {
+    expect(sanitizeMusic({ searchLimit: 1 }).searchLimit).toBe(3);
+    expect(sanitizeMusic({ searchLimit: 500 }).searchLimit).toBe(50);
+    expect(sanitizeMusic({ searchLimit: "x" }).searchLimit).toBe(10);
+    expect(sanitizeMusic({ defaultSource: "spotify" }).defaultSource).toBe("spotify");
+    expect(sanitizeMusic({ defaultSource: "any" }).defaultSource).toBe("any");
+    expect(sanitizeMusic({ defaultSource: "youtube" }).defaultSource).toBe("local");
+  });
+
+  it("reads the Spotify plugin entry: a client id is letters and digits only, the switches are real booleans", () => {
+    expect(sanitizeMusic({ spotify: { installed: true, enabled: true, clientId: "  abc123DEF456ghi789  " } }).spotify).toEqual({ installed: true, enabled: true, clientId: "abc123DEF456ghi789" });
+    expect(sanitizeMusic({ spotify: { installed: "yes", enabled: 1, clientId: "../etc/passwd" } }).spotify).toEqual({ installed: false, enabled: false, clientId: "" });
+    expect(sanitizeMusic({ spotify: { clientId: "short" } }).spotify.clientId).toBe("");
+    expect(sanitizeMusic({ spotify: { enabled: true } }).spotify.installed).toBe(true);
+  });
+
+  it("saves the default source and the search limit from the settings screen", () => {
+    const { config } = fresh();
+    applySettings(config, { music: { defaultSource: "any", searchLimit: 25 } });
+    expect(config.music).toMatchObject({ defaultSource: "any", searchLimit: 25 });
+    expect(() => applySettings(config, { music: { searchLimit: 2 } })).toThrow();
+    expect(() => applySettings(config, { music: { defaultSource: "youtube" } })).toThrow();
+  });
+
+  it("never lets the settings screen or the assistant write the Spotify entry; it is changed only through the plugin", () => {
+    const { config } = fresh();
+    expect(() => applySettings(config, { music: { spotify: { installed: true, enabled: true, clientId: "abc123DEF456ghi789" } } })).toThrow();
+    expect(config.music.spotify.clientId).toBe("");
+    expect(() => refuseForAgent({ music: { defaultSource: "any" } })).toThrow(/only be changed by the owner/);
+  });
+
+  it("shows the Spotify client id, which is not secret, in the settings view", () => {
+    const { config } = fresh();
+    config.music.spotify.clientId = "abc123DEF456ghi789";
+    expect(settingsView(config).music.spotify.clientId).toBe("abc123DEF456ghi789");
+  });
+});
+
 describe("changing them from the screen", () => {
   it("saves music settings, when the folder exists", () => {
     const { config, dir } = fresh();
     const applied = applySettings(config, { music: { folder: dir, extensions: ["mp3", "flac"], maxTracks: 2000, scanDepth: 3, volume: 40, shuffle: true, repeat: "one", visualizer: false, startView: "full" } });
-    expect(config.music).toEqual({ folder: dir, extensions: ["mp3", "flac"], maxTracks: 2000, scanDepth: 3, volume: 40, shuffle: true, repeat: "one", visualizer: false, startView: "full" });
+    expect(config.music).toMatchObject({ folder: dir, extensions: ["mp3", "flac"], maxTracks: 2000, scanDepth: 3, volume: 40, shuffle: true, repeat: "one", visualizer: false, startView: "full" });
     expect(applied.changed).toEqual(expect.arrayContaining(["music.folder", "music.volume"]));
     expect(settingsView(config).music.folder).toBe(dir);
   });

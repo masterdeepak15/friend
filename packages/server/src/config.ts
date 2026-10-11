@@ -1,4 +1,4 @@
-import { AUDIO_EXTENSIONS, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
+import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, type DefaultSource, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME, type AlexaLocale } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -63,6 +63,12 @@ export interface MusicConfig {
   /** The moving bars (off saves power on weak devices). */
   visualizer: boolean;
   startView: "mini" | "full";
+  /** Where a search or a play starts from when the assistant names no source. */
+  defaultSource: DefaultSource;
+  /** How many results a search from a connected service returns at most. */
+  searchLimit: number;
+  /** The Spotify plugin: added from the plugins screen. The client id is the owner's own free developer app (not secret); tokens are never kept here. */
+  spotify: { installed: boolean; enabled: boolean; clientId: string };
 }
 
 export interface HudConfig {
@@ -104,7 +110,16 @@ export interface AlexaConfig {
 const SKILL_ID = /^amzn1\.ask\.skill\.[A-Za-z0-9-]{8,80}$/;
 const AMAZON_USER = /^amzn1\.ask\.account\.[A-Za-z0-9._-]{8,500}$/;
 
-export const DEFAULT_MUSIC: MusicConfig = { folder: "", extensions: [...AUDIO_EXTENSIONS], maxTracks: MUSIC_LIMITS.maxTracks.def, scanDepth: MUSIC_LIMITS.scanDepth.def, volume: MUSIC_LIMITS.volume.def, shuffle: false, repeat: "all", visualizer: true, startView: "mini" };
+export const DEFAULT_MUSIC: MusicConfig = { folder: "", extensions: [...AUDIO_EXTENSIONS], maxTracks: MUSIC_LIMITS.maxTracks.def, scanDepth: MUSIC_LIMITS.scanDepth.def, volume: MUSIC_LIMITS.volume.def, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: MUSIC_LIMITS.searchLimit.def, spotify: { installed: false, enabled: false, clientId: "" } };
+
+const CLIENT_ID = /^[A-Za-z0-9]{8,64}$/;
+
+function sanitizeSpotify(raw: unknown): MusicConfig["spotify"] {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const id = typeof r.clientId === "string" ? r.clientId.trim() : "";
+  const clientId = CLIENT_ID.test(id) ? id : "";
+  return { installed: r.installed === true || (r.installed === undefined && (r.enabled === true || clientId !== "")), enabled: r.enabled === true, clientId };
+}
 
 export function sanitizeMusic(raw: unknown): MusicConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -120,6 +135,9 @@ export function sanitizeMusic(raw: unknown): MusicConfig {
     repeat: (REPEAT_MODES as readonly unknown[]).includes(r.repeat) ? (r.repeat as RepeatMode) : "all",
     visualizer: r.visualizer !== false,
     startView: r.startView === "full" ? "full" : "mini",
+    defaultSource: (DEFAULT_SOURCES as readonly unknown[]).includes(r.defaultSource) ? (r.defaultSource as DefaultSource) : "local",
+    searchLimit: num(r.searchLimit, MUSIC_LIMITS.searchLimit),
+    spotify: sanitizeSpotify(r.spotify),
   };
 }
 
