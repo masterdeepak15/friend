@@ -118,6 +118,8 @@ export interface MusicApi {
   spotifySetClientId(clientId: string, pin: string, ip: string): Promise<{ ok: true }>;
   /** The return from Spotify. True when the login was completed. */
   spotifyCallback(params: Record<string, string>): Promise<boolean>;
+  /** Where mpv is on this PC (or how to install it), using the program set in Settings. */
+  hostCheck(): Promise<unknown>;
   /** A good access token for Spotify's web player in the owner's own browser, or null when Spotify is not connected. */
   spotifyToken(): Promise<string | null>;
 }
@@ -685,6 +687,7 @@ export function createGateway(deps: GatewayDeps) {
       }
     });
   }
+  app.get("/api/music/host/check", { onRequest: musicGuard }, async (_req, reply) => reply.header("cache-control", "no-store").send(await deps.music!.hostCheck()));
   app.get("/api/music/spotify/token", { onRequest: musicGuard }, async (_req, reply) => {
     reply.header("cache-control", "no-store");
     const accessToken = await deps.music!.spotifyToken().catch(() => null);

@@ -19,7 +19,7 @@ import { AlexaHub, fetchAmazonCert } from "./alexa/hub";
 import { MusicHub } from "./music/hub";
 import { HostPlayer } from "./music/host";
 import { MusicLibrary } from "./music/library";
-import { Mpv } from "./music/mpv";
+import { findMpv, Mpv, type FindResult } from "./music/mpv";
 import { MusicTokens } from "./music/oauth";
 import { LocalSource, MusicSources } from "./music/source";
 import { SpotifyHub } from "./music/spotify";
@@ -86,6 +86,8 @@ export interface AppOptions {
   musicFetch?: typeof fetch;
   /** For tests: stands in for mpv. */
   musicMpv?: ConstructorParameters<typeof HostPlayer>[0]["mpv"] & { reset?: () => void };
+  /** For tests: stands in for looking for mpv on this PC. */
+  musicFindMpv?: () => Promise<FindResult>;
   /** How Amazon's signing certificate is downloaded (tests hand in their own). */
   alexaFetchCert?: (url: string) => Promise<string>;
   /** The roots Amazon's certificate must lead to (tests hand in their own). Defaults to the ones Node knows. */
@@ -988,6 +990,7 @@ export async function createApp(opts: AppOptions) {
         audit.log("owner", "music.spotify.clientid", { ip });
         return { ok: true };
       },
+      hostCheck: () => (opts.musicFindMpv ?? (() => findMpv({ program: config.music.hostPlayer })))(),
       spotifyToken: async () => (spotifyHub.status().connected ? spotifyHub.accessToken() : null),
       spotifyDisconnect: async (pin, ip) => {
         await requirePin(pin, ip);

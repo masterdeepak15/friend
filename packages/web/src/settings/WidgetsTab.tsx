@@ -1,5 +1,14 @@
 import { AUDIO_EXTENSIONS, LAUNCHER_MUSIC, LAUNCHER_PANELS, MAX_LAUNCHER, MUSIC_LIMITS, launcherProblem, programProblem } from "@friend/protocol";
+import { useState } from "react";
 import type { HudSettings, MusicSettings } from "./settingsApi";
+
+/** Where mpv is on the PC that runs Friend, or how to install it. */
+export type HostCheck = { found: true; path: string; version: string } | { found: false; install: string };
+export const httpHostCheck = async (): Promise<HostCheck> => {
+  const res = await fetch("/api/music/host/check", { cache: "no-store" });
+  if (!res.ok) throw new Error(res.status === 401 ? "Please sign in again." : `The request failed (${res.status}).`);
+  return (await res.json()) as HostCheck;
+};
 
 type Item = HudSettings["launcher"][number];
 type ActionType = Item["action"]["type"];
@@ -10,7 +19,17 @@ const defaultValue = (type: ActionType): string => (type === "panel" ? LAUNCHER_
  * The music player and the screen widgets: where the music is, how it starts, how the date and time are written, what the
  * quick-launch buttons do and how much the screen may move. Saved with the owner's PIN like every other setting.
  */
-export function WidgetsTab({ music, hud, onMusic, onHud }: { music: MusicSettings; hud: HudSettings; onMusic: (p: Partial<MusicSettings>) => void; onHud: (p: Partial<HudSettings>) => void }) {
+export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostCheck }: { music: MusicSettings; hud: HudSettings; onMusic: (p: Partial<MusicSettings>) => void; onHud: (p: Partial<HudSettings>) => void; checkHost?: () => Promise<HostCheck> }) {
+  const [hostNote, setHostNote] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const runCheck = () => {
+    setChecking(true);
+    setHostNote(null);
+    checkHost()
+      .then((r) => setHostNote(r.found ? `mpv ${r.version} found (${r.path}).` : r.install))
+      .catch((e: Error) => setHostNote(e.message))
+      .finally(() => setChecking(false));
+  };
   const launcher = hud.launcher;
   const setItem = (i: number, p: Partial<Item>) => onHud({ launcher: launcher.map((l, j) => (j === i ? { ...l, ...p } : l)) });
   const move = (i: number, by: number) => {
@@ -101,6 +120,17 @@ export function WidgetsTab({ music, hud, onMusic, onHud }: { music: MusicSetting
           </small>
         )}
       </label>
+      <div className="settings-field">
+        <button type="button" disabled={checking} onClick={runCheck}>
+          Check mpv
+        </button>
+        <small className="auth-note">Looks for mpv with the saved program setting, or automatically when it is empty.</small>
+        {hostNote && (
+          <small role="status" className="auth-note">
+            {hostNote}
+          </small>
+        )}
+      </div>
       <label className="settings-field">
         <span>Spotify device on the PC to play on</span>
         <input type="text" value={music.spotifyDevice} maxLength={100} placeholder="the name Spotify shows for that device" onChange={(e) => onMusic({ spotifyDevice: e.target.value })} />

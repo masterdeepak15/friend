@@ -62,3 +62,22 @@ describe("where the sound comes out", () => {
     expect(screen.getByText(/Arguments cannot be added/)).toBeTruthy();
   });
 });
+
+describe("checking mpv", () => {
+  it("shows the version it found", async () => {
+    const check = vi.fn(async () => ({ found: true as const, path: "/usr/bin/mpv", version: "0.37.0" }));
+    render(<WidgetsTab music={music} hud={hud} onMusic={() => {}} onHud={() => {}} checkHost={check} />);
+    fireEvent.click(screen.getByRole("button", { name: "Check mpv" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/mpv 0\.37\.0 found/);
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows how to install it when it is not there, and an error in plain words", async () => {
+    const check = vi.fn().mockResolvedValueOnce({ found: false, install: "mpv is not installed. Install it once with: winget install mpv, then try again." }).mockRejectedValueOnce(new Error("Please sign in again."));
+    render(<WidgetsTab music={music} hud={hud} onMusic={() => {}} onHud={() => {}} checkHost={check} />);
+    fireEvent.click(screen.getByRole("button", { name: "Check mpv" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/winget install mpv/);
+    fireEvent.click(screen.getByRole("button", { name: "Check mpv" }));
+    await vi.waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/sign in again/));
+  });
+});

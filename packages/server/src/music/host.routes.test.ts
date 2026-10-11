@@ -82,3 +82,35 @@ describe("the PC's player in the app", () => {
     expect(t.mpv.resets).toBe(0);
   });
 });
+
+describe("checking for mpv", () => {
+  const bootCheck = async (find: () => Promise<{ found: true; path: string; version: string } | { found: false; install: string }>) => {
+    const dir = mkdtempSync(join(tmpdir(), "friend-hostcheck-"));
+    app = await createApp({ dataDir: dir, provider: new FakeProvider([]), config: { port: 0, roots: [], music: sanitizeMusic({ hostPlayer: "mpv" }) }, pluginCatalogDir: join(dir, "none"), musicMpv: new FakeMpv() as never, musicFindMpv: find });
+    const { port } = await app.start();
+    const base = `http://127.0.0.1:${port}`;
+    const j = { "content-type": "application/json" };
+    await fetch(`${base}/api/setup`, { method: "POST", headers: j, body: JSON.stringify(owner) });
+    const login = await fetch(`${base}/api/login`, { method: "POST", headers: j, body: JSON.stringify({ password: owner.password }) });
+    const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
+    return { anon: () => fetch(`${base}/api/music/host/check`), owner: () => fetch(`${base}/api/music/host/check`, { headers: { cookie } }) };
+  };
+
+  it("is for the signed-in owner only", async () => {
+    const t = await bootCheck(async () => ({ found: false, install: "x" }));
+    expect((await t.anon()).status).toBe(401);
+  });
+
+  it("says where mpv is and which version, or how to install it", async () => {
+    const seen: string[] = [];
+    const a = await bootCheck(async () => {
+      seen.push("called");
+      return { found: true, path: "/usr/bin/mpv", version: "0.37.0" };
+    });
+    expect(await (await a.owner()).json()).toEqual({ found: true, path: "/usr/bin/mpv", version: "0.37.0" });
+    expect(seen).toEqual(["called"]);
+    await app!.stop();
+    const b = await bootCheck(async () => ({ found: false, install: "mpv is not installed. Install it once with: winget install mpv, then try again." }));
+    expect(await (await b.owner()).json()).toEqual({ found: false, install: expect.stringContaining("winget install mpv") });
+  });
+});
