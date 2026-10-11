@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MusicHub } from "./hub";
 import { MusicLibrary } from "./library";
+import { LocalSource, MusicSources } from "./source";
 
 const state = (over: Record<string, unknown> = {}) => ({
   playing: false,
@@ -50,11 +51,11 @@ beforeEach(async () => {
 });
 
 describe("which screen plays", () => {
-  it("says so when no Friend screen is open", () => {
+  it("says so when no Friend screen is open", async () => {
     expect(hub.control({ action: "pause" })).toMatchObject({ ok: false, text: expect.stringMatching(/no friend screen is open/i) });
   });
 
-  it("uses the screen that is active, and the newest of two that are", () => {
+  it("uses the screen that is active, and the newest of two that are", async () => {
     const pc = new Conn();
     const phone = new Conn();
     hub.attach(pc);
@@ -69,7 +70,7 @@ describe("which screen plays", () => {
     expect(pc.commands()).toHaveLength(1);
   });
 
-  it("falls back to the newest screen that reported anything, then to the newest connected", () => {
+  it("falls back to the newest screen that reported anything, then to the newest connected", async () => {
     const a = new Conn();
     const b = new Conn();
     hub.attach(a);
@@ -81,7 +82,7 @@ describe("which screen plays", () => {
     expect(a.commands()).toHaveLength(1);
   });
 
-  it("forgets a screen that disconnects", () => {
+  it("forgets a screen that disconnects", async () => {
     const a = new Conn();
     hub.attach(a);
     hub.onState(a, state({ active: true, title: "X" }), 1);
@@ -91,10 +92,10 @@ describe("which screen plays", () => {
 });
 
 describe("playing by a search", () => {
-  it("sends the matching tracks to the screen, best match first, and says what it is playing", () => {
+  it("sends the matching tracks to the screen, best match first, and says what it is playing", async () => {
     const c = new Conn();
     hub.attach(c);
-    const r = hub.play({ query: "miles davis" });
+    const r = await hub.play({ query: "miles davis" });
     expect(r.ok).toBe(true);
     expect(r.text).toMatch(/2 tracks/);
     const cmd = c.commands()[0]!;
@@ -103,44 +104,44 @@ describe("playing by a search", () => {
     expect(JSON.stringify(cmd)).not.toMatch(/[A-Z]:\\|\/Users\//); // no path
   });
 
-  it("can start shuffled, add to the queue, or play next", () => {
+  it("can start shuffled, add to the queue, or play next", async () => {
     const c = new Conn();
     hub.attach(c);
-    hub.play({ query: "blue", shuffle: true });
-    hub.play({ query: "daft", mode: "add" });
-    hub.play({ query: "so what", mode: "next" });
+    await hub.play({ query: "blue", shuffle: true });
+    await hub.play({ query: "daft", mode: "add" });
+    await hub.play({ query: "so what", mode: "next" });
     const [a, b, d] = c.commands();
     expect(a).toMatchObject({ shuffle: true, mode: "replace" });
     expect(b).toMatchObject({ mode: "add" });
     expect(d).toMatchObject({ mode: "next" });
   });
 
-  it("finds by artist or album alone, and says plainly when nothing matches", () => {
+  it("finds by artist or album alone, and says plainly when nothing matches", async () => {
     const c = new Conn();
     hub.attach(c);
-    expect(hub.play({ artist: "coltrane" }).text).toMatch(/Blue Train/);
-    expect(hub.play({ query: "zzz nothing" })).toMatchObject({ ok: false, text: expect.stringMatching(/no music matches/i) });
+    expect((await hub.play({ artist: "coltrane" })).text).toMatch(/Blue Train/);
+    expect(await hub.play({ query: "zzz nothing" })).toMatchObject({ ok: false, text: expect.stringMatching(/no music matches/i) });
     expect(c.commands()).toHaveLength(1);
   });
 
-  it("plays the whole library, shuffled if asked, when no search is given, and caps how many it sends", () => {
+  it("plays the whole library, shuffled if asked, when no search is given, and caps how many it sends", async () => {
     const c = new Conn();
     hub.attach(c);
-    hub.play({});
+    await hub.play({});
     expect(c.commands()[0]!.tracks!).toHaveLength(4);
-    expect(hub.play({ limit: 2 }).text).toMatch(/2 tracks/);
+    expect((await hub.play({ limit: 2 })).text).toMatch(/2 tracks/);
   });
 
   it("says the library is empty, with the reason, when there is no music folder", async () => {
     const empty = new MusicHub({ library: new MusicLibrary({ folder: () => "", extensions: () => ["mp3"], maxTracks: () => 10, scanDepth: () => 2 }) });
     const c = new Conn();
     empty.attach(c);
-    expect(empty.play({ query: "x" })).toMatchObject({ ok: false, text: expect.stringMatching(/no music folder|library is empty/i) });
+    expect(await empty.play({ query: "x" })).toMatchObject({ ok: false, text: expect.stringMatching(/no music folder|library is empty/i) });
   });
 });
 
 describe("the other controls", () => {
-  it("send what they mean, checked and clamped", () => {
+  it("send what they mean, checked and clamped", async () => {
     const c = new Conn();
     hub.attach(c);
     expect(hub.control({ action: "volume", level: 150 }).ok).toBe(true);
@@ -161,7 +162,7 @@ describe("the other controls", () => {
     expect(sent[7]).toMatchObject({ action: "view", view: "full" });
   });
 
-  it("refuse what makes no sense, without sending anything", () => {
+  it("refuse what makes no sense, without sending anything", async () => {
     const c = new Conn();
     hub.attach(c);
     expect(hub.control({ action: "volume" })).toMatchObject({ ok: false });
@@ -171,7 +172,7 @@ describe("the other controls", () => {
     expect(c.commands()).toHaveLength(0);
   });
 
-  it("pause, resume, toggle, stop, next and previous go straight through", () => {
+  it("pause, resume, toggle, stop, next and previous go straight through", async () => {
     const c = new Conn();
     hub.attach(c);
     for (const action of ["pause", "resume", "toggle", "stop", "next", "previous"] as const) expect(hub.control({ action }).ok).toBe(true);
@@ -180,23 +181,23 @@ describe("the other controls", () => {
 });
 
 describe("the queue", () => {
-  it("adds by search, removes by number, clears, and shows what the screen last said", () => {
+  it("adds by search, removes by number, clears, and shows what the screen last said", async () => {
     const c = new Conn();
     hub.attach(c);
-    expect(hub.queue({ action: "add", query: "daft" }).ok).toBe(true);
+    expect((await hub.queue({ action: "add", query: "daft" })).ok).toBe(true);
     expect(c.commands()[0]).toMatchObject({ action: "play", mode: "add" });
-    expect(hub.queue({ action: "remove", index: 2 }).ok).toBe(true);
+    expect((await hub.queue({ action: "remove", index: 2 })).ok).toBe(true);
     expect(c.commands()[1]).toMatchObject({ action: "queue.remove", index: 1 }); // the owner counts from 1
-    expect(hub.queue({ action: "clear" }).ok).toBe(true);
+    expect((await hub.queue({ action: "clear" })).ok).toBe(true);
     hub.onState(c, state({ active: true, index: 1, queue: [{ id: "a", title: "One" }, { id: "b", title: "Two" }] }), 1);
-    const shown = hub.queue({ action: "show" });
+    const shown = await hub.queue({ action: "show" });
     expect(shown.text).toMatch(/1\. One/);
     expect(shown.text).toMatch(/2\. Two \(playing\)/);
   });
 });
 
 describe("what is playing and what can be played", () => {
-  it("describes the player in plain words", () => {
+  it("describes the player in plain words", async () => {
     const c = new Conn();
     hub.attach(c);
     hub.onState(c, state({ active: true, playing: true, title: "So What", artist: "Miles Davis", album: "Kind of Blue", position: 61, duration: 562, volume: 40, shuffle: true, repeat: "one", queue: [{ id: "a", title: "x" }, { id: "b", title: "y" }], index: 0 }), 1);
@@ -211,12 +212,110 @@ describe("what is playing and what can be played", () => {
     expect(hub.nowPlaying().text).toMatch(/nothing is playing/i);
   });
 
-  it("searches without needing a screen, and never lists paths", () => {
-    const r = hub.search({ query: "blue" });
+  it("searches without needing a screen, and never lists paths", async () => {
+    const r = await hub.search({ query: "blue" });
     expect(r.ok).toBe(true);
     expect(r.text).toMatch(/2 tracks/);
     expect(r.text).toContain("Blue Train");
     expect(r.text).not.toMatch(/[A-Z]:\\|\.mp3/);
-    expect(hub.search({ query: "nothing here" })).toMatchObject({ ok: true, text: expect.stringMatching(/no music matches/i) });
+    expect(await hub.search({ query: "nothing here" })).toMatchObject({ ok: true, text: expect.stringMatching(/no music matches/i) });
+  });
+});
+
+describe("playing from other sources", () => {
+  const spotTracks = [
+    { ref: "spotify:4uLU6hMCjMI75M1A2tKUQC", source: "spotify" as const, title: "Never Gonna Give You Up", artist: "Rick Astley", album: "WNYSB", durationSec: 213 },
+    { ref: "spotify:7qiZfU4dY1lWllzX7mPBI3", source: "spotify" as const, title: "Shape of You", artist: "Ed Sheeran", album: "Divide", durationSec: 233 },
+  ];
+  const spotify = (status: { connected: boolean; needs: string | null; canPlay?: boolean } = { connected: true, needs: null }) => ({
+    id: "spotify" as const,
+    status: () => ({ ...status, account: "me" }),
+    search: async () => spotTracks,
+    playlists: async () => [],
+    tracksOf: async () => [],
+    track: async () => null,
+  });
+  const make = (s = spotify(), defaultSource: "local" | "spotify" | "any" = "local") => {
+    const sources = new MusicSources([new LocalSource(lib), s], { defaultSource: () => defaultSource, searchLimit: () => 10 });
+    const h = new MusicHub({ library: lib, sources });
+    const c = new Conn();
+    h.attach(c);
+    return { h, c };
+  };
+
+  it("plays Spotify tracks by their ref when asked", async () => {
+    const { h, c } = make();
+    const r = await h.play({ query: "never", source: "spotify" });
+    expect(r.ok).toBe(true);
+    expect(c.commands()[0]).toMatchObject({ action: "play", mode: "replace", tracks: [{ id: "spotify:4uLU6hMCjMI75M1A2tKUQC", title: "Never Gonna Give You Up" }, { id: "spotify:7qiZfU4dY1lWllzX7mPBI3" }] });
+    expect(r.text).toMatch(/Never Gonna Give You Up/);
+  });
+
+  it("uses the owner's default source when none is named", async () => {
+    const { h, c } = make(spotify(), "spotify");
+    await h.play({ query: "never" });
+    expect(c.commands()[0]!.tracks![0]!.id).toBe("spotify:4uLU6hMCjMI75M1A2tKUQC");
+  });
+
+  it("the folder still plays with bare ids and up to 200 tracks, whatever the search limit", async () => {
+    const { h, c } = make(spotify(), "local");
+    await h.play({ query: "miles" });
+    expect(c.commands()[0]!.tracks!.map((t) => t.id).every((id) => /^[0-9a-f]{16}$/.test(id))).toBe(true);
+    expect(c.commands()[0]!.tracks).toHaveLength(2);
+  });
+
+  it("any: the folder's tracks keep bare ids next to Spotify's refs", async () => {
+    const { h, c } = make(spotify(), "any");
+    await h.play({ query: "miles", source: "any" });
+    const ids = c.commands()[0]!.tracks!.map((t) => t.id);
+    expect(ids.some((id) => /^[0-9a-f]{16}$/.test(id))).toBe(true);
+    expect(ids.some((id) => id.startsWith("spotify:"))).toBe(true);
+  });
+
+  it("a Spotify that is not connected says what to do, and nothing is sent", async () => {
+    const { h, c } = make(spotify({ connected: false, needs: "Connect your Spotify account in Plugins, Spotify." }));
+    const r = await h.play({ query: "never", source: "spotify" });
+    expect(r).toEqual({ ok: false, text: expect.stringContaining("Connect your Spotify account") });
+    expect(c.commands()).toHaveLength(0);
+  });
+
+  it("a free Spotify account can search but is told it cannot play, and nothing is sent", async () => {
+    const { h, c } = make(spotify({ connected: true, needs: "Spotify Premium is needed to play (searching works).", canPlay: false }));
+    const r = await h.play({ query: "never", source: "spotify" });
+    expect(r.ok).toBe(false);
+    expect(r.text).toMatch(/Premium/);
+    expect(c.commands()).toHaveLength(0);
+    const found = await h.search({ query: "never", source: "spotify" });
+    expect(found.ok).toBe(true);
+    expect(found.text).toMatch(/Never Gonna Give You Up/);
+  });
+
+  it("any with a free Spotify plays the folder's tracks only and says why Spotify was left out", async () => {
+    const { h, c } = make(spotify({ connected: true, needs: "Spotify Premium is needed to play (searching works).", canPlay: false }), "any");
+    const r = await h.play({ query: "miles", source: "any" });
+    expect(r.ok).toBe(true);
+    expect(c.commands()[0]!.tracks!.every((t) => /^[0-9a-f]{16}$/.test(t.id))).toBe(true);
+    expect(r.text).toMatch(/Premium/);
+  });
+
+  it("search lists each track with where it comes from", async () => {
+    const { h } = make();
+    const r = await h.search({ query: "never", source: "spotify" });
+    expect(r.text).toMatch(/Never Gonna Give You Up — Rick Astley.*Spotify/);
+  });
+
+  it("add to the queue takes the source too", async () => {
+    const { h, c } = make();
+    await h.queue({ action: "add", query: "never", source: "spotify" });
+    expect(c.commands()[0]).toMatchObject({ action: "play", mode: "add" });
+  });
+
+  it("an error from a source is one plain sentence and sends nothing", async () => {
+    const boom = { ...spotify(), search: async () => { throw new Error("token AT-1 leaked"); } };
+    const { h, c } = make(boom);
+    const r = await h.play({ query: "x", source: "spotify" });
+    expect(r.ok).toBe(false);
+    expect(r.text).not.toMatch(/AT-1/);
+    expect(c.commands()).toHaveLength(0);
   });
 });

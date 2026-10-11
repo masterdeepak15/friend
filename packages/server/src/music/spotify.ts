@@ -73,7 +73,7 @@ export class SpotifyHub implements MusicSource {
     const login = this.d.tokens.load("spotify");
     if (!login) return { connected: false, needs: "Connect your Spotify account in Plugins, Spotify.", account: null };
     if (this.d.tokens.needsReconnect("spotify")) return { connected: false, needs: RECONNECT, account: login.account };
-    return { connected: true, needs: login.premium === false ? "Spotify Premium is needed to play (searching works)." : null, account: login.account };
+    return { connected: true, needs: login.premium === false ? "Spotify Premium is needed to play (searching works)." : null, account: login.account, canPlay: login.premium !== false };
   }
 
   disconnect(): void {

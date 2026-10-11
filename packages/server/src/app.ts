@@ -172,10 +172,10 @@ export async function createApp(opts: AppOptions) {
   let brokerTimer: ReturnType<typeof setInterval> | undefined;
   // The owner's music: the folder is a setting; the player itself runs in the browser and the assistant controls it through the hub.
   const musicLibrary = new MusicLibrary({ folder: () => config.music.folder, extensions: () => config.music.extensions, maxTracks: () => config.music.maxTracks, scanDepth: () => config.music.scanDepth });
-  const musicHub = new MusicHub({ library: musicLibrary });
   const musicTokens = new MusicTokens(opts.dataDir);
   const spotifyHub = new SpotifyHub({ config: () => config, tokens: musicTokens, fetch: opts.musicFetch, publicBase: () => config.publicUrl ?? `http://127.0.0.1:${config.port}` });
   const musicSources = new MusicSources([new LocalSource(musicLibrary), spotifyHub], { defaultSource: () => config.music.defaultSource, searchLimit: () => config.music.searchLimit });
+  const musicHub = new MusicHub({ library: musicLibrary, sources: musicSources });
   void musicLibrary.scan().catch(() => {});
   const memory = new Memory(db);
   const tasks = new Tasks(db);

@@ -16,6 +16,8 @@ export interface SourceStatus {
   /** What the owner has to do or have before this source works, in plain words (null when nothing). */
   needs: string | null;
   account: string | null;
+  /** False when the account can be searched but not played (Spotify without Premium). Missing means it can play. */
+  canPlay?: boolean;
 }
 
 /** Somewhere music comes from. A new service is one more implementation of this and one more entry in the registry. */
@@ -72,6 +74,11 @@ export class MusicSources {
     private sources: MusicSource[],
     private d: { defaultSource: () => Wanted; searchLimit: () => number },
   ) {}
+
+  /** The source a search or a play starts from when none is named. */
+  defaultSource(): Wanted {
+    return this.d.defaultSource();
+  }
 
   status(): Record<MusicSourceId, SourceStatus> {
     const out = {} as Record<MusicSourceId, SourceStatus>;

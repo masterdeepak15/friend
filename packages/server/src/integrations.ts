@@ -149,8 +149,8 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
       secrets: { authToken: !!w.authToken },
     },
     { id: "zerodha", ...META.zerodha, kind: "integration", installed: z.installed, enabled: z.enabled, ...zState(), steps: zSteps, settings: { apiKey: z.apiKey }, secrets: { apiSecret: !!z.apiSecret } },
-    { id: "spotify", ...META.spotify, kind: "integration", installed: sp.installed, enabled: sp.enabled, ...spState(), steps: spSteps, settings: { clientId: sp.clientId }, secrets: {} },
     { id: "alexa", ...META.alexa, kind: "integration", installed: al.installed, enabled: al.enabled, ...alState(), steps: aSteps, settings: { skillId: al.skillId, invocationName: al.invocationName }, secrets: {} },
+    { id: "spotify", ...META.spotify, kind: "integration", installed: sp.installed, enabled: sp.enabled, ...spState(), steps: spSteps, settings: { clientId: sp.clientId }, secrets: {} },
   ];
 }
 

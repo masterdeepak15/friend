@@ -598,16 +598,15 @@ export class Agent {
 
     if (call.name.startsWith("music.")) {
       const m = d.music!;
-      const out =
-        call.name === "music.play"
-          ? m.play(args)
-          : call.name === "music.control"
-            ? m.control(args as never)
-            : call.name === "music.queue"
-              ? m.queue(args as never)
-              : call.name === "music.search"
-                ? m.search(args as never)
-                : m.nowPlaying();
+      const out = await (call.name === "music.play"
+        ? m.play(args)
+        : call.name === "music.control"
+          ? m.control(args as never)
+          : call.name === "music.queue"
+            ? m.queue(args as never)
+            : call.name === "music.search"
+              ? m.search(args as never)
+              : m.nowPlaying());
       d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "music.control" || call.name === "music.queue" ? { action: args.action } : {}, tier, ok: out.ok });
       return out.ok ? { text: out.text, isError: false } : fail(out.text);
     }
