@@ -1,4 +1,4 @@
-import type { ClientMsg, MusicState } from "@friend/protocol";
+import type { ClientMsg, MusicCommand, MusicState } from "@friend/protocol";
 import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MusicPlayerView } from "./MusicPlayer";
@@ -85,6 +85,47 @@ describe("the player in remote mode (the PC plays)", () => {
     expect(audio.paused).toBe(false);
     rerender({ remote: true });
     expect(audio.paused).toBe(true);
+  });
+});
+
+describe("going to the PC and back", () => {
+  const play1: { n: number; command: MusicCommand } = { n: 1, command: { action: "play", tracks: [track(1)], mode: "replace" } };
+
+  it("the screen's own player stops, so coming back does not start the old track again by itself", () => {
+    const audio = new Audio();
+    let plays = 0;
+    const realPlay = audio.play.bind(audio);
+    audio.play = () => {
+      plays++;
+      return realPlay();
+    };
+    const { result, rerender } = renderHook((p: { remote: boolean; cmd: typeof play1 | null }) => useMusicPlayer({ music, remote: p.remote, cmd: p.cmd, send: () => {}, connection: "open", createAudio: () => audio }), { initialProps: { remote: false, cmd: play1 as typeof play1 | null } });
+    expect(plays).toBe(1);
+    rerender({ remote: true, cmd: play1 });
+    expect(result.current.state.playing).toBe(false);
+    rerender({ remote: false, cmd: play1 });
+    expect(plays).toBe(1);
+    expect(audio.paused).toBe(true);
+  });
+
+  it("gives back the audio context and the Spotify engine each time, so none pile up", () => {
+    const closed = vi.fn(async () => {});
+    class Ctx {
+      destination = {};
+      createMediaElementSource() {
+        return { connect() {} };
+      }
+      createAnalyser() {
+        return { connect() {}, fftSize: 0, smoothingTimeConstant: 0, frequencyBinCount: 0, getByteFrequencyData() {} };
+      }
+      close = closed;
+    }
+    vi.stubGlobal("AudioContext", Ctx);
+    const engine = Object.assign(new Audio(), { error: null as string | null, dispose: vi.fn() });
+    const { rerender } = renderHook((p: { remote: boolean }) => useMusicPlayer({ music, remote: p.remote, cmd: { n: 1, command: { action: "play", tracks: [{ ...track(1), id: "spotify:4uLU6hMCjMI75M1A2tKUQC" }, track(2)], mode: "replace" } }, send: () => {}, connection: "open", createAudio: () => new Audio(), createSpotify: () => engine }), { initialProps: { remote: false } });
+    rerender({ remote: true });
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(engine.dispose).toHaveBeenCalledTimes(1);
   });
 });
 

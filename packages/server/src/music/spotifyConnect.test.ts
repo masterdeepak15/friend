@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MusicTokens } from "./oauth";
 import { SpotifyHub } from "./spotify";
 import { fakeSpotify } from "./testing/fakeSpotify";
@@ -95,5 +95,31 @@ describe("Spotify devices", () => {
     fake.rateLimit = false;
     fake.garbage = true;
     await expect(hub.playbackState()).rejects.toThrow(/did not answer/i);
+  });
+});
+
+describe("a Spotify that never answers", () => {
+  it("is given up on after a few seconds, in one sentence, so nothing waits behind it", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = fakeSpotify();
+      const tokens = new MusicTokens(mkdtempSync(join(tmpdir(), "friend-connect-")));
+      const config = { music: { spotify: { installed: true, enabled: true, clientId: CLIENT } } };
+      let hang = false;
+      const fetchFn = ((url: string, init?: RequestInit) => {
+        if (!hang) return fake.fetch(url, init);
+        return new Promise((_res, rej) => init?.signal?.addEventListener("abort", () => rej(new Error("aborted"))));
+      }) as typeof fetch;
+      const hub = new SpotifyHub({ config: () => config as never, tokens, fetch: fetchFn, clock: () => 1_000_000, publicBase: () => "https://friend.example.com", requestTimeoutMs: 5000 });
+      const state = new URL(hub.connectUrl()!).searchParams.get("state")!;
+      await hub.completeLogin({ code: fake.issueCode(), state });
+      hang = true;
+      const p = hub.playbackState();
+      const caught = p.catch((e: Error) => e.message);
+      await vi.advanceTimersByTimeAsync(5100);
+      expect(await caught).toMatch(/could not reach Spotify/i);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -19,6 +19,8 @@ export interface SpotifyHubDeps {
   /** The address people reach Friend at: the public address, or http://127.0.0.1:<port> when there is none. */
   publicBase: () => string;
   states?: OAuthStates;
+  /** How long to wait for Spotify to answer before giving up (default 8 seconds). */
+  requestTimeoutMs?: number;
 }
 
 interface ApiTrack {
@@ -82,10 +84,15 @@ export class SpotifyHub implements MusicSource {
 
   private async call(url: string, init?: RequestInit): Promise<Response> {
     if (!HOSTS.has(new URL(url).host)) throw new Error("Friend only talks to Spotify's own addresses.");
+    // a Spotify that never answers must not hold up everything queued behind the call
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.d.requestTimeoutMs ?? 8000);
     try {
-      return await (this.d.fetch ?? fetch)(url, init);
+      return await (this.d.fetch ?? fetch)(url, { ...init, signal: ctl.signal });
     } catch {
       throw new Error("Friend could not reach Spotify right now.");
+    } finally {
+      clearTimeout(timer);
     }
   }
 

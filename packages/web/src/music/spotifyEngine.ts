@@ -26,7 +26,7 @@ export interface SpotifyEngineDeps {
   readyTimeoutMs?: number;
 }
 
-export type SpotifyEngine = PlayerAudio & { error: string | null };
+export type SpotifyEngine = PlayerAudio & { error: string | null; dispose(): void };
 
 const REF = /^spotify:([A-Za-z0-9_-]{1,64})$/;
 const PREMIUM = "Spotify Premium is needed to play on this screen.";
@@ -181,6 +181,18 @@ export function createSpotifyEngine(d: SpotifyEngineDeps): SpotifyEngine {
       posAt = now();
       stopTicker();
       void player?.pause().catch(() => {});
+    },
+    dispose() {
+      stopTicker();
+      try {
+        player?.disconnect();
+      } catch {
+        /* already gone */
+      }
+      player = null;
+      deviceId = null;
+      uri = null;
+      startedUri = null;
     },
     addEventListener(type: string, fn: () => void) {
       let s = listeners.get(type);

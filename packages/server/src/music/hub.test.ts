@@ -357,6 +357,9 @@ describe("with the PC as the output", () => {
     available() {
       return this.availableNow;
     }
+    lastError(): string | null {
+      return null;
+    }
   }
   let host: FakeHost;
   let output: "screen" | "host";
@@ -412,6 +415,26 @@ describe("with the PC as the output", () => {
   it("says what is playing and shows the queue from the PC's player", async () => {
     expect(h.nowPlaying().text).toMatch(/Playing: So What by Miles Davis.*1:05 of 9:00/);
     expect((await h.queue({ action: "show" })).text).toMatch(/2 tracks.*1\. So What \(playing\).*2\. Blue in Green/s);
+  });
+
+  it("the view (mini, full, hidden) is the screen's business: it goes to the screens, not the PC", async () => {
+    const r = await h.control({ action: "view", view: "full" });
+    expect(r.ok).toBe(true);
+    expect(screen.commands()).toEqual([expect.objectContaining({ action: "view", view: "full" })]);
+    expect(host.commands).toHaveLength(0);
+  });
+
+  it("a title with a full stop in it is not cut in two, and the reply says where it plays", async () => {
+    const sources = new MusicSources([new LocalSource(lib), { id: "spotify" as const, status: () => ({ connected: true, needs: null, account: "me" }), search: async () => [{ ref: "spotify:4uLU6hMCjMI75M1A2tKUQC", source: "spotify" as const, title: "Mr. Brightside", artist: "The Killers", album: "Hot Fuss", durationSec: 222 }], playlists: async () => [], tracksOf: async () => [], track: async () => null }], { defaultSource: () => "spotify", searchLimit: () => 10 });
+    const hh = new MusicHub({ library: lib, sources, host: host as never, output: () => "host" });
+    const r = await hh.play({ query: "brightside", source: "spotify" });
+    expect(r.text).toBe("Playing 1 track on this PC, starting with Mr. Brightside by The Killers.");
+    expect((await hh.play({ query: "brightside", source: "spotify", mode: "add" })).text).toBe("Added 1 track to the queue on this PC.");
+  });
+
+  it("tells why the PC stopped, when it did by itself", () => {
+    (host as unknown as { lastError: () => string | null }).lastError = () => "mpv stopped unexpectedly. Play again to start it again.";
+    expect(h.nowPlaying().text).toMatch(/mpv stopped unexpectedly/);
   });
 
   it("goes back to the screen the moment the output is the screen again", async () => {

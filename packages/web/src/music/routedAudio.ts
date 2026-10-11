@@ -62,6 +62,13 @@ export class RoutedAudio implements PlayerAudio {
     return this.spotify;
   }
 
+  /** Gives back what the Spotify engine holds (its player in the page). The audio element needs nothing. */
+  dispose(): void {
+    (this.spotify as (PlayerAudio & { dispose?: () => void }) | null)?.dispose?.();
+    this.spotify = null;
+    this.active = this.local;
+  }
+
   get src(): string {
     return this.active.src;
   }

@@ -184,7 +184,7 @@ export async function createApp(opts: AppOptions) {
   // The PC's own player (mpv for the folder, a Spotify device for Spotify). It only plays when the owner chose the PC as the output.
   let hostEmit: (state: MusicState) => void = () => {};
   const hostMpv = opts.musicMpv ?? new Mpv({ program: () => config.music.hostPlayer, dataDir: opts.dataDir });
-  const hostPlayer = new HostPlayer({ library: musicLibrary, mpv: hostMpv, spotify: spotifyHub, settings: () => config.music, emit: (s) => hostEmit(s) });
+  const hostPlayer = new HostPlayer({ library: musicLibrary, mpv: hostMpv, spotify: spotifyHub, settings: () => config.music, emit: (s) => hostEmit(s), onError: (text) => broadcast({ type: "alert", level: "warn", text }) });
   const musicHub = new MusicHub({ library: musicLibrary, sources: musicSources, host: hostPlayer, output: () => config.music.output });
   void musicLibrary.scan().catch(() => {});
   const memory = new Memory(db);

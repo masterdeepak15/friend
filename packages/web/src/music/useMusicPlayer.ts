@@ -143,6 +143,7 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
     if (!analyserStarted.current) startAnalyser();
   }, []);
   const analyserStarted = useRef(false);
+  const ctxRef = useRef<AudioContext | null>(null);
   const startAnalyser = () => {
     const routed = audioRef.current;
     const a = routed instanceof RoutedAudio ? routed.element : routed;
@@ -150,6 +151,7 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
     if (!a || !Ctx || typeof (a as unknown as HTMLMediaElement).play !== "function") return;
     try {
       const ctx = new Ctx();
+      ctxRef.current = ctx;
       const node = ctx.createMediaElementSource(a as unknown as HTMLMediaElement);
       const an = ctx.createAnalyser();
       an.fftSize = 256;
@@ -194,13 +196,21 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
       a.removeEventListener("ended", ended);
       a.removeEventListener("error", failed);
       a.pause();
-      // a fresh element (and analyser) is made if the screen plays again later
+      // a fresh element (and analyser) is made if the screen plays again later; what the old ones held is given back
+      void ctxRef.current?.close().catch(() => {});
+      ctxRef.current = null;
+      (a as RoutedAudio).dispose();
       lastTrack.current = null;
       audioRef.current = null;
       analyserStarted.current = false;
       setAnalyser(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote]);
+
+  // the PC plays now: what this screen was playing stops here too, so coming back does not start it again by itself
+  useEffect(() => {
+    if (remote) dispatch({ type: "stop" });
   }, [remote]);
 
   const current: Track | null = state.index >= 0 ? (state.queue[state.index] ?? null) : null;

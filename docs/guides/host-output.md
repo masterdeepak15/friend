@@ -37,4 +37,5 @@ Switching back to **The screen** stops the PC's player and lets the browser play
 
 - Friend gives mpv only files inside your music folder, and it does so through mpv's control channel, never as command-line arguments, so a file's name can never act as an option.
 - Only you, with your PIN, can change the output, the program or the device. The assistant cannot.
+- Friend starts mpv with its scripts, the youtube-dl hook and playlist references turned off, so a file in your folder cannot make mpv open other files or addresses. Your own mpv.conf (for example your audio device) is still used.
 - Stopping Friend (or changing these settings) ends mpv. If Friend is killed hard (for example from the task manager) mpv may stay open, idle; close it there.

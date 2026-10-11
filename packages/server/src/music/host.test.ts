@@ -309,3 +309,62 @@ describe("what it reports and how it ends", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe("hung and failing reads, and being stopped", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  it("a read that never comes back is not asked again behind itself", async () => {
+    const reads = vi.spyOn(sp, "playbackState").mockImplementation(() => new Promise(() => {}));
+    await player.command(play([spot("4uLU6hMCjMI75M1A2tKUQC") as never]));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(reads).toHaveBeenCalledTimes(1);
+  });
+
+  it("three failed reads in a row end playback with the sentence, and the screens are told", async () => {
+    const told: string[] = [];
+    player.dispose();
+    player = new HostPlayer({ library: { ready: async () => {}, resolve: async (id: string) => paths[id] ?? null }, mpv: mpv as never, spotify: sp as never, settings: () => settings, emit: () => {}, onError: (t) => void told.push(t) });
+    vi.spyOn(sp, "playbackState").mockRejectedValue(new Error("Spotify is asking Friend to slow down."));
+    await player.command(play([spot("4uLU6hMCjMI75M1A2tKUQC") as never]));
+    await vi.advanceTimersByTimeAsync(7000);
+    expect(player.state().playing).toBe(false);
+    expect(player.lastError()).toMatch(/slow down/);
+    expect(told).toEqual([expect.stringMatching(/slow down/)]);
+  });
+
+  it("an mpv that dies on its own, and a run of files that will not play, are told to the screens", async () => {
+    const told: string[] = [];
+    player.dispose();
+    mpv = new FakeMpv();
+    player = new HostPlayer({ library: { ready: async () => {}, resolve: async (id: string) => paths[id] ?? null }, mpv: mpv as never, spotify: sp as never, settings: () => settings, emit: () => {}, onError: (t) => void told.push(t) });
+    await player.command(play([folder(1)]));
+    mpv.fire({ type: "exited" });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(told).toEqual([expect.stringMatching(/mpv stopped/i)]);
+  });
+
+  it("a command that fails is answered to whoever sent it, not also broadcast", async () => {
+    const told: string[] = [];
+    player.dispose();
+    mpv = new FakeMpv();
+    mpv.loadError = "mpv is not installed.";
+    player = new HostPlayer({ library: { ready: async () => {}, resolve: async (id: string) => paths[id] ?? null }, mpv: mpv as never, spotify: sp as never, settings: () => settings, emit: () => {}, onError: (t) => void told.push(t) });
+    const r = await player.command(play([folder(1)]));
+    expect(r.ok).toBe(false);
+    expect(told).toEqual([]);
+  });
+
+  it("being stopped while a track is still loading starts nothing", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    player.dispose();
+    mpv = new FakeMpv();
+    player = new HostPlayer({ library: { ready: () => gate, resolve: async (id: string) => paths[id] ?? null }, mpv: mpv as never, spotify: sp as never, settings: () => settings, emit: () => {} });
+    const p = player.command(play([folder(1)]));
+    await vi.advanceTimersByTimeAsync(0); // the load is under way, waiting for the library
+    player.dispose();
+    release();
+    await p;
+    expect(mpv.loads()).toEqual([]);
+  });
+});

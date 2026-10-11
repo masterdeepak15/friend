@@ -94,7 +94,7 @@ describe("Mpv", () => {
     expect([a, b]).toEqual([{ ok: true }, { ok: true }]);
     expect(t.argvs).toHaveLength(1);
     const args = t.argvs[0]!;
-    expect(args).toEqual(expect.arrayContaining(["--no-video", "--idle=yes", "--no-terminal"]));
+    expect(args).toEqual(expect.arrayContaining(["--no-video", "--idle=yes", "--no-terminal", "--ytdl=no", "--load-scripts=no", "--access-references=no"]));
     expect(args.some((x) => x.startsWith("--input-ipc-server="))).toBe(true);
     await t.mpv.start();
     expect(t.argvs).toHaveLength(1);
@@ -149,6 +149,14 @@ describe("Mpv", () => {
     await vi.waitFor(() => expect(got.map((e) => e.type)).toContain("exited"));
     await t.mpv.load("/m/b.mp3");
     expect(t.argvs).toHaveLength(2);
+  });
+
+  it("after dispose it starts nothing, even for a call that was already on its way", async () => {
+    const t = make();
+    t.mpv.dispose();
+    expect(await t.mpv.start()).toEqual({ ok: false, error: expect.stringMatching(/stopped/i) });
+    await expect(t.mpv.load("/m/a.mp3")).rejects.toThrow(/stopped/i);
+    expect(t.argvs).toHaveLength(0);
   });
 
   it("gives up on a request mpv never answers, in a sentence", async () => {

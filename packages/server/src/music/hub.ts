@@ -62,7 +62,7 @@ export class MusicHub {
       library: MusicLibrary;
       sources?: MusicSources;
       /** The PC's own player, and which output the owner chose. With "host" every command goes to the PC and none to a screen. */
-      host?: Pick<HostPlayer, "command" | "state" | "available">;
+      host?: Pick<HostPlayer, "command" | "state" | "available" | "lastError">;
       output?: () => "screen" | "host";
     },
   ) {}
@@ -100,8 +100,16 @@ export class MusicHub {
     return { conn: pick[0], state: pick[1].state };
   }
 
+  /** The screens get the command (the view of the player is each screen's own business, whoever plays the sound). */
+  private sendToScreen(command: MusicCommand): Result | null {
+    const t = this.target();
+    if (!t) return { ok: false, text: NO_SCREEN };
+    t.conn.send({ type: "music.command", ...command });
+    return null;
+  }
+
   private async send(command: MusicCommand): Promise<Result | null> {
-    if (this.hostOn()) {
+    if (this.hostOn() && command.action !== "view") {
       const host = this.d.host!;
       const av = host.available();
       if (!av.ok) return { ok: false, text: av.reason };
@@ -119,8 +127,12 @@ export class MusicHub {
   }
 
   async play(a: PlayArgs): Promise<Result> {
-    const r = await this.playRouted(a);
-    return this.hostOn() && r.ok ? { ok: true, text: r.text.replace(/\.(?=( |$))/, " on this PC.") } : r;
+    return this.playRouted(a);
+  }
+
+  /** " on this PC" in a reply when the PC is where the sound comes out. */
+  private at(): string {
+    return this.hostOn() ? " on this PC" : "";
   }
 
   private async playRouted(a: PlayArgs): Promise<Result> {
@@ -150,7 +162,8 @@ export class MusicHub {
     if (failed) return failed;
     const n = tracks.length;
     const first = tracks[0]!;
-    const base = mode === "add" ? `Added ${plural(n, "track")} to the queue.` : mode === "next" ? `Queued ${plural(n, "track")} to play next, starting with ${label(first)}.` : `Playing ${plural(n, "track")}${a.shuffle ? " shuffled" : ", starting with " + label(first)}.`;
+    const at = this.at();
+    const base = mode === "add" ? `Added ${plural(n, "track")} to the queue${at}.` : mode === "next" ? `Queued ${plural(n, "track")} to play next${at}, starting with ${label(first)}.` : `Playing ${plural(n, "track")}${at}${a.shuffle ? " shuffled" : ", starting with " + label(first)}.`;
     return { ok: true, text: [base, ...notes].join(" ") };
   }
 
@@ -164,9 +177,10 @@ export class MusicHub {
     if (failed) return failed;
     const first = found.tracks[0]!;
     const n = found.tracks.length;
-    if (mode === "add") return { ok: true, text: `Added ${plural(n, "track")} to the queue.` };
-    if (mode === "next") return { ok: true, text: `Queued ${plural(n, "track")} to play next, starting with ${label(first)}.` };
-    return { ok: true, text: `Playing ${plural(n, "track")}${a.shuffle ? " shuffled" : ", starting with " + label(first)}.` };
+    const at = this.at();
+    if (mode === "add") return { ok: true, text: `Added ${plural(n, "track")} to the queue${at}.` };
+    if (mode === "next") return { ok: true, text: `Queued ${plural(n, "track")} to play next${at}, starting with ${label(first)}.` };
+    return { ok: true, text: `Playing ${plural(n, "track")}${at}${a.shuffle ? " shuffled" : ", starting with " + label(first)}.` };
   }
 
   async control(a: ControlArgs): Promise<Result> {
@@ -227,11 +241,12 @@ export class MusicHub {
     const t = this.hostOn() ? { state: this.d.host!.state() } : this.target();
     if (!t) return { ok: false, text: NO_SCREEN };
     const s = t.state;
-    if (!s || (!s.trackId && !s.title)) return { ok: true, text: "Nothing is playing." };
+    const why = this.hostOn() ? this.d.host!.lastError() : null;
+    if (!s || (!s.trackId && !s.title)) return { ok: true, text: why ? `Nothing is playing. ${why}` : "Nothing is playing." };
     const where = s.queue.length ? `, track ${s.index + 1} of ${s.queue.length}` : "";
     return {
       ok: true,
-      text: `${s.playing ? "Playing" : "Paused"}: ${label(s)}${s.album ? ` (album ${s.album})` : ""}, ${clock(s.position)} of ${clock(s.duration)}${where}. Volume ${s.volume}${s.muted ? " (muted)" : ""}, shuffle ${s.shuffle ? "on" : "off"}, repeat ${s.repeat}.`,
+      text: `${s.playing ? "Playing" : "Paused"}: ${label(s)}${s.album ? ` (album ${s.album})` : ""}, ${clock(s.position)} of ${clock(s.duration)}${where}. Volume ${s.volume}${s.muted ? " (muted)" : ""}, shuffle ${s.shuffle ? "on" : "off"}, repeat ${s.repeat}.${why ? ` ${why}` : ""}`,
     };
   }
 }
