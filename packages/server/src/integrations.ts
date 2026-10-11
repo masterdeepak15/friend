@@ -323,7 +323,7 @@ export function changeChrome(chrome: ChromeConfig, change: { install: true } | {
     return null;
   }
   if ("remove" in change) {
-    Object.assign(chrome, { installed: false, enabled: false });
+    Object.assign(chrome, { installed: false, enabled: false, remote: false });
     return null;
   }
   if (!chrome.installed) return `${META.chrome.name} is not installed yet.`;

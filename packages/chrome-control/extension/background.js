@@ -32,19 +32,33 @@ function parseTarget(c) {
     scheme = m[1].toLowerCase();
     raw = raw.slice(m[0].length);
   }
-  raw = raw.replace(/\/+$/, "");
+  // An address with a path (Friend's own, wss://name/chrome/ws) is used as it is: its port is the one in the address, not the port box.
+  let path = "";
+  const slash = raw.indexOf("/");
+  if (slash >= 0) {
+    path = raw.slice(slash).replace(/\/{2,}/g, "/").replace(/\/+$/, "");
+    raw = raw.slice(0, slash);
+    if (path && !/^\/[A-Za-z0-9._~/-]*$/.test(path)) return null;
+  }
   if (!raw) raw = "127.0.0.1";
+  let own = null;
+  const hp = /^(\[[0-9a-f:.]+\]|[^:[\]]+):(\d{1,5})$/i.exec(raw);
+  if (hp) {
+    raw = hp[1];
+    own = Number(hp[2]);
+  }
   if (/^[0-9a-f:]*:[0-9a-f:]*$/i.test(raw)) raw = `[${raw}]`; // bare IPv6
   const valid = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i.test(raw) || /^\[[0-9a-f:.]+\]$/i.test(raw);
   if (!valid) return null;
-  const port = Number(c.port) || 8765;
-  const url = `${scheme}://${raw}:${port}`;
+  const port = own ?? (path ? null : Number(c.port) || 8765);
+  const where = `${raw}${port ? ":" + port : ""}${path}`;
+  const base = `${scheme}://${where}${path ? "" : "/"}`;
   try {
-    new URL(url);
+    new URL(base);
   } catch {
     return null;
   }
-  return { url, label: `${raw}:${port}`, local: LOCAL_HOSTS.has(raw.toLowerCase()) };
+  return { base, label: where, local: LOCAL_HOSTS.has(raw.toLowerCase()) && !path };
 }
 
 let ws = null;
@@ -290,7 +304,7 @@ async function doConnect() {
   if (!c.token) return setStatus("no token");
   if (nameTaken) return setStatus("name in use");
   setStatus("connecting");
-  const sock = new WebSocket(`${target.url}/?token=${encodeURIComponent(c.token)}&name=${encodeURIComponent(c.name)}`);
+  const sock = new WebSocket(`${target.base}?token=${encodeURIComponent(c.token)}&name=${encodeURIComponent(c.name)}`);
   ws = sock;
   sock.onopen = () => {
     stats = { attached: attached.size, commands: 0, last: "", lastAt: 0 };

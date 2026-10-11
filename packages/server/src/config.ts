@@ -54,6 +54,8 @@ export interface Config {
 export interface ChromeConfig {
   installed: boolean;
   enabled: boolean;
+  /** Chrome control may also be reached from other PCs on Friend's own address (/chrome/mcp, /chrome/ws), with its key. Off unless the owner switches it on. */
+  remote: boolean;
 }
 
 export interface MusicConfig {
@@ -138,7 +140,7 @@ function sanitizeSpotify(raw: unknown): MusicConfig["spotify"] {
 
 export function sanitizeChrome(raw: unknown): ChromeConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true };
+  return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true, remote: r.remote === true };
 }
 
 function sanitizeAudius(raw: unknown): MusicConfig["audius"] {

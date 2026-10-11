@@ -13,6 +13,7 @@ import { LockoutError, type Auth, type Device, type Session } from "./auth";
 import { RateLimiter } from "./ratelimit";
 import type { Config } from "./config";
 import { HttpError } from "./http-error";
+import { chromeAddresses, keyFromRequest, proxyMcp, relayExtension, sameKey, type ChromeAccess } from "./connectors/chromeRemote";
 
 export const COOKIE_NAME = "friend_session";
 export const MAX_FRAME_BYTES = 64 * 1024;
@@ -45,6 +46,8 @@ export interface GatewayDeps {
   household?: HouseholdApi;
   /** Managing plugins from the owner's screen; the routes answer 503 without it. */
   plugins?: PluginsApi;
+  /** Chrome control reached from outside on Friend's own address (/chrome/mcp and /chrome/ws), and the extension to download. */
+  chrome?: ChromeRemoteApi;
   /** Managing connectors from the owner's screen; the routes answer 503 without it. */
   connectors?: ConnectorsApi;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
@@ -163,6 +166,23 @@ export interface ConnectorsApi {
 }
 
 /** What the plugin routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
+/** What the Chrome control routes need from the app. The key is only given to the owner after the PIN. */
+export interface ChromeRemoteApi {
+  /** Installed and switched on for use from outside. Off: the addresses do not exist. */
+  enabled(): boolean;
+  /** Chrome control's secret key, or null before it is set up. */
+  token(): string | null;
+  /** Where Chrome control itself listens on this PC (its MCP port and its extension port). */
+  ports(): { http: number; ws: number };
+  /** Starts Chrome control's own MCP server when nothing answers on its port. */
+  ensureServer(): Promise<void>;
+  /** The extension as a zip, or null when this Friend carries none. */
+  extensionZip(): Buffer | null;
+  access(origin: string): ChromeAccess;
+  setRemote(enabled: boolean, pin: string | undefined, ip: string): Promise<void>;
+  revealToken(pin: string, ip: string): Promise<string>;
+}
+
 export interface PluginsApi {
   list(): unknown;
   /** Installs a bundled plugin; needs the owner's PIN because it adds capabilities. */
@@ -229,6 +249,12 @@ export class SlidingWindow {
 
   size(): number {
     return this.hits.size;
+  }
+
+  /** Whether the key is out of hits right now, without using one. */
+  full(key: string): boolean {
+    const now = this.clock();
+    return (this.hits.get(key) ?? []).filter((t) => now - t < this.windowMs).length >= this.max;
   }
 
   private prune(now: number): void {
@@ -874,6 +900,76 @@ export function createGateway(deps: GatewayDeps) {
     }
   });
 
+  // ---- Chrome control (owner session: the page's own routes; the key: the addresses other PCs use) ----
+  const chromeFailures = new SlidingWindow(20, 60_000);
+  const chromeWss = new WebSocketServer({ noServer: true, maxPayload: MAX_DEVICE_FRAME_BYTES });
+  if (deps.chrome) {
+    const chrome = deps.chrome;
+    const refuse = (ip: string, what: string) => {
+      chromeFailures.allow(ip);
+      audit.log("anonymous", "chrome.remote_refused", { ip, what });
+    };
+    // the address the owner is using: their public address when there is one, else the one in the browser's address bar
+    const originOf = (req: FastifyRequest): string => (config.publicUrl ? new URL(config.publicUrl).origin : `${req.protocol}://${req.headers.host ?? "127.0.0.1"}`);
+
+    app.register(async (scope) => {
+      // the body is passed on as it came: no parsing, so Chrome control sees exactly what the client sent
+      for (const type of ["application/json", "*"]) scope.addContentTypeParser(type, { parseAs: "buffer" }, (_req, body, done) => done(null, body));
+      scope.route({
+        method: ["GET", "POST", "DELETE"],
+        url: "/chrome/mcp",
+        handler: async (req, reply) => {
+          if (!chrome.enabled()) return reply.code(404).send({ error: "Not found" });
+          if (req.headers.origin) return reply.code(403).send({ error: "Forbidden origin" }); // a website always sends one, a program does not
+          if (chromeFailures.full(req.ip)) return reply.code(429).header("retry-after", 30).send({ error: "Too many wrong keys. Wait a minute." });
+          const key = chrome.token();
+          if (!sameKey(keyFromRequest(req.headers, new URL(req.raw.url ?? "/", "http://x").search), key)) {
+            refuse(req.ip, "mcp");
+            return reply.code(401).send({ error: "Unauthorized" });
+          }
+          const body = Buffer.isBuffer(req.body) ? req.body : undefined;
+          reply.hijack();
+          const send = () => proxyMcp(req.raw, reply.raw, body, { port: chrome.ports().http, key: key! });
+          let answered = await send();
+          if (!answered) {
+            await chrome.ensureServer().catch(() => {});
+            answered = await send();
+          }
+          if (!answered && !reply.raw.headersSent) {
+            reply.raw.writeHead(502, { "content-type": "application/json" });
+            reply.raw.end(JSON.stringify({ error: "Chrome control is not running on this PC (its MCP server is not answering). Switch the plugin off and on again." }));
+          }
+        },
+      });
+    });
+
+    app.get("/api/plugins/chrome/access", { onRequest: pluginGuard }, async (req) => ({ ...chrome.access(originOf(req)) }));
+    app.post("/api/plugins/chrome/remote", { onRequest: pluginGuard }, async (req, reply) => {
+      const body = z.object({ enabled: z.boolean(), pin: z.string().min(1).max(32).optional() }).safeParse(req.body);
+      if (!body.success) return reply.code(400).send({ error: "Invalid input" });
+      try {
+        await chrome.setRemote(body.data.enabled, body.data.pin, req.ip);
+        return { ok: true };
+      } catch (e) {
+        return pluginError(reply, e, "chrome.remote");
+      }
+    });
+    app.post("/api/plugins/chrome/token", { onRequest: pluginGuard }, async (req, reply) => {
+      const body = z.object({ pin: z.string().min(1).max(32) }).safeParse(req.body);
+      if (!body.success) return reply.code(400).send({ error: "Enter your PIN" });
+      try {
+        return reply.header("cache-control", "no-store").send({ token: await chrome.revealToken(body.data.pin, req.ip) });
+      } catch (e) {
+        return pluginError(reply, e, "chrome.token");
+      }
+    });
+    app.get("/api/plugins/chrome/extension.zip", { onRequest: pluginGuard }, async (_req, reply) => {
+      const zip = chrome.extensionZip();
+      if (!zip) return reply.code(404).send({ error: "This Friend does not carry the Chrome extension." });
+      return reply.header("content-disposition", 'attachment; filename="friend-chrome-extension.zip"').type("application/zip").send(zip);
+    });
+  }
+
   // ---- connectors (owner session only) ----
   const connectorWindow = new SlidingWindow(30, 60_000);
   const connectorGuard = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1216,8 +1312,43 @@ export function createGateway(deps: GatewayDeps) {
     deps.onDeviceConnect(device, ws);
   }
 
+  /** The extension (or a program) of Chrome control, on another PC, joining through Friend's own address. */
+  const handleChromeUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    const chrome = deps.chrome;
+    const answer = (status: string) => {
+      socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
+      socket.destroy();
+    };
+    if (!chrome || !chrome.enabled()) return answer("404 Not Found");
+    const ip = clientIp(req);
+    if (chromeFailures.full(ip)) return answer("429 Too Many Requests");
+    const search = new URL(req.url ?? "/", "http://x").search;
+    const params = new URLSearchParams(search);
+    if (!sameKey(params.get("token"), chrome.token())) {
+      chromeFailures.allow(ip);
+      audit.log("anonymous", "chrome.remote_refused", { ip, what: "ws" });
+      return answer("401 Unauthorized");
+    }
+    // the extension says where it is from; a program on another PC sends no Origin; a website always sends one and is never let in
+    const origin = req.headers.origin;
+    const peer = params.get("role") === "peer";
+    if (peer ? !!origin : !origin || !origin.startsWith("chrome-extension://")) return answer("403 Forbidden");
+    chromeWss.handleUpgrade(req, socket, head, (ws) => {
+      ws.on("error", () => {});
+      relayExtension(ws, { port: chrome.ports().ws, search, origin, maxPayload: MAX_DEVICE_FRAME_BYTES });
+    });
+  };
+
   app.server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const path = (req.url ?? "").split("?")[0];
+    if (path === "/chrome/ws") {
+      if (!hostAllowed(req.headers.host)) {
+        audit.log("anonymous", "host.refused", { host: String(req.headers.host).slice(0, 100) });
+        socket.write("HTTP/1.1 421 Misdirected Request\r\nConnection: close\r\n\r\n");
+        return socket.destroy();
+      }
+      return handleChromeUpgrade(req, socket, head);
+    }
     if (path !== "/ws" && path !== "/device") return socket.destroy();
     if (!hostAllowed(req.headers.host)) {
       audit.log("anonymous", "host.refused", { host: String(req.headers.host).slice(0, 100) });
@@ -1239,9 +1370,10 @@ export function createGateway(deps: GatewayDeps) {
       return { port: typeof addr === "object" && addr ? addr.port : config.port };
     },
     async close(): Promise<void> {
-      for (const c of [...wss.clients, ...deviceWss.clients]) c.terminate();
+      for (const c of [...wss.clients, ...deviceWss.clients, ...chromeWss.clients]) c.terminate();
       wss.close();
       deviceWss.close();
+      chromeWss.close();
       await app.close();
     },
   };

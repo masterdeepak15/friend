@@ -26,16 +26,16 @@ describe("the chrome setting", () => {
   it("is off and not installed on a new install, and survives a save", () => {
     const dir = mkdtempSync(join(tmpdir(), "friend-chromecfg-"));
     const c = loadConfig(dir);
-    expect(c.chrome).toEqual({ installed: false, enabled: false });
-    c.chrome = { installed: true, enabled: true };
+    expect(c.chrome).toEqual({ installed: false, enabled: false, remote: false });
+    c.chrome = { installed: true, enabled: true, remote: false };
     saveConfig(c);
-    expect(loadConfig(dir).chrome).toEqual({ installed: true, enabled: true });
+    expect(loadConfig(dir).chrome).toEqual({ installed: true, enabled: true, remote: false });
   });
   it("reads anything odd in the file as off", () => {
     const dir = mkdtempSync(join(tmpdir(), "friend-chromecfg-"));
     const c = loadConfig(dir);
     saveConfig({ ...c, chrome: { installed: "yes", enabled: 1 } as never });
-    expect(loadConfig(dir).chrome).toEqual({ installed: false, enabled: false });
+    expect(loadConfig(dir).chrome).toEqual({ installed: false, enabled: false, remote: false });
   });
 });
 
@@ -59,14 +59,14 @@ describe("chrome among the integrations", () => {
   });
   it("says when the extension is not linked, and when everything works", () => {
     const c = cfg();
-    c.chrome = { installed: true, enabled: true };
+    c.chrome = { installed: true, enabled: true, remote: false };
     expect(view(c, ready({ extension: "off" }))).toMatchObject({ state: "needs-setup", detail: expect.stringMatching(/extension/i) });
     expect(view(c, ready())).toMatchObject({ state: "online" });
     expect(view(c, ready({ extension: "unknown" }))).toMatchObject({ state: "online", detail: expect.stringMatching(/check/i) });
   });
   it("shows a failing connector as an error, and a starting one as connecting", () => {
     const c = cfg();
-    c.chrome = { installed: true, enabled: true };
+    c.chrome = { installed: true, enabled: true, remote: false };
     const conn = ready().connector!;
     expect(view(c, ready({ connector: { ...conn, status: "error", error: "It did not answer in time." } }))).toMatchObject({ state: "error", detail: "It did not answer in time." });
     expect(view(c, ready({ connector: { ...conn, status: "connecting" } })).state).toBe("connecting");
@@ -74,7 +74,7 @@ describe("chrome among the integrations", () => {
   });
   it("lists the steps with what is done, and the extension folder as a setting (not a secret)", () => {
     const c = cfg();
-    c.chrome = { installed: true, enabled: true };
+    c.chrome = { installed: true, enabled: true, remote: false };
     const v = view(c, ready());
     expect(v.steps.map((s) => s.done)).toEqual([true, true, true, true]);
     expect(v.settings).toEqual({ extensionFolder: "C:/Users/me/.chrome-control-mcp/extension" });
@@ -91,7 +91,7 @@ describe("chrome among the integrations", () => {
 
 describe("changeChrome", () => {
   it("installs, switches on once set up, switches off, and removes", () => {
-    const c = { installed: false, enabled: false };
+    const c = { installed: false, enabled: false, remote: false };
     expect(changeChrome(c, { enabled: true }, true)).toMatch(/not installed yet/);
     expect(changeChrome(c, { install: true }, false)).toBeNull();
     expect(c.installed).toBe(true);
@@ -103,6 +103,6 @@ describe("changeChrome", () => {
     expect(c.enabled).toBe(false);
     changeChrome(c, { enabled: true }, true);
     expect(changeChrome(c, { remove: true }, true)).toBeNull();
-    expect(c).toEqual({ installed: false, enabled: false });
+    expect(c).toEqual({ installed: false, enabled: false, remote: false });
   });
 });

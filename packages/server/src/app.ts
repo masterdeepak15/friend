@@ -8,6 +8,8 @@ import { McpHub } from "./connectors/hub";
 import { PRESETS } from "./connectors/presets";
 import { isQuickPreset, quickCheck, quickConnect, quickInstall, type QuickRunner } from "./connectors/quick";
 import { bundledChromeControl, ChromePlugin } from "./connectors/chromePlugin";
+import { bundledExtensionDir, chromeAddresses, chromeToken } from "./connectors/chromeRemote";
+import { zipDirectory } from "./zip";
 import { runCommand } from "./connectors/run";
 import { ConnectorStore } from "./connectors/store";
 import { Approvals } from "./approvals";
@@ -47,7 +49,7 @@ import { join } from "node:path";
 import { loadConfig, saveConfig, type Config } from "./config";
 import { openDb } from "./db";
 import { DeviceHub } from "./devices";
-import { createGateway, type ClientConn, type ConnectorsApi, type PluginsApi } from "./gateway";
+import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi, type PluginsApi } from "./gateway";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import { ClaudeCodeProvider } from "./provider/claude-code/provider";
@@ -108,6 +110,8 @@ export interface AppOptions {
   /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
   pluginCatalogDir?: string;
   /** The one-click connectors: how their install command is run and where the person's home folder is (tests). */
+  /** Where Chrome control itself listens on this PC, and how its MCP server is started when nothing answers (tests). */
+  chromeRemote?: { httpPort?: number; wsPort?: number; startServer?: () => Promise<void> };
   quick?: { run?: QuickRunner; home?: string; /** Chrome control's index.js that comes with Friend (tests); null: none, so the npm package is used. */ bundled?: string | null };
   /** Where weather comes from. Defaults to Open-Meteo. */
   weather?: Pick<WeatherService, "get">;
@@ -793,10 +797,45 @@ export async function createApp(opts: AppOptions) {
     },
   };
 
+  /** Chrome control from other PCs, through Friend's own address. Only the owner switches it on, with the PIN. */
+  const chromeRemoteApi: ChromeRemoteApi = {
+    enabled: () => config.chrome.installed && config.chrome.remote,
+    token: () => chromeToken(opts.quick?.home),
+    ports: () => ({ http: opts.chromeRemote?.httpPort ?? Number(process.env.CHROME_BRIDGE_HTTP_PORT ?? 8766), ws: opts.chromeRemote?.wsPort ?? Number(process.env.CHROME_BRIDGE_PORT ?? 8765) }),
+    ensureServer: () => (opts.chromeRemote?.startServer ? opts.chromeRemote.startServer() : chromePlugin.startServer()),
+    extensionZip: () => {
+      const dir = bundledExtensionDir(chromeBundled);
+      return dir ? zipDirectory(dir, "friend-chrome-extension") : null;
+    },
+    access: (origin) => ({ remote: config.chrome.installed && config.chrome.remote, ...chromeAddresses(origin), extensionZip: bundledExtensionDir(chromeBundled) ? "/api/plugins/chrome/extension.zip" : null }),
+    setRemote: async (enabled, pin, ip) => {
+      if (enabled) {
+        if (!pin) throw new HttpError(400, "Enter your PIN to allow Chrome control from other PCs.");
+        await requirePin(pin, ip);
+        if (!config.chrome.installed) throw new HttpError(400, "Chrome control is not installed yet. Install it first.");
+      }
+      const err = changeChromeConfig((c) => {
+        c.remote = enabled;
+        return null;
+      });
+      if (err) throw new HttpError(400, err);
+      audit.log("owner", enabled ? "chrome.remote_on" : "chrome.remote_off", { ip });
+      if (enabled) void chromeRemoteApi.ensureServer().catch(() => {});
+    },
+    revealToken: async (pin, ip) => {
+      await requirePin(pin, ip);
+      const key = chromeToken(opts.quick?.home);
+      if (!key) throw new HttpError(400, "Chrome control is not set up yet, so it has no key.");
+      audit.log("owner", "chrome.token_shown", { ip });
+      return key;
+    },
+  };
+
   const tls = config.https ? await ensureTlsCert(opts.dataDir, [...config.allowedHosts, ...(config.publicUrl ? [new URL(config.publicUrl).hostname] : [])]) : undefined;
   const gateway = createGateway({
     ...(tls ? { tls } : {}),
     connectors: connectorsApi,
+    chrome: chromeRemoteApi,
     voicePreview: async (id) => {
       if (!voice || !voiceAvailable()) throw new HttpError(503, "Voice is not available. Run: friend voice setup");
       const indian = [...HINDI_VOICES, ...MARATHI_VOICES].some((v) => v.id === id) || id === config.voice.hindiVoice || id === config.voice.marathiVoice;
@@ -1353,6 +1392,7 @@ export async function createApp(opts: AppOptions) {
       }
       hub.startAll({ except: config.chrome.enabled ? ["chrome"] : [] });
       if (config.chrome.enabled) void chromePlugin.connect();
+      if (config.chrome.installed && config.chrome.remote) void chromeRemoteApi.ensureServer().catch(() => {});
       channelHub.apply(); // Telegram starts listening when it is switched on
       brokerTimer = setInterval(() => void brokerHub.tick(new Date()).catch(() => {}), opts.brokerTickMs ?? 60_000);
       brokerTimer.unref?.();

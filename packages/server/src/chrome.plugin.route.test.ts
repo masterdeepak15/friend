@@ -115,7 +115,7 @@ describe("Chrome control as a plugin", () => {
     const on = await until(cookie, (x) => x.state === "online");
     expect(on).toMatchObject({ enabled: true, state: "online", detail: expect.stringMatching(/Connected to your Chrome/) });
     expect(await connectors(cookie)).toMatchObject([{ id: "chrome", status: "ready", tools: 3 }]);
-    expect(app.config.chrome).toEqual({ installed: true, enabled: true });
+    expect(app.config.chrome).toEqual({ installed: true, enabled: true, remote: false });
 
     expect((await api(cookie, "POST", "/chrome/enabled", { enabled: false })).status).toBe(200);
     expect((await until(cookie, (x) => x.state === "off")).state).toBe("off");
@@ -141,7 +141,7 @@ describe("Chrome control as a plugin", () => {
     });
     const v = await until(cookie, (x) => x.state === "online");
     expect(v).toMatchObject({ installed: true, enabled: true, state: "online" });
-    expect(loadConfig(dir).chrome).toEqual({ installed: true, enabled: true });
+    expect(loadConfig(dir).chrome).toEqual({ installed: true, enabled: true, remote: false });
   });
 
   it("leaves a switched-off connector from before off, and does not turn anything on by itself", async () => {
@@ -165,7 +165,7 @@ describe("Chrome control as a plugin", () => {
       seed: (d, h) => {
         installInto(h);
         const c = loadConfig(d);
-        c.chrome = { installed: true, enabled: true };
+        c.chrome = { installed: true, enabled: true, remote: false };
         saveConfig(c);
         const added = new ConnectorStore(d).add({ id: "chrome", name: "Chrome control", kind: "stdio", command: "definitely-not-a-real-program", args: [], env: {}, enabled: true });
         expect(added.ok).toBe(true);

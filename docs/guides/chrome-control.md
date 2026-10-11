@@ -19,6 +19,28 @@ of Friend: it comes inside the `friend-assistant` package, so you install nothin
 Every browser action still asks for your approval, and in the extension's popup you can limit it to certain sites. While the
 extension is on, Friend can act as you on the sites it allows.
 
+## Use it from another PC (one address, one port)
+
+Chrome control itself listens on two local ports (8765 for the extension, 8766 for MCP apps). You never need to open or
+remember them: Friend serves both on **its own address and port** (for example `https://friend.example.com` or
+`http://192.168.1.5:8787`), and passes them on to Chrome control inside your PC.
+
+1. Open **Plugins**, **Chrome control**, **Configure**. Under **From another PC** press **Allow other PCs** and enter your PIN.
+   It is off until you do this: while it is off, the two addresses below do not exist.
+2. On the other PC, sign in to Friend and press **Download the extension**. Unzip it, open `chrome://extensions`, turn on
+   **Developer mode**, press **Load unpacked** and choose the unzipped folder.
+3. Press **Show the key** (PIN). In the extension's popup on the other PC, type the **server** address shown in Configure
+   (like `wss://friend.example.com/chrome/ws`), paste the key, and engage the link. That Chrome now appears next to yours;
+   give each Chrome its own name in the popup.
+4. For apps on other PCs (Claude Code, Claude Desktop), use the **MCP address** shown (`https://friend.example.com/chrome/mcp`)
+   and send the key as `Authorization: Bearer KEY`.
+
+How it is kept safe: a wrong or missing key gets nothing (and a few wrong guesses lock that address out for a minute); a
+website cannot use it (browser pages are refused); the key is only shown after your PIN and is never written to Friend's
+logs; and every refused try is recorded. Use `https` (Friend's public address) when the other PC is not on your own network.
+Friend's cookie login is not involved: the key is the only way in, so keep it private. Switching **Stop allowing other PCs** off
+removes both addresses at once.
+
 ## Good to know
 
 - **Removing the plugin** removes Friend's connection only. The helper and the extension stay in `~/.chrome-control-mcp`, because

@@ -50,6 +50,7 @@ export class ChromePlugin {
   private error: string | null = null;
   private extension: ChromeStatus["extension"] = "unknown";
   private asking: Promise<ChromeStatus["extension"]> | null = null;
+  private serving: Promise<void> | null = null;
 
   constructor(private deps: ChromePluginDeps) {}
 
@@ -115,6 +116,23 @@ export class ChromePlugin {
       return this.extension;
     })();
     return this.asking;
+  }
+
+  /**
+   * Starts Chrome control's own MCP server in the background (the one other PCs reach through Friend's /chrome/mcp). It is the
+   * program's own "start": it does nothing when the server is already running, and it keeps running after Friend stops.
+   */
+  startServer(): Promise<void> {
+    const entry = this.deps.bundled;
+    if (!entry) return Promise.resolve();
+    if (this.serving) return this.serving;
+    this.serving = this.deps
+      .run(process.execPath, [entry, "start"])
+      .then(() => {})
+      .finally(() => {
+        this.serving = null;
+      });
+    return this.serving;
   }
 
   /** Switches the connector off but keeps it listed. */

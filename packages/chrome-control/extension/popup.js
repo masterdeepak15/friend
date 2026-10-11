@@ -31,8 +31,8 @@ function look(s) {
     return { cls: "state-nokey", word: "NO KEY", sub: isRemote(s.host) ? "PASTE THE SERVER'S ACCESS KEY" : "RUN: NPX CHROME-CONTROL-MCP SETUP" };
   }
   if (s.status === "name in use") return { cls: "state-nokey", word: "NAME TAKEN", sub: "ANOTHER CHROME USES THIS NAME. RENAME THIS ONE" };
-  if (s.status === "bad host") return { cls: "state-nokey", word: "BAD HOST", sub: "USE A DOMAIN OR IP, NO PATH" };
-  const where = isRemote(s.host) ? `${hostName(s.host).toUpperCase()}:${port}` : `PORT ${port}`;
+  if (s.status === "bad host") return { cls: "state-nokey", word: "BAD HOST", sub: "USE A DOMAIN, AN IP, OR WSS://NAME/CHROME/WS" };
+  const where = isRemote(s.host) ? (hostName(s.host).includes("/") ? hostName(s.host).toUpperCase() : `${hostName(s.host).toUpperCase()}:${port}`) : `PORT ${port}`;
   return { cls: "state-nosig", word: "NO SIGNAL", sub: `MCP SERVER NOT FOUND ON ${where}` };
 }
 
