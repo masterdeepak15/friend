@@ -57,6 +57,21 @@ If you are not at the PC, press **Send me the login link on Telegram** (or Whats
 
 The first time, if something does not work, see the troubleshooting table below. Friend never sees your Zerodha password; it only receives a one-time code from Zerodha, which it exchanges for the day's access token.
 
+## Report options
+
+On the Configure page, **Report options** lets you change how reports and answers are written, so Friend is not tied to one country or broker:
+
+| Setting | Default | Range |
+|---|---|---|
+| Currency sign | ₹ | up to 4 characters |
+| Currency word (spoken by Alexa) | rupees | up to 20 characters |
+| Number format (locale) | en-IN (1,23,456.50) | any locale such as en-US (123,456.50) or de-DE (123.456,50) |
+| Mention a holding above this share of the portfolio | 30% | 5 to 90 |
+| Mention a holding down more than this today | 5% | 1 to 50 |
+| Seconds to keep an account read (protects the broker's rate limit) | 30 | 5 to 300 |
+| Most report schedules | 20 | 1 to 50 |
+| Tries a day for a report | 3 | 1 to 10 |
+
 ## 5. Reports
 
 Use **Add a report** on the Configure page (name, morning/close/custom, time like 09:30, days, Telegram/WhatsApp/SMS; PIN), or just ask in chat:

@@ -68,6 +68,23 @@ Say "Alexa, ask *your invocation name*" to your Echo. Alexa says it does not kno
 
 Your skill is in *development* mode, so it works on every Echo signed in to the same Amazon account, with no review or publishing.
 
+## Settings you can change
+
+Everything below is on the Alexa Configure page under **Advanced** (PIN to save), and nothing is tied to one person's setup:
+
+| Setting | Default | Range |
+|---|---|---|
+| Skill name (in the console and listing) | Friend Assistant | up to 50 characters |
+| Languages | English (India) and Hindi (India) | at least one; the downloads follow your choice |
+| Seconds to work on an answer before "still working" | 6.5 | 2 to 7.5 (Alexa itself gives up after 8) |
+| Minutes to keep a late answer | 10 | 1 to 60 |
+| Seconds to wait for your yes on your phone | 120 | 30 to 600 |
+| Requests a minute allowed from one address | 60 | 10 to 600 |
+| Echo devices allowed | 10 | 1 to 50 |
+| Extra tools a voice may use without asking | none | tool names such as `calendar.list` |
+
+What cannot be changed (safety): tools that reach your PC, files, settings, add-ons, the camera or screen, and anything that needs your PIN, can never be allowed by voice, and the assistant itself can never change these settings.
+
 ## Scheduled spoken reports (Routines)
 
 Amazon does not let Friend start talking, but an Alexa **Routine** can. In the Alexa app: More → Routines → **+**, *When*: Schedule (for example 9:30 on weekdays), *Action*: Alexa says / Customized → "ask jarvis assistant how my portfolio is" (check on your device that routines can start your skill). The Echo then speaks Friend's answer at that time.

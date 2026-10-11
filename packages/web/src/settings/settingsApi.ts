@@ -11,6 +11,15 @@ export interface BrokersView {
   timezone: string;
   skipDates: string[];
   loginReminderMinutes: number;
+  /** How money is written and spoken, the warning levels in reports, and the limits. */
+  currencySymbol: string;
+  currencyName: string;
+  numberLocale: string;
+  concentrationPct: number;
+  bigDropPct: number;
+  cacheSeconds: number;
+  maxSchedules: number;
+  maxTriesPerDay: number;
 }
 /** The Alexa settings as the screen sees them: allowed Echo ids are shortened. */
 export interface AlexaView {
@@ -19,6 +28,14 @@ export interface AlexaView {
   skillId: string;
   invocationName: string;
   allowed: { id: string; name: string }[];
+  skillName: string;
+  locales: string[];
+  answerSeconds: number;
+  holdMinutes: number;
+  permissionSeconds: number;
+  requestsPerMinute: number;
+  maxDevices: number;
+  extraVoiceTools: string[];
 }
 export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
 

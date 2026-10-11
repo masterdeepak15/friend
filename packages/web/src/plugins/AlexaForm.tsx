@@ -1,6 +1,7 @@
 import { invocationNameProblem } from "@friend/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PinPad } from "../overlay/PinPad";
+import { NumberField } from "./NumberField";
 import { touch } from "../overlay/touch";
 import type { AlexaView } from "../settings/settingsApi";
 
@@ -11,6 +12,8 @@ export interface AlexaStatus {
   invocationName: string;
   /** The address to give Amazon, or null while Friend has no public address. */
   endpoint: string | null;
+  /** The names of the files to paste into the console, for the languages in use. */
+  files: string[];
   waiting: { short: string; deviceShort: string; locale: string; at: number }[];
   allowed: { short: string; name: string; addedAt: number }[];
 }
@@ -51,11 +54,13 @@ export function alexaProblem(v: Pick<AlexaView, "skillId" | "invocationName">): 
   return null;
 }
 
-const FILES = [
-  ["skill.json", "the skill's manifest (name, endpoint)"],
-  ["en-IN.json", "the English (India) interaction model"],
-  ["hi-IN.json", "the Hindi (India) interaction model"],
-] as const;
+const FILE_NOTE: Record<string, string> = {
+  "skill.json": "the skill's manifest (name, endpoint)",
+  "en-IN.json": "the English (India) interaction model",
+  "hi-IN.json": "the Hindi (India) interaction model",
+};
+const LOCALE_NAME: Record<string, string> = { "en-IN": "English (India)", "hi-IN": "Hindi (India)" };
+
 
 const ago = (at: number): string => {
   const m = Math.max(0, Math.round((Date.now() - at) / 60_000));
@@ -126,12 +131,12 @@ export function AlexaForm({ view, setView, api = httpAlexaApi }: { view: AlexaVi
       <p className="auth-note">If your address changes later, paste the new address into the console again. Nothing else needs to change.</p>
       {filesReady ? (
         <ul className="plugins-list">
-          {FILES.map(([file, what]) => (
+          {status.files.map((file) => (
             <li key={file}>
               <a href={`/api/alexa/package/${file}`} download={file}>
                 {file}
               </a>{" "}
-              <small className="auth-note">{what}</small>
+              <small className="auth-note">{FILE_NOTE[file] ?? ""}</small>
             </li>
           ))}
         </ul>
@@ -152,6 +157,39 @@ export function AlexaForm({ view, setView, api = httpAlexaApi }: { view: AlexaVi
           {problem}
         </p>
       )}
+
+      <details>
+        <summary className="plugins-heading">Advanced</summary>
+        <label className="settings-field">
+          <span>Skill name</span>
+          <input value={view.skillName} onChange={(e) => setView({ ...view, skillName: e.target.value })} style={touch} />
+        </label>
+        <div className="settings-field" role="group" aria-label="Languages">
+          {Object.entries(LOCALE_NAME).map(([code, label]) => (
+            <label key={code} className="settings-check">
+              <input
+                type="checkbox"
+                checked={view.locales.includes(code)}
+                onChange={(e) => {
+                  const next = e.target.checked ? [...view.locales, code] : view.locales.filter((l) => l !== code);
+                  if (next.length > 0) setView({ ...view, locales: Object.keys(LOCALE_NAME).filter((l) => next.includes(l)) });
+                }}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
+        <NumberField label="Seconds to work on an answer" value={view.answerSeconds} min={2} max={7.5} step={0.5} onChange={(n) => setView({ ...view, answerSeconds: n })} />
+        <NumberField label="Minutes to keep a late answer" value={view.holdMinutes} min={1} max={60} onChange={(n) => setView({ ...view, holdMinutes: n })} />
+        <NumberField label="Seconds to wait for your yes on your phone" value={view.permissionSeconds} min={30} max={600} onChange={(n) => setView({ ...view, permissionSeconds: n })} />
+        <NumberField label="Requests a minute allowed" value={view.requestsPerMinute} min={10} max={600} onChange={(n) => setView({ ...view, requestsPerMinute: n })} />
+        <NumberField label="Echo devices allowed" value={view.maxDevices} min={1} max={50} onChange={(n) => setView({ ...view, maxDevices: n })} />
+        <label className="settings-field">
+          <span>Extra tools a voice may use without asking (one per line)</span>
+          <textarea rows={2} value={view.extraVoiceTools.join("\n")} onChange={(e) => setView({ ...view, extraVoiceTools: e.target.value.split(/[\s,]+/).filter(Boolean) })} />
+        </label>
+        <small className="auth-note">Tools that reach your PC, files, settings, add-ons or camera, and anything that needs your PIN, can never be added.</small>
+      </details>
 
       <h4 className="plugins-heading">Echo devices</h4>
       {status && status.waiting.length === 0 && status.allowed.length === 0 && (

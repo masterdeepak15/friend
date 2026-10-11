@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PinPad } from "../overlay/PinPad";
+import { NumberField } from "./NumberField";
 import { touch } from "../overlay/touch";
 import type { BrokersView } from "../settings/settingsApi";
 
@@ -174,6 +175,27 @@ export function ZerodhaForm({
         <span>Remind me to log in (minutes before the first report, 0 = never)</span>
         <input type="number" min={0} max={120} value={view.loginReminderMinutes} onChange={(e) => set({ loginReminderMinutes: Number(e.target.value) })} style={touch} />
       </label>
+
+      <details>
+        <summary className="plugins-heading">Report options</summary>
+        <label className="settings-field">
+          <span>Currency sign</span>
+          <input value={view.currencySymbol} maxLength={4} onChange={(e) => set({ currencySymbol: e.target.value })} style={touch} />
+        </label>
+        <label className="settings-field">
+          <span>Currency word (spoken)</span>
+          <input value={view.currencyName} maxLength={20} onChange={(e) => set({ currencyName: e.target.value })} style={touch} />
+        </label>
+        <label className="settings-field">
+          <span>Number format (locale)</span>
+          <input value={view.numberLocale} onChange={(e) => set({ numberLocale: e.target.value })} placeholder="en-IN, en-US, de-DE" style={touch} />
+        </label>
+        <NumberField label="Mention a holding above this share of the portfolio (%)" value={view.concentrationPct} min={5} max={90} onChange={(n) => set({ concentrationPct: n })} />
+        <NumberField label="Mention a holding down more than this today (%)" value={view.bigDropPct} min={1} max={50} onChange={(n) => set({ bigDropPct: n })} />
+        <NumberField label="Seconds to keep an account read" value={view.cacheSeconds} min={5} max={300} onChange={(n) => set({ cacheSeconds: n })} />
+        <NumberField label="Most report schedules" value={view.maxSchedules} min={1} max={50} onChange={(n) => set({ maxSchedules: n })} />
+        <NumberField label="Tries a day for a report" value={view.maxTriesPerDay} min={1} max={10} onChange={(n) => set({ maxTriesPerDay: n })} />
+      </details>
 
       <h4 className="plugins-heading">Daily login</h4>
       <p className={status?.zerodha.loggedIn ? "auth-note" : "auth-note"}>{status?.zerodha.detail ?? "Checking…"}</p>

@@ -27,7 +27,8 @@ const entry = (over: Partial<IntegrationEntry> = {}): IntegrationEntry => ({
   steps: [{ text: "Create a free skill in the Alexa developer console.", done: true }, { text: "Switch the plugin on.", done: true }],
   ...over,
 });
-const view = (alexa: SettingsView["alexa"] = { installed: true, enabled: true, skillId: SKILL, invocationName: "jarvis assistant", allowed: [] }): SettingsView => ({
+const alexaOptions = { skillName: "Friend Assistant", locales: ["en-IN", "hi-IN"], answerSeconds: 6.5, holdMinutes: 10, permissionSeconds: 120, requestsPerMinute: 60, maxDevices: 10, extraVoiceTools: [] };
+const view = (alexa: SettingsView["alexa"] = { installed: true, enabled: true, skillId: SKILL, invocationName: "jarvis assistant", allowed: [], ...alexaOptions }): SettingsView => ({
   provider: "claude-code",
   model: "claude-sonnet-5-5",
   apiKeySet: false,
@@ -46,6 +47,7 @@ const status = (over: Partial<AlexaStatus> = {}): AlexaStatus => ({
   skillIdSet: true,
   invocationName: "jarvis assistant",
   endpoint: "https://friend.example.com/api/alexa",
+  files: ["skill.json", "en-IN.json", "hi-IN.json"],
   waiting: [],
   allowed: [],
   ...over,
@@ -83,7 +85,7 @@ describe("the Alexa Configure page", () => {
   });
 
   it("saves only what changed, after the PIN", async () => {
-    const s = settingsApi(view({ installed: true, enabled: true, skillId: "", invocationName: "", allowed: [] }));
+    const s = settingsApi(view({ installed: true, enabled: true, skillId: "", invocationName: "", allowed: [], ...alexaOptions }));
     open(alexaApi(), s);
     await userEvent.type(await screen.findByLabelText("Skill ID"), SKILL);
     await userEvent.type(screen.getByLabelText("Invocation name"), "jarvis assistant");

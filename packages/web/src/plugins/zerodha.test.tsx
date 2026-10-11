@@ -38,7 +38,7 @@ const view = (zerodha = { installed: true, enabled: true, apiKey: "abc123", secr
   ollama: { url: "http://127.0.0.1:11434", model: "qwen2.5:7b", vision: false, contextTokens: 8192 },
   claudeCode: { model: "sonnet", command: "claude", fallback: "ollama" },
   voice: { enabled: true, speakTyped: true, language: null, accept: 0.72, challenge: 0.58, ttsVoice: "en_US-lessac-medium", sttModel: "base" },
-  brokers: { zerodha, timezone: "Asia/Kolkata", skipDates: [], loginReminderMinutes: 15 },
+  brokers: { zerodha, timezone: "Asia/Kolkata", skipDates: [], loginReminderMinutes: 15, currencySymbol: "₹", currencyName: "rupees", numberLocale: "en-IN", concentrationPct: 30, bigDropPct: 5, cacheSeconds: 30, maxSchedules: 20, maxTriesPerDay: 3 },
   trading: { level: "read" },
 });
 const settingsApi = (v = view()): SettingsApi => ({ get: vi.fn(async () => v), save: vi.fn(async () => ({ settings: v, changed: true, restart: [] })) });

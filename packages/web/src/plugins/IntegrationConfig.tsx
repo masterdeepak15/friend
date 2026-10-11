@@ -12,9 +12,14 @@ const EMPTY: ChannelsView = {
   twilio: { installed: false, enabled: false, accountSid: "", tokenSet: false, smsFrom: "", whatsappFrom: "", ownerNumber: "" },
 };
 
-const EMPTY_BROKERS: BrokersView = { zerodha: { installed: false, enabled: false, apiKey: "", secretSet: false }, timezone: "Asia/Kolkata", skipDates: [], loginReminderMinutes: 15 };
+const EMPTY_BROKERS: BrokersView = { zerodha: { installed: false, enabled: false, apiKey: "", secretSet: false }, timezone: "Asia/Kolkata", skipDates: [], loginReminderMinutes: 15, currencySymbol: "₹", currencyName: "rupees", numberLocale: "en-IN", concentrationPct: 30, bigDropPct: 5, cacheSeconds: 30, maxSchedules: 20, maxTriesPerDay: 3 };
+const BROKER_OPTION_KEYS = ["currencySymbol", "currencyName", "numberLocale", "concentrationPct", "bigDropPct", "cacheSeconds", "maxSchedules", "maxTriesPerDay"] as const;
+const ALEXA_OPTION_KEYS = ["skillName", "locales", "answerSeconds", "holdMinutes", "permissionSeconds", "requestsPerMinute", "maxDevices", "extraVoiceTools"] as const;
+/** Only the settings whose value is different from what was saved. */
+const changedKeys = <T extends object>(draft: T, saved: T, keys: readonly (keyof T)[]): Record<string, unknown> =>
+  Object.fromEntries(keys.filter((k) => JSON.stringify(draft[k]) !== JSON.stringify(saved[k])).map((k) => [k, draft[k]]));
 
-const EMPTY_ALEXA: AlexaView = { installed: false, enabled: false, skillId: "", invocationName: "", allowed: [] };
+const EMPTY_ALEXA: AlexaView = { installed: false, enabled: false, skillId: "", invocationName: "", allowed: [], skillName: "Friend Assistant", locales: ["en-IN", "hi-IN"], answerSeconds: 6.5, holdMinutes: 10, permissionSeconds: 120, requestsPerMinute: 60, maxDevices: 10, extraVoiceTools: [] };
 
 /**
  * The Configure page of one integration. What is typed here is saved with the owner's PIN, like every other setting; the
@@ -80,7 +85,7 @@ export function IntegrationConfig({
   const patch = (): Record<string, unknown> => {
     if (isAlexa) {
       if (!savedA) return {};
-      const a: Record<string, unknown> = {};
+      const a: Record<string, unknown> = changedKeys(draftA, savedA, ALEXA_OPTION_KEYS);
       if (draftA.skillId.trim() !== savedA.skillId) a.skillId = draftA.skillId.trim();
       if (draftA.invocationName.trim() !== savedA.invocationName) a.invocationName = draftA.invocationName.trim();
       return Object.keys(a).length ? { alexa: a } : {};
@@ -95,6 +100,7 @@ export function IntegrationConfig({
       if (draftB.timezone !== savedB.timezone) b.timezone = draftB.timezone.trim();
       if (JSON.stringify(draftB.skipDates) !== JSON.stringify(savedB.skipDates)) b.skipDates = draftB.skipDates;
       if (draftB.loginReminderMinutes !== savedB.loginReminderMinutes) b.loginReminderMinutes = draftB.loginReminderMinutes;
+      Object.assign(b, changedKeys(draftB, savedB, BROKER_OPTION_KEYS));
       return Object.keys(b).length ? { brokers: b } : {};
     }
     if (!saved) return {};
