@@ -162,6 +162,16 @@ export async function createApp(opts: AppOptions) {
     db,
     audit,
     notify: (m) => broadcast(m),
+    transcribe: async (audio, mime) => {
+      const v = opts.voice;
+      if (!v || !v.available()) return { ok: false, error: "The voice engine is not running on the PC, so I can't understand voice messages right now." };
+      try {
+        const t = await v.transcribe(audio, mime, config.voice.language);
+        return { ok: true, text: t.text };
+      } catch (e) {
+        return { ok: false, error: e instanceof VoiceError ? e.message : "I could not understand that voice message." };
+      }
+    },
     ask: async (text, via) => {
       // a plain yes or no from the owner may be the answer to something Alexa asked for permission to do
       if (alexaHub.tryApprove(text)) return "Okay.";

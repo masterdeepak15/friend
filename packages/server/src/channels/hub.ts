@@ -26,6 +26,8 @@ export interface HubDeps {
   audit: Audit;
   /** Runs one request that came from the owner's own chat and resolves with the reply to send back. */
   ask(text: string, via: ChannelId): Promise<string>;
+  /** Turns a voice message into words, or says why it cannot. Left out when there is no voice engine. */
+  transcribe?(audio: Buffer, mime: string): Promise<{ ok: true; text: string } | { ok: false; error: string }>;
   /** Tells every open screen something (for example that a message arrived). */
   notify(m: ServerMsg): void;
   fetch?: typeof fetch;
@@ -40,9 +42,19 @@ export interface ChannelStatus {
   twilio: { enabled: boolean; tokenSet: boolean; ownerSet: boolean; sms: boolean; whatsapp: boolean; webhook: string | null };
 }
 
+interface TelegramClip {
+  file_id: string;
+  duration?: number;
+  file_size?: number;
+  mime_type?: string;
+}
+
+/** A voice message that cannot be used; the message is safe to send back to the owner. */
+class VoiceMessageError extends Error {}
+
 interface TelegramUpdate {
   update_id: number;
-  message?: { text?: string; chat: { id: number }; from?: { username?: string; first_name?: string } };
+  message?: { text?: string; voice?: TelegramClip; audio?: TelegramClip; chat: { id: number }; from?: { username?: string; first_name?: string } };
 }
 
 const LINK_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -52,8 +64,39 @@ const INBOX_KEEP = 500;
 const TELEGRAM_CHUNK = 4000;
 const SMS_MAX = 1500;
 /** The owner's own chat may send this many messages in a window; others are only stored, a few per hour per sender. */
+/** A voice message longer or bigger than this is not downloaded (what the owner is told says so). */
+const VOICE_MAX_SECONDS = 300;
+const VOICE_MAX_BYTES = 8_000_000;
+const VOICE_FETCH_MS = 20_000;
+const TWILIO_MEDIA_HOSTS = /(^|\.)(twilio\.com|twiliocdn\.com|amazonaws\.com)$/;
 const OWNER_LIMIT = { max: 20, windowMs: 5 * 60_000 };
 const STRANGER_LIMIT = { max: 20, windowMs: 3600_000 };
+
+const t0 = (token: string | null): string => token ?? "";
+
+/** The body of a response, as bytes; refused if it is bigger than the limit (checked as it arrives, not afterwards). */
+async function readLimited(res: Response, max: number): Promise<Buffer> {
+  const tooBig = () => new VoiceMessageError("That voice message is too big. Send a shorter one.");
+  if (Number(res.headers.get("content-length") ?? 0) > max) {
+    void res.body?.cancel().catch(() => {});
+    throw tooBig();
+  }
+  const reader = res.body?.getReader();
+  if (!reader) return Buffer.alloc(0);
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > max) {
+      void reader.cancel().catch(() => {});
+      throw tooBig();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 const plain = (s: string) => s.replace(/[\u0000-\u001f\u007f‪-‮⁦-⁩]/g, " ");
@@ -234,7 +277,11 @@ export class ChannelHub {
 
   private async onTelegram(u: TelegramUpdate): Promise<void> {
     const m = u.message;
-    if (!m || typeof m.text !== "string" || !m.text.trim()) return;
+    if (!m) return;
+    if (typeof m.text !== "string" || !m.text.trim()) {
+      const clip = m.voice ?? m.audio;
+      return clip ? this.onTelegramVoice(m.chat.id, clip) : undefined;
+    }
     const chat = m.chat.id;
     const text = m.text.trim().slice(0, 4000);
     const name = plain(m.from?.username ?? m.from?.first_name ?? String(chat)).slice(0, 60);
@@ -254,6 +301,85 @@ export class ChannelHub {
     this.record("telegram", "in", String(chat), name, text);
     this.deps.audit.log("system", "channel.message_in", { channel: "telegram", from: name });
     this.deps.notify({ type: "alert", level: "info", text: `New Telegram message from ${name}: ${clip(plain(text), 80)}` });
+  }
+
+  /** A voice message from the owner's chat is understood and answered like a typed one. From anyone else it is ignored. */
+  private async onTelegramVoice(chat: number, clip: TelegramClip): Promise<void> {
+    const t = this.cfg.telegram;
+    if (t.ownerChatId === null || chat !== t.ownerChatId) return;
+    if (!this.allowed(`owner:${chat}`, OWNER_LIMIT)) return void (await this.sendRaw("telegram", String(chat), "Slow down a little: too many messages in a short time."));
+    await this.tg("sendChatAction", { chat_id: chat, action: "typing" }).catch(() => {});
+    await this.answerVoice("telegram", String(chat), () => this.telegramAudio(clip));
+  }
+
+  private async telegramAudio(clip: TelegramClip): Promise<{ audio: Buffer; mime: string }> {
+    const fail = () => new VoiceMessageError("I could not fetch that voice message from Telegram. Try sending it again.");
+    if ((clip.duration ?? 0) > VOICE_MAX_SECONDS) throw new VoiceMessageError(`That voice message is too long. Send one under ${VOICE_MAX_SECONDS / 60} minutes.`);
+    if ((clip.file_size ?? 0) > VOICE_MAX_BYTES) throw new VoiceMessageError("That voice message is too big. Send a shorter one.");
+    const token = t0(this.cfg.telegram.botToken);
+    let info: { file_path?: string; file_size?: number };
+    try {
+      info = await this.tg<{ file_path?: string; file_size?: number }>("getFile", { file_id: clip.file_id });
+    } catch {
+      throw fail();
+    }
+    if (!info.file_path || !/^[\w\-./]+$/.test(info.file_path) || info.file_path.includes("..")) throw fail();
+    if ((info.file_size ?? 0) > VOICE_MAX_BYTES) throw new VoiceMessageError("That voice message is too big. Send a shorter one.");
+    let res: Response;
+    try {
+      res = await this.f(`https://api.telegram.org/file/bot${token}/${info.file_path}`, { signal: AbortSignal.timeout(VOICE_FETCH_MS) });
+    } catch {
+      throw fail();
+    }
+    if (!res.ok) throw fail();
+    return { audio: await readLimited(res, VOICE_MAX_BYTES), mime: clip.mime_type?.toLowerCase().startsWith("audio/") ? clip.mime_type : "audio/ogg" };
+  }
+
+  /** Downloads, understands and answers a voice message; whatever goes wrong is told to the owner in one sentence. */
+  private async answerVoice(channel: ChannelId, peer: string, get: () => Promise<{ audio: Buffer; mime: string }>): Promise<void> {
+    let heard: string;
+    try {
+      if (!this.deps.transcribe) throw new VoiceMessageError("I can't understand voice messages yet: the voice engine is not set up on the PC.");
+      const { audio, mime } = await get();
+      const r = await this.deps.transcribe(audio, mime);
+      if (!r.ok) throw new VoiceMessageError(r.error);
+      heard = r.text.trim().slice(0, 1600);
+      if (!heard) throw new VoiceMessageError("I could not hear any words in that voice message.");
+    } catch (e) {
+      const text = e instanceof VoiceMessageError ? e.message : "I could not understand that voice message.";
+      if (!(e instanceof VoiceMessageError)) this.deps.audit.log("system", "channel.voice_failed", { message: this.mask((e as Error).message).slice(0, 200) });
+      await this.sendRaw(channel, peer, text).catch(() => {});
+      return;
+    }
+    await this.respond(channel, peer, heard, heard);
+  }
+
+  /** The audio of a WhatsApp or SMS message. Twilio keeps it at its own address and wants the account's login to hand it over. */
+  private async twilioAudio(mediaUrl: string, mime: string): Promise<{ audio: Buffer; mime: string }> {
+    const w = this.cfg.twilio;
+    const fail = () => new VoiceMessageError("I could not fetch that voice message from WhatsApp. Try sending it again.");
+    let url: URL;
+    try {
+      url = new URL(mediaUrl);
+    } catch {
+      throw fail();
+    }
+    if (url.protocol !== "https:" || url.hostname !== "api.twilio.com") throw fail();
+    const login = "Basic " + Buffer.from(`${w.accountSid}:${w.authToken ?? ""}`).toString("base64");
+    try {
+      let res = await this.f(url.toString(), { headers: { authorization: login }, redirect: "manual", signal: AbortSignal.timeout(VOICE_FETCH_MS) });
+      if (res.status >= 300 && res.status < 400) {
+        void res.body?.cancel().catch(() => {});
+        const next = new URL(res.headers.get("location") ?? "", url);
+        // the login goes to api.twilio.com only; the media host it points to gets none
+        if (next.protocol !== "https:" || !TWILIO_MEDIA_HOSTS.test(next.hostname)) throw fail();
+        res = await this.f(next.toString(), { redirect: "manual", signal: AbortSignal.timeout(VOICE_FETCH_MS) });
+      }
+      if (!res.ok) throw fail();
+      return { audio: await readLimited(res, VOICE_MAX_BYTES), mime: mime.toLowerCase() };
+    } catch (e) {
+      throw e instanceof VoiceMessageError ? e : fail();
+    }
   }
 
   private async tryLink(chat: number, code: string): Promise<void> {
@@ -279,7 +405,7 @@ export class ChannelHub {
 
   // ---- asking the assistant ------------------------------------------------------------------------------------
 
-  private async respond(channel: ChannelId, peer: string, text: string): Promise<void> {
+  private async respond(channel: ChannelId, peer: string, text: string, heard?: string): Promise<void> {
     this.record(channel, "in", peer, "owner", text);
     this.deps.audit.log("owner", "channel.message_in", { channel, via: "owner" });
     if (channel === "telegram") await this.tg("sendChatAction", { chat_id: Number(peer), action: "typing" }).catch(() => {});
@@ -290,7 +416,8 @@ export class ChannelHub {
       this.deps.audit.log("system", "channel.ask_failed", { message: (e as Error).message.slice(0, 200) });
       reply = "Something went wrong on my side. Try again in a moment.";
     }
-    await this.sendRaw(channel, peer, reply || "Done.");
+    reply = reply || "Done.";
+    await this.sendRaw(channel, peer, heard ? `🎙 “${clip(plain(heard), 300)}”\n\n${reply}` : reply);
   }
 
   // ---- sending -------------------------------------------------------------------------------------------------
@@ -378,8 +505,17 @@ export class ChannelHub {
     const channel: ChannelId = whatsapp ? "whatsapp" : "sms";
     const number = from.replace(/^whatsapp:/, "");
     const text = (params.Body ?? "").trim().slice(0, 1600);
-    if (!text) return "ok";
-    if (w.ownerNumber && digits(number) === digits(w.ownerNumber)) {
+    const isOwner = !!w.ownerNumber && digits(number) === digits(w.ownerNumber);
+    if (!text) {
+      // a voice message: understood and answered like a typed one, for the owner only
+      const mediaUrl = params.MediaUrl0;
+      const mediaType = params.MediaContentType0 ?? "";
+      if (!isOwner || !mediaUrl || !(Number(params.NumMedia) > 0) || !/^audio\//i.test(mediaType)) return "ok";
+      if (!this.allowed(`owner:${channel}`, OWNER_LIMIT)) return "ok";
+      void this.answerVoice(channel, number, () => this.twilioAudio(mediaUrl, mediaType)).catch((e) => this.deps.audit.log("system", "channel.respond_failed", { message: (e as Error).message.slice(0, 200) }));
+      return "ok";
+    }
+    if (isOwner) {
       if (!this.allowed(`owner:${channel}`, OWNER_LIMIT)) return "ok";
       void this.respond(channel, number, text).catch((e) => this.deps.audit.log("system", "channel.respond_failed", { message: (e as Error).message.slice(0, 200) }));
       return "ok";
