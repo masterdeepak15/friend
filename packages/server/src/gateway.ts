@@ -118,6 +118,8 @@ export interface MusicApi {
   spotifySetClientId(clientId: string, pin: string, ip: string): Promise<{ ok: true }>;
   /** The return from Spotify. True when the login was completed. */
   spotifyCallback(params: Record<string, string>): Promise<boolean>;
+  /** A good access token for Spotify's web player in the owner's own browser, or null when Spotify is not connected. */
+  spotifyToken(): Promise<string | null>;
 }
 
 /** What the settings routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -683,6 +685,11 @@ export function createGateway(deps: GatewayDeps) {
       }
     });
   }
+  app.get("/api/music/spotify/token", { onRequest: musicGuard }, async (_req, reply) => {
+    reply.header("cache-control", "no-store");
+    const accessToken = await deps.music!.spotifyToken().catch(() => null);
+    return accessToken ? { accessToken } : reply.code(404).send({ error: "Spotify is not connected." });
+  });
   app.post("/api/music/spotify/client-id", { onRequest: musicGuard }, async (req, reply) => {
     reply.header("cache-control", "no-store");
     const body = z.object({ clientId: z.string().max(200), pin: z.string().min(1).max(32) }).safeParse(req.body ?? {});

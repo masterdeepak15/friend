@@ -1,7 +1,9 @@
-import type { ClientMsg, MusicCommand, MusicView } from "@friend/protocol";
+import { parseRef, type ClientMsg, type MusicCommand, type MusicView } from "@friend/protocol";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { Connection } from "../store";
 import { initialPlayer, playerReducer, type PlayerAction, type PlayerState, type Track } from "./playerCore";
+import { RoutedAudio } from "./routedAudio";
+import { createSpotifyEngine, fetchSpotifyToken } from "./spotifyEngine";
 
 /** What the player needs from an audio element (a real one, or a stand-in in tests). */
 export interface PlayerAudio {
@@ -24,7 +26,15 @@ export interface MusicPlayerOptions {
   send: (m: ClientMsg) => void;
   connection: Connection;
   createAudio?: () => PlayerAudio;
+  /** For tests: stands in for the Spotify engine (which is only built when a Spotify track is first loaded). */
+  createSpotify?: () => PlayerAudio;
 }
+
+/** Where a track's sound comes from: the folder's files are streamed by Friend; a Spotify track is its own ref, played by Spotify's player. */
+const srcOf = (id: string): string => {
+  const p = parseRef(id);
+  return !p ? `/api/music/track/${id}` : p.source === "local" ? `/api/music/track/${p.id}` : id;
+};
 
 const reduce = (s: PlayerState, a: PlayerAction): PlayerState => playerReducer(s, a);
 const KEY = "friend.music";
@@ -90,12 +100,14 @@ export function commandToAction(c: MusicCommand): PlayerAction | null {
  * The music player's brain in the browser: the queue (playerCore), the audio element that follows it, the commands the assistant
  * sends, the reports back to the server, the phone's lock-screen controls and the analyser that makes the bars move.
  */
-export function useMusicPlayer({ music, cmd, send, connection, createAudio }: MusicPlayerOptions) {
+export function useMusicPlayer({ music, cmd, send, connection, createAudio, createSpotify }: MusicPlayerOptions) {
   const [state, dispatch] = useReducer(reduce, undefined, () => {
     const r = recall();
     return initialPlayer({ volume: r.volume ?? 70, shuffle: r.shuffle ?? false, repeat: r.repeat ?? "all", view: r.view ?? "mini" });
   });
   const [blocked, setBlocked] = useState(false);
+  /** Why the sound cannot start, in words for the owner (for example, Spotify Premium is needed), or null. */
+  const [notice, setNotice] = useState<string | null>(null);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const audioRef = useRef<PlayerAudio | null>(null);
   const blockedRef = useRef(false);
@@ -120,7 +132,8 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio }: Mu
 
   const audio = (): PlayerAudio => {
     if (!audioRef.current) {
-      const a = createAudio ? createAudio() : (new Audio() as unknown as PlayerAudio);
+      const local = createAudio ? createAudio() : (new Audio() as unknown as PlayerAudio);
+      const a = new RoutedAudio(local, createSpotify ?? (() => createSpotifyEngine({ getToken: fetchSpotifyToken })));
       a.preload = "auto";
       audioRef.current = a;
     }
@@ -142,7 +155,9 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio }: Mu
           },
           () => {
             attempting.current = false;
-            setBlocked(true);
+            const why = (audioRef.current as RoutedAudio | null)?.error ?? null;
+            if (why) setNotice(why);
+            else setBlocked(true);
           },
         );
       } else {
@@ -158,7 +173,8 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio }: Mu
   }, []);
   const analyserStarted = useRef(false);
   const startAnalyser = () => {
-    const a = audioRef.current;
+    const routed = audioRef.current;
+    const a = routed instanceof RoutedAudio ? routed.element : routed;
     const Ctx = typeof window !== "undefined" ? (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) : undefined;
     if (!a || !Ctx || typeof (a as unknown as HTMLMediaElement).play !== "function") return;
     try {
@@ -188,7 +204,10 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio }: Mu
     };
     const meta = () => dispatch({ type: "time", position: a.currentTime || 0, duration: Number.isFinite(a.duration) ? a.duration : 0 });
     const ended = () => dispatch({ type: "ended" });
-    const failed = () => dispatch({ type: "failed" });
+    const failed = () => {
+      setNotice((a as RoutedAudio).error ?? null);
+      dispatch({ type: "failed" });
+    };
     a.addEventListener("timeupdate", time);
     a.addEventListener("loadedmetadata", meta);
     a.addEventListener("durationchange", meta);
@@ -219,7 +238,8 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio }: Mu
       a.src = "";
       return;
     }
-    a.src = `/api/music/track/${id}`;
+    setNotice(null);
+    a.src = srcOf(id);
     if (state.playing) tryPlay();
   }, [current?.id, state.playing, tryPlay]);
 
@@ -320,7 +340,7 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio }: Mu
     }
   }, [current?.id, state.playing]);
 
-  return { state, dispatch, current, blocked, analyser, unlock: tryPlay, audio: audioRef };
+  return { state, dispatch, current, blocked, notice, analyser, unlock: tryPlay, audio: audioRef };
 }
 
 export type MusicPlayer = ReturnType<typeof useMusicPlayer>;

@@ -174,3 +174,54 @@ describe("telling the server", () => {
     expect(sent.filter((m) => m.type === "music.state")).toHaveLength(0);
   });
 });
+
+describe("tracks from Spotify", () => {
+  const spot = (n: string) => ({ id: `spotify:${n}`, title: `Spotify ${n}`, artist: "Artist", album: "Album", durationSec: 200 });
+  let engine: FakeAudio & { error: string | null };
+  function mountWithSpotify(cmd: { n: number; command: MusicCommand } | null = null) {
+    engine = Object.assign(new FakeAudio(), { error: null as string | null });
+    return renderHook(() => useMusicPlayer({ music, cmd, send: (m) => sent.push(m), connection: "open", createAudio: () => audio, createSpotify: () => engine }));
+  }
+
+  it("plays them through the Spotify engine, and the folder's tracks through the audio element", () => {
+    const { result } = mountWithSpotify(play(1, [spot("4uLU6hMCjMI75M1A2tKUQC"), track(2) as never]));
+    expect(engine.src).toBe("spotify:4uLU6hMCjMI75M1A2tKUQC");
+    expect(engine.plays).toBe(1);
+    expect(audio.src).toBe("");
+    act(() => result.current.dispatch({ type: "next" }));
+    expect(audio.src).toBe("/api/music/track/0000000000000002");
+    expect(engine.paused).toBe(true);
+  });
+
+  it("understands a local: ref as a file in the folder", () => {
+    mountWithSpotify(play(1, [{ ...track(7), id: "local:0000000000000007" }]));
+    expect(audio.src).toBe("/api/music/track/0000000000000007");
+  });
+
+  it("does not build the Spotify engine for a library with only files", () => {
+    const make = vi.fn(() => Object.assign(new FakeAudio(), { error: null }));
+    renderHook(() => useMusicPlayer({ music, cmd: play(1), send: (m) => sent.push(m), connection: "open", createAudio: () => audio, createSpotify: make }));
+    expect(make).not.toHaveBeenCalled();
+  });
+
+  it("shows why it cannot play (Premium), instead of asking to unlock the sound", async () => {
+    engine = Object.assign(new FakeAudio(), { error: null as string | null });
+    engine.play = () => {
+      engine.error = "Spotify Premium is needed to play on this screen.";
+      engine.fire("error");
+      return Promise.reject(new Error(engine.error));
+    };
+    const { result } = renderHook(() => useMusicPlayer({ music, cmd: play(1, [spot("4uLU6hMCjMI75M1A2tKUQC")]), send: (m) => sent.push(m), connection: "open", createAudio: () => audio, createSpotify: () => engine }));
+    await act(async () => {});
+    expect(result.current.notice).toMatch(/Premium/);
+    expect(result.current.blocked).toBe(false);
+  });
+
+  it("reports a Spotify track to the server in a message the server accepts", async () => {
+    const { ClientMsg } = await import("@friend/protocol");
+    mountWithSpotify(play(1, [spot("4uLU6hMCjMI75M1A2tKUQC")]));
+    const state = sent.filter((m) => m.type === "music.state").at(-1)!;
+    expect(ClientMsg.safeParse(state).success).toBe(true);
+    expect((state as { state: { trackId: string | null } }).state.trackId).toBe("spotify:4uLU6hMCjMI75M1A2tKUQC");
+  });
+});

@@ -47,7 +47,7 @@ export type MusicTrackRef = z.infer<typeof MusicTrackRef>;
 /** What a screen reports about its player: what is playing, the queue, and whether this is the screen commands should reach. */
 export const MusicState = z.object({
   playing: z.boolean(),
-  trackId: z.string().max(16).nullable(),
+  trackId: z.string().max(80).nullable(),
   title: z.string().max(200),
   artist: z.string().max(200),
   album: z.string().max(200),
@@ -58,7 +58,7 @@ export const MusicState = z.object({
   shuffle: z.boolean(),
   repeat: z.enum(["off", "all", "one"]),
   view: z.enum(["mini", "full", "hidden"]),
-  queue: z.array(z.object({ id: z.string().max(16), title: z.string().max(200) })).max(50),
+  queue: z.array(z.object({ id: z.string().max(80), title: z.string().max(200) })).max(50),
   index: z.number().int().min(-1),
   active: z.boolean(),
 });

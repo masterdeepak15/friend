@@ -29,6 +29,15 @@ describe("widgets settings", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/http/);
   });
 
+  it("chooses the default source and the search limit", () => {
+    const onMusic = vi.fn();
+    render(<WidgetsTab music={music} hud={hud} onMusic={onMusic} onHud={() => {}} />);
+    fireEvent.change(screen.getByDisplayValue("The music folder"), { target: { value: "any" } });
+    expect(onMusic).toHaveBeenCalledWith({ defaultSource: "any" });
+    fireEvent.change(screen.getByDisplayValue("10"), { target: { value: "25" } });
+    expect(onMusic).toHaveBeenCalledWith({ searchLimit: 25 });
+  });
+
   it("keeps at least one file type and caps the buttons", () => {
     const onMusic = vi.fn();
     const full = Array.from({ length: 12 }, (_, i) => ({ id: `i${i}`, label: `B${i}`, icon: "x", action: { type: "panel" as const, value: "chat" } }));

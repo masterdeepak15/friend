@@ -976,6 +976,7 @@ export async function createApp(opts: AppOptions) {
         audit.log("owner", "music.spotify.clientid", { ip });
         return { ok: true };
       },
+      spotifyToken: async () => (spotifyHub.status().connected ? spotifyHub.accessToken() : null),
       spotifyDisconnect: async (pin, ip) => {
         await requirePin(pin, ip);
         spotifyHub.disconnect();

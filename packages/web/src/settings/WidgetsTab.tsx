@@ -72,6 +72,19 @@ export function WidgetsTab({ music, hud, onMusic, onHud }: { music: MusicSetting
         <span>Moving bars around the dial</span>
       </label>
       <label className="settings-field">
+        <span>Where music comes from, when the assistant is not told</span>
+        <select value={music.defaultSource} onChange={(e) => onMusic({ defaultSource: e.target.value as MusicSettings["defaultSource"] })}>
+          <option value="local">The music folder</option>
+          <option value="spotify">Spotify</option>
+          <option value="any">Both</option>
+        </select>
+        <small className="auth-note">Spotify is added from Plugins. Playing from it needs Spotify Premium on your account.</small>
+      </label>
+      <label className="settings-field">
+        <span>Most results from a service such as Spotify</span>
+        <input type="number" min={MUSIC_LIMITS.searchLimit.min} max={MUSIC_LIMITS.searchLimit.max} value={music.searchLimit} onChange={(e) => onMusic({ searchLimit: Number(e.target.value) })} />
+      </label>
+      <label className="settings-field">
         <span>Most tracks to list</span>
         <input type="number" min={MUSIC_LIMITS.maxTracks.min} max={MUSIC_LIMITS.maxTracks.max} value={music.maxTracks} onChange={(e) => onMusic({ maxTracks: Number(e.target.value) })} />
       </label>

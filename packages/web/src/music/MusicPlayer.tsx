@@ -1,4 +1,4 @@
-import type { MusicView } from "@friend/protocol";
+import { parseRef, type MusicView } from "@friend/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Movable } from "../layout/Movable";
 import { ripple, useScramble } from "../hud/fx";
@@ -16,6 +16,13 @@ const clock = (sec: number): string => {
 
 /** The cover picture of a track, or null when it has none (checked once per track). */
 const covers = new Map<string, boolean>();
+/** Only the music folder has cover pictures; a service's track shows the emblem. */
+const coverId = (id: string): string | null => {
+  const p = parseRef(id);
+  return p && p.source === "local" ? p.id : null;
+};
+const isSpotify = (id: string): boolean => parseRef(id)?.source === "spotify";
+
 function useCover(id: string | undefined): string | null {
   const [ok, setOk] = useState<boolean>(id ? (covers.get(id) ?? false) : false);
   useEffect(() => {
@@ -31,12 +38,14 @@ function useCover(id: string | undefined): string | null {
       covers.set(id, false);
       if (live) setOk(false);
     };
-    img.src = `/api/music/cover/${id}`;
+    const cid = coverId(id);
+    if (!cid) return setOk(false);
+    img.src = `/api/music/cover/${cid}`;
     return () => {
       live = false;
     };
   }, [id]);
-  return id && ok ? `/api/music/cover/${id}` : null;
+  return id && ok ? `/api/music/cover/${coverId(id)}` : null;
 }
 
 interface Row extends Track {
@@ -46,6 +55,31 @@ async function fetchLibrary(q: string, limit: number): Promise<{ tracks: Row[]; 
   const res = await fetch(`/api/music/library?q=${encodeURIComponent(q)}&limit=${limit}`);
   if (!res.ok) return { tracks: [], total: 0 };
   return (await res.json()) as { tracks: Row[]; total: number };
+}
+/** What the owner's sources can do right now (is Spotify connected, and what it still needs). Null until it is known. */
+function useSpotifyInfo(): { connected: boolean; needs: string | null } | null {
+  const [info, setInfo] = useState<{ connected: boolean; needs: string | null } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void fetch("/api/music/sources")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { sources?: { id: string; status: { connected: boolean; needs: string | null } }[] } | null) => {
+        const s = j?.sources?.find((x) => x.id === "spotify")?.status;
+        if (live && s) setInfo({ connected: s.connected, needs: s.needs });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  return info;
+}
+async function searchSpotify(q: string, limit: number): Promise<{ tracks: Row[]; total: number }> {
+  const res = await fetch(`/api/music/search?q=${encodeURIComponent(q)}&source=spotify&limit=${limit}`);
+  if (!res.ok) return { tracks: [], total: 0 };
+  const j = (await res.json()) as { tracks?: { ref: string; title: string; artist: string; album: string; durationSec: number | null }[] };
+  const tracks = (j.tracks ?? []).map((t) => ({ id: t.ref, title: t.title, artist: t.artist, album: t.album, durationSec: t.durationSec }));
+  return { tracks, total: tracks.length };
 }
 const asTrack = (r: Row): Track => ({ id: r.id, title: r.title, artist: r.artist, album: r.album, durationSec: r.durationSec });
 
@@ -171,16 +205,25 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
   const { state, dispatch } = player;
   const [tab, setTab] = useState<"queue" | "library">(state.queue.length ? "queue" : "library");
   const [q, setQ] = useState("");
+  const [source, setSource] = useState<"folder" | "spotify">("folder");
   const [found, setFound] = useState<{ tracks: Row[]; total: number } | null>(null);
+  const spotify = useSpotifyInfo();
+  const spotifyOn = !!spotify?.connected;
+  const onSpotify = source === "spotify" && spotifyOn;
   useEffect(() => {
     if (tab !== "library") return;
     let live = true;
-    const t = setTimeout(() => void fetchLibrary(q, 100).then((r) => live && setFound(r)), q ? 250 : 0);
+    if (onSpotify && !q.trim()) {
+      setFound(null);
+      return;
+    }
+    const run = () => (onSpotify ? searchSpotify(q.trim(), 30) : fetchLibrary(q, 100));
+    const t = setTimeout(() => void run().then((r) => live && setFound(r)), q ? 250 : 0);
     return () => {
       live = false;
       clearTimeout(t);
     };
-  }, [tab, q]);
+  }, [tab, q, onSpotify]);
   const rows: { track: Track; index: number }[] = tab === "queue" ? state.queue.map((track, index) => ({ track, index })) : (found?.tracks ?? []).map((r, index) => ({ track: asTrack(r), index }));
   return (
     <div className="hud-playlist">
@@ -196,9 +239,29 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
           </button>
         )}
       </div>
+      {tab === "library" && spotifyOn && (
+        <div className="hud-tabs" role="tablist" aria-label="Where to look">
+          {(["folder", "spotify"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="tab"
+              aria-selected={source === s}
+              className={`hud-chip${source === s ? " on" : ""}`}
+              onClick={() => {
+                setSource(s);
+                setFound(null);
+              }}
+            >
+              {s === "folder" ? "Folder" : "Spotify"}
+            </button>
+          ))}
+        </div>
+      )}
       {tab === "library" && <input className="hud-search" type="search" placeholder="Search title, artist or album" aria-label="Search the music" value={q} onChange={(e) => setQ(e.target.value)} />}
       <ul className="hud-list">
-        {rows.length === 0 && <li className="hud-empty">{tab === "queue" ? "The queue is empty." : found ? "No music matches." : "Loading…"}</li>}
+        {rows.length === 0 && <li className="hud-empty">{tab === "queue" ? "The queue is empty." : onSpotify && !q.trim() ? "Type to search Spotify." : found ? "No music matches." : "Loading…"}</li>}
+        {tab === "library" && onSpotify && spotify?.needs && <li className="hud-empty">{spotify.needs}</li>}
         {rows.map(({ track, index }, i) => {
           const current = tab === "queue" && index === state.index;
           return (
@@ -211,7 +274,10 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
                 onClick={() => (tab === "queue" ? dispatch({ type: "jump", index }) : dispatch({ type: "play", tracks: (found?.tracks ?? []).map(asTrack), mode: "replace", start: index }))}
               >
                 <span className="hud-tab-title">{track.title}</span>
-                <small>{track.artist || track.album}</small>
+                <small>
+                  {track.artist || track.album}
+                  {isSpotify(track.id) && <em className="hud-source">SPOTIFY</em>}
+                </small>
               </button>
               {tab === "library" && (
                 <button type="button" className="hud-mini" aria-label={`Add ${track.title} to the queue`} title="Add to the queue" onClick={() => dispatch({ type: "play", tracks: [track], mode: "add" })}>
@@ -236,7 +302,7 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
  * view with the big dial, level bars, volume and the playlist. The assistant controls the same player.
  */
 export function MusicPlayerView({ player, music, animations }: { player: Player; music: MusicView | null; animations: Anim }) {
-  const { state, dispatch, current, blocked, analyser, unlock } = player;
+  const { state, dispatch, current, blocked, notice, analyser, unlock } = player;
   const levels = useMemo(newLevels, []);
   const cover = useCover(current?.id);
   const full = state.view === "full";
@@ -268,11 +334,19 @@ export function MusicPlayerView({ player, music, animations }: { player: Player;
         <div className="hud-music-main">
           <div className="hud-now" aria-live="polite">
             <b className="hud-title">{current ? title : "Nothing playing"}</b>
-            <small className="hud-sub">{current ? [current.artist, current.album].filter(Boolean).join(" — ") : "Press play, or ask for some music."}</small>
+            <small className="hud-sub">
+              {current ? [current.artist, current.album].filter(Boolean).join(" — ") : "Press play, or ask for some music."}
+              {current && isSpotify(current.id) && <em className="hud-source">SPOTIFY</em>}
+            </small>
           </div>
           <Timeline player={player} />
           <Transport player={player} anim={animations} />
           {full && <VolumeControl player={player} />}
+          {notice && (
+            <p className="hud-notice" role="status">
+              {notice}
+            </p>
+          )}
           {blocked && (
             <button type="button" className="hud-unlock" onClick={unlock}>
               Tap to enable sound

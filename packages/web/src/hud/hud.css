@@ -176,6 +176,8 @@
 .hud-list .hud-tab-main { display: grid; grid-template-columns: 1fr; gap: 1px; padding: 6px 12px 8px 14px; min-height: 0; }
 .hud-tab-title { font-size: 0.8rem; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hud-list small { font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-source { margin-left: 8px; padding: 0 5px; font-style: normal; font-size: 0.56rem; letter-spacing: 0.18em; color: #031018; background: var(--accent); clip-path: polygon(0 0, 100% 0, calc(100% - 4px) 100%, 0 100%); vertical-align: 1px; }
+.hud-notice { margin: 0; padding: 4px 10px; border-left: 2px solid var(--warn); font-size: 0.7rem; letter-spacing: 0.06em; color: var(--warn); }
 .hud-empty { padding: 10px 4px; font-size: 0.75rem; color: var(--muted); }
 
 /* ================= animations ================= */

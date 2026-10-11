@@ -97,3 +97,17 @@ describe("music sources routes", () => {
     expect(r.notes.join(" ")).toMatch(/Connect your Spotify/);
   });
 });
+
+describe("the token for Spotify's web player", () => {
+  it("goes only to the signed-in owner, and only while Spotify is connected", async () => {
+    const t = await boot();
+    expect((await t.anon("/api/music/spotify/token")).status).toBe(401);
+    expect((await t.api("/api/music/spotify/token")).status).toBe(404);
+    const { url } = await t.connect();
+    await t.anon(`/api/music/oauth/callback?code=${t.fake.issueCode()}&state=${url!.searchParams.get("state")}`);
+    const r = await t.api("/api/music/spotify/token");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("cache-control")).toMatch(/no-store/);
+    expect(((await r.json()) as { accessToken: string }).accessToken).toMatch(/^AT-\d+$/);
+  });
+});
