@@ -7,6 +7,9 @@ import {
   type StageObject,
   type ViewPreset,
   type ClientLook,
+  type HudView,
+  type MusicCommand,
+  type MusicView,
 } from "@friend/protocol";
 
 /** "elsewhere": Friend is open in another window; this one waits for "Use here". */
@@ -73,6 +76,13 @@ export interface StageViewState {
   speaker: { name: string | null; trust: "owner" | "member" | "guest" | "unverified"; seq: number } | null;
   /** What the profile badge calls the owner (empty: "Owner"). */
   ownerName: string;
+  /** The assistant's name, for the profile tag. */
+  assistantName: string;
+  /** The widget settings and the music player's settings, as the server sent them (null until the first "ui" message). */
+  hud: HudView | null;
+  music: MusicView | null;
+  /** The newest command for the music player (n counts them, so the same command twice still runs twice). */
+  musicCmd: { n: number; command: MusicCommand } | null;
   /** The assistant asked for the plugins screen to be opened (at one integration's Configure page). `n` changes with every request. */
   uiOpen: { n: number; integration?: string } | null;
 }
@@ -102,6 +112,10 @@ export const initialState: StageViewState = {
   camera: { enabled: false, stream: null },
   speaker: null,
   ownerName: "",
+  assistantName: "",
+  hud: null,
+  music: null,
+  musicCmd: null,
   uiOpen: null,
 };
 
@@ -214,7 +228,11 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     case "ui.open":
       return { ...state, uiOpen: { n: (state.uiOpen?.n ?? 0) + 1, ...(m.integration ? { integration: m.integration } : {}) } };
     case "ui":
-      return { ...state, view: m.view, look: m.look ?? state.look, ownerName: m.ownerName ?? state.ownerName, viewKnown: true };
+      return { ...state, view: m.view, look: m.look ?? state.look, ownerName: m.ownerName ?? state.ownerName, assistantName: m.assistantName ?? state.assistantName, hud: m.hud ?? state.hud, music: m.music ?? state.music, viewKnown: true };
+    case "music.command": {
+      const { type: _type, ...command } = m;
+      return { ...state, musicCmd: { n: (state.musicCmd?.n ?? 0) + 1, command } };
+    }
     case "caption.delta": {
       const fresh = state.captionDone;
       const last = state.chat.at(-1);

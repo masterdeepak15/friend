@@ -80,6 +80,21 @@ export const MusicCommand = z.object({
 });
 export type MusicCommand = z.infer<typeof MusicCommand>;
 
+/** The screen widgets as a screen needs them (the owner's settings, with nothing private in them). */
+export const HudView = z.object({
+  terminalLabel: z.string().max(24),
+  clock: z.object({ hour12: z.boolean(), seconds: z.boolean(), locale: z.string().max(35) }),
+  launcher: z
+    .array(z.object({ id: z.string().max(20), label: z.string().max(24), icon: z.string().max(16), action: z.object({ type: z.enum(["url", "prompt", "panel", "music"]), value: z.string().max(500) }) }))
+    .max(12),
+  animations: z.enum(["full", "reduced", "off"]),
+});
+export type HudView = z.infer<typeof HudView>;
+
+/** The music player's settings as a screen needs them. The folder itself is not sent, only whether one is chosen. */
+export const MusicView = z.object({ folderSet: z.boolean(), volume: z.number().min(0).max(100), shuffle: z.boolean(), repeat: z.enum(["off", "all", "one"]), visualizer: z.boolean(), startView: z.enum(["mini", "full"]) });
+export type MusicView = z.infer<typeof MusicView>;
+
 export const ServerMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("music.command") }).merge(MusicCommand),
   z.object({ type: z.literal("stage"), command: StageCommand }),
@@ -92,7 +107,7 @@ export const ServerMsg = z.discriminatedUnion("type", [
   /** What the owner just said or typed, so every open screen can show the conversation. */
   z.object({ type: z.literal("chat.user"), text: z.string() }),
   /** The owner's chosen view (sent on connect and whenever it changes). */
-  z.object({ type: z.literal("ui"), view: ViewPreset, look: ClientLook.optional(), ownerName: z.string().max(40).optional() }),
+  z.object({ type: z.literal("ui"), view: ViewPreset, look: ClientLook.optional(), ownerName: z.string().max(40).optional(), assistantName: z.string().max(40).optional(), hud: HudView.optional(), music: MusicView.optional() }),
   z.object({ type: z.literal("activity"), text: z.string().max(80).nullable() }),
   z.object({
     type: z.literal("status"),

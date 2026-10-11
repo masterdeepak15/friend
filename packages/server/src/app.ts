@@ -278,7 +278,7 @@ export async function createApp(opts: AppOptions) {
     if (applied.changed.includes("voice.ttsVoice")) void warmVoice(config.voice.ttsVoice, voiceBefore);
     if (applied.changed.includes("voice.hindiVoice")) void warmLanguageVoice(config.voice.hindiVoice);
     if (applied.changed.includes("voice.marathiVoice")) void warmLanguageVoice(config.voice.marathiVoice);
-    if (applied.changed.some((k) => k === "view" || k === "ownerName" || k.startsWith("look."))) {
+    if (applied.changed.some((k) => k === "view" || k === "ownerName" || k.startsWith("look.") || k.startsWith("hud") || k.startsWith("music"))) {
       if (applied.changed.some((k) => k.startsWith("look."))) for (const command of stage.setLook(config.look)) broadcast({ type: "stage", command });
       broadcast(uiMsg());
     }
@@ -445,7 +445,15 @@ export async function createApp(opts: AppOptions) {
     broadcast({ type: "alert", level: "info", text: "The voice request timed out and was dropped." });
   });
   let stopped = false;
-  const uiMsg = (): ServerMsg => ({ type: "ui", view: config.view, look: clientLook(config.look), ownerName: config.ownerName });
+  const uiMsg = (): ServerMsg => ({
+    type: "ui",
+    view: config.view,
+    look: clientLook(config.look),
+    ownerName: config.ownerName,
+    assistantName: auth.assistantName(),
+    hud: { terminalLabel: config.hud.terminalLabel, clock: { ...config.hud.clock }, launcher: config.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })), animations: config.hud.animations },
+    music: { folderSet: config.music.folder !== "", volume: config.music.volume, shuffle: config.music.shuffle, repeat: config.music.repeat, visualizer: config.music.visualizer, startView: config.music.startView },
+  });
   const statusMsg = (): ServerMsg => ({
     type: "status",
     busy: agent.isBusy(),
