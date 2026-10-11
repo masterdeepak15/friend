@@ -77,6 +77,8 @@ export interface ChannelsApi {
   link(pin: string | undefined, ip: string): Promise<unknown>;
   unlink(pin: string | undefined, ip: string): Promise<unknown>;
   twilioInbound(url: string, params: Record<string, string>, signature: string | undefined): "ok" | "forbidden" | "off";
+  /** The file behind a token given to Twilio for a WhatsApp message, while it is good. */
+  media(token: string): { path: string; mime: string; name: string } | null;
 }
 
 /** What the broker routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -538,6 +540,17 @@ export function createGateway(deps: GatewayDeps) {
     }
   });
   const twilioWindow = new SlidingWindow(60, 60_000);
+  // Twilio fetches a file Friend is sending by WhatsApp from here. No cookie: the random token, good for ten minutes, is the proof.
+  const twilioMediaWindow = new SlidingWindow(60, 60_000);
+  app.get<{ Params: { token: string } }>("/api/channels/media/:token", async (req, reply) => {
+    if (!deps.channels) return reply.code(404).send();
+    if (!twilioMediaWindow.allow(`twm:${req.ip}`)) return reply.code(429).send();
+    const file = deps.channels.media(req.params.token);
+    if (!file) return reply.code(404).send();
+    const info = await fsp.stat(file.path).catch(() => null);
+    if (!info || !info.isFile()) return reply.code(404).send();
+    return reply.header("x-content-type-options", "nosniff").header("cache-control", "no-store").header("content-length", info.size).type(file.mime).send(createReadStream(file.path));
+  });
   app.post("/api/channels/twilio", async (req, reply) => {
     if (!deps.channels) return reply.code(404).send();
     if (!twilioWindow.allow(`tw:${req.ip}`)) return reply.code(429).send();

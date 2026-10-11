@@ -15,5 +15,5 @@ export const ALEXA_LIMITS = {
 export const TOOL_NAME = /^[a-z][a-z0-9._-]{1,60}$/;
 
 /** Never reachable by a voice from a speaker device, whatever its tier or the owner's settings: the PC, files, settings, add-ons, the camera and screen. This is a safety floor, not a setting. */
-export const NOT_BY_VOICE = ["shell.", "fs.", "code.", "settings.", "connectors.", "plugins.", "plugin.", "integrations.", "camera.", "screen.", "mcp."];
+export const NOT_BY_VOICE = ["shell.", "fs.", "code.", "settings.", "connectors.", "plugins.", "plugin.", "integrations.", "camera.", "screen.", "mcp.", "message.send_file"];
 export const isNeverByVoice = (tool: string): boolean => NOT_BY_VOICE.some((p) => tool.startsWith(p));

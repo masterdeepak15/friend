@@ -14,6 +14,10 @@ const CODE_LANG: Record<string, string> = {
   py: "python", go: "go", rs: "rust", java: "java", c: "c", h: "c", cpp: "cpp", cs: "csharp", rb: "ruby", php: "php", sh: "shell", ps1: "powershell", bat: "batch", sql: "sql", toml: "toml", ini: "ini", env: "text",
 };
 
+/** What is never sent from the PC to a chat: programs and scripts. */
+const NOT_SENT = new Set(["exe", "bat", "cmd", "com", "msi", "scr", "ps1", "vbs", "lnk", "dll", "sh", "jar", "reg"]);
+const DOC_MIME: Record<string, string> = { pdf: "application/pdf", txt: "text/plain", csv: "text/csv", md: "text/markdown", json: "application/json", zip: "application/zip", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation" };
+const MAX_SEND = 100 * 1024 * 1024;
 const MAX_IMAGE = 40 * 1024 * 1024;
 const MAX_VIDEO = 8 * 1024 * 1024 * 1024;
 const MAX_PDF = 300 * 1024 * 1024;
@@ -89,6 +93,28 @@ export class MediaStore {
     const id = randomBytes(16).toString("hex");
     this.db.prepare("insert into media (id, path, mime, size, created_at) values (?, ?, ?, ?, ?)").run(id, path, mime, size, this.clock());
     return id;
+  }
+
+  /** A file the assistant wants to send to the owner's chat: checked here (it must exist, be a real file, not be Friend's own data, not a program). */
+  async sendable(rawPath: string): Promise<{ ok: true; path: string; name: string; mime: string; size: number; kind: "image" | "audio" | "video" | "document" } | { ok: false; error: string }> {
+    if (!isAbsolute(rawPath)) return { ok: false, error: "Give the full path of the file, for example D:\\Pictures\\photo.png." };
+    let real: string;
+    try {
+      real = await fs.realpath(resolve(rawPath));
+    } catch {
+      return { ok: false, error: "That file does not exist." };
+    }
+    if (insideOf(await fs.realpath(this.dataDir).catch(() => this.dataDir), real)) return { ok: false, error: "Friend's own data folder cannot be sent." };
+    const stat = await fs.stat(real).catch(() => null);
+    if (!stat || !stat.isFile()) return { ok: false, error: "That path is not a file." };
+    const name = basename(real);
+    const ext = extname(real).slice(1).toLowerCase();
+    if (NOT_SENT.has(ext)) return { ok: false, error: `Friend cannot send .${ext} files.` };
+    if (stat.size === 0) return { ok: false, error: "That file is empty." };
+    if (stat.size > MAX_SEND) return { ok: false, error: `That file is too big to send (${Math.round(stat.size / 1048576)} MB).` };
+    const mime = IMAGE[ext] ?? VIDEO[ext] ?? DOC_MIME[ext] ?? "application/octet-stream";
+    const kind = mime.startsWith("image/") ? "image" : mime.startsWith("audio/") ? "audio" : mime.startsWith("video/") ? "video" : "document";
+    return { ok: true, path: real, name, mime, size: stat.size, kind };
   }
 
   async present(rawPath: string, title?: string): Promise<Presented> {

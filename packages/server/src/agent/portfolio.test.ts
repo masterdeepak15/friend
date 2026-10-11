@@ -70,7 +70,7 @@ beforeEach(async () => {
       audit,
       config,
       assistantName: () => "Jarvis",
-      channels: { send, inbox: () => [] },
+      channels: { send, sendFile: async () => ({ ok: true as const, summary: "Sent." }), inbox: () => [] },
       ...(withBrokers ? { brokers: hub } : {}),
     });
 });

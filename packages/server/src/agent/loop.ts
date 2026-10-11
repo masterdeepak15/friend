@@ -54,9 +54,9 @@ export interface AgentDeps {
   /** Takes one picture of the owner's Friend screen through their browser. Without it screen.look reports it is unavailable. */
   screen?: Pick<CameraBroker, "request">;
   /** Opens a file the owner approved so the screen can show it. Without it file.present reports it is unavailable. */
-  media?: Pick<MediaStore, "present">;
+  media?: Pick<MediaStore, "present" | "sendable">;
   /** Sends messages and reads the inbox. Without it the message tools report they are unavailable. */
-  channels?: Pick<ChannelHub, "send" | "inbox">;
+  channels?: Pick<ChannelHub, "send" | "sendFile" | "inbox">;
   /** The owner's stock broker (Zerodha), read only. Without it the portfolio and report tools report they are unavailable. */
   brokers?: Pick<BrokerHub, "status" | "snapshot" | "report" | "schedules" | "loginLink">;
   /** The music player on the owner's screen. Without it the music tools report they are unavailable. */
@@ -476,6 +476,7 @@ export class Agent {
       if (!d.provider.vision) return fail("This model cannot look at pictures. Use a vision model (Claude, or an Ollama vision model with ollama.vision true).");
     }
     if (call.name === "file.present" && !d.media) return fail("Showing files is not available.");
+    if (call.name === "message.send_file" && d.channels && !d.media) return fail("Sending files is not available.");
     if (call.name.startsWith("message.") && !d.channels) return fail("Messaging is not available.");
     if (call.name.startsWith("music.") && !d.music) return fail("Music is not available.");
     if ((call.name.startsWith("portfolio.") || call.name.startsWith("reports.")) && !d.brokers) return fail("The portfolio is not available.");
@@ -489,6 +490,11 @@ export class Agent {
       if (!d.provider.vision) {
         return fail("This model cannot look at pictures. Use a vision model (Claude, or an Ollama vision model with ollama.vision true).");
       }
+    }
+    if (call.name === "message.send_file") {
+      // say why a file cannot be sent before bothering the owner with a card for it
+      const ok = await d.media!.sendable(String(args.path));
+      if (!ok.ok) return fail(ok.error);
     }
     if (decision === "ask" || decision === "ask_with_pin") {
       const outcome = await d.approvals.request(
@@ -621,6 +627,15 @@ export class Agent {
       const { channel, to, text } = args as { channel: "telegram" | "sms" | "whatsapp"; to: string; text: string };
       const sent = await d.channels!.send(channel, to, text);
       d.audit.log("agent", "tool.call", { tool: call.name, args: { channel }, tier, ok: sent.ok });
+      return sent.ok ? { text: sent.summary, isError: false } : fail(sent.error);
+    }
+
+    if (call.name === "message.send_file") {
+      const { channel, to, path, caption } = args as { channel: "telegram" | "whatsapp"; to: string; path: string; caption?: string };
+      const file = await d.media!.sendable(path);
+      if (!file.ok) return fail(file.error);
+      const sent = await d.channels!.sendFile(channel, to, file, caption);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { channel, kind: file.kind }, tier, ok: sent.ok });
       return sent.ok ? { text: sent.summary, isError: false } : fail(sent.error);
     }
 

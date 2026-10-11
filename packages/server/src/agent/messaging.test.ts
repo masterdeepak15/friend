@@ -25,6 +25,8 @@ let approvals: Approvals;
 let config: Config;
 let send: ReturnType<typeof vi.fn<ChannelHub["send"]>>;
 let inbox: ReturnType<typeof vi.fn<ChannelHub["inbox"]>>;
+let sendFile: ReturnType<typeof vi.fn<ChannelHub["sendFile"]>>;
+let sendable: ReturnType<typeof vi.fn>;
 let build: (provider: FakeProvider, withChannels?: boolean) => Agent;
 
 const emit = (m: ServerMsg) => {
@@ -41,6 +43,8 @@ beforeEach(async () => {
   decision = "approve";
   send = vi.fn<ChannelHub["send"]>(async (channel) => ({ ok: true, summary: `Sent by ${channel}.` }));
   inbox = vi.fn<ChannelHub["inbox"]>(() => []);
+  sendFile = vi.fn<ChannelHub["sendFile"]>(async (channel) => ({ ok: true, summary: `File sent on ${channel}.` }));
+  sendable = vi.fn(async (path: string) => ({ ok: true as const, path, name: "photo.png", mime: "image/png", size: 1200, kind: "image" as const }));
   const dir = mkdtempSync(join(tmpdir(), "friend-msg-"));
   const db = openDb(dir);
   const audit = new Audit(db);
@@ -60,7 +64,7 @@ beforeEach(async () => {
       audit,
       config,
       assistantName: () => "Jarvis",
-      ...(withChannels ? { channels: { send, inbox } } : {}),
+      ...(withChannels ? { channels: { send, inbox, sendFile }, media: { sendable } as never } : {}),
     });
 });
 
@@ -139,5 +143,67 @@ describe("message.inbox", () => {
     const provider = new FakeProvider([[call("i1", "message.inbox", {}), done], [text("Nothing."), done]]);
     await build(provider).runTurn("any messages?", ctx);
     expect(lastTool(provider)).toMatch(/No messages/);
+  });
+});
+
+const fileCall = (over: Record<string, unknown> = {}) => [[call("f1", "message.send_file", { channel: "telegram", to: "me", path: "D:\\Pictures\\photo.png", caption: "Here you go", ...over }), done], [text("Sent."), done]];
+
+describe("message.send_file", () => {
+  it("asks first, showing the file, and then sends it", async () => {
+    const provider = new FakeProvider(fileCall() as ProviderEvent[][]);
+    await build(provider).runTurn("send me the photo", ctx);
+    const [card] = ask();
+    expect(card).toMatchObject({ tool: "message.send_file", tier: "T2", needsPin: false });
+    expect(card!.summary).toContain("D:\\Pictures\\photo.png");
+    expect(card!.summary).toContain("Telegram");
+    expect(sendFile).toHaveBeenCalledWith("telegram", "me", expect.objectContaining({ name: "photo.png", kind: "image" }), "Here you go");
+    expect(lastTool(provider)).toMatch(/File sent on telegram/);
+  });
+
+  it("asks every time, even in auto mode, and a standing rule cannot skip it", async () => {
+    config.approvals = "auto";
+    await build(new FakeProvider(fileCall() as ProviderEvent[][])).runTurn("send me the photo", ctx);
+    expect(ask()).toHaveLength(1);
+  });
+
+  it("sends nothing when the owner says no", async () => {
+    decision = "deny";
+    const provider = new FakeProvider(fileCall() as ProviderEvent[][]);
+    await build(provider).runTurn("send me the photo", ctx);
+    expect(sendFile).not.toHaveBeenCalled();
+    expect(lastTool(provider)).toMatch(/did not approve/);
+  });
+
+  it("says why a file cannot be sent before bothering the owner", async () => {
+    sendable.mockResolvedValueOnce({ ok: false, error: "That file does not exist." });
+    const provider = new FakeProvider(fileCall() as ProviderEvent[][]);
+    await build(provider).runTurn("send me the photo", ctx);
+    expect(ask()).toEqual([]);
+    expect(sendFile).not.toHaveBeenCalled();
+    expect(lastTool(provider)).toMatch(/does not exist/);
+  });
+
+  it("reports why the channel could not send it", async () => {
+    sendFile.mockResolvedValueOnce({ ok: false, error: "Telegram is not linked to the owner yet." });
+    const provider = new FakeProvider(fileCall() as ProviderEvent[][]);
+    await build(provider).runTurn("send me the photo", ctx);
+    expect(lastTool(provider)).toMatch(/not linked/);
+  });
+
+  it("is not for guests, for other recipients, for SMS, or when messaging is not available", async () => {
+    await build(new FakeProvider(fileCall() as ProviderEvent[][])).runTurn("x", { ...ctx, trust: "guest" });
+    await build(new FakeProvider(fileCall({ to: "+919800000001" }) as ProviderEvent[][])).runTurn("x", ctx);
+    await build(new FakeProvider(fileCall({ channel: "sms" }) as ProviderEvent[][])).runTurn("x", ctx);
+    expect(sendFile).not.toHaveBeenCalled();
+    const provider = new FakeProvider(fileCall() as ProviderEvent[][]);
+    await build(provider, false).runTurn("x", ctx);
+    expect(lastTool(provider)).toMatch(/Messaging is not available/);
+  });
+
+  it("can never be asked for by voice from a speaker device", async () => {
+    const provider = new FakeProvider(fileCall() as ProviderEvent[][]);
+    await build(provider).runTurn("send me the photo", { ...ctx, trust: "voice-device" });
+    expect(sendFile).not.toHaveBeenCalled();
+    expect(ask()).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 import type { ServerMsg } from "@friend/protocol";
-import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { promises as fsp } from "node:fs";
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type { Audit } from "../audit";
 import { loadConfig, phoneNumber, saveConfig, type Config } from "../config";
 import type { Db } from "../db";
@@ -20,7 +21,18 @@ export interface InboxRow {
 
 export type SendResult = { ok: true; summary: string } | { ok: false; error: string };
 
+/** A file ready to be sent to a chat (checked by MediaStore.sendable). */
+export interface SendableFile {
+  path: string;
+  name: string;
+  mime: string;
+  size: number;
+  kind: "image" | "audio" | "video" | "document";
+}
+
 export interface HubDeps {
+  /** The address people reach Friend at from outside, or null when there is none (WhatsApp files need one). */
+  publicBase?: () => string | null;
   config: Config;
   db: Db;
   audit: Audit;
@@ -69,6 +81,13 @@ const VOICE_MAX_SECONDS = 300;
 const VOICE_MAX_BYTES = 8_000_000;
 const VOICE_FETCH_MS = 20_000;
 const TWILIO_MEDIA_HOSTS = /(^|\.)(twilio\.com|twiliocdn\.com|amazonaws\.com)$/;
+/** What each chat takes as a file, and how long WhatsApp may fetch a file from Friend. */
+const TELEGRAM_FILE_MAX = 50_000_000;
+const TELEGRAM_PHOTO_MAX = 10_000_000;
+const TELEGRAM_CAPTION = 1024;
+const WHATSAPP_FILE_MAX = 16_000_000;
+const OUTBOX_TTL_MS = 10 * 60_000;
+const OUTBOX_MAX = 20;
 const OWNER_LIMIT = { max: 20, windowMs: 5 * 60_000 };
 const STRANGER_LIMIT = { max: 20, windowMs: 3600_000 };
 
@@ -115,6 +134,8 @@ export class ChannelHub {
   private tgBot: string | null = null;
   private link: { code: string; expires: number; fails: number } | null = null;
   private seen: string[] = [];
+  /** Files waiting for Twilio to fetch them (WhatsApp takes a media address, not an upload): random token, ten minutes. */
+  private outbox = new Map<string, { path: string; mime: string; name: string; expires: number }>();
   private hits = new Map<string, number[]>();
 
   constructor(private deps: HubDeps) {
@@ -458,15 +479,80 @@ export class ChannelHub {
     }
   }
 
+  /** Sends a file from the PC to the owner's chat. Only the owner's own chat or number: never someone else. */
+  async sendFile(channel: ChannelId, to: string, file: SendableFile, caption?: string): Promise<SendResult> {
+    if (to !== "me" && to !== "owner") return { ok: false, error: "A file can only be sent to the owner." };
+    if (channel === "sms") return { ok: false, error: "SMS cannot carry files. Use Telegram or WhatsApp." };
+    const text = caption?.trim() ?? "";
+    try {
+      if (channel === "telegram") {
+        const t = this.cfg.telegram;
+        if (!t.installed) return { ok: false, error: "Telegram is not installed. The owner can install it from the plugins screen." };
+        if (!t.enabled || !t.botToken) return { ok: false, error: "Telegram is not switched on. The owner finishes setting it up in Plugins, Telegram, Configure." };
+        if (t.ownerChatId === null) return { ok: false, error: "Telegram is not linked to the owner yet." };
+        if (file.size > TELEGRAM_FILE_MAX) return { ok: false, error: "That file is too big for Telegram (50 MB at most)." };
+        const photo = file.kind === "image" && /^image\/(jpeg|png|webp)$/.test(file.mime) && file.size <= TELEGRAM_PHOTO_MAX;
+        const [method, field] = photo ? (["sendPhoto", "photo"] as const) : file.kind === "audio" ? (["sendAudio", "audio"] as const) : file.kind === "video" && file.mime === "video/mp4" ? (["sendVideo", "video"] as const) : (["sendDocument", "document"] as const);
+        const form = new FormData();
+        form.set("chat_id", String(t.ownerChatId));
+        if (text) form.set("caption", text.slice(0, TELEGRAM_CAPTION));
+        form.set(field, new Blob([new Uint8Array(await fsp.readFile(file.path))], { type: file.mime }), file.name);
+        const res = await this.f(`https://api.telegram.org/bot${t.botToken}/${method}`, { method: "POST", body: form, signal: AbortSignal.timeout(60_000) });
+        const json = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
+        if (!json.ok) throw new Error(json.description ?? `Telegram answered ${res.status}`);
+        this.record("telegram", "out", String(t.ownerChatId), "", `[file: ${file.name}]${text ? " " + text : ""}`);
+        this.deps.audit.log("agent", "channel.file_out", { channel, kind: file.kind });
+        return { ok: true, summary: "Sent the file on Telegram to the owner." };
+      }
+      const w = this.cfg.twilio;
+      if (!w.installed) return { ok: false, error: "WhatsApp is not installed. The owner can install \"WhatsApp and SMS (Twilio)\" from the plugins screen." };
+      if (!w.enabled || !w.authToken || !w.accountSid) return { ok: false, error: "WhatsApp is not switched on. The owner finishes setting it up in Plugins, WhatsApp and SMS, Configure." };
+      if (!w.ownerNumber) return { ok: false, error: "A phone number is needed, in international form such as +919800000000." };
+      if (file.size > WHATSAPP_FILE_MAX) return { ok: false, error: "That file is too big for WhatsApp (16 MB at most)." };
+      const base = this.deps.publicBase?.()?.replace(/\/+$/, "");
+      if (!base) return { ok: false, error: "WhatsApp fetches files from Friend, so Friend needs its public address first (Settings, or the tunnel)." };
+      const token = this.stash(file);
+      await this.twilioSend(w.ownerNumber, text, true, `${base}/api/channels/media/${token}`);
+      this.record("whatsapp", "out", w.ownerNumber, "", `[file: ${file.name}]${text ? " " + text : ""}`);
+      this.deps.audit.log("agent", "channel.file_out", { channel, kind: file.kind });
+      return { ok: true, summary: `Sent the file by WhatsApp to ${w.ownerNumber}.` };
+    } catch (e) {
+      return { ok: false, error: this.mask((e as Error).message).slice(0, 200) };
+    }
+  }
+
+  private stash(file: SendableFile): string {
+    const now = this.now();
+    for (const [k, v] of this.outbox) if (v.expires <= now) this.outbox.delete(k);
+    while (this.outbox.size >= OUTBOX_MAX) this.outbox.delete(this.outbox.keys().next().value as string);
+    const token = randomBytes(16).toString("hex");
+    this.outbox.set(token, { path: file.path, mime: file.mime, name: file.name, expires: now + OUTBOX_TTL_MS });
+    return token;
+  }
+
+  /** The file behind a token Friend gave Twilio, while it is still good. */
+  mediaFor(token: string): { path: string; mime: string; name: string } | null {
+    if (!/^[0-9a-f]{32}$/.test(token)) return null;
+    const f = this.outbox.get(token);
+    if (!f) return null;
+    if (f.expires <= this.now()) {
+      this.outbox.delete(token);
+      return null;
+    }
+    return { path: f.path, mime: f.mime, name: f.name };
+  }
+
   // ---- twilio (SMS and WhatsApp) -------------------------------------------------------------------------------
 
-  private async twilioSend(to: string, text: string, whatsapp: boolean): Promise<void> {
+  private async twilioSend(to: string, text: string, whatsapp: boolean, mediaUrl?: string): Promise<void> {
     const w = this.cfg.twilio;
     if (!w.accountSid || !w.authToken) throw new Error("Twilio is not set up.");
     const from = whatsapp ? w.whatsappFrom : w.smsFrom;
     if (!from) throw new Error(`No ${whatsapp ? "WhatsApp" : "SMS"} number is set.`);
     const prefix = whatsapp ? "whatsapp:" : "";
-    const body = new URLSearchParams({ To: `${prefix}${to}`, From: `${prefix}${from}`, Body: text.slice(0, SMS_MAX) });
+    const body = new URLSearchParams({ To: `${prefix}${to}`, From: `${prefix}${from}` });
+    if (text) body.set("Body", text.slice(0, SMS_MAX));
+    if (mediaUrl) body.set("MediaUrl", mediaUrl);
     const res = await this.f(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(w.accountSid)}/Messages.json`, {
       method: "POST",
       headers: { authorization: `Basic ${Buffer.from(`${w.accountSid}:${w.authToken}`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" },

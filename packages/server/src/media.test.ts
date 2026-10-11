@@ -178,3 +178,33 @@ describe("the media and screen routes", () => {
     expect((await send({ cookie })).status).toBe(404);
   });
 });
+
+describe("MediaStore.sendable", () => {
+  it("describes a picture, a song, a clip, a PDF and a plain document for sending", async () => {
+    const { store, files } = make();
+    for (const n of ["a.png", "a.jpg", "a.mp3", "a.mp4", "a.pdf", "a.docx", "a.zip"]) writeFileSync(join(files, n), "x");
+    const kinds: Record<string, string> = {};
+    for (const n of ["a.png", "a.jpg", "a.mp3", "a.mp4", "a.pdf", "a.docx", "a.zip"]) {
+      const r = await store.sendable(join(files, n));
+      expect(r.ok, n).toBe(true);
+      if (r.ok) kinds[n] = r.kind;
+    }
+    expect(kinds).toEqual({ "a.png": "image", "a.jpg": "image", "a.mp3": "audio", "a.mp4": "video", "a.pdf": "document", "a.docx": "document", "a.zip": "document" });
+    const png = await store.sendable(join(files, "a.png"));
+    expect(png).toMatchObject({ ok: true, name: "a.png", mime: "image/png", size: 1 });
+  });
+
+  it("refuses what must not leave the PC or cannot be sent", async () => {
+    const { store, files, data } = make();
+    mkdirSync(join(files, "sub"));
+    writeFileSync(join(data, "config.json"), '{"apiKey":"secret"}');
+    writeFileSync(join(files, "empty.png"), "");
+    writeFileSync(join(files, "run.exe"), "x");
+    expect(await store.sendable("relative/path.png")).toMatchObject({ ok: false, error: expect.stringMatching(/full path/) });
+    expect(await store.sendable(join(files, "missing.png"))).toMatchObject({ ok: false, error: expect.stringMatching(/does not exist/) });
+    expect(await store.sendable(join(files, "sub"))).toMatchObject({ ok: false, error: expect.stringMatching(/not a file/) });
+    expect(await store.sendable(join(data, "config.json"))).toMatchObject({ ok: false, error: expect.stringMatching(/data folder/) });
+    expect(await store.sendable(join(files, "empty.png"))).toMatchObject({ ok: false, error: expect.stringMatching(/empty/) });
+    expect(await store.sendable(join(files, "run.exe"))).toMatchObject({ ok: false, error: expect.stringMatching(/cannot send \.exe/) });
+  });
+});

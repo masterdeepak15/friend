@@ -162,6 +162,7 @@ export async function createApp(opts: AppOptions) {
     db,
     audit,
     notify: (m) => broadcast(m),
+    publicBase: () => config.publicUrl ?? null,
     transcribe: async (audio, mime) => {
       const v = opts.voice;
       if (!v || !v.available()) return { ok: false, error: "The voice engine is not running on the PC, so I can't understand voice messages right now." };
@@ -993,6 +994,7 @@ export async function createApp(opts: AppOptions) {
         return { ok: true };
       },
       twilioInbound: (url, params, signature) => channelHub.handleTwilio(url, params, signature),
+      media: (token) => channelHub.mediaFor(token),
     },
     music: {
       library: async (q) => {
