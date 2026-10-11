@@ -18,6 +18,9 @@ import { ChannelHub } from "./channels/hub";
 import { AlexaHub, fetchAmazonCert } from "./alexa/hub";
 import { MusicHub } from "./music/hub";
 import { MusicLibrary } from "./music/library";
+import { MusicTokens } from "./music/oauth";
+import { LocalSource, MusicSources } from "./music/source";
+import { SpotifyHub } from "./music/spotify";
 import { buildSkillPackage, packageFileNames } from "./alexa/package";
 import { portfolioSpeech, statusSpeech, tasksSpeech } from "./alexa/fast";
 import { summarize } from "./brokers/portfolio";
@@ -77,6 +80,8 @@ export interface AppOptions {
   cameraTimeoutMs?: number;
   /** How Zerodha is reached (tests hand in a fake). */
   brokerFetch?: typeof fetch;
+  /** For tests: stands in for Spotify's servers. */
+  musicFetch?: typeof fetch;
   /** How Amazon's signing certificate is downloaded (tests hand in their own). */
   alexaFetchCert?: (url: string) => Promise<string>;
   /** The roots Amazon's certificate must lead to (tests hand in their own). Defaults to the ones Node knows. */
@@ -168,6 +173,9 @@ export async function createApp(opts: AppOptions) {
   // The owner's music: the folder is a setting; the player itself runs in the browser and the assistant controls it through the hub.
   const musicLibrary = new MusicLibrary({ folder: () => config.music.folder, extensions: () => config.music.extensions, maxTracks: () => config.music.maxTracks, scanDepth: () => config.music.scanDepth });
   const musicHub = new MusicHub({ library: musicLibrary });
+  const musicTokens = new MusicTokens(opts.dataDir);
+  const spotifyHub = new SpotifyHub({ config: () => config, tokens: musicTokens, fetch: opts.musicFetch, publicBase: () => config.publicUrl ?? `http://127.0.0.1:${config.port}` });
+  const musicSources = new MusicSources([new LocalSource(musicLibrary), spotifyHub], { defaultSource: () => config.music.defaultSource, searchLimit: () => config.music.searchLimit });
   void musicLibrary.scan().catch(() => {});
   const memory = new Memory(db);
   const tasks = new Tasks(db);
@@ -927,6 +935,31 @@ export async function createApp(opts: AppOptions) {
         return musicLibrary.cover(id);
       },
       rescan: () => musicLibrary.scan(),
+      sources: () => ({
+        sources: Object.entries(musicSources.status()).map(([id, status]) => ({ id, status })),
+        spotify: { redirectUri: spotifyHub.redirectUri(), clientId: config.music.spotify.clientId },
+      }),
+      search: async (q) => musicSources.search(q.q, { ...(q.source ? { source: q.source } : {}), ...(q.limit ? { limit: q.limit } : {}) }),
+      spotifyConnect: async (pin, ip) => {
+        await requirePin(pin, ip);
+        const st = spotifyHub.status();
+        if (!config.music.spotify.installed || !config.music.spotify.enabled) throw new HttpError(400, st.needs ?? "Install and switch on Spotify in Plugins.");
+        const url = spotifyHub.connectUrl();
+        if (!url) throw new HttpError(400, "Add your Spotify client id first, in Plugins, Spotify.");
+        audit.log("owner", "music.spotify.connect", { ip });
+        return { url };
+      },
+      spotifyDisconnect: async (pin, ip) => {
+        await requirePin(pin, ip);
+        spotifyHub.disconnect();
+        audit.log("owner", "music.spotify.disconnect", { ip });
+        return { ok: true };
+      },
+      spotifyCallback: async (params) => {
+        const r = await spotifyHub.completeLogin(params);
+        audit.log("owner", r.ok ? "music.spotify.connected" : "music.spotify.failed", {});
+        return r.ok;
+      },
     },
     alexa: {
       handle: (raw, headers) => alexaHub.handle(raw, headers),

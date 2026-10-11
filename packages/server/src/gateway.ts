@@ -108,6 +108,14 @@ export interface MusicApi {
   track(id: string): Promise<{ path: string; mime: string } | null>;
   cover(id: string): Promise<{ mime: string; data: Buffer } | null>;
   rescan(): Promise<{ count: number; truncated: boolean; problem?: string }>;
+  /** Every music source and what the owner needs to do for it, plus what the Spotify plugin page shows. No tokens. */
+  sources(): unknown;
+  search(q: { q: string; source?: "local" | "spotify" | "any"; limit?: number }): Promise<unknown>;
+  /** Needs the owner's PIN. Gives the address to send the owner's browser to. */
+  spotifyConnect(pin: string, ip: string): Promise<{ url: string }>;
+  spotifyDisconnect(pin: string, ip: string): Promise<{ ok: true }>;
+  /** The return from Spotify. True when the login was completed. */
+  spotifyCallback(params: Record<string, string>): Promise<boolean>;
 }
 
 /** What the settings routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -644,6 +652,45 @@ export function createGateway(deps: GatewayDeps) {
     return reply.header("x-content-type-options", "nosniff").header("cache-control", "private, max-age=3600").type(cover.mime).send(cover.data);
   });
   app.post("/api/music/rescan", { onRequest: musicGuard }, async () => deps.music!.rescan());
+  const musicError = (reply: FastifyReply, e: unknown) => {
+    if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+    if (e instanceof LockoutError) return reply.code(429).header("retry-after", Math.ceil(e.retryAfterMs / 1000)).send({ error: "Too many wrong PINs. Wait a moment." });
+    audit.log("owner", "music.failed", { message: (e as Error).message });
+    return reply.code(500).send({ error: "That did not work. Try again." });
+  };
+  app.get("/api/music/sources", { onRequest: musicGuard }, async (_req, reply) => reply.header("cache-control", "no-store").send(deps.music!.sources()));
+  app.get<{ Querystring: { q?: string; source?: string; limit?: string } }>("/api/music/search", { onRequest: musicGuard }, async (req, reply) => {
+    reply.header("cache-control", "no-store");
+    const source = req.query.source === "local" || req.query.source === "spotify" || req.query.source === "any" ? req.query.source : undefined;
+    const limit = Number(req.query.limit);
+    try {
+      return await deps.music!.search({ q: typeof req.query.q === "string" ? req.query.q.slice(0, 200) : "", ...(source ? { source } : {}), ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}) });
+    } catch (e) {
+      return musicError(reply, e);
+    }
+  });
+  for (const action of ["connect", "disconnect"] as const) {
+    app.post(`/api/music/spotify/${action}`, { onRequest: musicGuard }, async (req, reply) => {
+      reply.header("cache-control", "no-store");
+      const body = z.object({ pin: z.string().min(1).max(32) }).safeParse(req.body ?? {});
+      if (!body.success) return reply.code(400).send({ error: "Enter your PIN" });
+      try {
+        return action === "connect" ? await deps.music!.spotifyConnect(body.data.pin, req.ip) : await deps.music!.spotifyDisconnect(body.data.pin, req.ip);
+      } catch (e) {
+        return musicError(reply, e);
+      }
+    });
+  }
+  // Spotify sends the owner's browser here after they allow Friend. There is no cookie to check: the one-time state Friend made is the proof.
+  const musicReturnWindow = new SlidingWindow(20, 60_000);
+  app.get("/api/music/oauth/callback", async (req, reply) => {
+    if (!deps.music) return reply.code(404).send();
+    if (!musicReturnWindow.allow(`mo:${req.ip}`)) return reply.code(429).header("retry-after", 30).send();
+    const params: Record<string, string> = {};
+    for (const [k, v] of Object.entries((req.query ?? {}) as Record<string, unknown>)) if (typeof v === "string" && k.length <= 40 && v.length <= 1000) params[k] = v;
+    const ok = await deps.music.spotifyCallback(params).catch(() => false);
+    return reply.header("cache-control", "no-store").header("referrer-policy", "no-referrer").redirect(ok ? "/?music=connected" : "/?music=failed");
+  });
 
   // ---- Alexa ----
   // Amazon calls this with a signed JSON body. The signature covers the exact bytes, so it is read as raw bytes (32 KB at most).
