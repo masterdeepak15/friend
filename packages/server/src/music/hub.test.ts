@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MusicHub } from "./hub";
 import { MusicLibrary } from "./library";
-import { LocalSource, MusicSources } from "./source";
+import { LocalSource, MusicSources, type MusicSource } from "./source";
 
 const state = (over: Record<string, unknown> = {}) => ({
   playing: false,
@@ -235,7 +235,7 @@ describe("playing from other sources", () => {
     tracksOf: async () => [],
     track: async () => null,
   });
-  const make = (s = spotify(), defaultSource: "local" | "spotify" | "any" = "local") => {
+  const make = (s: MusicSource = spotify(), defaultSource: "local" | "spotify" | "any" = "local") => {
     const sources = new MusicSources([new LocalSource(lib), s], { defaultSource: () => defaultSource, searchLimit: () => 10 });
     const h = new MusicHub({ library: lib, sources });
     const c = new Conn();
