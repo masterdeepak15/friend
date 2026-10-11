@@ -128,7 +128,11 @@ export function ChromeForm({ api = httpChromeApi, pollMs = 3000 }: { api?: Chrom
 
   return (
     <div className="settings-section">
-      {info?.detail && <p className="auth-note">{info.detail}</p>}
+      {info?.detail && (
+        <p className="auth-note" style={{ marginBottom: 10 }}>
+          {info.detail}
+        </p>
+      )}
       {info?.extensionFolder && (
         <label className="settings-field">
           <span>Folder to load in Chrome (chrome://extensions, Developer mode, Load unpacked)</span>

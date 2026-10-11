@@ -189,7 +189,7 @@ export function IntegrationConfig({
   return (
     <>
       <h4 className="plugins-heading">{integration.name}</h4>
-      <p className="auth-note">{integration.detail || integration.description}</p>
+      <p className="auth-note">{isChrome ? integration.description : integration.detail || integration.description}</p>
       <ol className="integration-steps">
         {integration.steps.map((s, i) => (
           <li key={i} className={s.done ? "done" : undefined}>

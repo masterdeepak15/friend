@@ -219,10 +219,10 @@ button { cursor: pointer; }
 .plugins-body { overflow-y: auto; min-height: 0; padding-right: 4px; }
 .plugins-heading { margin: 14px 0 6px; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
 .plugin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.plugin-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: rgba(255, 255, 255, 0.04); }
-.plugin-info { min-width: 0; }
+.plugin-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; padding: 8px 10px; background: rgba(255, 255, 255, 0.04); }
+.plugin-info { min-width: 0; flex: 1 1 180px; } /* on a narrow screen the buttons go under the name instead of pushing out of the window */
 .plugin-info .auth-note { font-size: 0.82rem; }
-.plugin-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.plugin-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .plugin-actions button { border: 1px solid var(--edge); background: transparent; padding: 0 12px; }
 .obj-sandbox { display: flex; flex-direction: column; gap: 6px; width: 100%; min-width: min(560px, 80vw); height: min(420px, 60vh); }
 .obj-sandbox iframe { flex: 1; width: 100%; min-height: 200px; border: 1px solid var(--edge); background: #050b10; }

@@ -78,6 +78,11 @@ describe("inside Configure", () => {
     detail: "Load the extension.",
     steps: [{ text: "Set Chrome control up.", done: true }],
   };
+  it("says the state once, live, instead of twice (the list's line and the form's would be the same words)", async () => {
+    render(<IntegrationConfig integration={{ ...entry, detail: "Switched off." }} onBack={() => {}} settingsApi={{ get: async () => ({}) as never, save: vi.fn() as never }} chromeApi={api(info({ detail: "Switched off." }))} />);
+    await screen.findByDisplayValue(FOLDER);
+    expect(screen.getAllByText("Switched off.")).toHaveLength(1);
+  });
   it("is the page for the chrome plugin, with no Save button (nothing to type)", async () => {
     render(<IntegrationConfig integration={entry} onBack={() => {}} settingsApi={{ get: async () => ({}) as never, save: vi.fn() as never }} chromeApi={api()} />);
     expect(await screen.findByDisplayValue(FOLDER)).toBeTruthy();
