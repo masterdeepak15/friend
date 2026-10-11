@@ -1,9 +1,11 @@
 import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
+import { AUDIO_EXTENSIONS, LAUNCHER_ACTIONS, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS } from "@friend/protocol";
+import { statSync } from "node:fs";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
-import { isValidTimeZone, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
+import { isValidTimeZone, sanitizeHud, validDateLocale, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
 const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
@@ -81,6 +83,33 @@ export const SettingsPatch = z
         requestsPerMinute: z.number().int().min(ALEXA_LIMITS.requestsPerMinute.min).max(ALEXA_LIMITS.requestsPerMinute.max),
         maxDevices: z.number().int().min(ALEXA_LIMITS.maxDevices.min).max(ALEXA_LIMITS.maxDevices.max),
         extraVoiceTools: z.array(z.string().regex(TOOL_NAME, "A tool name like calendar.list")).max(20),
+      })
+      .partial()
+      .strict(),
+    /** The music player. The folder is checked when it is saved. */
+    music: z
+      .object({
+        folder: z.string().trim().max(500),
+        extensions: z.array(z.enum(AUDIO_EXTENSIONS)).min(1).max(AUDIO_EXTENSIONS.length),
+        maxTracks: z.number().int().min(MUSIC_LIMITS.maxTracks.min).max(MUSIC_LIMITS.maxTracks.max),
+        scanDepth: z.number().int().min(MUSIC_LIMITS.scanDepth.min).max(MUSIC_LIMITS.scanDepth.max),
+        volume: z.number().int().min(MUSIC_LIMITS.volume.min).max(MUSIC_LIMITS.volume.max),
+        shuffle: z.boolean(),
+        repeat: z.enum(["off", "all", "one"]),
+        visualizer: z.boolean(),
+        startView: z.enum(["mini", "full"]),
+      })
+      .partial()
+      .strict(),
+    /** The screen widgets: profile label, date and time, quick-launch buttons, animations. */
+    hud: z
+      .object({
+        terminalLabel: z.string().trim().min(1).max(24),
+        clock: z.object({ hour12: z.boolean(), seconds: z.boolean(), locale: z.string().trim().max(35) }).partial().strict(),
+        launcher: z
+          .array(z.object({ id: z.string().max(20).optional(), label: z.string(), icon: z.string(), action: z.object({ type: z.enum(LAUNCHER_ACTIONS), value: z.string() }).strict() }).strict())
+          .max(MAX_LAUNCHER),
+        animations: z.enum(["full", "reduced", "off"]),
       })
       .partial()
       .strict(),
@@ -176,6 +205,8 @@ export interface SettingsView {
     maxTriesPerDay: number;
   };
   trading: { level: "read" };
+  music: Config["music"];
+  hud: Config["hud"];
   /** The ids of allowed Amazon accounts are shown shortened. */
   alexa: {
     installed: boolean;
@@ -227,6 +258,8 @@ export function settingsView(c: Config): SettingsView {
       maxTriesPerDay: c.brokers.maxTriesPerDay,
     },
     trading: { level: c.trading.level },
+    music: { ...c.music, extensions: [...c.music.extensions] },
+    hud: { ...c.hud, clock: { ...c.hud.clock }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
     alexa: {
       installed: c.alexa.installed,
       enabled: c.alexa.enabled,
@@ -268,6 +301,7 @@ export function refuseForAgent(raw: unknown): void {
   const cc = (r.claudeCode && typeof r.claudeCode === "object" ? r.claudeCode : {}) as Record<string, unknown>;
   const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
   if ("brokers" in r || "trading" in r) throw new SettingsError("Broker accounts and the trading level can only be changed by the owner on the settings screen.");
+  if ("music" in r || "hud" in r) throw new SettingsError("The music folder and the screen widgets can only be changed by the owner on the settings screen.");
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
   if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
@@ -299,6 +333,21 @@ export function applySettings(config: Config, raw: unknown): Applied {
   if (p.brokers?.timezone !== undefined && !isValidTimeZone(p.brokers.timezone)) throw new SettingsError("brokers.timezone: That is not a time zone, try one like Asia/Kolkata.");
 
   if (p.brokers?.numberLocale !== undefined && !validNumberLocale(p.brokers.numberLocale)) throw new SettingsError("brokers.numberLocale: That is not a number format this PC knows, try one like en-IN or en-US.");
+
+  if (p.music?.folder) {
+    let isDir = false;
+    try {
+      isDir = statSync(p.music.folder).isDirectory();
+    } catch {
+      isDir = false;
+    }
+    if (!isDir) throw new SettingsError("music.folder: That folder was not found on this PC.");
+  }
+  if (p.hud?.clock?.locale && !validDateLocale(p.hud.clock.locale)) throw new SettingsError("hud.clock.locale: That is not a date format this PC knows, try one like en-GB or en-US.");
+  for (const item of p.hud?.launcher ?? []) {
+    const problem = launcherProblem(item);
+    if (problem) throw new SettingsError(`hud.launcher: ${problem}`);
+  }
 
   for (const t of p.alexa?.extraVoiceTools ?? []) {
     if (isNeverByVoice(t)) throw new SettingsError(`alexa.extraVoiceTools: ${t} can never be used by voice (it reaches your PC, files, settings, add-ons or camera).`);
@@ -376,6 +425,13 @@ export function applySettings(config: Config, raw: unknown): Applied {
     for (const k of ["skillName", "locales", "answerSeconds", "holdMinutes", "permissionSeconds", "requestsPerMinute", "maxDevices", "extraVoiceTools"] as const) {
       if (p.alexa[k] !== undefined) (config.alexa as unknown as Record<string, unknown>)[k] = p.alexa[k];
     }
+  }
+  if (p.music) Object.assign(config.music, p.music);
+  if (p.hud) {
+    const { clock, launcher, ...rest } = p.hud;
+    Object.assign(config.hud, rest);
+    if (clock) Object.assign(config.hud.clock, clock);
+    if (launcher) config.hud.launcher = sanitizeHud({ launcher }).launcher;
   }
   if (p.approvals) config.approvals = p.approvals;
   if (p.channels) {

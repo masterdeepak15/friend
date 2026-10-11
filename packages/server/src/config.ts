@@ -1,3 +1,4 @@
+import { AUDIO_EXTENSIONS, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME, type AlexaLocale } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -41,7 +42,36 @@ export interface Config {
   trading: TradingConfig;
   /** The owner's own Alexa skill (custom, in development) and which Amazon accounts may use it. */
   alexa: AlexaConfig;
+  /** The music player: where the owner's music is, and how the player starts. */
+  music: MusicConfig;
+  /** The screen widgets: profile label, date and time, quick-launch buttons, animations. */
+  hud: HudConfig;
   dataDir: string;
+}
+
+export interface MusicConfig {
+  /** The folder the music is in (empty: the player is off until the owner chooses one). */
+  folder: string;
+  /** Which audio kinds to look for. */
+  extensions: string[];
+  /** How many tracks to list at most, and how many levels of sub-folders to look into. */
+  maxTracks: number;
+  scanDepth: number;
+  volume: number;
+  shuffle: boolean;
+  repeat: RepeatMode;
+  /** The moving bars (off saves power on weak devices). */
+  visualizer: boolean;
+  startView: "mini" | "full";
+}
+
+export interface HudConfig {
+  /** The word after the assistant's name on the profile tag ("JARVIS TERMINAL"). */
+  terminalLabel: string;
+  clock: { hour12: boolean; seconds: boolean; /** A locale for the date ("en-GB"); empty uses the browser's. */ locale: string };
+  launcher: LauncherItem[];
+  /** full: every animation; reduced: only the gentle ones; off: none. The system's "reduce motion" always wins. */
+  animations: "full" | "reduced" | "off";
 }
 
 export interface AlexaConfig {
@@ -73,6 +103,64 @@ export interface AlexaConfig {
 
 const SKILL_ID = /^amzn1\.ask\.skill\.[A-Za-z0-9-]{8,80}$/;
 const AMAZON_USER = /^amzn1\.ask\.account\.[A-Za-z0-9._-]{8,500}$/;
+
+export const DEFAULT_MUSIC: MusicConfig = { folder: "", extensions: [...AUDIO_EXTENSIONS], maxTracks: MUSIC_LIMITS.maxTracks.def, scanDepth: MUSIC_LIMITS.scanDepth.def, volume: MUSIC_LIMITS.volume.def, shuffle: false, repeat: "all", visualizer: true, startView: "mini" };
+
+export function sanitizeMusic(raw: unknown): MusicConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const num = (v: unknown, o: { min: number; max: number; def: number }): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(o.max, Math.max(o.min, Math.round(v))) : o.def);
+  const exts = [...new Set((Array.isArray(r.extensions) ? r.extensions : []).map((e) => (typeof e === "string" ? e.toLowerCase().replace(/^\./, "") : "")).filter((e) => (AUDIO_EXTENSIONS as readonly string[]).includes(e)))];
+  return {
+    folder: typeof r.folder === "string" ? r.folder.trim().slice(0, 500) : "",
+    extensions: exts.length ? exts : [...AUDIO_EXTENSIONS],
+    maxTracks: num(r.maxTracks, MUSIC_LIMITS.maxTracks),
+    scanDepth: num(r.scanDepth, MUSIC_LIMITS.scanDepth),
+    volume: num(r.volume, MUSIC_LIMITS.volume),
+    shuffle: r.shuffle === true,
+    repeat: (REPEAT_MODES as readonly unknown[]).includes(r.repeat) ? (r.repeat as RepeatMode) : "all",
+    visualizer: r.visualizer !== false,
+    startView: r.startView === "full" ? "full" : "mini",
+  };
+}
+
+const DEFAULT_LAUNCHER: LauncherItem[] = [
+  { id: "chat", label: "Chat", icon: "💬", action: { type: "panel", value: "chat" } },
+  { id: "tasks", label: "Tasks", icon: "✅", action: { type: "panel", value: "tasks" } },
+  { id: "music", label: "Music", icon: "🎵", action: { type: "panel", value: "music" } },
+  { id: "plugins", label: "Plugins", icon: "🧩", action: { type: "panel", value: "plugins" } },
+  { id: "settings", label: "Settings", icon: "⚙", action: { type: "panel", value: "settings" } },
+];
+
+/** Whether a date locale is one this PC knows. */
+export const validDateLocale = (l: unknown): l is string => {
+  if (typeof l !== "string" || !l || l.length > 35) return false;
+  try {
+    return Intl.DateTimeFormat.supportedLocalesOf([l]).length === 1;
+  } catch {
+    return false;
+  }
+};
+
+export function sanitizeHud(raw: unknown): HudConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const c = (r.clock && typeof r.clock === "object" ? r.clock : {}) as Record<string, unknown>;
+  const stored = Array.isArray(r.launcher) ? r.launcher : null;
+  const seen = new Set<string>();
+  const launcher = (stored ?? DEFAULT_LAUNCHER).flatMap((item, i): LauncherItem[] => {
+    if (launcherProblem(item) !== null) return [];
+    const x = item as { id?: unknown; label: string; icon: string; action: { type: LauncherItem["action"]["type"]; value: string } };
+    let id = typeof x.id === "string" && /^[a-z0-9-]{1,20}$/.test(x.id) ? x.id : `b${i + 1}`;
+    while (seen.has(id)) id = `${id}x`;
+    seen.add(id);
+    return [{ id, label: x.label.trim(), icon: x.icon.trim(), action: { type: x.action.type, value: x.action.value.trim() } }];
+  });
+  return {
+    terminalLabel: (typeof r.terminalLabel === "string" ? r.terminalLabel.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 24) : "") || "TERMINAL",
+    clock: { hour12: c.hour12 !== false, seconds: c.seconds === true, locale: validDateLocale(c.locale) ? c.locale : "" },
+    launcher: launcher.slice(0, MAX_LAUNCHER),
+    animations: r.animations === "reduced" || r.animations === "off" ? r.animations : "full",
+  };
+}
 
 export function sanitizeAlexa(raw: unknown): AlexaConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -415,6 +503,8 @@ const defaults = (dataDir: string): Config => ({
   brokers: sanitizeBrokers({}),
   trading: { level: "read" },
   alexa: sanitizeAlexa({}),
+  music: sanitizeMusic({}),
+  hud: sanitizeHud({}),
   dataDir,
 });
 
@@ -462,6 +552,8 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     brokers: sanitizeBrokers(stored.brokers),
     trading: { level: "read" }, // any other level in the file is read as read: orders do not exist in this version
     alexa: sanitizeAlexa(stored.alexa),
+    music: sanitizeMusic(stored.music),
+    hud: sanitizeHud(stored.hud),
     dataDir,
   };
 }
