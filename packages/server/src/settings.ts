@@ -263,7 +263,7 @@ export function settingsView(c: Config): SettingsView {
       maxTriesPerDay: c.brokers.maxTriesPerDay,
     },
     trading: { level: c.trading.level },
-    music: { ...c.music, extensions: [...c.music.extensions], spotify: { ...c.music.spotify } },
+    music: { ...c.music, extensions: [...c.music.extensions], spotify: { ...c.music.spotify }, soundcloud: { ...c.music.soundcloud } },
     hud: { ...c.hud, clock: { ...c.hud.clock }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
     alexa: {
       installed: c.alexa.installed,

@@ -75,6 +75,7 @@ export interface MusicConfig {
   spotifyDevice: string;
   /** The Spotify plugin: added from the plugins screen. The client id is the owner's own free developer app (not secret); tokens are never kept here. */
   spotify: { installed: boolean; enabled: boolean; clientId: string };
+  soundcloud: { installed: boolean; enabled: boolean; clientId: string };
 }
 
 export interface HudConfig {
@@ -116,7 +117,7 @@ export interface AlexaConfig {
 const SKILL_ID = /^amzn1\.ask\.skill\.[A-Za-z0-9-]{8,80}$/;
 const AMAZON_USER = /^amzn1\.ask\.account\.[A-Za-z0-9._-]{8,500}$/;
 
-export const DEFAULT_MUSIC: MusicConfig = { folder: "", extensions: [...AUDIO_EXTENSIONS], maxTracks: MUSIC_LIMITS.maxTracks.def, scanDepth: MUSIC_LIMITS.scanDepth.def, volume: MUSIC_LIMITS.volume.def, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: MUSIC_LIMITS.searchLimit.def, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" } };
+export const DEFAULT_MUSIC: MusicConfig = { folder: "", extensions: [...AUDIO_EXTENSIONS], maxTracks: MUSIC_LIMITS.maxTracks.def, scanDepth: MUSIC_LIMITS.scanDepth.def, volume: MUSIC_LIMITS.volume.def, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: MUSIC_LIMITS.searchLimit.def, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" }, soundcloud: { installed: false, enabled: false, clientId: "" } };
 
 const CLIENT_ID = /^[A-Za-z0-9]{8,64}$/;
 
@@ -147,6 +148,7 @@ export function sanitizeMusic(raw: unknown): MusicConfig {
     hostPlayer: typeof r.hostPlayer === "string" && programProblem(r.hostPlayer.trim()) === null ? r.hostPlayer.trim() : "",
     spotifyDevice: typeof r.spotifyDevice === "string" ? r.spotifyDevice.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 100) : "",
     spotify: sanitizeSpotify(r.spotify),
+    soundcloud: sanitizeSpotify(r.soundcloud),
   };
 }
 

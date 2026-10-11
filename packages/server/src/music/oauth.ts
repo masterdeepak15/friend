@@ -108,6 +108,44 @@ export class MusicTokens {
   }
 }
 
+/** An app secret kept in its own file in the data folder, readable by the owner only. Write-only: nothing hands it back to a screen or the assistant. */
+export class MusicSecrets {
+  constructor(private dir: string) {}
+
+  private file(source: MusicSourceId): string {
+    return join(this.dir, `music-${source}.secret.json`);
+  }
+
+  set(source: MusicSourceId, secret: string): void {
+    mkdirSync(this.dir, { recursive: true });
+    const file = this.file(source);
+    writeFileSync(file, JSON.stringify({ secret }), { mode: 0o600 });
+    try {
+      chmodSync(file, 0o600);
+    } catch {
+      /* permission bits unsupported on this system */
+    }
+  }
+
+  /** For the service's own token call only. */
+  get(source: MusicSourceId): string {
+    try {
+      const j = JSON.parse(readFileSync(this.file(source), "utf8")) as { secret?: unknown };
+      return typeof j.secret === "string" ? j.secret : "";
+    } catch {
+      return "";
+    }
+  }
+
+  has(source: MusicSourceId): boolean {
+    return this.get(source) !== "";
+  }
+
+  clear(source: MusicSourceId): void {
+    rmSync(this.file(source), { force: true });
+  }
+}
+
 const refreshing = new WeakMap<MusicTokens, Map<MusicSourceId, Promise<string | null>>>();
 const waitUntil = new WeakMap<MusicTokens, Map<MusicSourceId, number>>();
 
