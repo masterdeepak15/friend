@@ -16,7 +16,7 @@ import { CameraBroker } from "./camera";
 import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
 import { AlexaHub, fetchAmazonCert } from "./alexa/hub";
-import { buildSkillPackage, PACKAGE_FILES, type PackageFile } from "./alexa/package";
+import { buildSkillPackage, packageFileNames } from "./alexa/package";
 import { portfolioSpeech, statusSpeech, tasksSpeech } from "./alexa/fast";
 import { summarize } from "./brokers/portfolio";
 import { BrokerHub } from "./brokers/hub";
@@ -909,9 +909,10 @@ export async function createApp(opts: AppOptions) {
       },
       packageFile: (name) => {
         const endpoint = alexaHub.endpoint();
-        if (!(PACKAGE_FILES as readonly string[]).includes(name) || !endpoint || !config.alexa.invocationName) return null;
+        if (!packageFileNames(config.alexa.locales).includes(name) || !endpoint || !config.alexa.invocationName) return null;
         try {
-          return { type: "application/json", text: buildSkillPackage({ invocationName: config.alexa.invocationName, endpoint })[name as PackageFile] };
+          const text = buildSkillPackage({ invocationName: config.alexa.invocationName, endpoint, skillName: config.alexa.skillName, locales: config.alexa.locales })[name];
+          return text ? { type: "application/json", text } : null;
         } catch {
           return null;
         }

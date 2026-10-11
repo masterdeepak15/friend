@@ -1,3 +1,4 @@
+import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME, type AlexaLocale } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { DEFAULT_HINDI_VOICE, DEFAULT_MARATHI_VOICE, type PresenceStyle, type ViewPreset } from "@friend/protocol";
@@ -44,6 +45,21 @@ export interface Config {
 }
 
 export interface AlexaConfig {
+  /** The skill's name in the Alexa console and its store listing (not what is said to start it). */
+  skillName: string;
+  /** The languages the skill package is made for. */
+  locales: AlexaLocale[];
+  /** How long Friend works on an open question before saying "still working", seconds (Alexa itself gives up after 8). */
+  answerSeconds: number;
+  /** How long a late answer is kept for "is it ready", minutes. */
+  holdMinutes: number;
+  /** How long the owner has to answer a permission message, seconds. */
+  permissionSeconds: number;
+  /** How many requests a minute the endpoint accepts from one address, and how many Echo accounts may be allowed. */
+  requestsPerMinute: number;
+  maxDevices: number;
+  /** Extra tools a voice may use without asking (never PC, file, settings, add-on, camera or PIN tools). */
+  extraVoiceTools: string[];
   /** `installed`: added from the plugins screen (or set up earlier). `enabled`: switched on. */
   installed: boolean;
   enabled: boolean;
@@ -68,12 +84,24 @@ export function sanitizeAlexa(raw: unknown): AlexaConfig {
     const label = typeof x.name === "string" ? x.name.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "";
     return [{ id: x.id, name: label || "Echo", addedAt: typeof x.addedAt === "number" && Number.isFinite(x.addedAt) ? x.addedAt : 0 }];
   });
+  const num = (v: unknown, o: { min: number; max: number; def: number }, whole = true): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(o.max, Math.max(o.min, whole ? Math.round(v) : Math.round(v * 10) / 10)) : o.def);
+  const locales = [...new Set((Array.isArray(r.locales) ? r.locales : []).filter((l): l is AlexaLocale => (ALEXA_LOCALES as readonly unknown[]).includes(l)))];
+  const tools = [...new Set((Array.isArray(r.extraVoiceTools) ? r.extraVoiceTools : []).filter((t): t is string => typeof t === "string" && TOOL_NAME.test(t) && !isNeverByVoice(t)))].slice(0, 20);
+  const maxDevices = num(r.maxDevices, ALEXA_LIMITS.maxDevices);
   return {
     installed: r.installed === true || (r.installed === undefined && (r.enabled === true || skillId !== "")),
     enabled: r.enabled === true,
     skillId,
     invocationName: name,
-    allowedUsers: users.slice(0, 10),
+    skillName: (typeof r.skillName === "string" ? r.skillName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 50) : "") || "Friend Assistant",
+    locales: locales.length ? locales : [...ALEXA_LOCALES],
+    answerSeconds: num(r.answerSeconds, ALEXA_LIMITS.answerSeconds, false),
+    holdMinutes: num(r.holdMinutes, ALEXA_LIMITS.holdMinutes),
+    permissionSeconds: num(r.permissionSeconds, ALEXA_LIMITS.permissionSeconds),
+    requestsPerMinute: num(r.requestsPerMinute, ALEXA_LIMITS.requestsPerMinute),
+    maxDevices,
+    extraVoiceTools: tools,
+    allowedUsers: users.slice(0, maxDevices),
   };
 }
 

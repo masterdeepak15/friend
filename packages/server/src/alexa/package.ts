@@ -1,8 +1,10 @@
+import { ALEXA_LOCALES, type AlexaLocale } from "./constants";
 import { invocationNameProblem } from "./invocation";
 import { LEAD_INS, LEAD_INTENTS, type Lang } from "./phrases";
 
-export type PackageFile = "skill.json" | "en-IN.json" | "hi-IN.json";
-export const PACKAGE_FILES: readonly PackageFile[] = ["skill.json", "en-IN.json", "hi-IN.json"];
+/** The names of the files in the package for these languages: the manifest and one model each. */
+export const packageFileNames = (locales: readonly AlexaLocale[]): string[] => ["skill.json", ...locales.map((l) => `${l}.json`)];
+const langOf = (locale: AlexaLocale): Lang => (locale.startsWith("hi") ? "hi" : "en");
 
 interface Intent {
   name: string;
@@ -47,9 +49,8 @@ function intents(lang: Lang): Intent[] {
 const model = (invocationName: string, lang: Lang): string =>
   JSON.stringify({ interactionModel: { languageModel: { invocationName, intents: intents(lang), types: [] } } }, null, 2);
 
-const SKILL_NAME = "Friend Assistant";
-const locale = (lang: Lang, invocationName: string) => ({
-  name: SKILL_NAME,
+const locale = (lang: Lang, invocationName: string, name: string) => ({
+  name,
   summary: lang === "hi" ? "अपने फ्रेंड असिस्टेंट से बात करें।" : "Talk to your own Friend assistant.",
   description: lang === "hi" ? "यह आपके अपने फ्रेंड असिस्टेंट के लिए निजी स्किल है। आपके अपने कंप्यूटर पर चलता है।" : "A private skill for your own self-hosted Friend assistant. It talks to your own computer.",
   examplePhrases: [lang === "hi" ? `अलेक्सा, ${invocationName} से मेरा पोर्टफोलियो कैसा है पूछो` : `Alexa, ask ${invocationName} how my portfolio is`, `Alexa, open ${invocationName}`, `Alexa, ask ${invocationName} what is on my list`],
@@ -60,7 +61,9 @@ const locale = (lang: Lang, invocationName: string) => ({
  * The three files the owner pastes into the Alexa developer console: the skill manifest (with Friend's address as the endpoint) and
  * the interaction models for English (India) and Hindi (India). Nothing is uploaded anywhere by Friend.
  */
-export function buildSkillPackage(o: { invocationName: string; endpoint: string }): Record<PackageFile, string> {
+export function buildSkillPackage(o: { invocationName: string; endpoint: string; skillName?: string; locales?: readonly AlexaLocale[] }): Record<string, string> {
+  const locales = o.locales?.length ? o.locales : ALEXA_LOCALES;
+  const skillName = o.skillName?.trim() || "Friend Assistant";
   const problem = invocationNameProblem(o.invocationName);
   if (problem) throw new Error(problem);
   if (!/^https:\/\/[^\s/]+\/\S*$/.test(o.endpoint)) throw new Error("The address must be an https address, such as https://your-address/api/alexa.");
@@ -68,9 +71,9 @@ export function buildSkillPackage(o: { invocationName: string; endpoint: string 
     manifest: {
       manifestVersion: "1.0",
       publishingInformation: {
-        locales: { "en-IN": locale("en", o.invocationName), "hi-IN": locale("hi", o.invocationName) },
+        locales: Object.fromEntries(locales.map((l) => [l, locale(langOf(l), o.invocationName, skillName)])),
         isAvailableWorldwide: false,
-        distributionCountries: ["IN"],
+        distributionCountries: [...new Set(locales.map((l) => l.slice(3)))],
         category: "ORGANIZERS_AND_ASSISTANTS",
         testingInstructions: "A private skill for its owner's own self-hosted assistant. It is used in development mode only.",
       },
@@ -78,9 +81,5 @@ export function buildSkillPackage(o: { invocationName: string; endpoint: string 
       privacyAndCompliance: { allowsPurchases: false, usesPersonalInfo: false, isChildDirected: false, isExportCompliant: true, containsAds: false },
     },
   };
-  return {
-    "skill.json": JSON.stringify(manifest, null, 2),
-    "en-IN.json": model(o.invocationName, "en"),
-    "hi-IN.json": model(o.invocationName, "hi"),
-  };
+  return { "skill.json": JSON.stringify(manifest, null, 2), ...Object.fromEntries(locales.map((l) => [`${l}.json`, model(o.invocationName, langOf(l))])) };
 }

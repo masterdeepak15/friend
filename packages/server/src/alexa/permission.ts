@@ -9,8 +9,8 @@ export interface VoicePermissionDeps {
   linked(): Channel[];
   /** Whether a Friend screen is open (it shows the same approval card). */
   screenOpen(): boolean;
-  /** How long to wait for an answer (default 2 minutes, the same as an approval card on the screen). */
-  waitMs?: number;
+  /** How long to wait for an answer (default 2 minutes, the same as an approval card on the screen). A function, so the owner's setting applies at once. */
+  waitMs?: number | (() => number);
 }
 
 const YES = new Set(["yes", "y", "yeah", "ok", "okay", "ha", "haan", "han", "हाँ", "हां", "हा"]);
@@ -45,16 +45,18 @@ export class VoicePermission {
     const screen = this.d.screenOpen();
     if (card.needsPin || (!channels.length && !screen)) return answer(card.id, false);
 
+    const waitMs = typeof this.d.waitMs === "function" ? this.d.waitMs() : (this.d.waitMs ?? 120_000);
+    const minutes = Math.max(1, Math.round(waitMs / 60_000));
     const entry: Waiting = {
       id: card.id,
       answer,
-      timer: setTimeout(() => this.settle(card.id, false), this.d.waitMs ?? 120_000),
+      timer: setTimeout(() => this.settle(card.id, false), waitMs),
     };
     this.waiting.push(entry);
     if (screen) base(card);
     if (channels.length) {
       const channel = channels.includes("telegram") ? "telegram" : channels[0]!;
-      const text = `Alexa asked to: ${card.summary}\nReply YES to allow it, or NO to refuse, within 2 minutes.`;
+      const text = `Alexa asked to: ${card.summary}\nReply YES to allow it, or NO to refuse, within ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`;
       this.d.send(channel, "me", text).then(
         (r) => {
           if (!r.ok && !screen) this.settle(card.id, false);

@@ -5,11 +5,11 @@ import { LEAD_INS, LEAD_INTENTS } from "./phrases";
 
 const make = () => buildSkillPackage({ invocationName: "jarvis assistant", endpoint: "https://friend.example.com/api/alexa" });
 type Intent = { name: string; samples: string[]; slots?: { name: string; type: string }[] };
-const model = (file: "en-IN.json" | "hi-IN.json") => JSON.parse(make()[file]).interactionModel.languageModel as { invocationName: string; intents: Intent[]; types: unknown[] };
+const model = (file: "en-IN.json" | "hi-IN.json") => JSON.parse(make()[file]!).interactionModel.languageModel as { invocationName: string; intents: Intent[]; types: unknown[] };
 
 describe("the manifest", () => {
   it("is JSON that points at Friend's address and says it is a trusted certificate", () => {
-    const m = JSON.parse(make()["skill.json"]).manifest;
+    const m = JSON.parse(make()["skill.json"]!).manifest;
     expect(m.apis.custom.endpoint).toEqual({ uri: "https://friend.example.com/api/alexa", sslCertificateType: "Trusted" });
     expect(Object.keys(m.publishingInformation.locales).sort()).toEqual(["en-IN", "hi-IN"]);
     expect(m.manifestVersion).toBe("1.0");
@@ -20,7 +20,7 @@ describe("the manifest", () => {
     expect(() => buildSkillPackage({ invocationName: "jarvis assistant", endpoint: "http://friend.example.com/api/alexa" })).toThrow(/https/i);
     expect(() => buildSkillPackage({ invocationName: "jarvis assistant", endpoint: "" })).toThrow();
     expect(() => buildSkillPackage({ invocationName: "ask jarvis", endpoint: "https://friend.example.com/api/alexa" })).toThrow(/ask/i);
-    expect(JSON.parse(buildSkillPackage({ invocationName: "maya", endpoint: "https://friend.example.com/api/alexa" })["en-IN.json"]).interactionModel.languageModel.invocationName).toBe("maya");
+    expect(JSON.parse(buildSkillPackage({ invocationName: "maya", endpoint: "https://friend.example.com/api/alexa" })["en-IN.json"]!).interactionModel.languageModel.invocationName).toBe("maya");
   });
 });
 

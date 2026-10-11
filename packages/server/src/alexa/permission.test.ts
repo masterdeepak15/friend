@@ -30,7 +30,7 @@ describe("asking by message", () => {
     expect([channel, to]).toEqual(["telegram", "me"]);
     expect(text).toContain("Dinner is ready");
     expect(text).toMatch(/reply YES/i);
-    expect(text).toMatch(/2 minutes/);
+    expect(text).toMatch(/within \d+ minutes?/);
     expect(answer).not.toHaveBeenCalled();
   });
 

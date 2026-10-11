@@ -597,11 +597,16 @@ export function createGateway(deps: GatewayDeps) {
 
   // ---- Alexa ----
   // Amazon calls this with a signed JSON body. The signature covers the exact bytes, so it is read as raw bytes (32 KB at most).
-  const alexaWindow = new SlidingWindow(60, 60_000);
+  let alexaLimit = config.alexa.requestsPerMinute;
+  let alexaWindow = new SlidingWindow(alexaLimit, 60_000);
   void app.register(async (inst) => {
     inst.removeContentTypeParser("application/json");
     inst.addContentTypeParser("application/json", { parseAs: "buffer", bodyLimit: 32 * 1024 }, (_req, body, done) => done(null, body));
     inst.addHook("onRequest", async (req, reply) => {
+      if (config.alexa.requestsPerMinute !== alexaLimit) {
+        alexaLimit = config.alexa.requestsPerMinute; // the owner changed the setting: it applies now
+        alexaWindow = new SlidingWindow(alexaLimit, 60_000);
+      }
       if (!alexaWindow.allow(`alexa:${req.ip}`)) return reply.code(429).header("retry-after", 30).send();
     });
     inst.post("/api/alexa", async (req, reply) => {

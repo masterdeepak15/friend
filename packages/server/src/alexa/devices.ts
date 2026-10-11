@@ -1,7 +1,6 @@
 import type { AlexaConfig } from "../config";
 
 export const MAX_WAITING = 20;
-export const MAX_ALLOWED = 10;
 const WAITING_TTL_MS = 24 * 3600_000;
 const USER_ID = /^amzn1\.ask\.account\.[A-Za-z0-9._-]{8,500}$/;
 const SHORT = 8;
@@ -58,7 +57,7 @@ export class AlexaDevices {
   allow(short: string, name: string): boolean {
     this.prune();
     const matches = [...this.waitingMap.values()].filter((w) => short.length === SHORT && w.id.endsWith(short));
-    if (matches.length !== 1 || this.store.config().allowedUsers.length >= MAX_ALLOWED) return false;
+    if (matches.length !== 1 || this.store.config().allowedUsers.length >= this.store.config().maxDevices) return false;
     const w = matches[0]!;
     const label = name.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) || "Echo";
     this.store.update((a) => a.allowedUsers.push({ id: w.id, name: label, addedAt: this.clock() }));

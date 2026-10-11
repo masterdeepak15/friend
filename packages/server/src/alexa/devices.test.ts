@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AlexaConfig } from "../config";
-import { AlexaDevices, MAX_ALLOWED, MAX_WAITING } from "./devices";
+import { sanitizeAlexa } from "../config";
+import { AlexaDevices, MAX_WAITING } from "./devices";
 
 const user = (n: number) => `amzn1.ask.account.AHUSERABCDEFGHIJKLMNOP${String(n).padStart(8, "0")}`;
 let cfg: AlexaConfig;
@@ -9,7 +10,7 @@ const saved = vi.fn();
 const make = () => new AlexaDevices({ config: () => cfg, update: (fn) => (fn(cfg), saved()) }, () => now);
 
 beforeEach(() => {
-  cfg = { installed: true, enabled: true, skillId: "", invocationName: "", allowedUsers: [] };
+  cfg = { ...sanitizeAlexa({}), installed: true, enabled: true };
   now = 1_000_000;
   saved.mockClear();
 });
@@ -65,7 +66,7 @@ describe("allowing and forgetting", () => {
 
   it("allows at most ten", () => {
     const d = make();
-    for (let i = 0; i < MAX_ALLOWED; i++) {
+    for (let i = 0; i < cfg.maxDevices; i++) {
       d.noteWaiting(user(i), "dev", "en-IN");
       expect(d.allow(user(i).slice(-8), `Echo ${i}`)).toBe(true);
     }

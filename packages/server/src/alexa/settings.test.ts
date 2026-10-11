@@ -15,7 +15,21 @@ const USER = "amzn1.ask.account.AHXYZABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 describe("the defaults", () => {
   it("start with Alexa not installed, no skill, no name and nobody allowed", () => {
-    expect(fresh().config.alexa).toEqual({ installed: false, enabled: false, skillId: "", invocationName: "", allowedUsers: [] });
+    expect(fresh().config.alexa).toEqual({
+      installed: false,
+      enabled: false,
+      skillId: "",
+      invocationName: "",
+      allowedUsers: [],
+      skillName: "Friend Assistant",
+      locales: ["en-IN", "hi-IN"],
+      answerSeconds: 6.5,
+      holdMinutes: 10,
+      permissionSeconds: 120,
+      requestsPerMinute: 60,
+      maxDevices: 10,
+      extraVoiceTools: [],
+    });
   });
 });
 

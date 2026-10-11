@@ -13,6 +13,8 @@ export const ASK_EVERY_TIME = new Set(["camera.snap"]);
 export const MEMBER_TOOLS = new Set(["weather.get", "stage.scene", "stage.show", "stage.update", "stage.hide", "stage.presence", "stage.mood"]);
 
 /** What a voice from a speaker device (Alexa) may do without asking: look things up, show them, and add a reminder. */
+import { isNeverByVoice } from "../alexa/constants";
+
 export const VOICE_TOOLS = new Set([
   "weather.get",
   "task.list",
@@ -33,8 +35,6 @@ export const VOICE_TOOLS = new Set([
   "stage.mood",
   "stage.presence",
 ]);
-/** Never reachable by a voice from a speaker device, whatever its tier: the PC, files, settings, add-ons, the camera and screen. */
-const NOT_BY_VOICE = ["shell.", "fs.", "code.", "settings.", "connectors.", "plugins.", "plugin.", "integrations.", "camera.", "screen.", "mcp."];
 
 /** What the "edits" approval mode lets through without asking: reading and writing files, and the sandboxed code runner. */
 const EDIT_TOOLS = new Set(["fs.list", "fs.read", "fs.write", "code.run"]);
@@ -73,7 +73,9 @@ export class PolicyEngine {
     if (input.trust === "member") return MEMBER_TOOLS.has(input.tool) ? "allow" : "deny";
     if (input.trust === "voice-device") {
       if (VOICE_TOOLS.has(input.tool)) return "allow";
-      if (input.baseTier === "T3" || input.baseTier === "T0" || input.baseTier === "T1" || NOT_BY_VOICE.some((p) => input.tool.startsWith(p))) return "deny";
+      if (input.baseTier === "T3" || isNeverByVoice(input.tool)) return "deny";
+      if (this.config.alexa.extraVoiceTools.includes(input.tool)) return "allow"; // a tool the owner chose to allow by voice
+      if (input.baseTier === "T0" || input.baseTier === "T1") return "deny";
       return "ask"; // a tier-2 action: the owner says yes on their phone, whatever the approval mode
     }
     let tier: Tier = input.baseTier;

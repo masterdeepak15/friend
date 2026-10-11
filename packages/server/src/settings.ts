@@ -1,6 +1,7 @@
 import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
+import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
 import { isValidTimeZone, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
 
@@ -72,6 +73,14 @@ export const SettingsPatch = z
       .object({
         skillId: z.string().trim().max(100).regex(/^(amzn1\.ask\.skill\.[A-Za-z0-9-]{8,80})?$/, "A skill id like amzn1.ask.skill.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"),
         invocationName: z.string().trim().max(60),
+        skillName: z.string().trim().min(1).max(50),
+        locales: z.array(z.enum(ALEXA_LOCALES)).min(1).max(ALEXA_LOCALES.length),
+        answerSeconds: z.number().min(ALEXA_LIMITS.answerSeconds.min).max(ALEXA_LIMITS.answerSeconds.max),
+        holdMinutes: z.number().int().min(ALEXA_LIMITS.holdMinutes.min).max(ALEXA_LIMITS.holdMinutes.max),
+        permissionSeconds: z.number().int().min(ALEXA_LIMITS.permissionSeconds.min).max(ALEXA_LIMITS.permissionSeconds.max),
+        requestsPerMinute: z.number().int().min(ALEXA_LIMITS.requestsPerMinute.min).max(ALEXA_LIMITS.requestsPerMinute.max),
+        maxDevices: z.number().int().min(ALEXA_LIMITS.maxDevices.min).max(ALEXA_LIMITS.maxDevices.max),
+        extraVoiceTools: z.array(z.string().regex(TOOL_NAME, "A tool name like calendar.list")).max(20),
       })
       .partial()
       .strict(),
@@ -168,7 +177,21 @@ export interface SettingsView {
   };
   trading: { level: "read" };
   /** The ids of allowed Amazon accounts are shown shortened. */
-  alexa: { installed: boolean; enabled: boolean; skillId: string; invocationName: string; allowed: { id: string; name: string }[] };
+  alexa: {
+    installed: boolean;
+    enabled: boolean;
+    skillId: string;
+    invocationName: string;
+    allowed: { id: string; name: string }[];
+    skillName: string;
+    locales: string[];
+    answerSeconds: number;
+    holdMinutes: number;
+    permissionSeconds: number;
+    requestsPerMinute: number;
+    maxDevices: number;
+    extraVoiceTools: string[];
+  };
   look: Config["look"];
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** The key itself is never sent to the screen. */
@@ -210,6 +233,14 @@ export function settingsView(c: Config): SettingsView {
       skillId: c.alexa.skillId,
       invocationName: c.alexa.invocationName,
       allowed: c.alexa.allowedUsers.map((u) => ({ id: "…" + u.id.slice(-8), name: u.name })),
+      skillName: c.alexa.skillName,
+      locales: [...c.alexa.locales],
+      answerSeconds: c.alexa.answerSeconds,
+      holdMinutes: c.alexa.holdMinutes,
+      permissionSeconds: c.alexa.permissionSeconds,
+      requestsPerMinute: c.alexa.requestsPerMinute,
+      maxDevices: c.alexa.maxDevices,
+      extraVoiceTools: [...c.alexa.extraVoiceTools],
     },
     look: { ...c.look },
     ollama: { url: c.ollama.url, model: c.ollama.model, vision: !!c.ollama.vision, contextTokens: c.ollama.contextTokens },
@@ -268,6 +299,10 @@ export function applySettings(config: Config, raw: unknown): Applied {
   if (p.brokers?.timezone !== undefined && !isValidTimeZone(p.brokers.timezone)) throw new SettingsError("brokers.timezone: That is not a time zone, try one like Asia/Kolkata.");
 
   if (p.brokers?.numberLocale !== undefined && !validNumberLocale(p.brokers.numberLocale)) throw new SettingsError("brokers.numberLocale: That is not a number format this PC knows, try one like en-IN or en-US.");
+
+  for (const t of p.alexa?.extraVoiceTools ?? []) {
+    if (isNeverByVoice(t)) throw new SettingsError(`alexa.extraVoiceTools: ${t} can never be used by voice (it reaches your PC, files, settings, add-ons or camera).`);
+  }
 
   if (p.alexa?.invocationName) {
     const problem = invocationNameProblem(p.alexa.invocationName);
@@ -338,6 +373,9 @@ export function applySettings(config: Config, raw: unknown): Applied {
     config.alexa.installed = true; // configuring it is installing it
     if (p.alexa.skillId !== undefined) config.alexa.skillId = p.alexa.skillId;
     if (p.alexa.invocationName !== undefined) config.alexa.invocationName = p.alexa.invocationName;
+    for (const k of ["skillName", "locales", "answerSeconds", "holdMinutes", "permissionSeconds", "requestsPerMinute", "maxDevices", "extraVoiceTools"] as const) {
+      if (p.alexa[k] !== undefined) (config.alexa as unknown as Record<string, unknown>)[k] = p.alexa[k];
+    }
   }
   if (p.approvals) config.approvals = p.approvals;
   if (p.channels) {

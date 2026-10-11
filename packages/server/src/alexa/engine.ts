@@ -19,13 +19,15 @@ export interface EngineDeps {
   /** Fixed questions answered straight from Friend's tools, with no model. */
   fast: Partial<Record<FastIntent, (locale: string, slots: Record<string, string>) => Promise<string>>>;
   clock: () => number;
-  /** How long to wait for an answer before saying "still working" (default 6500 ms). */
-  budgetMs?: number;
+  /** How long to wait for an answer before saying "still working" (default 6500 ms). A function, so the owner's setting applies at once. */
+  budgetMs?: number | (() => number);
   /** How long a late answer is kept for "is it ready" (default 10 minutes). */
-  holdMs?: number;
+  holdMs?: number | (() => number);
   /** Lets Alexa say "Let me check" while the answer is being made. */
   progressive?: (speech: string) => void;
 }
+
+const ms = (v: number | (() => number) | undefined, def: number): number => (typeof v === "function" ? v() : (v ?? def));
 
 type Slot = { pending: true } | { pending: false; text: string | null; at: number };
 
@@ -83,7 +85,7 @@ export class AlexaEngine {
   private ready(key: string, lang: Lang): AlexaReply {
     const slot = this.slots.get(key);
     if (slot?.pending) return { speech: say(lang, "working"), end: false };
-    if (!slot || this.d.clock() - slot.at > (this.d.holdMs ?? 600_000)) {
+    if (!slot || this.d.clock() - slot.at > ms(this.d.holdMs, 600_000)) {
       this.slots.delete(key);
       return { speech: say(lang, "nothing"), end: true };
     }
@@ -111,7 +113,7 @@ export class AlexaEngine {
     const waited = await Promise.race([
       work,
       new Promise<"late">((resolve) => {
-        timer = setTimeout(() => resolve("late"), this.d.budgetMs ?? 6500);
+        timer = setTimeout(() => resolve("late"), ms(this.d.budgetMs, 6500));
       }),
     ]);
     clearTimeout(timer);

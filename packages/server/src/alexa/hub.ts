@@ -4,6 +4,7 @@ import type { ChannelHub } from "../channels/hub";
 import type { Config } from "../config";
 import { AlexaDevices, type AlexaDevicesStore } from "./devices";
 import { AlexaEngine, type AlexaReply, type EngineDeps } from "./engine";
+import { packageFileNames } from "./package";
 import { VoicePermission } from "./permission";
 import { langOf, say } from "./phrases";
 import { verifyAlexaRequest, type AlexaRequestBody, type VerifyOptions } from "./verify";
@@ -31,6 +32,8 @@ export interface AlexaStatus {
   invocationName: string;
   /** The address to give Amazon (from the public address), or null while none is set. */
   endpoint: string | null;
+  /** The files to paste into the Alexa console (their names), for the chosen languages. */
+  files: string[];
   waiting: ReturnType<AlexaDevices["waiting"]>;
   allowed: ReturnType<AlexaDevices["allowed"]>;
 }
@@ -68,6 +71,7 @@ export class AlexaHub {
   constructor(private d: AlexaHubDeps) {
     this.devices = new AlexaDevices(d.store, d.clock);
     this.permission = new VoicePermission({
+      waitMs: () => d.config.alexa.permissionSeconds * 1000,
       send: async (channel, to, text) => {
         const r = await d.channels.send(channel, to, text);
         return { ok: r.ok };
@@ -75,7 +79,13 @@ export class AlexaHub {
       linked: d.linked,
       screenOpen: d.screenOpen,
     });
-    this.engine = new AlexaEngine({ ask: (t, l, k) => this.ask(t, l, k), fast: d.fast, clock: d.clock });
+    this.engine = new AlexaEngine({
+      ask: (t, l, k) => this.ask(t, l, k),
+      fast: d.fast,
+      clock: d.clock,
+      budgetMs: () => d.config.alexa.answerSeconds * 1000,
+      holdMs: () => d.config.alexa.holdMinutes * 60_000,
+    });
   }
 
   endpoint(): string | null {
@@ -85,7 +95,7 @@ export class AlexaHub {
 
   status(): AlexaStatus {
     const a = this.d.config.alexa;
-    return { installed: a.installed, enabled: a.enabled, skillIdSet: !!a.skillId, invocationName: a.invocationName, endpoint: this.endpoint(), waiting: this.devices.waiting(), allowed: this.devices.allowed() };
+    return { installed: a.installed, enabled: a.enabled, skillIdSet: !!a.skillId, invocationName: a.invocationName, endpoint: this.endpoint(), files: packageFileNames(a.locales), waiting: this.devices.waiting(), allowed: this.devices.allowed() };
   }
 
   /** The owner's reply on Telegram or WhatsApp. True when it answered a permission request from Alexa. */

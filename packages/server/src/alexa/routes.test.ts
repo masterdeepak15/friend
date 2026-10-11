@@ -148,6 +148,7 @@ describe("the plugins list", () => {
     expect(plugins.integrations.map((i) => i.id)).toEqual(["telegram", "twilio", "zerodha", "alexa"]);
     expect(plugins.integrations.find((i) => i.id === "alexa")).toMatchObject({ installed: true });
     await t.api("/api/plugins/alexa", { method: "DELETE" });
-    expect(loadConfig(t.dir).alexa).toEqual({ installed: false, enabled: false, skillId: "", invocationName: "", allowedUsers: [] });
+    // the skill id, the name and the allowed Echoes are forgotten; the owner's other Alexa preferences stay
+    expect(loadConfig(t.dir).alexa).toMatchObject({ installed: false, enabled: false, skillId: "", invocationName: "", allowedUsers: [], skillName: "Friend Assistant" });
   });
 });
