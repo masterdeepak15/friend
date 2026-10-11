@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialPlayer, playerReducer, type PlayerState, type Track } from "./playerCore";
+import { initialPlayer, playerReducer, type PlayerState, type Track } from "./musicQueue";
 
 const t = (n: number): Track => ({ id: String(n).padStart(16, "0"), title: `Song ${n}`, artist: "A", album: "B", durationSec: 100 + n });
 const tracks = (n: number) => Array.from({ length: n }, (_, i) => t(i + 1));
