@@ -65,3 +65,36 @@
 `5. The player screen: dock bar, dial with spectrum, level bars, playlist tabs, search, Media Session, keyboard, settings fields; tests.
 `6. A look check in the real browser against a throwaway Friend with a small test folder, then adjust.
 `7. Docs (guide and README), full verification, release.
+
+## Addendum (2026-10-11): the rest of the S.H.I.E.L.D. look, and the animations
+
+The owner also wants, from the same screenshot: the **profile widget**, the **date and time widget** and the **quick-launch buttons**, and asked me to work out the hover, click and playing animations (a still image cannot show them). Friend already has a draggable shield profile badge, a corner clock and draggable panels; these are restyled, not duplicated.
+
+**Widgets**
+
+| Widget | Look | Behaviour and settings |
+|---|---|---|
+| Profile | a round emblem with a slowly turning dashed ring and the shield with the person's initial, and an angled name tag: "<assistant name> TERMINAL", the role line (owner, family member, guest), the person's name | still shows who is talking (owner / recognised family member / guest). Label wording is a setting (`hud.terminalLabel`) |
+| Date and time | the big day number with the month under a blue bar and the weekday beside it, and the time with a thin line and a small circle | 12 or 24 hour, show seconds, locale of the date: settings (`hud.clock`) |
+| Quick launch | a stack of angled tabs like the skin's left menu, each with an icon and a label, and a short blue underline | the buttons are a list in settings (`hud.launcher`, up to 12): **open an address**, **ask the assistant** (sends the text as if typed), **open a Friend panel** (plugins, settings, tasks, chat, music), **music** (play/pause); icon is a short glyph or emoji; the assistant cannot change the list |
+| Music player | the dock bar and full view in the design above | as above |
+
+**Animations (all drawn with CSS and a little script; all stop under "reduce motion"; a setting `hud.animations` = full / reduced / off)**
+
+| Moment | What happens |
+|---|---|
+| Page opens | each widget powers up: a quick flicker and a clip-path wipe, one after another (about 80 ms apart); the thin lines draw themselves |
+| Hover on a tab or button | the tab slides about 6 px toward the centre, its edge bar and underline grow from the left, a light sweep runs across once, the icon brightens (140 ms, ease-out) |
+| Press | the tab sinks a little (scale .97) with an inner glow |
+| Click | a ripple spreads from the pointer, a single scan line crosses the tab, and the label flickers to "ENGAGED" and back |
+| Keyboard focus | a dashed outline that pulses slowly |
+| Dock expand / collapse | the panel morphs between the bar and the full view by moving its chamfered corners (about 260 ms) |
+| Music playing | the needle sweeps round the dial once every 3 s; the radial bars follow the sound (smoothed); the cover turns slowly and pulses on the bass; the level bars bounce; the progress arc fills smoothly |
+| Music paused | the needle eases to rest, the bars fall away like gravity, the cover stops |
+| Track change | the title scrambles into the new text for about 300 ms, and the cover cross-fades |
+| Clock | the colon blinks every second, a small dot travels along the line once a second, and a digit rolls up when it changes |
+| Profile | the ring turns slowly; when the person speaks it flares once; while Friend is working, ring segments chase round it; while listening it glows steadily |
+
+**Settings added:** `hud.terminalLabel`, `hud.clock` (hour12, seconds, locale), `hud.launcher` (list), `hud.animations`. They live in a new **Widgets** tab of Settings (with the music settings), PIN to save, assistant cannot change them.
+
+**Also in the plan:** the panels `launcher` and `music` join `chat, tasks, status, clock, profile` in the view presets and the Esc menu, and can be dragged like the others.
