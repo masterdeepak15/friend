@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseRef } from "./musicRef";
 import { StageCommand, StageSnapshot } from "./stage";
 import { Tier } from "./tiers";
 
@@ -40,7 +41,7 @@ export const PendingApproval = z.object({
 export type PendingApproval = z.infer<typeof PendingApproval>;
 
 /** One track as a screen needs it to show and play it (an id Friend made, never a path). */
-export const MusicTrackRef = z.object({ id: z.string().regex(/^[0-9a-f]{16}$/), title: z.string().max(200), artist: z.string().max(200), album: z.string().max(200), durationSec: z.number().nullable() });
+export const MusicTrackRef = z.object({ id: z.string().refine((v) => parseRef(v) !== null, "A track id or a source:id ref"), title: z.string().max(200), artist: z.string().max(200), album: z.string().max(200), durationSec: z.number().nullable() });
 export type MusicTrackRef = z.infer<typeof MusicTrackRef>;
 
 /** What a screen reports about its player: what is playing, the queue, and whether this is the screen commands should reach. */
