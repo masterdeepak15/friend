@@ -86,6 +86,8 @@ export interface AppOptions {
   brokerFetch?: typeof fetch;
   /** For tests: stands in for Spotify's servers. */
   musicFetch?: typeof fetch;
+  /** For tests: how names are looked up before Friend fetches audio from them. */
+  musicResolve?: (host: string) => Promise<string[]>;
   /** For tests: stands in for mpv. */
   musicMpv?: ConstructorParameters<typeof HostPlayer>[0]["mpv"] & { reset?: () => void };
   /** For tests: stands in for looking for mpv on this PC. */
@@ -185,7 +187,7 @@ export async function createApp(opts: AppOptions) {
   const musicStates = new OAuthStates();
   const publicBase = () => config.publicUrl ?? `http://127.0.0.1:${config.port}`;
   const soundcloudHub = new SoundCloudHub({ config: () => config, tokens: musicTokens, secrets: musicSecrets, states: musicStates, fetch: opts.musicFetch, publicBase });
-  const audiusHub = new AudiusHub({ config: () => config, fetch: opts.musicFetch });
+  const audiusHub = new AudiusHub({ config: () => config, fetch: opts.musicFetch, resolve: opts.musicResolve });
   const spotifyHub = new SpotifyHub({ config: () => config, tokens: musicTokens, states: musicStates, fetch: opts.musicFetch, publicBase: () => config.publicUrl ?? `http://127.0.0.1:${config.port}` });
   const musicSources = new MusicSources([new LocalSource(musicLibrary), spotifyHub, soundcloudHub, audiusHub], { defaultSource: () => config.music.defaultSource, searchLimit: () => config.music.searchLimit });
   // The PC's own player (mpv for the folder, a Spotify device for Spotify). It only plays when the owner chose the PC as the output.

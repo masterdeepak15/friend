@@ -44,4 +44,4 @@
 
 ## Rulings
 
-- Follow the API's redirect to a third-party node (public https host, fixed path) because the node list is dynamic. Cost if wrong: DNS rebinding to a private address in a tiny window; accepted, documented.
+- Follow the API's redirect to a third-party node (public https host, fixed path) because the node list is dynamic. Names are also resolved and refused if any address is private. Cost if wrong: DNS rebinding between the check and the fetch; on the PC mpv follows later redirects itself (certificates checked). Accepted, documented.

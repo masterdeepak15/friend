@@ -94,7 +94,7 @@ describe("Mpv", () => {
     expect([a, b]).toEqual([{ ok: true }, { ok: true }]);
     expect(t.argvs).toHaveLength(1);
     const args = t.argvs[0]!;
-    expect(args).toEqual(expect.arrayContaining(["--no-video", "--idle=yes", "--no-terminal", "--ytdl=no", "--load-scripts=no", "--access-references=no"]));
+    expect(args).toEqual(expect.arrayContaining(["--no-video", "--idle=yes", "--no-terminal", "--ytdl=no", "--load-scripts=no", "--access-references=no", "--tls-verify=yes"]));
     expect(args.some((x) => x.startsWith("--input-ipc-server="))).toBe(true);
     await t.mpv.start();
     expect(t.argvs).toHaveLength(1);

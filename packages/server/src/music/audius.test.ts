@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { AudiusHub, isAudiusAddress } from "./audius";
 import { fakeAudius } from "./testing/fakeAudius";
 
+const PRIVATE_NAMES: Record<string, string[]> = { "127.0.0.1.nip.io": ["127.0.0.1"], "mixed.example.org": ["93.184.216.34", "10.0.0.8"], "v6.example.org": ["::1"], "mapped.example.org": ["::ffff:192.168.1.5"], "nat.example.org": ["100.64.0.9"], "linklocal.example.org": ["169.254.1.1"], "ula.example.org": ["fd12:3456::1"], "gone.example.org": [] };
+const resolve = async (host: string): Promise<string[]> => PRIVATE_NAMES[host] ?? ["93.184.216.34"];
+
 function setup(over: { installed?: boolean; enabled?: boolean; requestTimeoutMs?: number } = {}) {
   const fake = fakeAudius();
   const config = { music: { audius: { installed: over.installed ?? true, enabled: over.enabled ?? true } } };
-  const hub = new AudiusHub({ config: () => config as never, fetch: fake.fetch, ...(over.requestTimeoutMs ? { requestTimeoutMs: over.requestTimeoutMs } : {}) });
+  const hub = new AudiusHub({ config: () => config as never, fetch: fake.fetch, resolve, ...(over.requestTimeoutMs ? { requestTimeoutMs: over.requestTimeoutMs } : {}) });
   return { fake, hub };
 }
 
@@ -82,6 +85,57 @@ describe("isAudiusAddress", () => {
     ]) {
       expect(isAudiusAddress(bad), bad).toBe(false);
     }
+  });
+});
+
+describe("isAudiusAddress, the names that mean this machine or this network", () => {
+  it("is not fooled by a trailing dot, odd spellings, single-label names or reserved names", () => {
+    for (const bad of [
+      "https://localhost./tracks/cidstream/Qm1",
+      "https://local%68ost./tracks/cidstream/Qm1",
+      "https://nas.local./tracks/cidstream/Qm1",
+      "https://nas.internal./tracks/cidstream/Qm1",
+      "https://router./tracks/cidstream/Qm1",
+      "https://x.localdomain/tracks/cidstream/Qm1",
+      "https://x.test/tracks/cidstream/Qm1",
+      "https://x.example/tracks/cidstream/Qm1",
+      "https://x.invalid/tracks/cidstream/Qm1",
+      "https://1.0.0.127.in-addr.arpa/tracks/cidstream/Qm1",
+      "https://2130706433/tracks/cidstream/Qm1",
+      "https://0x7f.1/tracks/cidstream/Qm1",
+      "https://127.1/tracks/cidstream/Qm1",
+      "https://[::ffff:127.0.0.1]/tracks/cidstream/Qm1",
+    ]) {
+      expect(isAudiusAddress(bad), bad).toBe(false);
+    }
+    expect(isAudiusAddress("https://creatornode.audius.co./tracks/cidstream/Qm1")).toBe(true);
+  });
+});
+
+describe("a public name that points at a private address", () => {
+  it("is refused for the first address, for a redirect, and for the stream, without naming it", async () => {
+    const { fake, hub } = setup();
+    for (const host of ["127.0.0.1.nip.io", "mixed.example.org", "v6.example.org", "mapped.example.org", "nat.example.org", "linklocal.example.org", "ula.example.org", "gone.example.org"]) {
+      const before = fake.requests.length;
+      const r = await hub.fetchAudio(`https://${host}/tracks/cidstream/Qm1?signature=TOPSECRET`);
+      expect(r.ok, host).toBe(false);
+      expect(JSON.stringify(r)).not.toMatch(/TOPSECRET|nip\.io/);
+      expect(fake.requests.length, host).toBe(before);
+    }
+    fake.node = "https://127.0.0.1.nip.io/tracks/cidstream/Qm1?signature=TOPSECRET";
+    expect((await hub.streamOf("95wro")).ok).toBe(false);
+    fake.node = "https://creatornode.audius.co/tracks/cidstream/Qm1";
+    fake.nodeRedirect = "https://127.0.0.1.nip.io/tracks/cidstream/Qm2";
+    expect(await hub.fetchAudio("https://creatornode.audius.co/tracks/cidstream/Qm1")).toEqual({ ok: false, error: expect.stringMatching(/will not follow/i) });
+  });
+});
+
+describe("a slow Audius", () => {
+  it("gives up when the body never finishes, not only when the headers never come", async () => {
+    const { fake, hub } = setup({ requestTimeoutMs: 100 });
+    fake.stallBody = true;
+    await expect(hub.search("x", 3)).rejects.toThrow(/could not reach/i);
+    await expect(hub.track("95wro")).rejects.toThrow(/could not reach/i);
   });
 });
 

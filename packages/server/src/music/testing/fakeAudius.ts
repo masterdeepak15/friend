@@ -5,6 +5,8 @@ export interface FakeAudius {
   rateLimit: boolean;
   garbage: boolean;
   hang: boolean;
+  /** The API answers 200 and then never finishes sending the body. */
+  stallBody: boolean;
   /** Where the stream endpoint redirects to. */
   node: string;
   /** The content node redirects again to this address first (a chain). */
@@ -27,6 +29,7 @@ export function fakeAudius(): FakeAudius {
     rateLimit: false,
     garbage: false,
     hang: false,
+    stallBody: false,
     node: "https://creatornode.audius.co/tracks/cidstream/QmAbc?signature=SECRETSIG&skip_play_count=true",
     nodeRedirect: null,
     fetch: (async (input: unknown, init?: RequestInit) => {
@@ -43,6 +46,10 @@ export function fakeAudius(): FakeAudius {
       if (u.host !== "api.audius.co") return new Response("no", { status: 404 });
       if (f.rateLimit) return json(429, {});
       if (f.garbage) return new Response("<html>", { status: 200 });
+      if (f.stallBody) {
+        const body = new ReadableStream({ start: (c) => init?.signal?.addEventListener("abort", () => c.error(new Error("aborted"))) });
+        return new Response(body, { status: 200, headers: { "content-type": "application/json" } });
+      }
       if (u.pathname === "/v1/tracks/search") {
         const q = (u.searchParams.get("query") ?? "").toLowerCase();
         const lim = Number(u.searchParams.get("limit") ?? "10");

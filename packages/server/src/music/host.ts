@@ -34,7 +34,7 @@ const NO_DEVICE = "Name the Spotify device to play on in Settings, Widgets.";
  * the assistant and the screen treat it like any other player.
  */
 /** What SoundCloud says when the login or the line is the problem (not one track): playback stops with that sentence. */
-const LOGIN_OR_LINE = /reconnect|connect your|slow down|could not reach|could not renew/i;
+const LOGIN_OR_LINE = /reconnect|connect your|slow down|could not reach|could not renew|did not answer properly/i;
 
 export class HostPlayer {
   private s: PlayerState;

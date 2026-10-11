@@ -165,7 +165,7 @@ export class Mpv {
     const pipe = this.pipePath();
     let child: ChildProcess;
     try {
-      child = (this.d.spawn ?? nodeSpawn)(found.path, ["--no-video", "--idle=yes", "--no-terminal", "--force-window=no", "--ytdl=no", "--load-scripts=no", "--access-references=no", `--input-ipc-server=${pipe}`], { stdio: "ignore", windowsHide: true });
+      child = (this.d.spawn ?? nodeSpawn)(found.path, ["--no-video", "--idle=yes", "--no-terminal", "--force-window=no", "--ytdl=no", "--load-scripts=no", "--access-references=no", "--tls-verify=yes", `--input-ipc-server=${pipe}`], { stdio: "ignore", windowsHide: true });
     } catch {
       return { ok: false, error: "mpv could not be started." };
     }

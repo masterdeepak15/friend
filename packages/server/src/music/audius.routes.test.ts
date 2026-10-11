@@ -17,7 +17,7 @@ afterEach(async () => {
 async function boot(audius: { installed: boolean; enabled: boolean } = { installed: true, enabled: true }) {
   const dir = mkdtempSync(join(tmpdir(), "friend-audius-routes-"));
   const fake = fakeAudius();
-  app = await createApp({ dataDir: dir, provider: new FakeProvider([]), config: { port: 0, roots: [], music: sanitizeMusic({ audius }) }, pluginCatalogDir: join(dir, "none"), musicFetch: fake.fetch });
+  app = await createApp({ dataDir: dir, provider: new FakeProvider([]), config: { port: 0, roots: [], music: sanitizeMusic({ audius }) }, pluginCatalogDir: join(dir, "none"), musicFetch: fake.fetch, musicResolve: async () => ["93.184.216.34"] });
   const { port } = await app.start();
   const base = `http://127.0.0.1:${port}`;
   const j = { "content-type": "application/json" };

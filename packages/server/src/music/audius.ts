@@ -1,4 +1,6 @@
 import { makeRef } from "@friend/protocol";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import type { Config } from "../config";
 import type { MusicSource, SourceStatus, SourceTrack } from "./source";
 
@@ -16,16 +18,37 @@ export function isAudiusAddress(address: string): boolean {
   try {
     const u = new URL(address);
     if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443")) return false;
-    const h = u.hostname.toLowerCase();
-    if (!h.includes(".") || h.startsWith("[") || /^[0-9.]+$/.test(h) || h.includes(":")) return false;
-    if (h === "localhost" || /\.(local|localhost|internal|lan|home|home\.arpa|corp|intranet)$/.test(h)) return false;
+    const h = u.hostname.toLowerCase().replace(/\.$/, "");
+    if (h.startsWith("[") || h.includes(":") || isIP(h) !== 0 || /^[0-9.]+$/.test(h)) return false;
+    const labels = h.split(".");
+    if (labels.length < 2 || labels.some((l) => l === "")) return false;
+    if (h === "localhost" || /\.(local|localhost|localdomain|internal|lan|home|corp|intranet|test|example|invalid|arpa|onion)$/.test(h)) return false;
     return u.pathname.startsWith("/tracks/cidstream/");
   } catch {
     return false;
   }
 }
 
+/** An address number that belongs to this machine or a private network (not the open internet). */
+export function isPrivateAddress(ip: string): boolean {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  const a = mapped ? mapped[1]! : ip;
+  if (isIP(a) === 4) {
+    const [p, q] = a.split(".").map(Number) as [number, number];
+    return p === 0 || p === 10 || p === 127 || p >= 224 || (p === 100 && q >= 64 && q <= 127) || (p === 169 && q === 254) || (p === 172 && q >= 16 && q <= 31) || (p === 192 && q === 168) || (p === 192 && q === 0) || (p === 198 && (q === 18 || q === 19));
+  }
+  if (isIP(a) === 6) {
+    const x = a.toLowerCase();
+    return x === "::" || x === "::1" || /^f[cd]/.test(x) || /^fe[89ab]/.test(x) || x.startsWith("ff");
+  }
+  return true;
+}
+
+const resolveAll = async (host: string): Promise<string[]> => (await lookup(host, { all: true })).map((r) => r.address);
+
 export interface AudiusHubDeps {
+  /** Looks a name up (default: the system's). Every address must be a public one. */
+  resolve?: (host: string) => Promise<string[]>;
   config: () => Pick<Config, "music">;
   fetch?: typeof fetch;
   /** How long to wait for Audius to answer before giving up (default 8 seconds). */
@@ -68,15 +91,40 @@ export class AudiusHub implements MusicSource {
     }
   }
 
-  private async api<T>(path: string, params: Record<string, string> = {}): Promise<T | null> {
-    const res = await this.call(`${API}${path}?${new URLSearchParams({ ...params, app_name: APP_NAME })}`, { headers: { accept: "application/json" } });
-    if (res.status === 429) throw new Error("Audius is asking Friend to slow down. Try again in a minute.");
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error("Audius did not answer properly right now.");
+  /** A name that points only at public addresses (a public-looking name can still be an alias for the owner's own network). */
+  private async publicName(address: string): Promise<boolean> {
     try {
-      return ((await res.json()) as { data?: T }).data ?? null;
+      const addrs = await (this.d.resolve ?? resolveAll)(new URL(address).hostname.replace(/\.$/, ""));
+      return addrs.length > 0 && addrs.every((a) => !isPrivateAddress(a));
     } catch {
-      throw new Error("Audius did not answer properly right now.");
+      return false;
+    }
+  }
+
+  private async api<T>(path: string, params: Record<string, string> = {}): Promise<T | null> {
+    // the time limit covers the body too: an Audius that sends the headers and then stalls must not hold everything up
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), this.d.requestTimeoutMs ?? 8000);
+    let res: Response;
+    try {
+      res = await (this.d.fetch ?? fetch)(`${API}${path}?${new URLSearchParams({ ...params, app_name: APP_NAME })}`, { headers: { accept: "application/json" }, signal: ctl.signal });
+    } catch {
+      clearTimeout(timer);
+      throw new Error("Friend could not reach Audius right now.");
+    }
+    try {
+      if (res.status === 429) throw new Error("Audius is asking Friend to slow down. Try again in a minute.");
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error("Audius did not answer properly right now.");
+      try {
+        return ((await res.json()) as { data?: T }).data ?? null;
+      } catch {
+        if (ctl.signal.aborted) throw new Error("Friend could not reach Audius right now.");
+        throw new Error("Audius did not answer properly right now.");
+      }
+    } finally {
+      clearTimeout(timer);
+      void res.body?.cancel().catch(() => {});
     }
   }
 
@@ -123,7 +171,7 @@ export class AudiusHub implements MusicSource {
       const loc = res.headers.get("location");
       if (res.status < 300 || res.status >= 400 || !loc) return { ok: false, error: "Audius did not answer properly right now." };
       const url = new URL(loc, API).toString();
-      if (!isAudiusAddress(url)) return { ok: false, error: "Audius gave no playable address for that track." };
+      if (!isAudiusAddress(url) || !(await this.publicName(url))) return { ok: false, error: "Audius gave no playable address for that track." };
       return { ok: true, url };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Audius did not answer properly right now." };
@@ -134,7 +182,7 @@ export class AudiusHub implements MusicSource {
   async fetchAudio(address: string, range?: string, signal?: AbortSignal): Promise<{ ok: true; res: Response } | { ok: false; error: string }> {
     let next = address;
     for (let hop = 0; hop <= MAX_HOPS; hop++) {
-      if (!isAudiusAddress(next)) return { ok: false, error: "Audius sent the audio somewhere Friend will not follow." };
+      if (!isAudiusAddress(next) || !(await this.publicName(next))) return { ok: false, error: "Audius sent the audio somewhere Friend will not follow." };
       let res: Response;
       try {
         const ctl = new AbortController();
@@ -159,7 +207,10 @@ export class AudiusHub implements MusicSource {
         }
         continue;
       }
-      if (!res.ok && res.status !== 206) return { ok: false, error: "Audius did not play that track right now." };
+      if (!res.ok && res.status !== 206) {
+        void res.body?.cancel().catch(() => {});
+        return { ok: false, error: "Audius did not play that track right now." };
+      }
       return { ok: true, res };
     }
     return { ok: false, error: "Audius sent the audio around too many times." };
