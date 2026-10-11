@@ -1,4 +1,4 @@
-import type { ServerMsg } from "@friend/protocol";
+import type { MusicCommand, ServerMsg } from "@friend/protocol";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -52,7 +52,7 @@ beforeEach(async () => {
 
 describe("which screen plays", () => {
   it("says so when no Friend screen is open", async () => {
-    expect(hub.control({ action: "pause" })).toMatchObject({ ok: false, text: expect.stringMatching(/no friend screen is open/i) });
+    expect(await hub.control({ action: "pause" })).toMatchObject({ ok: false, text: expect.stringMatching(/no friend screen is open/i) });
   });
 
   it("uses the screen that is active, and the newest of two that are", async () => {
@@ -62,11 +62,11 @@ describe("which screen plays", () => {
     hub.attach(phone);
     hub.onState(pc, state({ active: true }), 100);
     hub.onState(phone, state({ active: true }), 200);
-    hub.control({ action: "pause" });
+    await hub.control({ action: "pause" });
     expect(phone.commands()).toHaveLength(1);
     expect(pc.commands()).toHaveLength(0);
     hub.onState(pc, state({ active: true }), 300);
-    hub.control({ action: "resume" });
+    await hub.control({ action: "resume" });
     expect(pc.commands()).toHaveLength(1);
   });
 
@@ -75,10 +75,10 @@ describe("which screen plays", () => {
     const b = new Conn();
     hub.attach(a);
     hub.attach(b);
-    hub.control({ action: "pause" });
+    await hub.control({ action: "pause" });
     expect(b.commands()).toHaveLength(1); // nobody has reported: the newest connection
     hub.onState(a, state({ active: false }), 500);
-    hub.control({ action: "resume" });
+    await hub.control({ action: "resume" });
     expect(a.commands()).toHaveLength(1);
   });
 
@@ -144,14 +144,14 @@ describe("the other controls", () => {
   it("send what they mean, checked and clamped", async () => {
     const c = new Conn();
     hub.attach(c);
-    expect(hub.control({ action: "volume", level: 150 }).ok).toBe(true);
-    expect(hub.control({ action: "volume", delta: -20 }).ok).toBe(true);
-    expect(hub.control({ action: "seek", seconds: 30 }).ok).toBe(true);
-    expect(hub.control({ action: "seek", percent: 50 }).ok).toBe(true);
-    expect(hub.control({ action: "mute", on: true }).ok).toBe(true);
-    expect(hub.control({ action: "shuffle", on: true }).ok).toBe(true);
-    expect(hub.control({ action: "repeat", mode: "one" }).ok).toBe(true);
-    expect(hub.control({ action: "view", view: "full" }).ok).toBe(true);
+    expect((await hub.control({ action: "volume", level: 150 })).ok).toBe(true);
+    expect((await hub.control({ action: "volume", delta: -20 })).ok).toBe(true);
+    expect((await hub.control({ action: "seek", seconds: 30 })).ok).toBe(true);
+    expect((await hub.control({ action: "seek", percent: 50 })).ok).toBe(true);
+    expect((await hub.control({ action: "mute", on: true })).ok).toBe(true);
+    expect((await hub.control({ action: "shuffle", on: true })).ok).toBe(true);
+    expect((await hub.control({ action: "repeat", mode: "one" })).ok).toBe(true);
+    expect((await hub.control({ action: "view", view: "full" })).ok).toBe(true);
     const sent = c.commands();
     expect(sent[0]).toMatchObject({ action: "volume", level: 100 });
     expect(sent[1]).toMatchObject({ action: "volume", delta: -20 });
@@ -165,17 +165,17 @@ describe("the other controls", () => {
   it("refuse what makes no sense, without sending anything", async () => {
     const c = new Conn();
     hub.attach(c);
-    expect(hub.control({ action: "volume" })).toMatchObject({ ok: false });
-    expect(hub.control({ action: "seek" })).toMatchObject({ ok: false });
-    expect(hub.control({ action: "repeat", mode: "forever" as never })).toMatchObject({ ok: false });
-    expect(hub.control({ action: "explode" as never })).toMatchObject({ ok: false });
+    expect(await hub.control({ action: "volume" })).toMatchObject({ ok: false });
+    expect(await hub.control({ action: "seek" })).toMatchObject({ ok: false });
+    expect(await hub.control({ action: "repeat", mode: "forever" as never })).toMatchObject({ ok: false });
+    expect(await hub.control({ action: "explode" as never })).toMatchObject({ ok: false });
     expect(c.commands()).toHaveLength(0);
   });
 
   it("pause, resume, toggle, stop, next and previous go straight through", async () => {
     const c = new Conn();
     hub.attach(c);
-    for (const action of ["pause", "resume", "toggle", "stop", "next", "previous"] as const) expect(hub.control({ action }).ok).toBe(true);
+    for (const action of ["pause", "resume", "toggle", "stop", "next", "previous"] as const) expect((await hub.control({ action })).ok).toBe(true);
     expect(c.commands().map((m) => m.action)).toEqual(["pause", "resume", "toggle", "stop", "next", "previous"]);
   });
 });
@@ -338,5 +338,87 @@ describe("playing from other sources", () => {
     expect(r.ok).toBe(false);
     expect(r.text).not.toMatch(/AT-1/);
     expect(c.commands()).toHaveLength(0);
+  });
+});
+
+describe("with the PC as the output", () => {
+  class FakeHost {
+    commands: MusicCommand[] = [];
+    result: { ok: boolean; text: string } = { ok: true, text: "Done." };
+    availableNow: { ok: true } | { ok: false; reason: string } = { ok: true };
+    stateNow = state({ playing: true, trackId: "0000000000000001", title: "So What", artist: "Miles Davis", album: "Kind of Blue", position: 65, duration: 540, queue: [{ id: "a", title: "So What" }, { id: "b", title: "Blue in Green" }], index: 0 });
+    async command(c: MusicCommand) {
+      this.commands.push(c);
+      return this.result;
+    }
+    state() {
+      return this.stateNow;
+    }
+    available() {
+      return this.availableNow;
+    }
+  }
+  let host: FakeHost;
+  let output: "screen" | "host";
+  let screen: Conn;
+  let h: MusicHub;
+  beforeEach(() => {
+    host = new FakeHost();
+    output = "host";
+    screen = new Conn();
+    h = new MusicHub({ library: lib, host: host as never, output: () => output });
+    h.attach(screen);
+  });
+
+  it("sends play to the PC, not to the screen, and says where it plays", async () => {
+    const r = await h.play({ query: "miles" });
+    expect(r.ok).toBe(true);
+    expect(r.text).toMatch(/on this PC/);
+    expect(host.commands[0]).toMatchObject({ action: "play", mode: "replace" });
+    expect(host.commands[0]!.tracks!.every((t) => /^[0-9a-f]{16}$/.test(t.id))).toBe(true);
+    expect(screen.commands()).toHaveLength(0);
+  });
+
+  it("controls and queue edits go to the PC too", async () => {
+    await h.control({ action: "pause" });
+    await h.control({ action: "volume", level: 30 });
+    await h.queue({ action: "remove", index: 2 });
+    await h.queue({ action: "clear" });
+    expect(host.commands.map((c) => c.action)).toEqual(["pause", "volume", "queue.remove", "queue.clear"]);
+    expect(screen.commands()).toHaveLength(0);
+  });
+
+  it("works with no screen open at all", async () => {
+    h.detach(screen);
+    expect((await h.play({ query: "miles" })).ok).toBe(true);
+    expect((await h.control({ action: "pause" })).ok).toBe(true);
+  });
+
+  it("when the PC cannot play, the reason comes back and nothing goes to any screen", async () => {
+    host.availableNow = { ok: false, reason: "The player program set in Settings cannot be used." };
+    const r = await h.play({ query: "miles" });
+    expect(r).toEqual({ ok: false, text: expect.stringContaining("player program") });
+    expect(host.commands).toHaveLength(0);
+    expect(screen.commands()).toHaveLength(0);
+  });
+
+  it("an error from the PC's player (mpv missing) is passed on as it is", async () => {
+    host.result = { ok: false, text: "mpv is not installed. Install it once with: winget install mpv, then try again." };
+    const r = await h.play({ query: "miles" });
+    expect(r).toEqual({ ok: false, text: expect.stringContaining("winget install mpv") });
+    expect(screen.commands()).toHaveLength(0);
+  });
+
+  it("says what is playing and shows the queue from the PC's player", async () => {
+    expect(h.nowPlaying().text).toMatch(/Playing: So What by Miles Davis.*1:05 of 9:00/);
+    expect((await h.queue({ action: "show" })).text).toMatch(/2 tracks.*1\. So What \(playing\).*2\. Blue in Green/s);
+  });
+
+  it("goes back to the screen the moment the output is the screen again", async () => {
+    output = "screen";
+    await h.play({ query: "miles" });
+    expect(host.commands).toHaveLength(0);
+    expect(screen.commands()).toHaveLength(1);
+    expect(h.nowPlaying().text).toMatch(/nothing is playing/i);
   });
 });

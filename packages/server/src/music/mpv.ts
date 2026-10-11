@@ -320,6 +320,11 @@ export class Mpv {
     }
   }
 
+  /** Ends the running mpv (if any) so the next call starts a fresh one, for example with another program. The listeners stay. */
+  reset(): void {
+    if (this.child) this.cleanup(this.child);
+  }
+
   /** Ends mpv and forgets it. Nothing is left running. */
   dispose(): void {
     this.disposed = true;

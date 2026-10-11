@@ -1,4 +1,4 @@
-import type { ClientMsg, ServerMsg } from "@friend/protocol";
+import type { ClientMsg, MusicState, ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
 import { HINDI_VOICES, MARATHI_VOICES, clampToSafe, isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
@@ -17,7 +17,9 @@ import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
 import { AlexaHub, fetchAmazonCert } from "./alexa/hub";
 import { MusicHub } from "./music/hub";
+import { HostPlayer } from "./music/host";
 import { MusicLibrary } from "./music/library";
+import { Mpv } from "./music/mpv";
 import { MusicTokens } from "./music/oauth";
 import { LocalSource, MusicSources } from "./music/source";
 import { SpotifyHub } from "./music/spotify";
@@ -82,6 +84,8 @@ export interface AppOptions {
   brokerFetch?: typeof fetch;
   /** For tests: stands in for Spotify's servers. */
   musicFetch?: typeof fetch;
+  /** For tests: stands in for mpv. */
+  musicMpv?: ConstructorParameters<typeof HostPlayer>[0]["mpv"] & { reset?: () => void };
   /** How Amazon's signing certificate is downloaded (tests hand in their own). */
   alexaFetchCert?: (url: string) => Promise<string>;
   /** The roots Amazon's certificate must lead to (tests hand in their own). Defaults to the ones Node knows. */
@@ -175,7 +179,11 @@ export async function createApp(opts: AppOptions) {
   const musicTokens = new MusicTokens(opts.dataDir);
   const spotifyHub = new SpotifyHub({ config: () => config, tokens: musicTokens, fetch: opts.musicFetch, publicBase: () => config.publicUrl ?? `http://127.0.0.1:${config.port}` });
   const musicSources = new MusicSources([new LocalSource(musicLibrary), spotifyHub], { defaultSource: () => config.music.defaultSource, searchLimit: () => config.music.searchLimit });
-  const musicHub = new MusicHub({ library: musicLibrary, sources: musicSources });
+  // The PC's own player (mpv for the folder, a Spotify device for Spotify). It only plays when the owner chose the PC as the output.
+  let hostEmit: (state: MusicState) => void = () => {};
+  const hostMpv = opts.musicMpv ?? new Mpv({ program: () => config.music.hostPlayer, dataDir: opts.dataDir });
+  const hostPlayer = new HostPlayer({ library: musicLibrary, mpv: hostMpv, spotify: spotifyHub, settings: () => config.music, emit: (s) => hostEmit(s) });
+  const musicHub = new MusicHub({ library: musicLibrary, sources: musicSources, host: hostPlayer, output: () => config.music.output });
   void musicLibrary.scan().catch(() => {});
   const memory = new Memory(db);
   const tasks = new Tasks(db);
@@ -288,6 +296,9 @@ export async function createApp(opts: AppOptions) {
     if (applied.changed.some((k) => k.startsWith("channels"))) channelHub.apply();
     if (applied.changed.some((k) => k.startsWith("brokers"))) brokerHub.apply();
     if (applied.changed.some((k) => k.startsWith("music."))) void musicLibrary.scan().catch(() => {});
+    // the player that is leaving stops; a new program setting means a fresh mpv
+    if (applied.changed.includes("music.output") && config.music.output === "screen") void hostPlayer.stop().catch(() => {});
+    if (applied.changed.includes("music.hostPlayer")) void hostPlayer.stop().then(() => (hostMpv as { reset?: () => void }).reset?.()).catch(() => {});
     if (applied.providerChanged && switchable) {
       const swap = () => {
         const old = switchable.swap(makeProvider());
@@ -1164,6 +1175,8 @@ export async function createApp(opts: AppOptions) {
   let timer: NodeJS.Timeout | null = null;
 
   return {
+    /** The PC's own music player (also used by tests). */
+    musicHost: hostPlayer,
     config,
     db,
     audit,
@@ -1204,6 +1217,7 @@ export async function createApp(opts: AppOptions) {
     },
     async stop(): Promise<void> {
       stopped = true;
+      hostPlayer.dispose();
       heartbeat.stop();
       channelHub.stop();
       if (brokerTimer) clearInterval(brokerTimer);

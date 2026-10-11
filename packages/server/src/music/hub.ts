@@ -1,6 +1,7 @@
 import type { MusicCommand, MusicState, MusicTrackRef, ServerMsg } from "@friend/protocol";
 import { parseRef } from "@friend/protocol";
 import type { MusicLibrary, PublicTrack } from "./library";
+import type { HostPlayer } from "./host";
 import type { MusicSources, SourceTrack } from "./source";
 
 export interface MusicConn {
@@ -56,7 +57,19 @@ export class MusicHub {
   private conns = new Map<MusicConn, { state: MusicState | null; at: number; order: number }>();
   private order = 0;
 
-  constructor(private d: { library: MusicLibrary; sources?: MusicSources }) {}
+  constructor(
+    private d: {
+      library: MusicLibrary;
+      sources?: MusicSources;
+      /** The PC's own player, and which output the owner chose. With "host" every command goes to the PC and none to a screen. */
+      host?: Pick<HostPlayer, "command" | "state" | "available">;
+      output?: () => "screen" | "host";
+    },
+  ) {}
+
+  private hostOn(): boolean {
+    return !!this.d.host && this.d.output?.() === "host";
+  }
 
   private defaultSource(): "local" | "spotify" | "any" {
     return this.d.sources?.defaultSource() ?? "local";
@@ -87,7 +100,14 @@ export class MusicHub {
     return { conn: pick[0], state: pick[1].state };
   }
 
-  private send(command: MusicCommand): Result | null {
+  private async send(command: MusicCommand): Promise<Result | null> {
+    if (this.hostOn()) {
+      const host = this.d.host!;
+      const av = host.available();
+      if (!av.ok) return { ok: false, text: av.reason };
+      const r = await host.command(command);
+      return r.ok ? null : { ok: false, text: r.text };
+    }
     const t = this.target();
     if (!t) return { ok: false, text: NO_SCREEN };
     t.conn.send({ type: "music.command", ...command });
@@ -99,6 +119,11 @@ export class MusicHub {
   }
 
   async play(a: PlayArgs): Promise<Result> {
+    const r = await this.playRouted(a);
+    return this.hostOn() && r.ok ? { ok: true, text: r.text.replace(/\.(?=( |$))/, " on this PC.") } : r;
+  }
+
+  private async playRouted(a: PlayArgs): Promise<Result> {
     const words = [a.query, a.title, a.artist, a.album].filter((w): w is string => typeof w === "string" && w.trim() !== "").join(" ");
     // "play my music" with no words is the folder, whatever the default source is; only a named service needs a word to search for
     if (!words) return a.source === "spotify" ? { ok: false, text: "Say what to play from Spotify: a song, an artist or a playlist." } : this.playLocal(a, words);
@@ -121,7 +146,7 @@ export class MusicHub {
     }
     if (!tracks.length) return { ok: false, text: notes.length ? notes.join(" ") : `No music matches "${words}".` };
     const mode = a.mode ?? "replace";
-    const failed = this.send({ action: "play", tracks: tracks.map(refOfSource), mode, ...(a.shuffle ? { shuffle: true } : {}) });
+    const failed = await this.send({ action: "play", tracks: tracks.map(refOfSource), mode, ...(a.shuffle ? { shuffle: true } : {}) });
     if (failed) return failed;
     const n = tracks.length;
     const first = tracks[0]!;
@@ -129,13 +154,13 @@ export class MusicHub {
     return { ok: true, text: [base, ...notes].join(" ") };
   }
 
-  private playLocal(a: PlayArgs, words: string): Result {
+  private async playLocal(a: PlayArgs, words: string): Promise<Result> {
     const limit = Math.min(MAX_SEND, Math.max(1, Math.floor(a.limit ?? MAX_SEND)));
     if (this.d.library.stats().tracks === 0) return { ok: false, text: this.emptyReason() };
     const found = this.d.library.list({ q: words, limit });
     if (found.total === 0) return { ok: false, text: `No music matches "${words}".` };
     const mode = a.mode ?? "replace";
-    const failed = this.send({ action: "play", tracks: found.tracks.map(ref), mode, ...(a.shuffle ? { shuffle: true } : {}) });
+    const failed = await this.send({ action: "play", tracks: found.tracks.map(ref), mode, ...(a.shuffle ? { shuffle: true } : {}) });
     if (failed) return failed;
     const first = found.tracks[0]!;
     const n = found.tracks.length;
@@ -144,7 +169,7 @@ export class MusicHub {
     return { ok: true, text: `Playing ${plural(n, "track")}${a.shuffle ? " shuffled" : ", starting with " + label(first)}.` };
   }
 
-  control(a: ControlArgs): Result {
+  async control(a: ControlArgs): Promise<Result> {
     const bad = (text: string): Result => ({ ok: false, text });
     const simple = ["pause", "resume", "toggle", "stop", "next", "previous"];
     let command: MusicCommand;
@@ -165,17 +190,17 @@ export class MusicHub {
       if (a.view !== "mini" && a.view !== "full" && a.view !== "hidden") return bad("The view is mini, full or hidden.");
       command = { action: "view", view: a.view };
     } else return bad(`I do not know the music control "${a.action}".`);
-    return this.send(command) ?? { ok: true, text: "Done." };
+    return (await this.send(command)) ?? { ok: true, text: "Done." };
   }
 
   async queue(a: QueueArgs): Promise<Result> {
     if (a.action === "add") return this.play({ query: a.query, mode: "add", ...(a.source ? { source: a.source } : {}) });
     if (a.action === "remove") {
       if (!Number.isInteger(a.index) || (a.index as number) < 1) return { ok: false, text: "Say which queue number to remove (counting from 1)." };
-      return this.send({ action: "queue.remove", index: (a.index as number) - 1 }) ?? { ok: true, text: `Removed number ${a.index} from the queue.` };
+      return (await this.send({ action: "queue.remove", index: (a.index as number) - 1 })) ?? { ok: true, text: `Removed number ${a.index} from the queue.` };
     }
-    if (a.action === "clear") return this.send({ action: "queue.clear" }) ?? { ok: true, text: "The queue is cleared." };
-    const t = this.target();
+    if (a.action === "clear") return (await this.send({ action: "queue.clear" })) ?? { ok: true, text: "The queue is cleared." };
+    const t = this.hostOn() ? { state: this.d.host!.state() } : this.target();
     if (!t) return { ok: false, text: NO_SCREEN };
     const q = t.state?.queue ?? [];
     if (!q.length) return { ok: true, text: "The queue is empty." };
@@ -199,7 +224,7 @@ export class MusicHub {
   }
 
   nowPlaying(): Result {
-    const t = this.target();
+    const t = this.hostOn() ? { state: this.d.host!.state() } : this.target();
     if (!t) return { ok: false, text: NO_SCREEN };
     const s = t.state;
     if (!s || (!s.trackId && !s.title)) return { ok: true, text: "Nothing is playing." };
