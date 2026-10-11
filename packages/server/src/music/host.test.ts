@@ -368,3 +368,57 @@ describe("hung and failing reads, and being stopped", () => {
     expect(mpv.loads()).toEqual([]);
   });
 });
+
+describe("playing SoundCloud through mpv", () => {
+  const sc = (n: number) => ({ id: `soundcloud:${n}`, title: `SC ${n}`, artist: "A", album: "", durationSec: 100 });
+  let streams: Record<string, { ok: true; url: string } | { ok: false; error: string }>;
+  let asked: string[];
+  beforeEach(() => {
+    streams = { "1001": { ok: true, url: "https://cf-media.sndcdn.com/a.mp3?sig=1" }, "1002": { ok: true, url: "https://cf-media.sndcdn.com/b.mp3?sig=2" } };
+    asked = [];
+    player.dispose();
+    player = new HostPlayer({
+      library: { ready: async () => {}, resolve: async (id: string) => paths[id] ?? null },
+      mpv: mpv as never,
+      spotify: sp as never,
+      soundcloud: { streamOf: async (id: string) => (asked.push(id), streams[id] ?? { ok: false as const, error: "SoundCloud does not let this account play that track." }) },
+      settings: () => settings,
+      emit: (s) => void emitted.push(s),
+    });
+  });
+
+  it("gives mpv the address SoundCloud gave just now, and no device is asked for", async () => {
+    const r = await player.command(play([sc(1001) as never]));
+    expect(r.ok).toBe(true);
+    expect(mpv.loads()).toEqual(["https://cf-media.sndcdn.com/a.mp3?sig=1"]);
+    expect(sp.plays).toHaveLength(0);
+    expect(player.state()).toMatchObject({ playing: true, trackId: "soundcloud:1001" });
+  });
+
+  it("skips a track SoundCloud will not stream, and plays the next", async () => {
+    const r = await player.command(play([sc(1003) as never, sc(1001) as never]));
+    expect(r.ok).toBe(true);
+    expect(mpv.loads()).toEqual(["https://cf-media.sndcdn.com/a.mp3?sig=1"]);
+    expect(player.state().index).toBe(1);
+  });
+
+  it("a track mpv cannot open is fetched again once (the address may have run out), then skipped", async () => {
+    await player.command(play([sc(1001) as never, sc(1002) as never]));
+    streams["1001"] = { ok: true, url: "https://cf-media.sndcdn.com/a2.mp3?sig=NEW" };
+    mpv.fire({ type: "failed", reason: "mpv could not open or play that file." });
+    await vi.waitFor(() => expect(mpv.loads()).toContain("https://cf-media.sndcdn.com/a2.mp3?sig=NEW"));
+    expect(player.state().trackId).toBe("soundcloud:1001");
+    mpv.fire({ type: "failed", reason: "mpv could not open or play that file." });
+    await vi.waitFor(() => expect(player.state().trackId).toBe("soundcloud:1002"));
+    expect(asked.filter((x) => x === "1001")).toHaveLength(2);
+  });
+
+  it("says so when SoundCloud is not available on the PC", async () => {
+    player.dispose();
+    player = new HostPlayer({ library: { ready: async () => {}, resolve: async () => null }, mpv: mpv as never, spotify: sp as never, settings: () => settings, emit: () => {} });
+    const r = await player.command(play([sc(1001) as never]));
+    expect(r.ok).toBe(false);
+    expect(r.text).toMatch(/SoundCloud/);
+    expect(mpv.loads()).toHaveLength(0);
+  });
+});
