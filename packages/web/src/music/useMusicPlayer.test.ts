@@ -84,6 +84,14 @@ describe("playing", () => {
     expect(result.current.state).toMatchObject({ volume: 55, repeat: "all", view: "mini" });
   });
 
+  it("stays closed after a refresh once the owner closed it", () => {
+    const first = mount();
+    act(() => first.result.current.dispatch({ type: "view", view: "hidden" }));
+    first.unmount();
+    const again = mount();
+    expect(again.result.current.state.view).toBe("hidden");
+  });
+
   it("runs the same command number only once, and a new number again", () => {
     const { rerender } = mount({ cmd: play(1) });
     const first = audio.plays;

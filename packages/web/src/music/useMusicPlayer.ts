@@ -36,6 +36,7 @@ interface Remembered {
   muted?: boolean;
   shuffle?: boolean;
   repeat?: "off" | "all" | "one";
+  view?: "mini" | "full" | "hidden";
 }
 const recall = (): Remembered => {
   try {
@@ -46,7 +47,7 @@ const recall = (): Remembered => {
 };
 const remember = (s: PlayerState): void => {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ volume: s.volume, muted: s.muted, shuffle: s.shuffle, repeat: s.repeat }));
+    localStorage.setItem(KEY, JSON.stringify({ volume: s.volume, muted: s.muted, shuffle: s.shuffle, repeat: s.repeat, view: s.view }));
   } catch {
     /* not remembered, still works */
   }
@@ -92,7 +93,7 @@ export function commandToAction(c: MusicCommand): PlayerAction | null {
 export function useMusicPlayer({ music, cmd, send, connection, createAudio }: MusicPlayerOptions) {
   const [state, dispatch] = useReducer(reduce, undefined, () => {
     const r = recall();
-    return initialPlayer({ volume: r.volume ?? 70, shuffle: r.shuffle ?? false, repeat: r.repeat ?? "all", view: "mini" });
+    return initialPlayer({ volume: r.volume ?? 70, shuffle: r.shuffle ?? false, repeat: r.repeat ?? "all", view: r.view ?? "mini" });
   });
   const [blocked, setBlocked] = useState(false);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
@@ -113,7 +114,7 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio }: Mu
     dispatch({ type: "volume", level: r.volume ?? music.volume });
     dispatch({ type: "repeat", mode: r.repeat ?? music.repeat });
     if (r.shuffle ?? music.shuffle) dispatch({ type: "shuffle", on: true });
-    dispatch({ type: "view", view: music.startView });
+    dispatch({ type: "view", view: r.view ?? music.startView });
     if (r.muted) dispatch({ type: "mute", on: true });
   }, [music]);
 
@@ -242,7 +243,7 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio }: Mu
     if (a && a.src && Math.abs((a.currentTime || 0) - state.position) > SEEK_GAP) a.currentTime = state.position;
   }, [state.position]);
 
-  useEffect(() => remember(state), [state.volume, state.muted, state.shuffle, state.repeat]);
+  useEffect(() => remember(state), [state.volume, state.muted, state.shuffle, state.repeat, state.view]);
 
   // what the assistant asked for
   useEffect(() => {
