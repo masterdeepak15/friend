@@ -484,3 +484,23 @@ describe("playing from SoundCloud", () => {
     expect(c.commands()).toHaveLength(0);
   });
 });
+
+describe("playing from Audius", () => {
+  const tracks = [{ ref: "audius:95wro", source: "audius" as const, title: "Stars In The Sky", artist: "Lofi Army", album: "", durationSec: 71 }];
+  const au: MusicSource = { id: "audius" as const, status: () => ({ connected: true, needs: null, account: null }), search: async () => tracks, playlists: async () => [], tracksOf: async () => [], track: async () => null };
+  const make = () => {
+    const sources = new MusicSources([new LocalSource(lib), au], { defaultSource: () => "local", searchLimit: () => 10 });
+    const h = new MusicHub({ library: lib, sources });
+    const c = new Conn();
+    h.attach(c);
+    return { h, c };
+  };
+
+  it("plays an Audius track by its ref and names Audius in a listing", async () => {
+    const { h, c } = make();
+    expect((await h.play({ query: "stars", source: "audius" })).ok).toBe(true);
+    expect(c.commands()[0]).toMatchObject({ action: "play", tracks: [{ id: "audius:95wro" }] });
+    expect((await h.search({ query: "stars", source: "audius" })).text).toMatch(/Lofi Army.*Audius/);
+    expect(await h.play({ source: "audius" })).toEqual({ ok: false, text: expect.stringContaining("play from Audius") });
+  });
+});

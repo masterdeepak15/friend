@@ -110,7 +110,7 @@ export interface MusicApi {
   rescan(): Promise<{ count: number; truncated: boolean; problem?: string }>;
   /** Every music source and what the owner needs to do for it, plus what the Spotify plugin page shows. No tokens. */
   sources(): unknown;
-  search(q: { q: string; source?: "local" | "spotify" | "soundcloud" | "any"; limit?: number }): Promise<unknown>;
+  search(q: { q: string; source?: "local" | "spotify" | "soundcloud" | "audius" | "any"; limit?: number }): Promise<unknown>;
   /** Needs the owner's PIN. Gives the address to send the owner's browser to. */
   spotifyConnect(pin: string, ip: string): Promise<{ url: string }>;
   spotifyDisconnect(pin: string, ip: string): Promise<{ ok: true }>;
@@ -673,7 +673,7 @@ export function createGateway(deps: GatewayDeps) {
   app.get("/api/music/sources", { onRequest: musicGuard }, async (_req, reply) => reply.header("cache-control", "no-store").send(deps.music!.sources()));
   app.get<{ Querystring: { q?: string; source?: string; limit?: string } }>("/api/music/search", { onRequest: musicGuard }, async (req, reply) => {
     reply.header("cache-control", "no-store");
-    const source = req.query.source === "local" || req.query.source === "spotify" || req.query.source === "soundcloud" || req.query.source === "any" ? req.query.source : undefined;
+    const source = req.query.source === "local" || req.query.source === "spotify" || req.query.source === "soundcloud" || req.query.source === "audius" || req.query.source === "any" ? req.query.source : undefined;
     const limit = Number(req.query.limit);
     try {
       return await deps.music!.search({ q: typeof req.query.q === "string" ? req.query.q.slice(0, 200) : "", ...(source ? { source } : {}), ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}) });

@@ -1,6 +1,7 @@
 import { commandToAction, initialPlayer, parseRef, playerReducer, programProblem, type MusicCommand, type MusicState, type PlayerAction, type PlayerState, type Track } from "@friend/protocol";
 import type { MusicLibrary } from "./library";
 import type { Mpv, MpvEvent } from "./mpv";
+import { isAudiusAddress, type AudiusHub } from "./audius";
 import { isSoundCloudAddress, type SoundCloudHub } from "./soundcloud";
 import type { SpotifyHub } from "./spotify";
 
@@ -10,6 +11,8 @@ export interface HostDeps {
   spotify: Pick<SpotifyHub, "playOn" | "control" | "playbackState" | "status">;
   /** SoundCloud tracks are played by mpv from the address SoundCloud gives at the moment the track starts. */
   soundcloud?: Pick<SoundCloudHub, "streamOf">;
+  /** The same for Audius. */
+  audius?: Pick<AudiusHub, "streamOf">;
   settings: () => { volume: number; shuffle: boolean; repeat: "off" | "all" | "one"; spotifyDevice: string; hostPlayer: string };
   /** Told the player's state at once on every change, and at most once a second while the time moves. */
   emit: (state: MusicState) => void;
@@ -179,12 +182,14 @@ export class HostPlayer {
     const p = parseRef(track.id);
     if (!p) throw new Error("That track cannot be played here.");
     if (this.retried && this.retried !== track.id) this.retried = null;
-    if (p.source === "soundcloud") {
-      if (!this.d.soundcloud) throw new Error("SoundCloud is not available on this PC.");
+    if (p.source === "soundcloud" || p.source === "audius") {
+      const svc = p.source === "soundcloud" ? this.d.soundcloud : this.d.audius;
+      const vet = p.source === "soundcloud" ? isSoundCloudAddress : isAudiusAddress;
+      if (!svc) throw new Error(`${p.source === "soundcloud" ? "SoundCloud" : "Audius"} is not available on this PC.`);
       await this.leaveSpotify();
-      const s = await this.d.soundcloud.streamOf(p.id);
+      const s = await svc.streamOf(p.id);
       if (!s.ok && LOGIN_OR_LINE.test(s.error)) throw new Error(s.error);
-      if (!s.ok || !isSoundCloudAddress(s.url)) return this.skip();
+      if (!s.ok || !vet(s.url)) return this.skip();
       if (this.disposed) throw new Error("The player has stopped.");
       this.engine = "folder";
       await this.d.mpv.load(s.url);
@@ -273,12 +278,13 @@ export class HostPlayer {
       void this.run(async () => {
         // a SoundCloud address that ran out is asked for again, once per track, before the track is given up on
         const cur = this.s.queue[this.s.index];
-        if (cur && this.loadedId === cur.id && cur.id.startsWith("soundcloud:") && this.retried !== cur.id) {
+        if (cur && this.loadedId === cur.id && /^(soundcloud|audius):/.test(cur.id) && this.retried !== cur.id) {
           this.retried = cur.id;
           const at = this.s.position;
           try {
-            const again = await this.d.soundcloud?.streamOf(cur.id.slice("soundcloud:".length));
-            if (again?.ok && isSoundCloudAddress(again.url) && !this.disposed) {
+            const isSc = cur.id.startsWith("soundcloud:");
+            const again = await (isSc ? this.d.soundcloud : this.d.audius)?.streamOf(cur.id.slice(cur.id.indexOf(":") + 1));
+            if (again?.ok && (isSc ? isSoundCloudAddress : isAudiusAddress)(again.url) && !this.disposed) {
               await this.d.mpv.load(again.url);
               if (at > 1) await this.d.mpv.seek(at);
               await this.applyVolume();

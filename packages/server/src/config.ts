@@ -76,6 +76,7 @@ export interface MusicConfig {
   /** The Spotify plugin: added from the plugins screen. The client id is the owner's own free developer app (not secret); tokens are never kept here. */
   spotify: { installed: boolean; enabled: boolean; clientId: string };
   soundcloud: { installed: boolean; enabled: boolean; clientId: string };
+  audius: { installed: boolean; enabled: boolean };
 }
 
 export interface HudConfig {
@@ -117,7 +118,7 @@ export interface AlexaConfig {
 const SKILL_ID = /^amzn1\.ask\.skill\.[A-Za-z0-9-]{8,80}$/;
 const AMAZON_USER = /^amzn1\.ask\.account\.[A-Za-z0-9._-]{8,500}$/;
 
-export const DEFAULT_MUSIC: MusicConfig = { folder: "", extensions: [...AUDIO_EXTENSIONS], maxTracks: MUSIC_LIMITS.maxTracks.def, scanDepth: MUSIC_LIMITS.scanDepth.def, volume: MUSIC_LIMITS.volume.def, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: MUSIC_LIMITS.searchLimit.def, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" }, soundcloud: { installed: false, enabled: false, clientId: "" } };
+export const DEFAULT_MUSIC: MusicConfig = { folder: "", extensions: [...AUDIO_EXTENSIONS], maxTracks: MUSIC_LIMITS.maxTracks.def, scanDepth: MUSIC_LIMITS.scanDepth.def, volume: MUSIC_LIMITS.volume.def, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: MUSIC_LIMITS.searchLimit.def, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" }, soundcloud: { installed: false, enabled: false, clientId: "" }, audius: { installed: false, enabled: false } };
 
 const CLIENT_ID = /^[A-Za-z0-9]{8,64}$/;
 
@@ -126,6 +127,11 @@ function sanitizeSpotify(raw: unknown): MusicConfig["spotify"] {
   const id = typeof r.clientId === "string" ? r.clientId.trim() : "";
   const clientId = CLIENT_ID.test(id) ? id : "";
   return { installed: r.installed === true || (r.installed === undefined && (r.enabled === true || clientId !== "")), enabled: r.enabled === true, clientId };
+}
+
+function sanitizeAudius(raw: unknown): MusicConfig["audius"] {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true };
 }
 
 export function sanitizeMusic(raw: unknown): MusicConfig {
@@ -149,6 +155,7 @@ export function sanitizeMusic(raw: unknown): MusicConfig {
     spotifyDevice: typeof r.spotifyDevice === "string" ? r.spotifyDevice.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 100) : "",
     spotify: sanitizeSpotify(r.spotify),
     soundcloud: sanitizeSpotify(r.soundcloud),
+    audius: sanitizeAudius(r.audius),
   };
 }
 

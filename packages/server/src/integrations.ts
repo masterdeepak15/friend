@@ -1,14 +1,15 @@
 import type { AlexaHub } from "./alexa/hub";
 import type { BrokerHub } from "./brokers/hub";
 import type { ChannelHub } from "./channels/hub";
+import type { AudiusHub } from "./music/audius";
 import type { SoundCloudHub } from "./music/soundcloud";
 import type { SpotifyHub } from "./music/spotify";
 import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type Config, type MusicConfig } from "./config";
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
 export type ChannelIntegrationId = "telegram" | "twilio";
-export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud"];
+export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -40,6 +41,7 @@ const META: Record<IntegrationId, { name: string; description: string }> = {
   alexa: { name: "Alexa", description: "Talk to Friend from your Echo devices with a free skill of your own: ask by voice and hear the answer. Anything risky is refused, or asked on your phone first." },
   spotify: { name: "Spotify", description: "Play and search your own Spotify account from Friend: ask for a song, an artist or a playlist. Sign-in is through Spotify's own page. Playing needs Spotify Premium on your account, and a free app of your own at developer.spotify.com." },
   soundcloud: { name: "SoundCloud", description: "Play and search your own SoundCloud account from Friend: ask for a track or an artist. Sign-in is through SoundCloud's own page. Needs a free app of your own at soundcloud.com/you/apps (SoundCloud decides who gets one), and some tracks only play with the right SoundCloud plan." },
+  audius: { name: "Audius", description: "Free music from Audius, an open music service: ask for a track or an artist. No account, no key and no payment: install it and switch it on. Mostly independent artists." },
   zerodha: { name: "Zerodha", description: "Read-only look at your Zerodha portfolio: ask Friend how it is doing, or have a report sent to Telegram or WhatsApp every morning and at market close. Friend cannot place orders. Needs a free Kite Connect app." },
 };
 
@@ -51,9 +53,10 @@ export const PUBLIC_SETTINGS: Record<IntegrationId, readonly string[]> = {
   alexa: [],
   spotify: [],
   soundcloud: [],
+  audius: [],
 };
 
-export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }): IntegrationView[] {
+export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }, audius?: Pick<AudiusHub, "status">): IntegrationView[] {
   const status = hub.status();
   const t = config.channels.telegram;
   const w = config.channels.twilio;
@@ -70,6 +73,17 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { text: "Switch the plugin on.", done: sp.enabled },
     { text: "Press Connect in Configure and allow Friend in Spotify.", done: !!sps?.connected },
   ];
+  const au = config.music.audius;
+  const aus = audius?.status();
+  const auSteps: IntegrationStep[] = [
+    { text: "Install it. There is nothing to sign in to and nothing to pay.", done: au.installed },
+    { text: "Switch the plugin on.", done: au.enabled },
+  ];
+  const auState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!au.installed) return { state: "not-installed", detail: "" };
+    if (!au.enabled) return { state: "off", detail: "Switched off." };
+    return aus?.connected ? { state: "online", detail: "Ready." } : { state: "needs-setup", detail: aus?.needs ?? "Switch it on." };
+  };
   const sc = config.music.soundcloud;
   const scs = soundcloud?.status();
   const scSecret = soundcloud?.secretSet() ?? false;
@@ -171,6 +185,7 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { id: "alexa", ...META.alexa, kind: "integration", installed: al.installed, enabled: al.enabled, ...alState(), steps: aSteps, settings: { skillId: al.skillId, invocationName: al.invocationName }, secrets: {} },
     { id: "spotify", ...META.spotify, kind: "integration", installed: sp.installed, enabled: sp.enabled, ...spState(), steps: spSteps, settings: { clientId: sp.clientId }, secrets: {} },
     { id: "soundcloud", ...META.soundcloud, kind: "integration", installed: sc.installed, enabled: sc.enabled, ...scState(), steps: scSteps, settings: { clientId: sc.clientId }, secrets: { clientSecret: scSecret } },
+    { id: "audius", ...META.audius, kind: "integration", installed: au.installed, enabled: au.enabled, ...auState(), steps: auSteps, settings: {}, secrets: {} },
   ];
 }
 
@@ -262,7 +277,22 @@ export function changeSoundcloud(soundcloud: MusicConfig["soundcloud"], change: 
   return null;
 }
 
+/** The same for Audius: installed and switched on, nothing else to set. */
+export function changeAudius(audius: MusicConfig["audius"], change: { install: true } | { remove: true } | { enabled: boolean }): string | null {
+  if ("install" in change) {
+    audius.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    Object.assign(audius, { installed: false, enabled: false });
+    return null;
+  }
+  if (!audius.installed) return `${META.audius.name} is not installed yet.`;
+  audius.enabled = change.enabled;
+  return null;
+}
+
 /** Plain words about the integrations the assistant can set up, for its context. Spotify is left out: only the owner connects it. */
 export function integrationSummary(views: IntegrationView[]): string {
-  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.filter((v) => v.id !== "spotify" && v.id !== "soundcloud").map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
+  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.filter((v) => v.id !== "spotify" && v.id !== "soundcloud" && v.id !== "audius").map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
 }

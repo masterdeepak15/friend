@@ -21,6 +21,7 @@ import { HostPlayer } from "./music/host";
 import { MusicLibrary } from "./music/library";
 import { findMpv, Mpv, type FindResult } from "./music/mpv";
 import { MusicSecrets, MusicTokens, OAuthStates } from "./music/oauth";
+import { AudiusHub } from "./music/audius";
 import { SoundCloudHub } from "./music/soundcloud";
 import { LocalSource, MusicSources } from "./music/source";
 import { SpotifyHub } from "./music/spotify";
@@ -32,7 +33,7 @@ import { BrokerHub } from "./brokers/hub";
 const PORTFOLIO_SKILL = "portfolio-assistant";
 /** The type each kind of audio file is sent as. */
 const MIME: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", flac: "audio/flac" };
-import { changeAlexa, changeBroker, changeIntegration, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
+import { changeAlexa, changeBroker, changeIntegration, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -184,12 +185,13 @@ export async function createApp(opts: AppOptions) {
   const musicStates = new OAuthStates();
   const publicBase = () => config.publicUrl ?? `http://127.0.0.1:${config.port}`;
   const soundcloudHub = new SoundCloudHub({ config: () => config, tokens: musicTokens, secrets: musicSecrets, states: musicStates, fetch: opts.musicFetch, publicBase });
+  const audiusHub = new AudiusHub({ config: () => config, fetch: opts.musicFetch });
   const spotifyHub = new SpotifyHub({ config: () => config, tokens: musicTokens, states: musicStates, fetch: opts.musicFetch, publicBase: () => config.publicUrl ?? `http://127.0.0.1:${config.port}` });
-  const musicSources = new MusicSources([new LocalSource(musicLibrary), spotifyHub, soundcloudHub], { defaultSource: () => config.music.defaultSource, searchLimit: () => config.music.searchLimit });
+  const musicSources = new MusicSources([new LocalSource(musicLibrary), spotifyHub, soundcloudHub, audiusHub], { defaultSource: () => config.music.defaultSource, searchLimit: () => config.music.searchLimit });
   // The PC's own player (mpv for the folder, a Spotify device for Spotify). It only plays when the owner chose the PC as the output.
   let hostEmit: (state: MusicState) => void = () => {};
   const hostMpv = opts.musicMpv ?? new Mpv({ program: () => config.music.hostPlayer, dataDir: opts.dataDir });
-  const hostPlayer = new HostPlayer({ library: musicLibrary, mpv: hostMpv, spotify: spotifyHub, soundcloud: soundcloudHub, settings: () => config.music, emit: (s) => hostEmit(s), onError: (text) => broadcast({ type: "alert", level: "warn", text }) });
+  const hostPlayer = new HostPlayer({ library: musicLibrary, mpv: hostMpv, spotify: spotifyHub, soundcloud: soundcloudHub, audius: audiusHub, settings: () => config.music, emit: (s) => hostEmit(s), onError: (text) => broadcast({ type: "alert", level: "warn", text }) });
   const musicHub = new MusicHub({ library: musicLibrary, sources: musicSources, host: hostPlayer, output: () => config.music.output });
   void musicLibrary.scan().catch(() => {});
   const memory = new Memory(db);
@@ -244,6 +246,15 @@ export async function createApp(opts: AppOptions) {
     saveConfig(saved);
     return null;
   };
+  /** The same for the Audius part of the saved file. */
+  const changeAudiusConfig = (fn: (s: Config["music"]["audius"]) => string | null | void): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.music.audius);
+    if (typeof err === "string") return err;
+    fn(config.music.audius);
+    saveConfig(saved);
+    return null;
+  };
   const scView = { status: () => soundcloudHub.status(), secretSet: () => musicSecrets.has("soundcloud") };
   const changeAny = (id: IntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null => {
     if (id === "alexa") return changeAlexaConfig((a) => changeAlexa(a, change));
@@ -252,6 +263,7 @@ export async function createApp(opts: AppOptions) {
       if (!err && "remove" in change) spotifyHub.disconnect();
       return err;
     }
+    if (id === "audius") return changeAudiusConfig((s) => changeAudius(s, change));
     if (id === "soundcloud") {
       const err = changeSoundcloudConfig((s) => changeSoundcloud(s, change, musicSecrets.has("soundcloud")));
       if (!err && "remove" in change) {
@@ -283,12 +295,12 @@ export async function createApp(opts: AppOptions) {
       },
     },
     integrations: {
-      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView),
+      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub),
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {
@@ -439,7 +451,7 @@ export async function createApp(opts: AppOptions) {
     channels: channelHub,
     brokers: brokerHub,
     music: musicHub,
-    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView)) },
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub)) },
   });
 
   const clients = new Set<ClientConn>();
@@ -632,7 +644,7 @@ export async function createApp(opts: AppOptions) {
     list: () => {
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub) };
     },
     install: async (id, pin, ip) => {
       if (isIntegrationId(id)) {
@@ -1061,18 +1073,19 @@ export async function createApp(opts: AppOptions) {
       },
       stream: async (ref, range, signal) => {
         const p = parseRef(ref);
-        if (!p || p.source !== "soundcloud") return { ok: false, status: 404, error: "Not found" };
-        const st = soundcloudHub.status();
-        if (!st.connected) return { ok: false, status: 404, error: st.needs ?? "SoundCloud is not connected." };
-        const s = await soundcloudHub.streamOf(p.id);
+        const svc = p?.source === "soundcloud" ? soundcloudHub : p?.source === "audius" ? audiusHub : null;
+        if (!p || !svc) return { ok: false, status: 404, error: "Not found" };
+        const st = svc.status();
+        if (!st.connected) return { ok: false, status: 404, error: st.needs ?? "That music source is not connected." };
+        const s = await svc.streamOf(p.id);
         if (!s.ok) return { ok: false, status: 404, error: s.error };
-        const a = await soundcloudHub.fetchAudio(s.url, range, signal);
+        const a = await svc.fetchAudio(s.url, range, signal);
         if (!a.ok) return { ok: false, status: 502, error: a.error };
         const h = a.res.headers;
         const type = h.get("content-type") ?? "";
         if (type && !/^audio\/|^application\/octet-stream/i.test(type)) {
           void a.res.body?.cancel().catch(() => {});
-          return { ok: false, status: 502, error: "SoundCloud did not send audio for that track." };
+          return { ok: false, status: 502, error: "The music service did not send audio for that track." };
         }
         const headers: Record<string, string> = { "content-type": type.startsWith("audio/") ? type : "audio/mpeg", "accept-ranges": "bytes", "cache-control": "no-store", "x-content-type-options": "nosniff" };
         for (const k of ["content-range", "content-length"]) if (h.get(k)) headers[k] = h.get(k)!;

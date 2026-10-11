@@ -456,3 +456,45 @@ describe("SoundCloud on the PC when SoundCloud itself is the problem", () => {
     expect(r.text).toContain("Reconnect SoundCloud");
   });
 });
+
+describe("playing Audius through mpv", () => {
+  const au = (id: string) => ({ id: `audius:${id}`, title: `AU ${id}`, artist: "A", album: "", durationSec: 100 });
+  let streams: Record<string, { ok: true; url: string } | { ok: false; error: string }>;
+  beforeEach(() => {
+    streams = { a1: { ok: true, url: "https://creatornode.audius.co/tracks/cidstream/Qm1?signature=x" }, a2: { ok: true, url: "https://creatornode.audius.co/tracks/cidstream/Qm2?signature=y" } };
+    player.dispose();
+    player = new HostPlayer({
+      library: { ready: async () => {}, resolve: async () => null },
+      mpv: mpv as never,
+      spotify: sp as never,
+      audius: { streamOf: async (id: string) => streams[id] ?? { ok: false as const, error: "That Audius track cannot be played." } },
+      settings: () => settings,
+      emit: (s) => void emitted.push(s),
+    });
+  });
+
+  it("gives mpv the checked address, and never an address that is not a content node's", async () => {
+    await player.command(play([au("a1") as never]));
+    expect(mpv.loads()).toEqual(["https://creatornode.audius.co/tracks/cidstream/Qm1?signature=x"]);
+    streams.a2 = { ok: true, url: "https://127.0.0.1/tracks/cidstream/Qm2" };
+    await player.command(play([au("a2") as never, au("a1") as never]));
+    expect(mpv.loads()).not.toContain("https://127.0.0.1/tracks/cidstream/Qm2");
+    expect(player.state().trackId).toBe("audius:a1");
+  });
+
+  it("skips a track that will not stream, and fetches again once when mpv fails on an address", async () => {
+    await player.command(play([au("nope") as never, au("a1") as never]));
+    expect(player.state().trackId).toBe("audius:a1");
+    streams.a1 = { ok: true, url: "https://creatornode.audius.co/tracks/cidstream/Qm1?signature=NEW" };
+    mpv.fire({ type: "failed", reason: "mpv could not open or play that file." });
+    await vi.waitFor(() => expect(mpv.loads()).toContain("https://creatornode.audius.co/tracks/cidstream/Qm1?signature=NEW"));
+  });
+
+  it("says so when Audius is not available on the PC", async () => {
+    player.dispose();
+    player = new HostPlayer({ library: { ready: async () => {}, resolve: async () => null }, mpv: mpv as never, spotify: sp as never, settings: () => settings, emit: () => {} });
+    const r = await player.command(play([au("a1") as never]));
+    expect(r.ok).toBe(false);
+    expect(r.text).toMatch(/Audius/);
+  });
+});

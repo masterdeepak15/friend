@@ -30,7 +30,7 @@ export interface MusicSource {
   track(id: string): Promise<SourceTrack | null>;
 }
 
-const NAMES: Record<MusicSourceId, string> = { local: "The music folder", spotify: "Spotify", soundcloud: "SoundCloud" };
+const NAMES: Record<MusicSourceId, string> = { local: "The music folder", spotify: "Spotify", soundcloud: "SoundCloud", audius: "Audius" };
 
 /** The owner's music folder as a source. */
 export class LocalSource implements MusicSource {
