@@ -32,10 +32,10 @@ export interface MusicPlayerOptions {
   remote?: boolean;
 }
 
-/** Where a track's sound comes from: the folder's files are streamed by Friend; a Spotify track is its own ref, played by Spotify's player. */
+/** Where a track's sound comes from: the folder's files are streamed by Friend; a Spotify track is its own ref, played by Spotify's player; a SoundCloud track is streamed by Friend from the owner's SoundCloud account. */
 const srcOf = (id: string): string => {
   const p = parseRef(id);
-  return !p ? `/api/music/track/${id}` : p.source === "local" ? `/api/music/track/${p.id}` : id;
+  return !p ? `/api/music/track/${id}` : p.source === "local" ? `/api/music/track/${p.id}` : p.source === "soundcloud" ? `/api/music/stream/${id}` : id;
 };
 
 const reduce = (s: PlayerState, a: PlayerAction): PlayerState => playerReducer(s, a);

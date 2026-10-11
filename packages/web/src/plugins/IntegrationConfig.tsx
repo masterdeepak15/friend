@@ -4,6 +4,7 @@ import { touch } from "../overlay/touch";
 import { TelegramForm, TwilioForm, httpChannelsApi, type ChannelStatus, type ChannelsApi } from "../settings/ChannelsTab";
 import { httpSettingsApi, type AlexaView, type BrokersView, type ChannelsView, type SettingsApi } from "../settings/settingsApi";
 import { AlexaForm, alexaProblem, httpAlexaApi, type AlexaApi } from "./AlexaForm";
+import { SoundCloudForm, httpSoundCloudApi, type SoundCloudApi } from "./SoundCloudForm";
 import { SpotifyForm, httpSpotifyApi, type SpotifyApi } from "./SpotifyForm";
 import { ZerodhaForm, httpBrokersApi, type BrokersApi } from "./ZerodhaForm";
 import type { IntegrationEntry } from "./pluginsApi";
@@ -34,6 +35,7 @@ export function IntegrationConfig({
   brokersApi = httpBrokersApi,
   alexaApi = httpAlexaApi,
   spotifyApi = httpSpotifyApi,
+  soundcloudApi = httpSoundCloudApi,
 }: {
   integration: IntegrationEntry;
   onBack: () => void;
@@ -42,6 +44,7 @@ export function IntegrationConfig({
   brokersApi?: BrokersApi;
   alexaApi?: AlexaApi;
   spotifyApi?: SpotifyApi;
+  soundcloudApi?: SoundCloudApi;
 }) {
   const [saved, setSaved] = useState<ChannelsView | null>(null);
   const [draft, setDraft] = useState<ChannelsView>(EMPTY);
@@ -61,6 +64,7 @@ export function IntegrationConfig({
   const isZerodha = integration.id === "zerodha";
   const isAlexa = integration.id === "alexa";
   const isSpotify = integration.id === "spotify";
+  const isSoundCloud = integration.id === "soundcloud";
 
   useEffect(() => {
     alive.current = true;
@@ -87,7 +91,7 @@ export function IntegrationConfig({
 
   // only what was changed goes to the server
   const patch = (): Record<string, unknown> => {
-    if (isSpotify) return {}; // its client id, Connect and Disconnect each ask for the PIN themselves
+    if (isSpotify || isSoundCloud) return {}; // its client id, Connect and Disconnect each ask for the PIN themselves
     if (isAlexa) {
       if (!savedA) return {};
       const a: Record<string, unknown> = changedKeys(draftA, savedA, ALEXA_OPTION_KEYS);
@@ -188,11 +192,13 @@ export function IntegrationConfig({
         ))}
       </ol>
       {isSpotify && <SpotifyForm api={spotifyApi} />}
+      {isSoundCloud && <SoundCloudForm api={soundcloudApi} />}
       {isAlexa && savedA && <AlexaForm view={draftA} setView={setDraftA} api={alexaApi} />}
       {isZerodha && savedB && <ZerodhaForm view={draftB} setView={setDraftB} secret={secret} setSecret={setSecret} api={brokersApi} />}
       {!isZerodha &&
         !isAlexa &&
         !isSpotify &&
+        !isSoundCloud &&
         saved &&
         (isTelegram ? (
           <TelegramForm view={{ ...draft.telegram, enabled: integration.enabled }} secret={secret} setSecret={setSecret} api={channelsApi} />
@@ -206,7 +212,7 @@ export function IntegrationConfig({
         </p>
       )}
       <div className="approval-actions">
-        {!isSpotify && (
+        {!isSpotify && !isSoundCloud && (
           <button type="button" style={touch} className="primary" disabled={!dirty || busy || (isAlexa && alexaProblem(draftA) !== null)} onClick={() => setAsking(true)}>
             {dirty ? "Save…" : "Save"}
           </button>

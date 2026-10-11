@@ -95,9 +95,10 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
         <select value={music.defaultSource} onChange={(e) => onMusic({ defaultSource: e.target.value as MusicSettings["defaultSource"] })}>
           <option value="local">The music folder</option>
           <option value="spotify">Spotify</option>
+          <option value="soundcloud">SoundCloud</option>
           <option value="any">Both</option>
         </select>
-        <small className="auth-note">Spotify is added from Plugins. Playing from it needs Spotify Premium on your account.</small>
+        <small className="auth-note">Spotify and SoundCloud are added from Plugins. Playing from Spotify needs Spotify Premium on your account.</small>
       </label>
       <label className="settings-field">
         <span>Most results from a service such as Spotify</span>

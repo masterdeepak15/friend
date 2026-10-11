@@ -22,6 +22,9 @@ const coverId = (id: string): string | null => {
   return p && p.source === "local" ? p.id : null;
 };
 const isSpotify = (id: string): boolean => parseRef(id)?.source === "spotify";
+const isSoundCloud = (id: string): boolean => parseRef(id)?.source === "soundcloud";
+type Service = "spotify" | "soundcloud";
+const SERVICE_LABEL: Record<Service, string> = { spotify: "Spotify", soundcloud: "SoundCloud" };
 
 function useCover(id: string | undefined): string | null {
   const [ok, setOk] = useState<boolean>(id ? (covers.get(id) ?? false) : false);
@@ -56,16 +59,21 @@ async function fetchLibrary(q: string, limit: number): Promise<{ tracks: Row[]; 
   if (!res.ok) return { tracks: [], total: 0 };
   return (await res.json()) as { tracks: Row[]; total: number };
 }
-/** What the owner's sources can do right now (is Spotify connected, and what it still needs). Null until it is known. */
-function useSpotifyInfo(): { connected: boolean; needs: string | null } | null {
-  const [info, setInfo] = useState<{ connected: boolean; needs: string | null } | null>(null);
+type ServiceInfo = { connected: boolean; needs: string | null };
+/** What the owner's sources can do right now (is each service connected, and what it still needs). Null until it is known. */
+function useServiceInfo(): Partial<Record<Service, ServiceInfo>> | null {
+  const [info, setInfo] = useState<Partial<Record<Service, ServiceInfo>> | null>(null);
   useEffect(() => {
     let live = true;
     void fetch("/api/music/sources")
       .then((r) => (r.ok ? r.json() : null))
       .then((j: { sources?: { id: string; status: { connected: boolean; needs: string | null } }[] } | null) => {
-        const s = j?.sources?.find((x) => x.id === "spotify")?.status;
-        if (live && s) setInfo({ connected: s.connected, needs: s.needs });
+        const out: Partial<Record<Service, ServiceInfo>> = {};
+        for (const id of ["spotify", "soundcloud"] as const) {
+          const s = j?.sources?.find((x) => x.id === id)?.status;
+          if (s) out[id] = { connected: s.connected, needs: s.needs };
+        }
+        if (live && j) setInfo(out);
       })
       .catch(() => {});
     return () => {
@@ -74,8 +82,8 @@ function useSpotifyInfo(): { connected: boolean; needs: string | null } | null {
   }, []);
   return info;
 }
-async function searchSpotify(q: string, limit: number): Promise<{ tracks: Row[]; total: number }> {
-  const res = await fetch(`/api/music/search?q=${encodeURIComponent(q)}&source=spotify&limit=${limit}`);
+async function searchService(source: Service, q: string, limit: number): Promise<{ tracks: Row[]; total: number }> {
+  const res = await fetch(`/api/music/search?q=${encodeURIComponent(q)}&source=${source}&limit=${limit}`);
   if (!res.ok) return { tracks: [], total: 0 };
   const j = (await res.json()) as { tracks?: { ref: string; title: string; artist: string; album: string; durationSec: number | null }[] };
   const tracks = (j.tracks ?? []).map((t) => ({ id: t.ref, title: t.title, artist: t.artist, album: t.album, durationSec: t.durationSec }));
@@ -205,25 +213,26 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
   const { state, dispatch } = player;
   const [tab, setTab] = useState<"queue" | "library">(state.queue.length ? "queue" : "library");
   const [q, setQ] = useState("");
-  const [source, setSource] = useState<"folder" | "spotify">("folder");
+  const [source, setSource] = useState<"folder" | Service>("folder");
   const [found, setFound] = useState<{ tracks: Row[]; total: number } | null>(null);
-  const spotify = useSpotifyInfo();
-  const spotifyOn = !!spotify?.connected;
-  const onSpotify = source === "spotify" && spotifyOn;
+  const services = useServiceInfo();
+  const connected = (["spotify", "soundcloud"] as const).filter((s) => services?.[s]?.connected);
+  const onService = source !== "folder" && connected.includes(source) ? source : null;
+  const serviceNeeds = onService ? services?.[onService]?.needs : null;
   useEffect(() => {
     if (tab !== "library") return;
     let live = true;
-    if (onSpotify && !q.trim()) {
+    if (onService && !q.trim()) {
       setFound(null);
       return;
     }
-    const run = () => (onSpotify ? searchSpotify(q.trim(), 30) : fetchLibrary(q, 100));
+    const run = () => (onService ? searchService(onService, q.trim(), 30) : fetchLibrary(q, 100));
     const t = setTimeout(() => void run().then((r) => live && setFound(r)), q ? 250 : 0);
     return () => {
       live = false;
       clearTimeout(t);
     };
-  }, [tab, q, onSpotify]);
+  }, [tab, q, onService]);
   const rows: { track: Track; index: number }[] = tab === "queue" ? state.queue.map((track, index) => ({ track, index })) : (found?.tracks ?? []).map((r, index) => ({ track: asTrack(r), index }));
   return (
     <div className="hud-playlist">
@@ -239,9 +248,9 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
           </button>
         )}
       </div>
-      {tab === "library" && spotifyOn && (
+      {tab === "library" && connected.length > 0 && (
         <div className="hud-tabs" role="tablist" aria-label="Where to look">
-          {(["folder", "spotify"] as const).map((s) => (
+          {(["folder", ...connected] as const).map((s) => (
             <button
               key={s}
               type="button"
@@ -253,15 +262,15 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
                 setFound(null);
               }}
             >
-              {s === "folder" ? "Folder" : "Spotify"}
+              {s === "folder" ? "Folder" : SERVICE_LABEL[s]}
             </button>
           ))}
         </div>
       )}
       {tab === "library" && <input className="hud-search" type="search" placeholder="Search title, artist or album" aria-label="Search the music" value={q} onChange={(e) => setQ(e.target.value)} />}
       <ul className="hud-list">
-        {rows.length === 0 && <li className="hud-empty">{tab === "queue" ? "The queue is empty." : onSpotify && !q.trim() ? "Type to search Spotify." : found ? "No music matches." : "Loading…"}</li>}
-        {tab === "library" && onSpotify && spotify?.needs && <li className="hud-empty">{spotify.needs}</li>}
+        {rows.length === 0 && <li className="hud-empty">{tab === "queue" ? "The queue is empty." : onService && !q.trim() ? `Type to search ${SERVICE_LABEL[onService]}.` : found ? "No music matches." : "Loading…"}</li>}
+        {tab === "library" && onService && serviceNeeds && <li className="hud-empty">{serviceNeeds}</li>}
         {rows.map(({ track, index }, i) => {
           const current = tab === "queue" && index === state.index;
           return (
@@ -277,6 +286,7 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
                 <small>
                   {track.artist || track.album}
                   {isSpotify(track.id) && <em className="hud-source">SPOTIFY</em>}
+                  {isSoundCloud(track.id) && <em className="hud-source">SOUNDCLOUD</em>}
                 </small>
               </button>
               {tab === "library" && (
@@ -337,6 +347,7 @@ export function MusicPlayerView({ player, music, animations }: { player: Player;
             <small className="hud-sub">
               {current ? [current.artist, current.album].filter(Boolean).join(" — ") : "Press play, or ask for some music."}
               {current && isSpotify(current.id) && <em className="hud-source">SPOTIFY</em>}
+              {current && isSoundCloud(current.id) && <em className="hud-source">SOUNDCLOUD</em>}
               {player.remote && <em className="hud-source">THIS PC</em>}
             </small>
           </div>
