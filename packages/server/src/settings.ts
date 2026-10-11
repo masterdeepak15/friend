@@ -1,7 +1,7 @@
 import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
-import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, LAUNCHER_ACTIONS, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS } from "@friend/protocol";
+import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, MUSIC_OUTPUTS, programProblem, LAUNCHER_ACTIONS, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS } from "@friend/protocol";
 import { statSync } from "node:fs";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
@@ -99,6 +99,9 @@ export const SettingsPatch = z
         visualizer: z.boolean(),
         startView: z.enum(["mini", "full"]),
         defaultSource: z.enum(DEFAULT_SOURCES),
+        output: z.enum(MUSIC_OUTPUTS),
+        hostPlayer: z.string().trim().max(260).refine((v) => programProblem(v) === null, { message: "That is not a program name or path. Use a name like mpv, or a path with no spaces." }),
+        spotifyDevice: z.string().trim().max(100),
         searchLimit: z.number().int().min(MUSIC_LIMITS.searchLimit.min).max(MUSIC_LIMITS.searchLimit.max),
       })
       .partial()

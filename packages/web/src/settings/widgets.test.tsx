@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { WidgetsTab } from "./WidgetsTab";
 import { diffSettings, type HudSettings, type MusicSettings, type SettingsView } from "./settingsApi";
 
-const music: MusicSettings = { folder: "C:\Music", extensions: ["mp3", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, spotify: { installed: false, enabled: false, clientId: "" } };
+const music: MusicSettings = { folder: "C:\Music", extensions: ["mp3", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" } };
 const hud: HudSettings = { terminalLabel: "TERMINAL", clock: { hour12: true, seconds: false, locale: "" }, launcher: [{ id: "a", label: "Chat", icon: "C", action: { type: "panel", value: "chat" } }], animations: "full" };
 const base = { provider: "claude", model: "m", apiKeySet: false, view: "companion", music, hud, look: {}, ollama: {}, claudeCode: {}, voice: {} } as unknown as SettingsView;
 
@@ -45,5 +45,20 @@ describe("widgets settings", () => {
     fireEvent.click(screen.getByLabelText("mp3"));
     expect(onMusic).not.toHaveBeenCalled();
     expect((screen.getByText(/Add a button/) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("where the sound comes out", () => {
+  it("chooses the output, the program and the Spotify device, and says what is wrong with a program", () => {
+    const onMusic = vi.fn();
+    const { rerender } = render(<WidgetsTab music={music} hud={hud} onMusic={onMusic} onHud={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/where the sound comes out/i), { target: { value: "host" } });
+    expect(onMusic).toHaveBeenCalledWith({ output: "host" });
+    fireEvent.change(screen.getByLabelText(/program that plays/i), { target: { value: "mpv" } });
+    expect(onMusic).toHaveBeenCalledWith({ hostPlayer: "mpv" });
+    fireEvent.change(screen.getByPlaceholderText(/name Spotify shows/i), { target: { value: "Living room" } });
+    expect(onMusic).toHaveBeenCalledWith({ spotifyDevice: "Living room" });
+    rerender(<WidgetsTab music={{ ...music, hostPlayer: "mpv --x" }} hud={hud} onMusic={onMusic} onHud={() => {}} />);
+    expect(screen.getByText(/Arguments cannot be added/)).toBeTruthy();
   });
 });

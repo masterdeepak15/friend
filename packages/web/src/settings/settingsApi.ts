@@ -50,6 +50,9 @@ export interface MusicSettings {
   startView: "mini" | "full";
   defaultSource: "local" | "spotify" | "any";
   searchLimit: number;
+  output: "screen" | "host";
+  hostPlayer: string;
+  spotifyDevice: string;
   /** The Spotify plugin entry; changed only through the plugin, never from the settings screen. */
   spotify: { installed: boolean; enabled: boolean; clientId: string };
 }

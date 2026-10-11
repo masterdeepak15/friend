@@ -1,4 +1,4 @@
-import { AUDIO_EXTENSIONS, LAUNCHER_MUSIC, LAUNCHER_PANELS, MAX_LAUNCHER, MUSIC_LIMITS, launcherProblem } from "@friend/protocol";
+import { AUDIO_EXTENSIONS, LAUNCHER_MUSIC, LAUNCHER_PANELS, MAX_LAUNCHER, MUSIC_LIMITS, launcherProblem, programProblem } from "@friend/protocol";
 import type { HudSettings, MusicSettings } from "./settingsApi";
 
 type Item = HudSettings["launcher"][number];
@@ -83,6 +83,27 @@ export function WidgetsTab({ music, hud, onMusic, onHud }: { music: MusicSetting
       <label className="settings-field">
         <span>Most results from a service such as Spotify</span>
         <input type="number" min={MUSIC_LIMITS.searchLimit.min} max={MUSIC_LIMITS.searchLimit.max} value={music.searchLimit} onChange={(e) => onMusic({ searchLimit: Number(e.target.value) })} />
+      </label>
+      <label className="settings-field">
+        <span>Where the sound comes out</span>
+        <select value={music.output} onChange={(e) => onMusic({ output: e.target.value as MusicSettings["output"] })}>
+          <option value="screen">The screen (the browser plays it)</option>
+          <option value="host">This PC's speakers (no browser needed)</option>
+        </select>
+        <small className="auth-note">The PC's speakers play your folder's music through mpv, a free player you install once. Spotify plays on a Spotify device you name below.</small>
+      </label>
+      <label className="settings-field">
+        <span>Program that plays the folder's music on the PC (empty: find mpv automatically)</span>
+        <input type="text" value={music.hostPlayer} maxLength={260} placeholder="mpv" onChange={(e) => onMusic({ hostPlayer: e.target.value })} />
+        {programProblem(music.hostPlayer.trim()) && (
+          <small role="alert" className="auth-error">
+            {programProblem(music.hostPlayer.trim())}
+          </small>
+        )}
+      </label>
+      <label className="settings-field">
+        <span>Spotify device on the PC to play on</span>
+        <input type="text" value={music.spotifyDevice} maxLength={100} placeholder="the name Spotify shows for that device" onChange={(e) => onMusic({ spotifyDevice: e.target.value })} />
       </label>
       <label className="settings-field">
         <span>Most tracks to list</span>

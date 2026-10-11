@@ -57,5 +57,21 @@ export function launcherProblem(raw: unknown): string | null {
   }
 }
 
+/** Where the sound comes out: the browser on the screen, or the PC that runs Friend. */
+export const MUSIC_OUTPUTS = ["screen", "host"] as const;
+export type MusicOutput = (typeof MUSIC_OUTPUTS)[number];
+
+/**
+ * Why a program setting cannot be used, or null. It is one program (a name on the PATH, or a path), never a command line: no
+ * spaces, quotes or shell characters, and it cannot start with a dash. Empty is fine (Friend looks for it itself).
+ */
+export function programProblem(value: string): string | null {
+  if (value === "") return null;
+  if (value.length > 260) return "That program name is too long.";
+  if (/\s/.test(value)) return "Use the program's name, or a short path with no spaces (or add the program to your PATH). Arguments cannot be added here.";
+  if (value.startsWith("-") || !/^[A-Za-z0-9._:\\/~+-]+$/.test(value)) return "A program is a name or a path made of letters, digits and . _ : / \\ ~ + - only, and cannot start with a dash.";
+  return null;
+}
+
 export type RepeatMode = "off" | "all" | "one";
 export const REPEAT_MODES: readonly RepeatMode[] = ["off", "all", "one"];

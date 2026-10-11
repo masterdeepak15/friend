@@ -13,7 +13,7 @@ const fresh = () => {
 describe("the defaults", () => {
   it("no music folder, the usual audio kinds, a quiet start, and a launcher with the panels", () => {
     const { config } = fresh();
-    expect(config.music).toEqual({ folder: "", extensions: ["mp3", "m4a", "aac", "ogg", "opus", "wav", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, spotify: { installed: false, enabled: false, clientId: "" } });
+    expect(config.music).toEqual({ folder: "", extensions: ["mp3", "m4a", "aac", "ogg", "opus", "wav", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" } });
     expect(config.hud).toMatchObject({ terminalLabel: "TERMINAL", clock: { hour12: true, seconds: false, locale: "" }, animations: "full" });
     expect(config.hud.launcher.map((l) => l.label)).toEqual(["Chat", "Tasks", "Music", "Plugins", "Settings"]);
   });
@@ -135,5 +135,35 @@ describe("changing them from the screen", () => {
   it("is refused for the assistant, even with the PIN", () => {
     expect(() => refuseForAgent({ music: { folder: "C:\\" } })).toThrow(/only be changed by the owner/);
     expect(() => refuseForAgent({ hud: { launcher: [] } })).toThrow(/only be changed by the owner/);
+  });
+});
+
+describe("where the sound comes out", () => {
+  it("defaults to the screen, with the player and the Spotify device left for later", () => {
+    const { config } = fresh();
+    expect(config.music).toMatchObject({ output: "screen", hostPlayer: "", spotifyDevice: "" });
+  });
+
+  it("reads the saved values safely", () => {
+    expect(sanitizeMusic({ output: "host" }).output).toBe("host");
+    expect(sanitizeMusic({ output: "speaker" }).output).toBe("screen");
+    expect(sanitizeMusic({ hostPlayer: "mpv" }).hostPlayer).toBe("mpv");
+    expect(sanitizeMusic({ hostPlayer: "mpv --x" }).hostPlayer).toBe("");
+    expect(sanitizeMusic({ hostPlayer: 5 }).hostPlayer).toBe("");
+    expect(sanitizeMusic({ spotifyDevice: "  Living room  " }).spotifyDevice).toBe("Living room");
+    expect(sanitizeMusic({ spotifyDevice: "x".repeat(300) }).spotifyDevice).toHaveLength(100);
+  });
+
+  it("saves them from the settings screen, and refuses a program with arguments", () => {
+    const { config } = fresh();
+    applySettings(config, { music: { output: "host", hostPlayer: "mpv", spotifyDevice: "Living room" } });
+    expect(config.music).toMatchObject({ output: "host", hostPlayer: "mpv", spotifyDevice: "Living room" });
+    expect(() => applySettings(config, { music: { hostPlayer: "mpv --no-video" } })).toThrow();
+    expect(() => applySettings(config, { music: { output: "speaker" } })).toThrow();
+    expect(config.music.hostPlayer).toBe("mpv");
+  });
+
+  it("is refused for the assistant", () => {
+    expect(() => refuseForAgent({ music: { output: "host" } })).toThrow(/only be changed by the owner/);
   });
 });

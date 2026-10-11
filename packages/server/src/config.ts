@@ -1,4 +1,4 @@
-import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, type DefaultSource, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
+import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, type DefaultSource, launcherProblem, MUSIC_OUTPUTS, type MusicOutput, programProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME, type AlexaLocale } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -67,6 +67,12 @@ export interface MusicConfig {
   defaultSource: DefaultSource;
   /** How many results a search from a connected service returns at most. */
   searchLimit: number;
+  /** Where the sound comes out: the screen's browser, or the PC that runs Friend (needs mpv, and for Spotify a Spotify device). */
+  output: MusicOutput;
+  /** The program that plays the folder's music on the PC (mpv): a name or a path. Empty: find it automatically. */
+  hostPlayer: string;
+  /** The name of the Spotify device on the PC to play on, when the output is the PC. */
+  spotifyDevice: string;
   /** The Spotify plugin: added from the plugins screen. The client id is the owner's own free developer app (not secret); tokens are never kept here. */
   spotify: { installed: boolean; enabled: boolean; clientId: string };
 }
@@ -110,7 +116,7 @@ export interface AlexaConfig {
 const SKILL_ID = /^amzn1\.ask\.skill\.[A-Za-z0-9-]{8,80}$/;
 const AMAZON_USER = /^amzn1\.ask\.account\.[A-Za-z0-9._-]{8,500}$/;
 
-export const DEFAULT_MUSIC: MusicConfig = { folder: "", extensions: [...AUDIO_EXTENSIONS], maxTracks: MUSIC_LIMITS.maxTracks.def, scanDepth: MUSIC_LIMITS.scanDepth.def, volume: MUSIC_LIMITS.volume.def, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: MUSIC_LIMITS.searchLimit.def, spotify: { installed: false, enabled: false, clientId: "" } };
+export const DEFAULT_MUSIC: MusicConfig = { folder: "", extensions: [...AUDIO_EXTENSIONS], maxTracks: MUSIC_LIMITS.maxTracks.def, scanDepth: MUSIC_LIMITS.scanDepth.def, volume: MUSIC_LIMITS.volume.def, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: MUSIC_LIMITS.searchLimit.def, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" } };
 
 const CLIENT_ID = /^[A-Za-z0-9]{8,64}$/;
 
@@ -137,6 +143,9 @@ export function sanitizeMusic(raw: unknown): MusicConfig {
     startView: r.startView === "full" ? "full" : "mini",
     defaultSource: (DEFAULT_SOURCES as readonly unknown[]).includes(r.defaultSource) ? (r.defaultSource as DefaultSource) : "local",
     searchLimit: num(r.searchLimit, MUSIC_LIMITS.searchLimit),
+    output: (MUSIC_OUTPUTS as readonly unknown[]).includes(r.output) ? (r.output as MusicOutput) : "screen",
+    hostPlayer: typeof r.hostPlayer === "string" && programProblem(r.hostPlayer.trim()) === null ? r.hostPlayer.trim() : "",
+    spotifyDevice: typeof r.spotifyDevice === "string" ? r.spotifyDevice.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 100) : "",
     spotify: sanitizeSpotify(r.spotify),
   };
 }
