@@ -1,13 +1,14 @@
 import type { AlexaHub } from "./alexa/hub";
 import type { BrokerHub } from "./brokers/hub";
 import type { ChannelHub } from "./channels/hub";
+import type { SoundCloudHub } from "./music/soundcloud";
 import type { SpotifyHub } from "./music/spotify";
 import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type Config, type MusicConfig } from "./config";
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
 export type ChannelIntegrationId = "telegram" | "twilio";
-export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify"];
+export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -38,6 +39,7 @@ const META: Record<IntegrationId, { name: string; description: string }> = {
   twilio: { name: "WhatsApp and SMS (Twilio)", description: "Talk to Friend by WhatsApp or SMS, and let it message people for you. Needs a Twilio account and a public address for Friend." },
   alexa: { name: "Alexa", description: "Talk to Friend from your Echo devices with a free skill of your own: ask by voice and hear the answer. Anything risky is refused, or asked on your phone first." },
   spotify: { name: "Spotify", description: "Play and search your own Spotify account from Friend: ask for a song, an artist or a playlist. Sign-in is through Spotify's own page. Playing needs Spotify Premium on your account, and a free app of your own at developer.spotify.com." },
+  soundcloud: { name: "SoundCloud", description: "Play and search your own SoundCloud account from Friend: ask for a track or an artist. Sign-in is through SoundCloud's own page. Needs a free app of your own at soundcloud.com/you/apps (SoundCloud decides who gets one), and some tracks only play with the right SoundCloud plan." },
   zerodha: { name: "Zerodha", description: "Read-only look at your Zerodha portfolio: ask Friend how it is doing, or have a report sent to Telegram or WhatsApp every morning and at market close. Friend cannot place orders. Needs a free Kite Connect app." },
 };
 
@@ -48,9 +50,10 @@ export const PUBLIC_SETTINGS: Record<IntegrationId, readonly string[]> = {
   zerodha: [],
   alexa: [],
   spotify: [],
+  soundcloud: [],
 };
 
-export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">): IntegrationView[] {
+export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }): IntegrationView[] {
   const status = hub.status();
   const t = config.channels.telegram;
   const w = config.channels.twilio;
@@ -67,6 +70,22 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { text: "Switch the plugin on.", done: sp.enabled },
     { text: "Press Connect in Configure and allow Friend in Spotify.", done: !!sps?.connected },
   ];
+  const sc = config.music.soundcloud;
+  const scs = soundcloud?.status();
+  const scSecret = soundcloud?.secretSet() ?? false;
+  const scSteps: IntegrationStep[] = [
+    { text: "Register a free app at soundcloud.com/you/apps (SoundCloud decides who gets one) and add the redirect address shown in Configure.", done: !!sc.clientId },
+    { text: "Paste the app's Client ID and Client Secret in Configure and save.", done: !!sc.clientId && scSecret },
+    { text: "Switch the plugin on.", done: sc.enabled },
+    { text: "Press Connect in Configure and allow Friend in SoundCloud.", done: !!scs?.connected },
+  ];
+  const scState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!sc.installed) return { state: "not-installed", detail: "" };
+    if (!sc.clientId || !scSecret) return { state: "needs-setup", detail: "Add your SoundCloud client id and secret (press Configure)." };
+    if (!sc.enabled) return { state: "off", detail: "Switched off." };
+    if (!scs?.connected) return { state: "needs-setup", detail: scs?.needs ?? "Connect your SoundCloud account (press Configure)." };
+    return { state: "online", detail: scs.needs ?? "Connected." };
+  };
   const spState = (): Pick<IntegrationView, "state" | "detail"> => {
     if (!sp.installed) return { state: "not-installed", detail: "" };
     if (!sp.clientId) return { state: "needs-setup", detail: "Add your Spotify client id (press Configure)." };
@@ -151,6 +170,7 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { id: "zerodha", ...META.zerodha, kind: "integration", installed: z.installed, enabled: z.enabled, ...zState(), steps: zSteps, settings: { apiKey: z.apiKey }, secrets: { apiSecret: !!z.apiSecret } },
     { id: "alexa", ...META.alexa, kind: "integration", installed: al.installed, enabled: al.enabled, ...alState(), steps: aSteps, settings: { skillId: al.skillId, invocationName: al.invocationName }, secrets: {} },
     { id: "spotify", ...META.spotify, kind: "integration", installed: sp.installed, enabled: sp.enabled, ...spState(), steps: spSteps, settings: { clientId: sp.clientId }, secrets: {} },
+    { id: "soundcloud", ...META.soundcloud, kind: "integration", installed: sc.installed, enabled: sc.enabled, ...scState(), steps: scSteps, settings: { clientId: sc.clientId }, secrets: { clientSecret: scSecret } },
   ];
 }
 
@@ -226,7 +246,23 @@ export function changeSpotify(spotify: MusicConfig["spotify"], change: { install
   return null;
 }
 
+/** The same for SoundCloud. Removing forgets the client id (the caller also forgets the login and the secret). */
+export function changeSoundcloud(soundcloud: MusicConfig["soundcloud"], change: { install: true } | { remove: true } | { enabled: boolean }, secretSet: boolean): string | null {
+  if ("install" in change) {
+    soundcloud.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    Object.assign(soundcloud, { installed: false, enabled: false, clientId: "" });
+    return null;
+  }
+  if (!soundcloud.installed) return `${META.soundcloud.name} is not installed yet.`;
+  if (change.enabled && (!soundcloud.clientId || !secretSet)) return "Add your SoundCloud client id and secret first (Configure), then switch it on.";
+  soundcloud.enabled = change.enabled;
+  return null;
+}
+
 /** Plain words about the integrations the assistant can set up, for its context. Spotify is left out: only the owner connects it. */
 export function integrationSummary(views: IntegrationView[]): string {
-  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.filter((v) => v.id !== "spotify").map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
+  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.filter((v) => v.id !== "spotify" && v.id !== "soundcloud").map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
 }

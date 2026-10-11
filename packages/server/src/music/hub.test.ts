@@ -445,3 +445,42 @@ describe("with the PC as the output", () => {
     expect(h.nowPlaying().text).toMatch(/nothing is playing/i);
   });
 });
+
+describe("playing from SoundCloud", () => {
+  const scTracks = [{ ref: "soundcloud:1001", source: "soundcloud" as const, title: "Midnight City", artist: "M83 Official", album: "", durationSec: 243 }];
+  const sc = (connected = true): MusicSource => ({
+    id: "soundcloud" as const,
+    status: () => ({ connected, needs: connected ? null : "Connect your SoundCloud account in Plugins, SoundCloud.", account: "me" }),
+    search: async () => scTracks,
+    playlists: async () => [],
+    tracksOf: async () => [],
+    track: async () => null,
+  });
+  const make = (s: MusicSource = sc()) => {
+    const sources = new MusicSources([new LocalSource(lib), s], { defaultSource: () => "local", searchLimit: () => 10 });
+    const h = new MusicHub({ library: lib, sources });
+    const c = new Conn();
+    h.attach(c);
+    return { h, c };
+  };
+
+  it("plays a SoundCloud track by its ref", async () => {
+    const { h, c } = make();
+    const r = await h.play({ query: "midnight", source: "soundcloud" });
+    expect(r.ok).toBe(true);
+    expect(c.commands()[0]).toMatchObject({ action: "play", tracks: [{ id: "soundcloud:1001", title: "Midnight City" }] });
+  });
+
+  it("names SoundCloud in a search listing, and asks for words when none are given", async () => {
+    const { h } = make();
+    expect((await h.search({ query: "midnight", source: "soundcloud" })).text).toMatch(/Midnight City — M83 Official.*SoundCloud/);
+    expect(await h.play({ source: "soundcloud" })).toEqual({ ok: false, text: expect.stringContaining("play from SoundCloud") });
+  });
+
+  it("a SoundCloud that is not connected says what to do, and nothing is sent", async () => {
+    const { h, c } = make(sc(false));
+    const r = await h.play({ query: "midnight", source: "soundcloud" });
+    expect(r).toEqual({ ok: false, text: expect.stringContaining("Connect your SoundCloud account") });
+    expect(c.commands()).toHaveLength(0);
+  });
+});

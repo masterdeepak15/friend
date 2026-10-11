@@ -1,4 +1,4 @@
-import type { ClientMsg, MusicState, ServerMsg } from "@friend/protocol";
+import { parseRef, type ClientMsg, type MusicState, type ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
 import { HINDI_VOICES, MARATHI_VOICES, clampToSafe, isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
@@ -20,7 +20,8 @@ import { MusicHub } from "./music/hub";
 import { HostPlayer } from "./music/host";
 import { MusicLibrary } from "./music/library";
 import { findMpv, Mpv, type FindResult } from "./music/mpv";
-import { MusicTokens } from "./music/oauth";
+import { MusicSecrets, MusicTokens, OAuthStates } from "./music/oauth";
+import { SoundCloudHub } from "./music/soundcloud";
 import { LocalSource, MusicSources } from "./music/source";
 import { SpotifyHub } from "./music/spotify";
 import { buildSkillPackage, packageFileNames } from "./alexa/package";
@@ -31,7 +32,7 @@ import { BrokerHub } from "./brokers/hub";
 const PORTFOLIO_SKILL = "portfolio-assistant";
 /** The type each kind of audio file is sent as. */
 const MIME: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", flac: "audio/flac" };
-import { changeAlexa, changeBroker, changeIntegration, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
+import { changeAlexa, changeBroker, changeIntegration, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -179,8 +180,12 @@ export async function createApp(opts: AppOptions) {
   // The owner's music: the folder is a setting; the player itself runs in the browser and the assistant controls it through the hub.
   const musicLibrary = new MusicLibrary({ folder: () => config.music.folder, extensions: () => config.music.extensions, maxTracks: () => config.music.maxTracks, scanDepth: () => config.music.scanDepth });
   const musicTokens = new MusicTokens(opts.dataDir);
-  const spotifyHub = new SpotifyHub({ config: () => config, tokens: musicTokens, fetch: opts.musicFetch, publicBase: () => config.publicUrl ?? `http://127.0.0.1:${config.port}` });
-  const musicSources = new MusicSources([new LocalSource(musicLibrary), spotifyHub], { defaultSource: () => config.music.defaultSource, searchLimit: () => config.music.searchLimit });
+  const musicSecrets = new MusicSecrets(opts.dataDir);
+  const musicStates = new OAuthStates();
+  const publicBase = () => config.publicUrl ?? `http://127.0.0.1:${config.port}`;
+  const soundcloudHub = new SoundCloudHub({ config: () => config, tokens: musicTokens, secrets: musicSecrets, states: musicStates, fetch: opts.musicFetch, publicBase });
+  const spotifyHub = new SpotifyHub({ config: () => config, tokens: musicTokens, states: musicStates, fetch: opts.musicFetch, publicBase: () => config.publicUrl ?? `http://127.0.0.1:${config.port}` });
+  const musicSources = new MusicSources([new LocalSource(musicLibrary), spotifyHub, soundcloudHub], { defaultSource: () => config.music.defaultSource, searchLimit: () => config.music.searchLimit });
   // The PC's own player (mpv for the folder, a Spotify device for Spotify). It only plays when the owner chose the PC as the output.
   let hostEmit: (state: MusicState) => void = () => {};
   const hostMpv = opts.musicMpv ?? new Mpv({ program: () => config.music.hostPlayer, dataDir: opts.dataDir });
@@ -230,11 +235,29 @@ export async function createApp(opts: AppOptions) {
     saveConfig(saved);
     return null;
   };
+  /** The same for the SoundCloud part of the saved file. */
+  const changeSoundcloudConfig = (fn: (s: Config["music"]["soundcloud"]) => string | null | void): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.music.soundcloud);
+    if (typeof err === "string") return err;
+    fn(config.music.soundcloud);
+    saveConfig(saved);
+    return null;
+  };
+  const scView = { status: () => soundcloudHub.status(), secretSet: () => musicSecrets.has("soundcloud") };
   const changeAny = (id: IntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null => {
     if (id === "alexa") return changeAlexaConfig((a) => changeAlexa(a, change));
     if (id === "spotify") {
       const err = changeSpotifyConfig((s) => changeSpotify(s, change));
       if (!err && "remove" in change) spotifyHub.disconnect();
+      return err;
+    }
+    if (id === "soundcloud") {
+      const err = changeSoundcloudConfig((s) => changeSoundcloud(s, change, musicSecrets.has("soundcloud")));
+      if (!err && "remove" in change) {
+        soundcloudHub.disconnect();
+        musicSecrets.clear("soundcloud");
+      }
       return err;
     }
     if (id !== "zerodha") return changeChannels((c) => changeIntegration(c, id, change));
@@ -260,12 +283,12 @@ export async function createApp(opts: AppOptions) {
       },
     },
     integrations: {
-      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub),
+      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView),
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {
@@ -416,7 +439,7 @@ export async function createApp(opts: AppOptions) {
     channels: channelHub,
     brokers: brokerHub,
     music: musicHub,
-    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub)) },
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView)) },
   });
 
   const clients = new Set<ClientConn>();
@@ -609,7 +632,7 @@ export async function createApp(opts: AppOptions) {
     list: () => {
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView) };
     },
     install: async (id, pin, ip) => {
       if (isIntegrationId(id)) {
@@ -966,6 +989,7 @@ export async function createApp(opts: AppOptions) {
       sources: () => ({
         sources: Object.entries(musicSources.status()).map(([id, status]) => ({ id, status })),
         spotify: { redirectUri: spotifyHub.redirectUri(), clientId: config.music.spotify.clientId },
+        soundcloud: { redirectUri: soundcloudHub.redirectUri(), clientId: config.music.soundcloud.clientId, secretSet: musicSecrets.has("soundcloud") },
       }),
       search: async (q) => musicSources.search(q.q, { ...(q.source ? { source: q.source } : {}), ...(q.limit ? { limit: q.limit } : {}) }),
       spotifyConnect: async (pin, ip) => {
@@ -998,10 +1022,57 @@ export async function createApp(opts: AppOptions) {
         audit.log("owner", "music.spotify.disconnect", { ip });
         return { ok: true };
       },
-      spotifyCallback: async (params) => {
-        const r = await spotifyHub.completeLogin(params);
-        audit.log("owner", r.ok ? "music.spotify.connected" : "music.spotify.failed", {});
+      oauthCallback: async (params) => {
+        const which = musicStates.peek(params.state ?? "") === "soundcloud" ? "soundcloud" : "spotify";
+        const r = await (which === "soundcloud" ? soundcloudHub : spotifyHub).completeLogin(params);
+        audit.log("owner", r.ok ? `music.${which}.connected` : `music.${which}.failed`, {});
         return r.ok;
+      },
+      soundcloudConnect: async (pin, ip) => {
+        await requirePin(pin, ip);
+        const st = soundcloudHub.status();
+        if (!config.music.soundcloud.installed || !config.music.soundcloud.enabled) throw new HttpError(400, st.needs ?? "Install and switch on SoundCloud in Plugins.");
+        const url = soundcloudHub.connectUrl();
+        if (!url) throw new HttpError(400, "Add your SoundCloud client id and secret first, in Plugins, SoundCloud.");
+        audit.log("owner", "music.soundcloud.connect", { ip });
+        return { url };
+      },
+      soundcloudSetCredentials: async (clientId, clientSecret, pin, ip) => {
+        await requirePin(pin, ip);
+        const id = clientId.trim();
+        if (!/^[A-Za-z0-9]{8,64}$/.test(id)) throw new HttpError(400, "A SoundCloud client id is letters and digits only. Copy it from your app at soundcloud.com/you/apps.");
+        if (!config.music.soundcloud.installed) throw new HttpError(400, "Install SoundCloud from Plugins first.");
+        const secret = (clientSecret ?? "").trim();
+        if (clientSecret !== undefined && !/^[\x21-\x7e]{8,200}$/.test(secret)) throw new HttpError(400, "A SoundCloud client secret is 8 to 200 visible characters with no spaces. Copy it from your app.");
+        const changed = id !== config.music.soundcloud.clientId || (clientSecret !== undefined && secret !== musicSecrets.get("soundcloud"));
+        changeSoundcloudConfig((s) => {
+          s.clientId = id;
+        });
+        if (clientSecret !== undefined) musicSecrets.set("soundcloud", secret);
+        if (changed) soundcloudHub.disconnect(); // a login belongs to the app it was made for
+        audit.log("owner", "music.soundcloud.credentials", { ip });
+        return { ok: true };
+      },
+      soundcloudDisconnect: async (pin, ip) => {
+        await requirePin(pin, ip);
+        soundcloudHub.disconnect();
+        audit.log("owner", "music.soundcloud.disconnect", { ip });
+        return { ok: true };
+      },
+      stream: async (ref, range, signal) => {
+        const p = parseRef(ref);
+        if (!p || p.source !== "soundcloud") return { ok: false, status: 404, error: "Not found" };
+        const st = soundcloudHub.status();
+        if (!st.connected) return { ok: false, status: 404, error: st.needs ?? "SoundCloud is not connected." };
+        const s = await soundcloudHub.streamOf(p.id);
+        if (!s.ok) return { ok: false, status: 404, error: s.error };
+        const a = await soundcloudHub.fetchAudio(s.url, range, signal);
+        if (!a.ok) return { ok: false, status: 502, error: a.error };
+        const h = a.res.headers;
+        const type = h.get("content-type") ?? "";
+        const headers: Record<string, string> = { "content-type": type.startsWith("audio/") ? type : "audio/mpeg", "accept-ranges": "bytes", "cache-control": "no-store", "x-content-type-options": "nosniff" };
+        for (const k of ["content-range", "content-length"]) if (h.get(k)) headers[k] = h.get(k)!;
+        return { ok: true, status: a.res.status, headers, body: a.res.body };
       },
     },
     alexa: {

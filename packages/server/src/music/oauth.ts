@@ -35,6 +35,11 @@ export class OAuthStates {
     return state;
   }
 
+  /** Whose login a state belongs to, without using it up. */
+  peek(state: string): MusicSourceId | null {
+    return (typeof state === "string" ? this.pending.get(state)?.source : undefined) ?? null;
+  }
+
   take(state: string): { source: MusicSourceId; verifier: string } | null {
     const p = typeof state === "string" ? this.pending.get(state) : undefined;
     if (!p) return null;

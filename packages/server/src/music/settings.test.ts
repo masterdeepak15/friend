@@ -13,7 +13,7 @@ const fresh = () => {
 describe("the defaults", () => {
   it("no music folder, the usual audio kinds, a quiet start, and a launcher with the panels", () => {
     const { config } = fresh();
-    expect(config.music).toEqual({ folder: "", extensions: ["mp3", "m4a", "aac", "ogg", "opus", "wav", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" } });
+    expect(config.music).toEqual({ folder: "", extensions: ["mp3", "m4a", "aac", "ogg", "opus", "wav", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" }, soundcloud: { installed: false, enabled: false, clientId: "" } });
     expect(config.hud).toMatchObject({ terminalLabel: "TERMINAL", clock: { hour12: true, seconds: false, locale: "" }, animations: "full" });
     expect(config.hud.launcher.map((l) => l.label)).toEqual(["Chat", "Tasks", "Music", "Plugins", "Settings"]);
   });
@@ -68,6 +68,9 @@ describe("music sources", () => {
     expect(sanitizeMusic({ spotify: { installed: true, enabled: true, clientId: "  abc123DEF456ghi789  " } }).spotify).toEqual({ installed: true, enabled: true, clientId: "abc123DEF456ghi789" });
     expect(sanitizeMusic({ spotify: { installed: "yes", enabled: 1, clientId: "../etc/passwd" } }).spotify).toEqual({ installed: false, enabled: false, clientId: "" });
     expect(sanitizeMusic({ spotify: { clientId: "short" } }).spotify.clientId).toBe("");
+    expect(sanitizeMusic({ soundcloud: { enabled: true, clientId: "  abc123DEF456ghi789jkl012MNO345pq " } }).soundcloud).toEqual({ installed: true, enabled: true, clientId: "abc123DEF456ghi789jkl012MNO345pq" });
+    expect(sanitizeMusic({ soundcloud: { installed: "yes", clientId: "../x" } }).soundcloud).toEqual({ installed: false, enabled: false, clientId: "" });
+    expect(sanitizeMusic({ defaultSource: "soundcloud" }).defaultSource).toBe("soundcloud");
     expect(sanitizeMusic({ spotify: { enabled: true } }).spotify.installed).toBe(true);
   });
 
@@ -83,6 +86,8 @@ describe("music sources", () => {
     const { config } = fresh();
     expect(() => applySettings(config, { music: { spotify: { installed: true, enabled: true, clientId: "abc123DEF456ghi789" } } })).toThrow();
     expect(config.music.spotify.clientId).toBe("");
+    expect(() => applySettings(config, { music: { soundcloud: { installed: true, enabled: true, clientId: "abc123DEF456ghi789jkl012MNO345pq" } } })).toThrow();
+    expect(config.music.soundcloud.clientId).toBe("");
     expect(() => refuseForAgent({ music: { defaultSource: "any" } })).toThrow(/only be changed by the owner/);
   });
 

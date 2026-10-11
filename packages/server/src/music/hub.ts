@@ -30,7 +30,7 @@ export interface PlayArgs {
   mode?: "replace" | "add" | "next";
   limit?: number;
   /** Where to look: the music folder, Spotify or both. Left out, the owner's default. */
-  source?: "local" | "spotify" | "any";
+  source?: "local" | "spotify" | "soundcloud" | "any";
 }
 export interface ControlArgs {
   action: string;
@@ -46,13 +46,15 @@ export interface QueueArgs {
   action: "add" | "remove" | "clear" | "show";
   query?: string;
   index?: number;
-  source?: "local" | "spotify" | "any";
+  source?: "local" | "spotify" | "soundcloud" | "any";
 }
 
 /**
  * Between the assistant and the music player on the owner's screen. The player lives in the browser; this finds the screen that
  * should play (the active one, or the newest), sends it commands, and remembers what it last said about itself.
  */
+const SERVICE_NAMES = { spotify: "Spotify", soundcloud: "SoundCloud" } as const;
+
 export class MusicHub {
   private conns = new Map<MusicConn, { state: MusicState | null; at: number; order: number }>();
   private order = 0;
@@ -71,7 +73,7 @@ export class MusicHub {
     return !!this.d.host && this.d.output?.() === "host";
   }
 
-  private defaultSource(): "local" | "spotify" | "any" {
+  private defaultSource(): "local" | "spotify" | "soundcloud" | "any" {
     return this.d.sources?.defaultSource() ?? "local";
   }
 
@@ -138,13 +140,13 @@ export class MusicHub {
   private async playRouted(a: PlayArgs): Promise<Result> {
     const words = [a.query, a.title, a.artist, a.album].filter((w): w is string => typeof w === "string" && w.trim() !== "").join(" ");
     // "play my music" with no words is the folder, whatever the default source is; only a named service needs a word to search for
-    if (!words) return a.source === "spotify" ? { ok: false, text: "Say what to play from Spotify: a song, an artist or a playlist." } : this.playLocal(a, words);
+    if (!words) return a.source === "spotify" || a.source === "soundcloud" ? { ok: false, text: `Say what to play from ${SERVICE_NAMES[a.source]}: a song, an artist or a playlist.` } : this.playLocal(a, words);
     const source = a.source ?? this.defaultSource();
     return source === "local" ? this.playLocal(a, words) : this.playFrom(a, words, source);
   }
 
   /** Play from a connected service (alone or together with the folder). What cannot be played is left out and said so. */
-  private async playFrom(a: PlayArgs, words: string, source: "spotify" | "any"): Promise<Result> {
+  private async playFrom(a: PlayArgs, words: string, source: "spotify" | "soundcloud" | "any"): Promise<Result> {
     const sources = this.d.sources;
     if (!sources) return { ok: false, text: "Other music sources are not available." };
     const found = await sources.search(words, { source, ...(a.limit ? { limit: a.limit } : {}) });
@@ -221,11 +223,11 @@ export class MusicHub {
     return { ok: true, text: `The queue has ${plural(q.length, "track")}:\n${q.map((x, i) => `${i + 1}. ${x.title}${i === t.state!.index ? " (playing)" : ""}`).join("\n")}` };
   }
 
-  async search(a: { query: string; limit?: number; source?: "local" | "spotify" | "any" }): Promise<Result> {
+  async search(a: { query: string; limit?: number; source?: "local" | "spotify" | "soundcloud" | "any" }): Promise<Result> {
     const source = a.source ?? this.defaultSource();
     if (source !== "local" && this.d.sources) {
       const found = await this.d.sources.search(a.query, { source, ...(a.limit ? { limit: Math.min(15, a.limit) } : {}) });
-      const lines = found.tracks.map((t) => `- ${t.title}${t.artist ? ` — ${t.artist}` : ""}${t.album ? ` (${t.album})` : ""} [${t.source === "local" ? "folder" : "Spotify"}]`);
+      const lines = found.tracks.map((t) => `- ${t.title}${t.artist ? ` — ${t.artist}` : ""}${t.album ? ` (${t.album})` : ""} [${t.source === "local" ? "folder" : SERVICE_NAMES[t.source]}]`);
       if (!lines.length) return { ok: true, text: found.notes.length ? found.notes.join(" ") : `No music matches "${a.query.trim()}".` };
       return { ok: true, text: [`${plural(lines.length, "track")} found for "${a.query.trim()}":`, ...lines, ...found.notes].join("\n") };
     }

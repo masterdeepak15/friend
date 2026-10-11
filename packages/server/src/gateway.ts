@@ -5,7 +5,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, 
 import { createReadStream, existsSync, promises as fsp } from "node:fs";
 import { isIP } from "node:net";
 import type { IncomingMessage } from "node:http";
-import type { Duplex } from "node:stream";
+import { Readable, type Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import type { Audit } from "./audit";
@@ -110,14 +110,20 @@ export interface MusicApi {
   rescan(): Promise<{ count: number; truncated: boolean; problem?: string }>;
   /** Every music source and what the owner needs to do for it, plus what the Spotify plugin page shows. No tokens. */
   sources(): unknown;
-  search(q: { q: string; source?: "local" | "spotify" | "any"; limit?: number }): Promise<unknown>;
+  search(q: { q: string; source?: "local" | "spotify" | "soundcloud" | "any"; limit?: number }): Promise<unknown>;
   /** Needs the owner's PIN. Gives the address to send the owner's browser to. */
   spotifyConnect(pin: string, ip: string): Promise<{ url: string }>;
   spotifyDisconnect(pin: string, ip: string): Promise<{ ok: true }>;
   /** Needs the owner's PIN. The id of the owner's own Spotify app (not secret). */
   spotifySetClientId(clientId: string, pin: string, ip: string): Promise<{ ok: true }>;
-  /** The return from Spotify. True when the login was completed. */
-  spotifyCallback(params: Record<string, string>): Promise<boolean>;
+  /** The return from Spotify or SoundCloud (the state says which). True when the login was completed. */
+  oauthCallback(params: Record<string, string>): Promise<boolean>;
+  soundcloudConnect(pin: string, ip: string): Promise<{ url: string }>;
+  soundcloudDisconnect(pin: string, ip: string): Promise<{ ok: true }>;
+  /** Needs the owner's PIN. The client id of the owner's own SoundCloud app and, when given, its secret (write-only). */
+  soundcloudSetCredentials(clientId: string, clientSecret: string | undefined, pin: string, ip: string): Promise<{ ok: true }>;
+  /** SoundCloud audio for a ref, through Friend; the body is passed on with seek support. */
+  stream(ref: string, range: string | undefined, signal: AbortSignal): Promise<{ ok: true; status: number; headers: Record<string, string>; body: ReadableStream<Uint8Array> | null } | { ok: false; status: number; error: string }>;
   /** Where mpv is on this PC (or how to install it), using the program set in Settings. */
   hostCheck(): Promise<unknown>;
   /** A good access token for Spotify's web player in the owner's own browser, or null when Spotify is not connected. */
@@ -667,7 +673,7 @@ export function createGateway(deps: GatewayDeps) {
   app.get("/api/music/sources", { onRequest: musicGuard }, async (_req, reply) => reply.header("cache-control", "no-store").send(deps.music!.sources()));
   app.get<{ Querystring: { q?: string; source?: string; limit?: string } }>("/api/music/search", { onRequest: musicGuard }, async (req, reply) => {
     reply.header("cache-control", "no-store");
-    const source = req.query.source === "local" || req.query.source === "spotify" || req.query.source === "any" ? req.query.source : undefined;
+    const source = req.query.source === "local" || req.query.source === "spotify" || req.query.source === "soundcloud" || req.query.source === "any" ? req.query.source : undefined;
     const limit = Number(req.query.limit);
     try {
       return await deps.music!.search({ q: typeof req.query.q === "string" ? req.query.q.slice(0, 200) : "", ...(source ? { source } : {}), ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}) });
@@ -687,6 +693,42 @@ export function createGateway(deps: GatewayDeps) {
       }
     });
   }
+  for (const action of ["connect", "disconnect"] as const) {
+    app.post(`/api/music/soundcloud/${action}`, { onRequest: musicGuard }, async (req, reply) => {
+      reply.header("cache-control", "no-store");
+      const body = z.object({ pin: z.string().min(1).max(32) }).safeParse(req.body ?? {});
+      if (!body.success) return reply.code(400).send({ error: "Enter your PIN" });
+      try {
+        return action === "connect" ? await deps.music!.soundcloudConnect(body.data.pin, req.ip) : await deps.music!.soundcloudDisconnect(body.data.pin, req.ip);
+      } catch (e) {
+        return musicError(reply, e);
+      }
+    });
+  }
+  app.post("/api/music/soundcloud/credentials", { onRequest: musicGuard }, async (req, reply) => {
+    reply.header("cache-control", "no-store");
+    const body = z.object({ clientId: z.string().max(200), clientSecret: z.string().max(300).optional(), pin: z.string().min(1).max(32) }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "Enter the client id and your PIN" });
+    try {
+      return await deps.music!.soundcloudSetCredentials(body.data.clientId, body.data.clientSecret || undefined, body.data.pin, req.ip);
+    } catch (e) {
+      return musicError(reply, e);
+    }
+  });
+  app.get<{ Params: { ref: string } }>("/api/music/stream/:ref", { onRequest: musicGuard }, async (req, reply) => {
+    const ctl = new AbortController();
+    req.raw.on("close", () => ctl.abort());
+    const range = typeof req.headers.range === "string" && /^bytes=\d*-\d*$/.test(req.headers.range) ? req.headers.range : undefined;
+    let r;
+    try {
+      r = await deps.music!.stream(req.params.ref, range, ctl.signal);
+    } catch {
+      return reply.code(502).send({ error: "That track could not be played right now." });
+    }
+    if (!r.ok) return reply.code(r.status).send({ error: r.error });
+    for (const [k, v] of Object.entries(r.headers)) reply.header(k, v);
+    return reply.code(r.status).send(r.body ? Readable.fromWeb(r.body as never) : undefined);
+  });
   app.get("/api/music/host/check", { onRequest: musicGuard }, async (_req, reply) => reply.header("cache-control", "no-store").send(await deps.music!.hostCheck()));
   app.get("/api/music/spotify/token", { onRequest: musicGuard }, async (_req, reply) => {
     reply.header("cache-control", "no-store");
@@ -710,7 +752,7 @@ export function createGateway(deps: GatewayDeps) {
     if (!musicReturnWindow.allow(`mo:${req.ip}`)) return reply.code(429).header("retry-after", 30).send();
     const params: Record<string, string> = {};
     for (const [k, v] of Object.entries((req.query ?? {}) as Record<string, unknown>)) if (typeof v === "string" && k.length <= 40 && v.length <= 1000) params[k] = v;
-    const ok = await deps.music.spotifyCallback(params).catch(() => false);
+    const ok = await deps.music.oauthCallback(params).catch(() => false);
     return reply.header("cache-control", "no-store").header("referrer-policy", "no-referrer").redirect(ok ? "/?music=connected" : "/?music=failed");
   });
 
