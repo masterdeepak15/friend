@@ -184,7 +184,7 @@ export class SpotifyHub implements MusicSource {
   }
 
   /** Plays these tracks on the device with that name. Says which devices exist when the name is not one of them. */
-  async playOn(deviceName: string, trackIds: string[], positionMs?: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  async playOn(deviceName: string, trackIds: string[], positionMs?: number): Promise<{ ok: true; deviceId: string } | { ok: false; error: string }> {
     if (!trackIds.length || !trackIds.every((id) => TRACK_ID.test(id))) return { ok: false, error: "That is not a Spotify track." };
     try {
       const list = await this.devices();
@@ -194,7 +194,7 @@ export class SpotifyHub implements MusicSource {
         return { ok: false, error: list.length ? `No Spotify device named "${deviceName.trim()}" is available. Found: ${list.map((d) => d.name).join(", ")}.` : "No Spotify device is available. Open Spotify (or a Spotify Connect player) on the PC first." };
       }
       await this.player("PUT", `/v1/me/player/play?device_id=${encodeURIComponent(device.id)}`, { uris: trackIds.map((id) => `spotify:track:${id}`), ...(positionMs !== undefined ? { position_ms: Math.max(0, Math.round(positionMs)) } : {}) });
-      return { ok: true };
+      return { ok: true, deviceId: device.id };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Spotify did not answer properly right now." };
     }

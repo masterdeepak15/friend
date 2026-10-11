@@ -28,7 +28,7 @@ describe("Spotify devices", () => {
 
   it("plays tracks on the device with that name, whatever its case, as spotify:track uris", async () => {
     const { hub, fake } = await setup();
-    expect(await hub.playOn("  living ROOM ", ["4uLU6hMCjMI75M1A2tKUQC", "7qiZfU4dY1lWllzX7mPBI3"])).toEqual({ ok: true });
+    expect(await hub.playOn("  living ROOM ", ["4uLU6hMCjMI75M1A2tKUQC", "7qiZfU4dY1lWllzX7mPBI3"])).toEqual({ ok: true, deviceId: "D1" });
     expect(fake.player.at(-1)).toEqual({ call: "PUT /v1/me/player/play?device_id=D1", body: { uris: ["spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:track:7qiZfU4dY1lWllzX7mPBI3"] } });
   });
 

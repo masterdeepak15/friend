@@ -1,4 +1,4 @@
-import type { MusicTrackRef } from "./messages";
+import type { MusicCommand, MusicTrackRef } from "./messages";
 import type { RepeatMode } from "./hud";
 
 export type Track = MusicTrackRef;
@@ -149,5 +149,38 @@ export function playerReducer(s: PlayerState, a: PlayerAction, env: { shuffle?: 
       return Number.isInteger(a.index) && a.index >= 0 && a.index <= last ? reset(s, a.index, true) : s;
     case "time":
       return { ...s, position: Math.max(0, a.position), duration: Math.max(0, a.duration) };
+  }
+}
+
+/** Turns what the assistant asked for into a step of the player. */
+export function commandToAction(c: MusicCommand): PlayerAction | null {
+  switch (c.action) {
+    case "play":
+      return { type: "play", tracks: c.tracks ?? [], mode: c.mode === "add" || c.mode === "next" ? c.mode : "replace", ...(c.shuffle ? { shuffle: true } : {}) };
+    case "pause":
+    case "resume":
+    case "toggle":
+    case "stop":
+    case "next":
+    case "previous":
+      return { type: c.action };
+    case "seek":
+      return { type: "seek", ...(c.seconds !== undefined ? { seconds: c.seconds } : {}), ...(c.percent !== undefined ? { percent: c.percent } : {}) };
+    case "volume":
+      return { type: "volume", ...(c.level !== undefined ? { level: c.level } : {}), ...(c.delta !== undefined ? { delta: c.delta } : {}) };
+    case "mute":
+      return { type: "mute", ...(c.on !== undefined ? { on: c.on } : {}) };
+    case "shuffle":
+      return { type: "shuffle", ...(c.on !== undefined ? { on: c.on } : {}) };
+    case "repeat":
+      return c.mode === "off" || c.mode === "all" || c.mode === "one" ? { type: "repeat", mode: c.mode } : null;
+    case "view":
+      return c.view ? { type: "view", view: c.view } : null;
+    case "queue.remove":
+      return c.index !== undefined ? { type: "remove", index: c.index } : null;
+    case "queue.clear":
+      return { type: "clear" };
+    default:
+      return null;
   }
 }

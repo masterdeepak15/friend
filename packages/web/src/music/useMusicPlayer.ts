@@ -1,4 +1,4 @@
-import { parseRef, type ClientMsg, type MusicCommand, type MusicView } from "@friend/protocol";
+import { commandToAction, parseRef, type ClientMsg, type MusicCommand, type MusicView } from "@friend/protocol";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { Connection } from "../store";
 import { initialPlayer, playerReducer, type PlayerAction, type PlayerState, type Track } from "./playerCore";
@@ -63,38 +63,7 @@ const remember = (s: PlayerState): void => {
   }
 };
 
-/** Turns what the assistant asked for into a step of the player. */
-export function commandToAction(c: MusicCommand): PlayerAction | null {
-  switch (c.action) {
-    case "play":
-      return { type: "play", tracks: c.tracks ?? [], mode: c.mode === "add" || c.mode === "next" ? c.mode : "replace", ...(c.shuffle ? { shuffle: true } : {}) };
-    case "pause":
-    case "resume":
-    case "toggle":
-    case "stop":
-    case "next":
-    case "previous":
-      return { type: c.action };
-    case "seek":
-      return { type: "seek", ...(c.seconds !== undefined ? { seconds: c.seconds } : {}), ...(c.percent !== undefined ? { percent: c.percent } : {}) };
-    case "volume":
-      return { type: "volume", ...(c.level !== undefined ? { level: c.level } : {}), ...(c.delta !== undefined ? { delta: c.delta } : {}) };
-    case "mute":
-      return { type: "mute", ...(c.on !== undefined ? { on: c.on } : {}) };
-    case "shuffle":
-      return { type: "shuffle", ...(c.on !== undefined ? { on: c.on } : {}) };
-    case "repeat":
-      return c.mode === "off" || c.mode === "all" || c.mode === "one" ? { type: "repeat", mode: c.mode } : null;
-    case "view":
-      return c.view ? { type: "view", view: c.view } : null;
-    case "queue.remove":
-      return c.index !== undefined ? { type: "remove", index: c.index } : null;
-    case "queue.clear":
-      return { type: "clear" };
-    default:
-      return null;
-  }
-}
+export { commandToAction } from "@friend/protocol";
 
 /**
  * The music player's brain in the browser: the queue (playerCore), the audio element that follows it, the commands the assistant

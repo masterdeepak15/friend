@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialPlayer, playerReducer, type PlayerState, type Track } from "./musicQueue";
+import { commandToAction, initialPlayer, playerReducer, type PlayerState, type Track } from "./musicQueue";
 
 const t = (n: number): Track => ({ id: String(n).padStart(16, "0"), title: `Song ${n}`, artist: "A", album: "B", durationSec: 100 + n });
 const tracks = (n: number) => Array.from({ length: n }, (_, i) => t(i + 1));
@@ -166,5 +166,18 @@ describe("what the reducer reports", () => {
   it("shuffle uses the shuffle given, so a test can be exact", () => {
     const s = playerReducer(start(), { type: "play", tracks: tracks(3), mode: "replace", shuffle: true }, { shuffle: <T,>(items: T[]) => [...items].reverse() });
     expect(s.queue.map((x) => x.title)).toEqual(["Song 3", "Song 2", "Song 1"]);
+  });
+});
+
+describe("commandToAction", () => {
+  it("turns each command into a step, and ignores one it cannot use", () => {
+    expect(commandToAction({ action: "play", tracks: [t(1)], mode: "next", shuffle: true })).toMatchObject({ type: "play", mode: "next", shuffle: true });
+    expect(commandToAction({ action: "volume", delta: -10 })).toEqual({ type: "volume", delta: -10 });
+    expect(commandToAction({ action: "seek", percent: 40 })).toEqual({ type: "seek", percent: 40 });
+    expect(commandToAction({ action: "repeat", mode: "one" })).toEqual({ type: "repeat", mode: "one" });
+    expect(commandToAction({ action: "queue.remove", index: 2 })).toEqual({ type: "remove", index: 2 });
+    expect(commandToAction({ action: "queue.clear" })).toEqual({ type: "clear" });
+    expect(commandToAction({ action: "repeat" })).toBeNull();
+    expect(commandToAction({ action: "view" })).toBeNull();
   });
 });
