@@ -14,6 +14,11 @@ export interface FakeSpotify {
   /** Answer the next API call with 401 once (an access token that was revoked early). */
   unauthorizedOnce: boolean;
   tokensIssued: number;
+  /** The Spotify devices of the account, and what is playing on them (null: nothing). */
+  devices: { id: string; name: string; is_active: boolean }[];
+  playback: { is_playing: boolean; progress_ms: number; item: { id: string; duration_ms: number }; device: { name: string } } | null;
+  /** Every call to the player endpoints, as "METHOD path?query" with its body. */
+  player: { call: string; body: unknown }[];
 }
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
@@ -37,6 +42,12 @@ export function fakeSpotify(): FakeSpotify {
     garbage: false,
     unauthorizedOnce: false,
     tokensIssued: 0,
+    devices: [
+      { id: "D1", name: "Living room", is_active: false },
+      { id: "D2", name: "Kitchen", is_active: true },
+    ],
+    playback: null,
+    player: [],
     issueCode: () => {
       const c = `code-${++n}`;
       codes.add(c);
@@ -72,6 +83,16 @@ export function fakeSpotify(): FakeSpotify {
       }
       const auth = (headers.authorization ?? "").replace(/^Bearer /, "");
       if (live.get(auth) !== "access") return json(401, { error: { status: 401 } });
+      if (u.pathname.startsWith("/v1/me/player")) {
+        const method = init?.method ?? "GET";
+        if (method !== "GET") {
+          f.player.push({ call: `${method} ${u.pathname}${u.search}`, body: body ? JSON.parse(body) : null });
+          if (!f.premium) return json(403, { error: { status: 403, reason: "PREMIUM_REQUIRED" } });
+          return new Response(null, { status: 204 });
+        }
+        if (u.pathname === "/v1/me/player/devices") return json(200, { devices: f.devices });
+        if (u.pathname === "/v1/me/player") return f.playback ? json(200, f.playback) : new Response(null, { status: 204 });
+      }
       if (u.pathname === "/v1/me") return json(200, { id: "user1", display_name: "Test Listener", product: f.premium ? "premium" : "free" });
       if (u.pathname === "/v1/search") {
         const limit = Number(u.searchParams.get("limit") ?? 20);

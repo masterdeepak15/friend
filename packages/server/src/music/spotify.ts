@@ -149,6 +149,89 @@ export class SpotifyHub implements MusicSource {
     }
   }
 
+  /** A call to the player endpoints (which device plays, what plays, pause and so on). One renewal on a revoked token, one sentence on any failure. */
+  private async player(method: "GET" | "PUT" | "POST", path: string, body?: unknown, retry = true): Promise<{ status: number; json: unknown }> {
+    const token = await this.accessToken();
+    if (!token) throw new Error(this.d.tokens.needsReconnect("spotify") ? RECONNECT : "Connect your Spotify account in Plugins, Spotify.");
+    const res = await this.call(`${API}${path}`, {
+      method,
+      headers: { authorization: `Bearer ${token}`, ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+    if (res.status === 401 && retry) {
+      const login = this.d.tokens.load("spotify");
+      if (login) this.d.tokens.save("spotify", { ...login, expiresAt: 0 });
+      return this.player(method, path, body, false);
+    }
+    if (res.status === 429) throw new Error("Spotify is asking Friend to slow down. Try again in a minute.");
+    if (res.status === 403) throw new Error("Spotify Premium is needed to control playback.");
+    if (res.status === 404) throw new Error("Spotify has no active device for that. Open Spotify on the PC first.");
+    if (res.status === 204) return { status: 204, json: null };
+    if (!res.ok) throw new Error("Spotify did not answer properly right now.");
+    if (method !== "GET") return { status: res.status, json: null };
+    try {
+      return { status: res.status, json: await res.json() };
+    } catch {
+      throw new Error("Spotify did not answer properly right now.");
+    }
+  }
+
+  /** The devices Spotify knows on the owner's account (Spotify apps and any Spotify Connect player, such as one running on the PC). */
+  async devices(): Promise<{ id: string; name: string; active: boolean }[]> {
+    const r = await this.player("GET", "/v1/me/player/devices");
+    const list = ((r.json as { devices?: { id?: string; name?: string; is_active?: boolean }[] } | null)?.devices ?? []) as { id?: string; name?: string; is_active?: boolean }[];
+    return list.flatMap((d) => (d.id && d.name ? [{ id: d.id, name: d.name, active: d.is_active === true }] : []));
+  }
+
+  /** Plays these tracks on the device with that name. Says which devices exist when the name is not one of them. */
+  async playOn(deviceName: string, trackIds: string[], positionMs?: number): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!trackIds.length || !trackIds.every((id) => TRACK_ID.test(id))) return { ok: false, error: "That is not a Spotify track." };
+    try {
+      const list = await this.devices();
+      const want = deviceName.trim().toLowerCase();
+      const device = list.find((d) => d.name.trim().toLowerCase() === want);
+      if (!device) {
+        return { ok: false, error: list.length ? `No Spotify device named "${deviceName.trim()}" is available. Found: ${list.map((d) => d.name).join(", ")}.` : "No Spotify device is available. Open Spotify (or a Spotify Connect player) on the PC first." };
+      }
+      await this.player("PUT", `/v1/me/player/play?device_id=${encodeURIComponent(device.id)}`, { uris: trackIds.map((id) => `spotify:track:${id}`), ...(positionMs !== undefined ? { position_ms: Math.max(0, Math.round(positionMs)) } : {}) });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Spotify did not answer properly right now." };
+    }
+  }
+
+  /** Pause, resume, next, previous, seek or volume on one device. */
+  async control(deviceId: string, c: { action: "pause" | "resume" | "next" | "previous" | "seek" | "volume"; ms?: number; percent?: number }): Promise<void> {
+    const dev = `device_id=${encodeURIComponent(deviceId)}`;
+    switch (c.action) {
+      case "pause":
+        await this.player("PUT", `/v1/me/player/pause?${dev}`);
+        return;
+      case "resume":
+        await this.player("PUT", `/v1/me/player/play?${dev}`);
+        return;
+      case "next":
+        await this.player("POST", `/v1/me/player/next?${dev}`);
+        return;
+      case "previous":
+        await this.player("POST", `/v1/me/player/previous?${dev}`);
+        return;
+      case "seek":
+        await this.player("PUT", `/v1/me/player/seek?position_ms=${Math.max(0, Math.round(c.ms ?? 0))}&${dev}`);
+        return;
+      case "volume":
+        await this.player("PUT", `/v1/me/player/volume?volume_percent=${Math.min(100, Math.max(0, Math.round(c.percent ?? 0)))}&${dev}`);
+    }
+  }
+
+  /** What Spotify is playing right now, or null when nothing is. */
+  async playbackState(): Promise<{ playing: boolean; trackId: string | null; positionMs: number; durationMs: number; deviceName: string } | null> {
+    const r = await this.player("GET", "/v1/me/player");
+    const j = r.json as { is_playing?: boolean; progress_ms?: number; item?: { id?: string; duration_ms?: number } | null; device?: { name?: string } } | null;
+    if (!j) return null;
+    return { playing: j.is_playing === true, trackId: j.item?.id ?? null, positionMs: j.progress_ms ?? 0, durationMs: j.item?.duration_ms ?? 0, deviceName: j.device?.name ?? "" };
+  }
+
   private of(t: ApiTrack): SourceTrack | null {
     if (!t.id || !TRACK_ID.test(t.id)) return null;
     return {
