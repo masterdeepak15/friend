@@ -90,6 +90,7 @@ export function PluginsPanel({ api = httpPluginsApi, onClose, initialConfigure }
         <span className="approval-title">Plugins</span>
       </div>
 
+      <div className="plugins-body">
       {pending ? (
         <>
           <p className="auth-note">
@@ -229,6 +230,7 @@ export function PluginsPanel({ api = httpPluginsApi, onClose, initialConfigure }
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

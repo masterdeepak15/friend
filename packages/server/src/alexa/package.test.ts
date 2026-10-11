@@ -19,7 +19,8 @@ describe("the manifest", () => {
   it("is refused for an address that is not https, and for a bad invocation name", () => {
     expect(() => buildSkillPackage({ invocationName: "jarvis assistant", endpoint: "http://friend.example.com/api/alexa" })).toThrow(/https/i);
     expect(() => buildSkillPackage({ invocationName: "jarvis assistant", endpoint: "" })).toThrow();
-    expect(() => buildSkillPackage({ invocationName: "jarvis", endpoint: "https://friend.example.com/api/alexa" })).toThrow(/two/i);
+    expect(() => buildSkillPackage({ invocationName: "ask jarvis", endpoint: "https://friend.example.com/api/alexa" })).toThrow(/ask/i);
+    expect(JSON.parse(buildSkillPackage({ invocationName: "maya", endpoint: "https://friend.example.com/api/alexa" })["en-IN.json"]).interactionModel.languageModel.invocationName).toBe("maya");
   });
 });
 
@@ -53,6 +54,13 @@ describe.each(["en-IN.json", "hi-IN.json"] as const)("the %s interaction model",
         expect(s.match(/\{q\}/g)).toHaveLength(1);
       }
     }
+  });
+
+  it("has no sentence start used by two intents, which the console would refuse", () => {
+    const lang = file.startsWith("hi") ? "hi" : "en";
+    const starts = LEAD_INTENTS.map((n) => LEAD_INS[n][lang]);
+    expect(new Set(starts).size).toBe(starts.length);
+    expect(LEAD_INTENTS.length).toBeGreaterThanOrEqual(30);
   });
 
   it("never puts two slots in one sample, and always has words around a free-text slot", () => {

@@ -97,11 +97,15 @@ describe("the Alexa Configure page", () => {
     open(alexaApi());
     const name = await screen.findByLabelText("Invocation name");
     await userEvent.clear(name);
-    await userEvent.type(name, "jarvis");
-    expect(screen.getByRole("alert").textContent).toMatch(/two or more words/i);
+    await userEvent.type(name, "Maya");
+    expect(screen.getByRole("alert").textContent).toMatch(/lower-case/i);
     expect((screen.getByRole("button", { name: /^Save/ }) as HTMLButtonElement).disabled).toBe(true);
-    await userEvent.type(name, " ask");
+    await userEvent.clear(name);
+    await userEvent.type(name, "maya ask");
     expect(screen.getByRole("alert").textContent).toMatch(/ask/);
+    await userEvent.clear(name);
+    await userEvent.type(name, "maya");
+    expect(screen.queryByRole("alert")).toBeNull(); // one word is fine in development mode
   });
 
   it("flags a skill id that is not one", async () => {
@@ -165,6 +169,7 @@ describe("the plugins list", () => {
     render(<PluginsPanel api={api} onClose={() => {}} />);
     const row = (await screen.findByText("Alexa")).closest("li")!;
     expect(row.getAttribute("data-integration")).toBe("alexa");
+    expect(row.closest(".plugins-body")).toBeTruthy(); // the list scrolls inside the window
     expect(within(row).getByRole("button", { name: "Install" })).toBeTruthy();
   });
 });

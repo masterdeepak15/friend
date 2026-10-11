@@ -49,7 +49,7 @@ export interface AlexaConfig {
   enabled: boolean;
   /** The skill's id from the Alexa developer console (amzn1.ask.skill...). Not a secret. */
   skillId: string;
-  /** What the owner says after "Alexa, ask": two or more lower-case words. */
+  /** What the owner says after "Alexa, ask": lower-case words (one word is fine in development mode). */
   invocationName: string;
   /** Amazon accounts allowed to talk to Friend through Alexa. */
   allowedUsers: { id: string; name: string; addedAt: number }[];

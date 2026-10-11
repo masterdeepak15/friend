@@ -38,9 +38,8 @@ describe("what is read back from the saved file", () => {
 });
 
 describe("the invocation name", () => {
-  it.each(["jarvis assistant", "my friend", "home helper"])("accepts %s", (name) => expect(invocationNameProblem(name)).toBeNull());
+  it.each(["jarvis assistant", "my friend", "home helper", "maya"])("accepts %s", (name) => expect(invocationNameProblem(name)).toBeNull());
   it.each([
-    ["jarvis", /two/i],
     ["Jarvis Assistant", /lower/i],
     ["jarvis 2", /letters/i],
     ["ask jarvis", /ask/i],
@@ -48,7 +47,8 @@ describe("the invocation name", () => {
     ["alexa helper", /alexa/i],
     ["echo helper", /echo/i],
     ["my skill", /skill/i],
-    ["", /two/i],
+    ["", /enter the name/i],
+    ["maya 2", /letters/i],
     ["a".repeat(60) + " b", /long/i],
   ])("refuses %s", (name, why) => expect(invocationNameProblem(name)).toMatch(why));
 });
@@ -64,7 +64,7 @@ describe("changing them from the screen", () => {
   it("refuses a bad skill id, a bad name and unknown fields, and changes nothing", () => {
     const { config } = fresh();
     expect(() => applySettings(config, { alexa: { skillId: "hello" } })).toThrow();
-    expect(() => applySettings(config, { alexa: { invocationName: "jarvis" } })).toThrow(/two/i);
+    expect(() => applySettings(config, { alexa: { invocationName: "ask maya" } })).toThrow(/ask/i);
     expect(() => applySettings(config, { alexa: { allowedUsers: [] } })).toThrow();
     expect(() => applySettings(config, { alexa: { invocationName: "jarvis assistant" }, trading: { level: "orders" } })).toThrow();
     expect(config.alexa.invocationName).toBe("");

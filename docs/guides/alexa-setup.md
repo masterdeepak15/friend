@@ -7,7 +7,7 @@ You can talk to Friend through your own Echo devices: "Alexa, ask jarvis assista
 | Can | Cannot |
 |---|---|
 | Answer fixed questions straight from Friend: portfolio, weather, tasks, status | Speak on its own. Amazon only lets a skill answer when you speak to it (see "Scheduled spoken reports" below for the way round) |
-| Pass open questions to the assistant ("how...", "what...", "tell me...", "show me...", "remind me...", "please...") | Understand Marathi (Alexa custom skills support English India and Hindi India) |
+| Pass open questions to the assistant: start the sentence with one of about 30 words ("how", "what", "tell me", "show me", "remind me", "can you", "find", "check", "add", "send", "explain", "summarize", "calculate", "translate", "list", "when", "where", "who", "why"...) and then say anything | Understand Marathi (Alexa custom skills support English India and Hindi India) |
 | Add a reminder to your task list | Change settings, run commands, read or write files, use the camera, or do anything that needs your PIN |
 | Show the whole conversation on the Friend screen when one is open | Answer in more than about 8 seconds: a slow answer is held, and Alexa says "Still working. Ask me if it is ready." |
 
@@ -36,7 +36,7 @@ Esc, then **Plugins**. Under *Available*, press **Install** next to **Alexa** (P
 
 ## 3. Tell Friend the skill id and the name
 
-On Friend's Alexa Configure page enter the **Skill ID** and an **Invocation name**, then **Save…** (PIN). The invocation name is what you say after "Alexa, ask". Amazon requires **two or more words**, lower-case letters only, with none of: alexa, amazon, echo, skill, app, ask, tell, open, start, run, enable. For example `jarvis assistant`. Friend checks this for you.
+On Friend's Alexa Configure page enter the **Skill ID** and an **Invocation name**, then **Save…** (PIN). The invocation name is what you say after "Alexa, ask". Use lower-case letters only, with none of: alexa, amazon, echo, skill, app, ask, tell, open, start, run, enable. Amazon asks for **two or more words** for a skill that is published; a skill kept in development mode on your own account also accepts a single word such as `maya` ("Alexa, ask maya how my portfolio is"). If the console ever refuses a single word, use two (for example `maya assistant`). Friend checks the rest for you.
 
 Then switch the plugin on in the plugins list (**Turn on**, PIN).
 
@@ -62,6 +62,8 @@ Say "Alexa, ask *your invocation name*" to your Echo. Alexa says it does not kno
 - "Alexa, ask jarvis assistant what are my tasks"
 - "Alexa, ask jarvis assistant weather in Pune"
 - "Alexa, ask jarvis assistant tell me a joke"
+- "Alexa, ask jarvis assistant explain how compound interest works"
+- "Alexa, ask jarvis assistant remind me to call mom at six"
 - "Alexa, ask jarvis assistant is it ready" (after a slow answer)
 
 Your skill is in *development* mode, so it works on every Echo signed in to the same Amazon account, with no review or publishing.
@@ -84,7 +86,7 @@ Amazon does not let Friend start talking, but an Alexa **Routine** can. In the A
 | Console says the endpoint's certificate is not trusted | A self-signed or expired certificate | Use a real certificate on your public address |
 | "I do not know this Echo yet" | The Echo is not allowed | Configure → Echo devices → **Allow** |
 | "Still working. Ask me if it is ready." | The answer took longer than Alexa's time limit | Ask "is it ready" |
-| The skill does not open by name | The invocation name is not built yet or is not distinctive | Rebuild the model; try another two-word name |
+| The skill does not open by name | The invocation name is not built yet or is not distinctive | Rebuild the model; try a two-word name |
 | The Echo cannot find the skill | Different Amazon account | Use the Amazon account the developer console is signed in to |
 
 ## For developers
