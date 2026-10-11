@@ -22,8 +22,8 @@ export interface CommandDeps {
   /** Ends the session on the server ("logout") or locks everything ("lock"), then returns to the sign-in screen. */
   endSession: (how: "logout" | "lock") => void;
   /** Whether a side panel or corner widget is showing, and showing/hiding it. */
-  panelOn: (id: "chat" | "tasks" | "status" | "clock") => boolean;
-  setPanel: (id: "chat" | "tasks" | "status" | "clock", on: boolean) => void;
+  panelOn: (id: "chat" | "tasks" | "status" | "clock" | "music" | "launcher") => boolean;
+  setPanel: (id: "chat" | "tasks" | "status" | "clock" | "music" | "launcher", on: boolean) => void;
   view: "minimal" | "companion" | "workspace";
   setView: (view: "minimal" | "companion" | "workspace") => void;
   /** Puts every panel back where it starts. */
@@ -61,12 +61,12 @@ export function buildCommands(d: CommandDeps): SlashCommand[] {
       run: () => d.setMuted(true),
     },
     { name: "unmute", description: "Show the stage again", run: () => d.setMuted(false) },
-    ...(["chat", "tasks"] as const).map((id): SlashCommand => ({
-      name: id === "tasks" ? "tasks" : "chat",
+    ...(["chat", "tasks", "music", "launcher"] as const).map((id): SlashCommand => ({
+      name: id,
       usage: "on|off",
-      description: id === "chat" ? "Show or hide the conversation" : "Show or hide the schedule and to-dos",
+      description: { chat: "Show or hide the conversation", tasks: "Show or hide the schedule and to-dos", music: "Show or hide the music player", launcher: "Show or hide the quick-launch buttons" }[id],
       run: (a) => {
-        if (a && a !== "on" && a !== "off") return d.notify(`Use /${id === "tasks" ? "tasks" : "chat"} on or off.`);
+        if (a && a !== "on" && a !== "off") return d.notify(`Use /${id} on or off.`);
         d.setPanel(id, a ? a === "on" : !d.panelOn(id));
       },
     })),

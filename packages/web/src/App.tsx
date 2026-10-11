@@ -220,6 +220,10 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         onToggleChat={() => panels.toggle("chat")}
         tasksOn={panels.show.tasks}
         onToggleTasks={() => panels.toggle("tasks")}
+        musicOn={panels.show.music}
+        onToggleMusic={() => panels.toggle("music")}
+        launcherOn={panels.show.launcher}
+        onToggleLauncher={() => panels.toggle("launcher")}
         view={state.view}
         onView={setView}
         openRequest={menuRequest}

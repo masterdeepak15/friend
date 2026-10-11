@@ -77,7 +77,7 @@ describe("changing the look from the settings screen", () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(got).toContainEqual({ type: "stage", command: { cmd: "presence", style: "orb" } });
     expect(got).toContainEqual({ type: "stage", command: { cmd: "mood", accent: "#aa66ff", intensity: 0.9 } });
-    expect(got).toContainEqual({ type: "ui", view: "companion", look: { size: 1.3, reactivity: 0.7, ambient: true, captions: false, captionSize: "large" }, ownerName: "" });
+    expect(got).toContainEqual(expect.objectContaining({ type: "ui", view: "companion", look: { size: 1.3, reactivity: 0.7, ambient: true, captions: false, captionSize: "large" }, ownerName: "" }));
     expect(app.stage.snapshot()).toMatchObject({ presence: { style: "orb" }, mood: { accent: "#aa66ff", intensity: 0.9 } });
     ws.close();
   });

@@ -346,6 +346,16 @@ A plugin: Esc → **Plugins** → **Alexa** → **Install** (PIN) → **Configur
 - **Configurable.** Skill name, languages, answer and permission times, request and Echo limits, and extra tools a voice may use are settings on the Configure page (Advanced), with safe ranges; nothing is tied to one person's setup.
 - **Setup.** Friend needs a public HTTPS address with a real certificate (`friend config set publicUrl https://your-address`). The Configure page shows the endpoint, lets you download the skill files (manifest and English and Hindi models) to paste into the console, and lists your Echo devices. If your address changes later, paste the new endpoint into the console again; nothing else changes.
 
+## Music player and screen widgets
+
+Friend's screen has a media player and four widgets drawn in a HUD style (angled corners, thin lines, your accent colour): a **profile** tag, a **date and time**, **quick-launch buttons** and the **music player**. Esc → **Settings** → **Widgets** (PIN) sets them all.
+
+- **Music.** Pick a folder on the PC that runs Friend (sub-folders are searched; the folder is checked when you save). Friend reads the tags and cover art from the files (free, no account) and plays them in the browser, with a playlist, shuffle, repeat, volume and search. The file types, the most tracks, how deep to search, the start volume, repeat, shuffle and the moving bars are all settings. Files are only read from inside the folder; links that point out of it are not followed.
+- **Control by the assistant.** Say or type "play something by ...", "next", "turn it down", "shuffle", "what's playing". The assistant can play, pause, skip, seek, change volume, shuffle, repeat and edit the queue, and search the library; it cannot change the folder or any widget setting. Over Alexa the music tools are off unless you add them to the voice tools yourself.
+- **Quick launch.** Up to 12 buttons, each opening an address (http or https only), asking the assistant something, opening a panel (chat, tasks, plugins, settings, music) or controlling the music.
+- **Date and time, profile.** 12 or 24 hour, with or without seconds, in any date language; the profile tag shows the assistant's name, a label you choose, and who Friend is talking to.
+- **Animations.** Tabs slide and light up on hover, ripple and flicker "ENGAGED" when pressed; while music plays the dial's needle sweeps, the bars follow the sound and the cover turns. Settings → Animations can reduce them or turn them off, and the device's own "reduce motion" is always respected. Esc → Music and Quick launch hide or show them; `/music` and `/launcher` do the same.
+
 ## Pictures first: weather, stats and graphics
 
 Friend is meant to show answers, not only say them. It controls the whole screen and picks the object that fits (gauge, chart, table, timeline, graph, or its own animated page).

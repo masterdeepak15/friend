@@ -37,6 +37,26 @@ export interface AlexaView {
   maxDevices: number;
   extraVoiceTools: string[];
 }
+/** The music player's settings (the folder is shown here because only the owner sees this screen). */
+export interface MusicSettings {
+  folder: string;
+  extensions: string[];
+  maxTracks: number;
+  scanDepth: number;
+  volume: number;
+  shuffle: boolean;
+  repeat: "off" | "all" | "one";
+  visualizer: boolean;
+  startView: "mini" | "full";
+}
+/** The screen widgets: profile tag, date and time, quick-launch buttons, animations. */
+export interface HudSettings {
+  terminalLabel: string;
+  clock: { hour12: boolean; seconds: boolean; locale: string };
+  launcher: { id?: string; label: string; icon: string; action: { type: "url" | "prompt" | "panel" | "music"; value: string } }[];
+  animations: "full" | "reduced" | "off";
+}
+
 export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
 
 export interface SettingsView {
@@ -54,6 +74,8 @@ export interface SettingsView {
   /** What Friend may do with money. Only "read" exists in this version. */
   trading?: { level: "read" };
   alexa?: AlexaView;
+  music?: MusicSettings;
+  hud?: HudSettings;
   look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
@@ -168,6 +190,21 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
       if (a !== (before[group] as Record<string, unknown>)[k]) changed[k] = group === "voice" && k === "language" ? (a ?? "") : a;
     }
     if (Object.keys(changed).length) patch[group] = changed;
+  }
+  if (before.music && after.music) {
+    const changed: Record<string, unknown> = {};
+    for (const k of Object.keys(after.music) as (keyof MusicSettings)[]) if (JSON.stringify(after.music[k]) !== JSON.stringify(before.music[k])) changed[k] = after.music[k];
+    if (Object.keys(changed).length) patch.music = changed;
+  }
+  if (before.hud && after.hud) {
+    const changed: Record<string, unknown> = {};
+    if (after.hud.terminalLabel !== before.hud.terminalLabel) changed.terminalLabel = after.hud.terminalLabel;
+    if (after.hud.animations !== before.hud.animations) changed.animations = after.hud.animations;
+    const clock: Record<string, unknown> = {};
+    for (const k of Object.keys(after.hud.clock) as (keyof HudSettings["clock"])[]) if (after.hud.clock[k] !== before.hud.clock[k]) clock[k] = after.hud.clock[k];
+    if (Object.keys(clock).length) changed.clock = clock;
+    if (JSON.stringify(after.hud.launcher) !== JSON.stringify(before.hud.launcher)) changed.launcher = after.hud.launcher;
+    if (Object.keys(changed).length) patch.hud = changed;
   }
   if (before.openai && after.openai) {
     const changed: Record<string, unknown> = {};

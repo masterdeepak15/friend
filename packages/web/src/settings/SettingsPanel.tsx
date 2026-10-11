@@ -4,11 +4,12 @@ import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
 import { SecurityTab } from "./SecurityTab";
 import { TradingTab } from "./TradingTab";
+import { WidgetsTab } from "./WidgetsTab";
 import { HINDI_VOICES, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, isCatalogVoice } from "@friend/protocol";
 import { DEFAULT_LOOK, diffSettings, type ApprovalMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
-export type SettingsTab = "model" | "voice" | "look" | "approvals" | "trading" | "security";
+export type SettingsTab = "model" | "voice" | "look" | "approvals" | "trading" | "widgets" | "security";
 
 const TABS: { id: SettingsTab; label: string; note: string }[] = [
   { id: "model", label: "Model", note: "Where Friend thinks" },
@@ -16,6 +17,7 @@ const TABS: { id: SettingsTab; label: string; note: string }[] = [
   { id: "look", label: "Voice presence", note: "How it looks" },
   { id: "approvals", label: "Approvals", note: "How much it asks" },
   { id: "trading", label: "Trading", note: "What Friend may do with money" },
+  { id: "widgets", label: "Widgets", note: "Music, clock, quick launch" },
   { id: "security", label: "Security", note: "Password and PIN" },
 ];
 
@@ -505,6 +507,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           {tab === "look" && lookTab}
           {tab === "approvals" && approvalsTab}
           {tab === "trading" && <TradingTab level={draft.trading?.level ?? "read"} />}
+          {tab === "widgets" && draft.music && draft.hud && <WidgetsTab music={draft.music} hud={draft.hud} onMusic={(p) => setDraft({ ...draft, music: { ...draft.music!, ...p } })} onHud={(p) => setDraft({ ...draft, hud: { ...draft.hud!, ...p } })} />}
           {tab === "security" && <SecurityTab />}
         </div>
       </div>

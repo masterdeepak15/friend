@@ -183,7 +183,7 @@ describe("the Trading tab", () => {
     render(<SettingsPanel api={s} onClose={() => {}} initialTab="trading" />);
     expect(await screen.findByRole("radio", { name: /Read only/ })).toBeTruthy();
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent ?? "");
-    expect(tabs.findIndex((t) => t.startsWith("Trading"))).toBe(tabs.findIndex((t) => t.startsWith("Security")) - 1);
+    expect(tabs.findIndex((t) => t.startsWith("Trading"))).toBeLessThan(tabs.findIndex((t) => t.startsWith("Security")));
     expect(s.save).not.toHaveBeenCalled();
   });
 });

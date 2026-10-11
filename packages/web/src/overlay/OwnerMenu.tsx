@@ -28,6 +28,11 @@ export interface OwnerMenuProps {
   onToggleChat?: () => void;
   tasksOn?: boolean;
   onToggleTasks?: () => void;
+  /** The music player and the quick-launch buttons. */
+  musicOn?: boolean;
+  onToggleMusic?: () => void;
+  launcherOn?: boolean;
+  onToggleLauncher?: () => void;
   view?: "minimal" | "companion" | "workspace";
   onView?: (view: "minimal" | "companion" | "workspace") => void;
   /** Counts up each time something else (the menu button on a touch screen) asks for the menu to open. */
@@ -35,7 +40,7 @@ export interface OwnerMenuProps {
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, onHousehold, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, view, onView, openRequest }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, onHousehold, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, musicOn, onToggleMusic, launcherOn, onToggleLauncher, view, onView, openRequest }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -97,6 +102,16 @@ export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, vo
           {onToggleTasks && (
             <button type="button" style={touch} aria-pressed={!!tasksOn} onClick={onToggleTasks}>
               {tasksOn ? "Schedule: on" : "Schedule: off"}
+            </button>
+          )}
+          {onToggleMusic && (
+            <button type="button" style={touch} aria-pressed={!!musicOn} onClick={onToggleMusic}>
+              {musicOn ? "Music: on" : "Music: off"}
+            </button>
+          )}
+          {onToggleLauncher && (
+            <button type="button" style={touch} aria-pressed={!!launcherOn} onClick={onToggleLauncher}>
+              {launcherOn ? "Quick launch: on" : "Quick launch: off"}
             </button>
           )}
           {view && onView && (
