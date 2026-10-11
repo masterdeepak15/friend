@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MusicTrackRef } from "./messages";
+import { DEFAULT_SOURCES } from "./hud";
 import { makeRef, MUSIC_SOURCES, parseRef } from "./musicRef";
 import { TOOL_DEFS as TOOLS } from "./tools";
 
@@ -16,7 +17,7 @@ describe("music track refs", () => {
   });
   it("makes a ref", () => {
     expect(makeRef("local", "0123456789abcdef")).toBe("local:0123456789abcdef");
-    expect(MUSIC_SOURCES).toEqual(["local", "spotify"]);
+    expect(MUSIC_SOURCES).toEqual(["local", "spotify", "soundcloud"]);
   });
   it("lets a track carry either form and rejects a bad one", () => {
     const t = { title: "a", artist: "b", album: "c", durationSec: null };
@@ -30,5 +31,15 @@ describe("music track refs", () => {
       expect(tool.input.safeParse({ ...(name === "music.queue" ? { action: "add" } : name === "music.search" ? { query: "x" } : {}), source: "spotify" }).success).toBe(true);
       expect(tool.input.safeParse({ ...(name === "music.queue" ? { action: "add" } : name === "music.search" ? { query: "x" } : {}), source: "youtube" }).success).toBe(false);
     }
+  });
+  it("knows SoundCloud refs, which are numbers", () => {
+    expect(parseRef("soundcloud:123456")).toEqual({ source: "soundcloud", id: "123456" });
+    for (const bad of ["soundcloud:abc", "soundcloud:", "soundcloud:" + "1".repeat(21)]) expect(parseRef(bad)).toBeNull();
+    expect(makeRef("soundcloud", "9")).toBe("soundcloud:9");
+  });
+  it("lets SoundCloud be the default source and a tool source", () => {
+    expect(DEFAULT_SOURCES).toContain("soundcloud");
+    const tool = TOOLS.find((x) => x.name === "music.search")!;
+    expect(tool.input.safeParse({ query: "x", source: "soundcloud" }).success).toBe(true);
   });
 });

@@ -310,8 +310,8 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "music.play",
-    description: "Play music from the owner's music folder, or from a connected service such as Spotify (source local, spotify or any; leave it out for the owner's default), on their Friend screen. Search by words (a song, an artist, an album, a mood in the title); with nothing given it plays everything. shuffle true starts shuffled. mode: replace the queue (default), add to its end, or play next. Say in a few words what is playing; never read out file paths.",
-    input: z.object({ query: z.string().max(200).optional(), title: z.string().max(200).optional(), artist: z.string().max(200).optional(), album: z.string().max(200).optional(), shuffle: z.boolean().optional(), mode: z.enum(["replace", "add", "next"]).optional(), limit: z.number().int().min(1).max(500).optional(), source: z.enum(["local", "spotify", "any"]).optional() }).strict(),
+    description: "Play music from the owner's music folder, or from a connected service such as Spotify or SoundCloud (source local, spotify, soundcloud or any; leave it out for the owner's default), on their Friend screen. Search by words (a song, an artist, an album, a mood in the title); with nothing given it plays everything. shuffle true starts shuffled. mode: replace the queue (default), add to its end, or play next. Say in a few words what is playing; never read out file paths.",
+    input: z.object({ query: z.string().max(200).optional(), title: z.string().max(200).optional(), artist: z.string().max(200).optional(), album: z.string().max(200).optional(), shuffle: z.boolean().optional(), mode: z.enum(["replace", "add", "next"]).optional(), limit: z.number().int().min(1).max(500).optional(), source: z.enum(["local", "spotify", "soundcloud", "any"]).optional() }).strict(),
     baseTier: "T1",
     target: "gateway",
   },
@@ -336,14 +336,14 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "music.queue",
     description: "The play queue: add tracks found by a search, remove one by its number (counting from 1), clear it, or show it.",
-    input: z.object({ action: z.enum(["add", "remove", "clear", "show"]), query: z.string().max(200).optional(), index: z.number().int().min(1).optional(), source: z.enum(["local", "spotify", "any"]).optional() }).strict(),
+    input: z.object({ action: z.enum(["add", "remove", "clear", "show"]), query: z.string().max(200).optional(), index: z.number().int().min(1).optional(), source: z.enum(["local", "spotify", "soundcloud", "any"]).optional() }).strict(),
     baseTier: "T1",
     target: "gateway",
   },
   {
     name: "music.search",
-    description: "Find tracks in the owner's music folder or a connected service (source local, spotify or any) by words in the title, artist or album, and how many match. Use it before playing when you are unsure what they have.",
-    input: z.object({ query: z.string().max(200), limit: z.number().int().min(1).max(15).optional(), source: z.enum(["local", "spotify", "any"]).optional() }).strict(),
+    description: "Find tracks in the owner's music folder or a connected service (source local, spotify, soundcloud or any) by words in the title, artist or album, and how many match. Use it before playing when you are unsure what they have.",
+    input: z.object({ query: z.string().max(200), limit: z.number().int().min(1).max(15).optional(), source: z.enum(["local", "spotify", "soundcloud", "any"]).optional() }).strict(),
     baseTier: "T0",
     target: "gateway",
   },

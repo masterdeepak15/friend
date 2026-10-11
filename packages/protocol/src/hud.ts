@@ -11,7 +11,7 @@ export const MUSIC_LIMITS = {
 } as const;
 
 /** Which source a search or a play starts from when none is named. */
-export const DEFAULT_SOURCES = ["local", "spotify", "any"] as const;
+export const DEFAULT_SOURCES = ["local", "spotify", "soundcloud", "any"] as const;
 export type DefaultSource = (typeof DEFAULT_SOURCES)[number];
 
 /** What a quick-launch button can do. */
