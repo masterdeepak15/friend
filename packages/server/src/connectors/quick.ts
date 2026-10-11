@@ -45,10 +45,17 @@ export interface QuickDeps {
   run: QuickRunner;
   /** The person's home folder (tests). */
   home?: string;
+  /** The copy of Chrome control that comes with Friend (its index.js). Without it the npm package is used. */
+  bundled?: string | null;
 }
 
 const find = (id: string): Preset | undefined => PRESETS.find((p) => p.id === id && p.quick);
 export const isQuickPreset = (id: string): boolean => !!find(id);
+
+/** The program a one-click connector starts: Friend's own node on the copy that comes with it, or the npm package. */
+function programFor(preset: Preset, bundled: string | null | undefined): { command: string; args: string[] } {
+  return bundled ? { command: process.execPath, args: [bundled] } : { command: preset.connector.command, args: [...preset.connector.args] };
+}
 
 const MANUAL_EXTENSION =
   "One step only you can do, because Chrome does not allow programs to install extensions silently: open chrome://extensions, turn on Developer mode (top right), click Load unpacked and choose the folder shown above. Then click the extension's icon and switch it on.";
@@ -65,7 +72,7 @@ export function chromeInstalled(home = homedir()): { installed: boolean; extensi
   return { installed, extensionFolder: installed ? ext : null };
 }
 
-export function quickCheck(id: string, deps: Pick<QuickDeps, "home"> = {}): QuickCheck | null {
+export function quickCheck(id: string, deps: Pick<QuickDeps, "home" | "bundled"> = {}): QuickCheck | null {
   const preset = find(id);
   if (!preset) return null;
   const c = chromeInstalled(deps.home);
@@ -76,8 +83,10 @@ export function quickCheck(id: string, deps: Pick<QuickDeps, "home"> = {}): Quic
     preset: id,
     name: preset.name,
     ready: false,
-    message: "Chrome control is not installed on this PC yet. Please install it first, then press Connect again.",
-    installCommand: "npx -y chrome-control-mcp setup",
+    message: deps.bundled
+      ? "Chrome control comes with Friend, but it is not set up on this PC yet. Press Install to set it up, then Connect."
+      : "Chrome control is not installed on this PC yet. Please install it first, then press Connect again.",
+    installCommand: deps.bundled ? `"${process.execPath}" "${deps.bundled}" setup` : "npx -y chrome-control-mcp setup",
     manualStep: MANUAL_EXTENSION,
     extensionFolder: null,
   };
@@ -87,16 +96,17 @@ export function quickCheck(id: string, deps: Pick<QuickDeps, "home"> = {}): Quic
 export async function quickInstall(id: string, deps: QuickDeps, onLine?: (line: string) => void): Promise<QuickInstallResult> {
   if (!find(id)) return { ok: false, output: "", extensionFolder: null, message: "That is not a one-click connector." };
   const lines: string[] = [];
-  const r = await deps.run("npx", ["-y", "chrome-control-mcp", "setup", "--no-claude", "--no-open", "--no-flag"], {
-    onLine: (l) => {
-      lines.push(l);
-      onLine?.(l);
-    },
-  });
+  const collect = (l: string) => {
+    lines.push(l);
+    onLine?.(l);
+  };
+  const setup = ["setup", "--no-claude", "--no-open", "--no-flag"];
+  const r = deps.bundled ? await deps.run(process.execPath, [deps.bundled, ...setup], { onLine: collect }) : await deps.run("npx", ["-y", "chrome-control-mcp", ...setup], { onLine: collect });
   const after = chromeInstalled(deps.home);
   const output = (lines.length ? lines : r.stdout.split(/\r?\n/)).filter((l) => l.trim()).slice(-12).join("\n");
   if (r.code !== 0 || !after.installed) {
-    return { ok: false, output, extensionFolder: null, message: "The install did not finish. You can run it yourself in a terminal: npx -y chrome-control-mcp setup" };
+    const byHand = deps.bundled ? `"${process.execPath}" "${deps.bundled}" setup` : "npx -y chrome-control-mcp setup";
+    return { ok: false, output, extensionFolder: null, message: `The install did not finish. You can run it yourself in a terminal: ${byHand}` };
   }
   return { ok: true, output, extensionFolder: after.extensionFolder, message: `Chrome control is installed. ${MANUAL_EXTENSION}` };
 }
@@ -121,11 +131,18 @@ export async function quickConnect(id: string, deps: QuickDeps): Promise<QuickCo
   const preset = find(id);
   if (!preset) return { ok: false, connector: null, extension: "unknown", message: "That is not a one-click connector." };
   const check = quickCheck(id, deps)!;
+  const program = programFor(preset, deps.bundled);
   if (!check.ready) return { ok: false, connector: null, extension: "unknown", message: check.message };
 
   const { hub } = deps;
-  const existing = hub.list().find((c) => c.id === preset.connector.id);
-  const view = existing ? (existing.enabled ? await hub.reload(existing.id) : await hub.setEnabled(existing.id, true)) : await hub.add(preset.connector);
+  let existing = hub.list().find((c) => c.id === preset.connector.id);
+  // a connector saved for another copy (npx, or Friend in a folder it has since left) would start the wrong program: replace it
+  const saved = existing ? hub.command(existing.id) : null;
+  if (existing && deps.bundled && (!saved || saved.command !== program.command || saved.args.length !== program.args.length || saved.args.some((a, i) => a !== program.args[i]))) {
+    await hub.remove(existing.id);
+    existing = undefined;
+  }
+  const view = existing ? (existing.enabled ? await hub.reload(existing.id) : await hub.setEnabled(existing.id, true)) : await hub.add({ ...preset.connector, ...program });
   const connector = { id: view.id, name: view.name, status: view.status, error: view.error, tools: view.tools };
   if (view.status !== "ready") {
     return { ok: false, connector, extension: "unknown", message: `${preset.name} is saved, but it did not start: ${view.error ?? "unknown error"}` };

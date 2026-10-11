@@ -125,6 +125,18 @@ describe("switching connectors", () => {
     expect(second.list()[1]!.status).toBe("off");
   });
 
+  it("leaves out the connectors it is told another part will start itself", async () => {
+    const first = make();
+    await first.add(stdio("on"));
+    await first.add(stdio("mine"));
+    await first.close();
+    const second = make({}, dir);
+    second.startAll({ except: ["mine"] });
+    for (let i = 0; i < 100 && second.list()[0]!.status !== "ready"; i++) await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 1500)); // long enough for the one that was left out to have started too, had it been started
+    expect(second.list().map((c) => [c.id, c.status])).toEqual([["on", "ready"], ["mine", "connecting"]]);
+  });
+
   it("refuses a duplicate id", async () => {
     const hub = make();
     await hub.add(stdio("fake"));

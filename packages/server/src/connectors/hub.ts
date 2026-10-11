@@ -139,6 +139,12 @@ export class McpHub {
     return out;
   }
 
+  /** What a program connector starts (never its variables, which can hold secrets), or null for another kind or none. */
+  command(id: string): { command: string; args: string[] } | null {
+    const c = this.store.get(id);
+    return c && c.kind === "stdio" ? { command: c.command, args: [...c.args] } : null;
+  }
+
   has(fullName: string): boolean {
     return this.names.has(fullName);
   }
@@ -187,9 +193,9 @@ export class McpHub {
     await this.disconnect(id);
   }
 
-  /** Connects every switched-on connector without making Friend wait for any of them. */
-  startAll(): void {
-    for (const c of this.store.list()) if (c.enabled) void this.connect(c.id).catch(() => {});
+  /** Connects every switched-on connector without making Friend wait for any of them, except those another part will start itself. */
+  startAll(opts: { except?: readonly string[] } = {}): void {
+    for (const c of this.store.list()) if (c.enabled && !opts.except?.includes(c.id)) void this.connect(c.id).catch(() => {});
   }
 
   async close(): Promise<void> {

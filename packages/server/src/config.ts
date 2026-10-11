@@ -44,9 +44,16 @@ export interface Config {
   alexa: AlexaConfig;
   /** The music player: where the owner's music is, and how the player starts. */
   music: MusicConfig;
+  /** Chrome control, the plugin that lets Friend use the owner's own Chrome (it comes with Friend). Only the owner changes it. */
+  chrome: ChromeConfig;
   /** The screen widgets: profile label, date and time, quick-launch buttons, animations. */
   hud: HudConfig;
   dataDir: string;
+}
+
+export interface ChromeConfig {
+  installed: boolean;
+  enabled: boolean;
 }
 
 export interface MusicConfig {
@@ -127,6 +134,11 @@ function sanitizeSpotify(raw: unknown): MusicConfig["spotify"] {
   const id = typeof r.clientId === "string" ? r.clientId.trim() : "";
   const clientId = CLIENT_ID.test(id) ? id : "";
   return { installed: r.installed === true || (r.installed === undefined && (r.enabled === true || clientId !== "")), enabled: r.enabled === true, clientId };
+}
+
+export function sanitizeChrome(raw: unknown): ChromeConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true };
 }
 
 function sanitizeAudius(raw: unknown): MusicConfig["audius"] {
@@ -540,6 +552,7 @@ const defaults = (dataDir: string): Config => ({
   trading: { level: "read" },
   alexa: sanitizeAlexa({}),
   music: sanitizeMusic({}),
+  chrome: sanitizeChrome({}),
   hud: sanitizeHud({}),
   dataDir,
 });
@@ -589,6 +602,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     trading: { level: "read" }, // any other level in the file is read as read: orders do not exist in this version
     alexa: sanitizeAlexa(stored.alexa),
     music: sanitizeMusic(stored.music),
+    chrome: sanitizeChrome(stored.chrome),
     hud: sanitizeHud(stored.hud),
     dataDir,
   };

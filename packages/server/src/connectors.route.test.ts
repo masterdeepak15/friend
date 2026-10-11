@@ -18,7 +18,7 @@ const j = { "content-type": "application/json" };
 
 async function boot(existing?: string) {
   dir = existing ?? mkdtempSync(join(tmpdir(), "friend-connroute-"));
-  app = await createApp({ dataDir: dir, provider: new FakeProvider([]), config: { port: 0, roots: [] } });
+  app = await createApp({ dataDir: dir, provider: new FakeProvider([]), config: { port: 0, roots: [] }, quick: { bundled: null } });
   port = (await app.start()).port;
   if (!existing) await fetch(base() + "/api/setup", { method: "POST", headers: j, body: JSON.stringify(owner) });
   const res = await fetch(base() + "/api/login", { method: "POST", headers: j, body: JSON.stringify({ password: owner.password }) });

@@ -26,11 +26,11 @@ function installInto(h: string) {
   writeFileSync(join(b, "extension", "manifest.json"), "{}");
 }
 
-async function boot(opts: { installed?: boolean; run?: QuickRunner } = {}) {
+async function boot(opts: { installed?: boolean; run?: QuickRunner; bundled?: string } = {}) {
   const home = mkdtempSync(join(tmpdir(), "friend-qroute-home-"));
   if (opts.installed) installInto(home);
   const dir = mkdtempSync(join(tmpdir(), "friend-qroute-"));
-  app = await createApp({ dataDir: dir, provider: new FakeProvider([]), config: { port: 0, roots: [] }, quick: { home, run: opts.run ?? (async () => ({ code: 0, stdout: "" })) } });
+  app = await createApp({ dataDir: dir, provider: new FakeProvider([]), config: { port: 0, roots: [] }, quick: { home, bundled: opts.bundled ?? null, run: opts.run ?? (async () => ({ code: 0, stdout: "" })) } });
   port = (await app.start()).port;
   await fetch(base() + "/api/setup", { method: "POST", headers: j, body: JSON.stringify(owner) });
   const res = await fetch(base() + "/api/login", { method: "POST", headers: j, body: JSON.stringify({ password: owner.password }) });

@@ -1,0 +1,22 @@
+{
+  "name": "@friend/chrome-control",
+  "version": "0.5.1",
+  "private": true,
+  "description": "Chrome control: an MCP server that drives your own Chrome through a companion extension. Built into Friend as a plugin; also usable on its own.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Deepak Chougale",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "ws": "^8.18.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2"
+  }
+}

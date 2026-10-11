@@ -49,6 +49,12 @@ describe("the npm package", () => {
     for (const asset of ["web", "plugins", "voice/friend_voice"]) expect(script).toContain(asset);
   });
 
+  it("carries Chrome control inside, bundled with what it needs, so nothing else has to be installed", () => {
+    const script = readFileSync(resolve(here, "scripts/bundle.mjs"), "utf8");
+    for (const part of ["packages/chrome-control", "src/index.ts", "src/native-host.ts", "chrome-control", "extension"]) expect(script).toContain(part);
+    expect(script).not.toMatch(/external:.*chrome/);
+  });
+
   // only when the package has been built (pnpm package)
   const bundle = resolve(here, "dist/friend.mjs");
   const built = existsSync(bundle);
@@ -64,6 +70,15 @@ describe("the npm package", () => {
     for (const f of ["web/index.html", "plugins/unit-converter/plugin.json", "voice/friend_voice/__main__.py", "BUILD.json"]) expect(existsSync(join(here, "dist", f)), f).toBe(true);
     expect(existsSync(join(here, "dist/voice/friend_voice/__pycache__"))).toBe(false);
     expect(JSON.parse(readFileSync(join(here, "dist/BUILD.json"), "utf8")).version).toBe(pkg.version);
+  });
+
+  it.skipIf(!built)("the built package holds Chrome control next to the program, laid out the way its own setup expects", () => {
+    const base = join(here, "dist", "chrome-control");
+    for (const f of ["dist/index.js", "dist/native-host.js", "extension/manifest.json", "package.json", "LICENSE"]) expect(existsSync(join(base, f)), f).toBe(true);
+    expect(JSON.parse(readFileSync(join(base, "package.json"), "utf8")).version).toMatch(/^\d+\.\d+\.\d+$/);
+    const js = readFileSync(join(base, "dist", "index.js"), "utf8");
+    expect(js).not.toMatch(/[A-Z]:\\(Users|ClaudeWorkspace)|\/home\/[a-z]+\/|\/Users\/[A-Za-z]+\//);
+    expect(js).not.toMatch(/^import [^\n]* from ["'](ws|zod|@modelcontextprotocol\/[^"']*)["']/m); // bundled in, not left to be installed
   });
 
   it.skipIf(!built)("the built program imports no workspace package and no source files", () => {

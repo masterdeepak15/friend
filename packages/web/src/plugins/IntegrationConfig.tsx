@@ -4,6 +4,7 @@ import { touch } from "../overlay/touch";
 import { TelegramForm, TwilioForm, httpChannelsApi, type ChannelStatus, type ChannelsApi } from "../settings/ChannelsTab";
 import { httpSettingsApi, type AlexaView, type BrokersView, type ChannelsView, type SettingsApi } from "../settings/settingsApi";
 import { AlexaForm, alexaProblem, httpAlexaApi, type AlexaApi } from "./AlexaForm";
+import { ChromeForm, httpChromeApi, type ChromeApi } from "./ChromeForm";
 import { SoundCloudForm, httpSoundCloudApi, type SoundCloudApi } from "./SoundCloudForm";
 import { SpotifyForm, httpSpotifyApi, type SpotifyApi } from "./SpotifyForm";
 import { ZerodhaForm, httpBrokersApi, type BrokersApi } from "./ZerodhaForm";
@@ -36,6 +37,7 @@ export function IntegrationConfig({
   alexaApi = httpAlexaApi,
   spotifyApi = httpSpotifyApi,
   soundcloudApi = httpSoundCloudApi,
+  chromeApi = httpChromeApi,
 }: {
   integration: IntegrationEntry;
   onBack: () => void;
@@ -45,6 +47,7 @@ export function IntegrationConfig({
   alexaApi?: AlexaApi;
   spotifyApi?: SpotifyApi;
   soundcloudApi?: SoundCloudApi;
+  chromeApi?: ChromeApi;
 }) {
   const [saved, setSaved] = useState<ChannelsView | null>(null);
   const [draft, setDraft] = useState<ChannelsView>(EMPTY);
@@ -66,6 +69,8 @@ export function IntegrationConfig({
   const isSpotify = integration.id === "spotify";
   const isSoundCloud = integration.id === "soundcloud";
   const isAudius = integration.id === "audius";
+  const isChrome = integration.id === "chrome";
+  const nothingToSave = isSpotify || isSoundCloud || isAudius || isChrome;
 
   useEffect(() => {
     alive.current = true;
@@ -92,7 +97,7 @@ export function IntegrationConfig({
 
   // only what was changed goes to the server
   const patch = (): Record<string, unknown> => {
-    if (isSpotify || isSoundCloud || isAudius) return {}; // its client id, Connect and Disconnect each ask for the PIN themselves
+    if (nothingToSave) return {}; // its client id, Connect and Disconnect each ask for the PIN themselves; Audius and Chrome control have nothing to type
     if (isAlexa) {
       if (!savedA) return {};
       const a: Record<string, unknown> = changedKeys(draftA, savedA, ALEXA_OPTION_KEYS);
@@ -194,6 +199,7 @@ export function IntegrationConfig({
       </ol>
       {isSpotify && <SpotifyForm api={spotifyApi} />}
       {isSoundCloud && <SoundCloudForm api={soundcloudApi} />}
+      {isChrome && <ChromeForm api={chromeApi} />}
       {isAlexa && savedA && <AlexaForm view={draftA} setView={setDraftA} api={alexaApi} />}
       {isZerodha && savedB && <ZerodhaForm view={draftB} setView={setDraftB} secret={secret} setSecret={setSecret} api={brokersApi} />}
       {!isZerodha &&
@@ -201,6 +207,7 @@ export function IntegrationConfig({
         !isSpotify &&
         !isSoundCloud &&
         !isAudius &&
+        !isChrome &&
         saved &&
         (isTelegram ? (
           <TelegramForm view={{ ...draft.telegram, enabled: integration.enabled }} secret={secret} setSecret={setSecret} api={channelsApi} />
@@ -214,7 +221,7 @@ export function IntegrationConfig({
         </p>
       )}
       <div className="approval-actions">
-        {!isSpotify && !isSoundCloud && !isAudius && (
+        {!nothingToSave && (
           <button type="button" style={touch} className="primary" disabled={!dirty || busy || (isAlexa && alexaProblem(draftA) !== null)} onClick={() => setAsking(true)}>
             {dirty ? "Save…" : "Save"}
           </button>

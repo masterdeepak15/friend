@@ -7,6 +7,7 @@ import { chatLines } from "./chatlog";
 import { McpHub } from "./connectors/hub";
 import { PRESETS } from "./connectors/presets";
 import { isQuickPreset, quickCheck, quickConnect, quickInstall, type QuickRunner } from "./connectors/quick";
+import { bundledChromeControl, ChromePlugin } from "./connectors/chromePlugin";
 import { runCommand } from "./connectors/run";
 import { ConnectorStore } from "./connectors/store";
 import { Approvals } from "./approvals";
@@ -33,7 +34,7 @@ import { BrokerHub } from "./brokers/hub";
 const PORTFOLIO_SKILL = "portfolio-assistant";
 /** The type each kind of audio file is sent as. */
 const MIME: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", flac: "audio/flac" };
-import { changeAlexa, changeBroker, changeIntegration, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
+import { changeAlexa, changeBroker, changeChrome, changeIntegration, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -107,7 +108,7 @@ export interface AppOptions {
   /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
   pluginCatalogDir?: string;
   /** The one-click connectors: how their install command is run and where the person's home folder is (tests). */
-  quick?: { run?: QuickRunner; home?: string };
+  quick?: { run?: QuickRunner; home?: string; /** Chrome control's index.js that comes with Friend (tests); null: none, so the npm package is used. */ bundled?: string | null };
   /** Where weather comes from. Defaults to Open-Meteo. */
   weather?: Pick<WeatherService, "get">;
 }
@@ -211,6 +212,8 @@ export async function createApp(opts: AppOptions) {
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
   const hub = new McpHub(new ConnectorStore(opts.dataDir));
+  const chromeBundled = opts.quick?.bundled !== undefined ? opts.quick.bundled : bundledChromeControl();
+  const chromePlugin = new ChromePlugin({ hub, run: opts.quick?.run ?? runCommand, home: opts.quick?.home, bundled: chromeBundled });
   /** Changes the integrations in memory and in the saved file (only this change reaches the file), then restarts what needs it. Returns the reason it could not be done. */
   const changeChannels = (fn: (c: Config["channels"]) => string | null): string | null => {
     const saved = loadConfig(opts.dataDir);
@@ -268,6 +271,15 @@ export async function createApp(opts: AppOptions) {
     saveConfig(saved);
     return null;
   };
+  /** The same for the Chrome control part of the saved file. */
+  const changeChromeConfig = (fn: (s: Config["chrome"]) => string | null): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.chrome);
+    if (err) return err;
+    fn(config.chrome);
+    saveConfig(saved);
+    return null;
+  };
   const scView = { status: () => soundcloudHub.status(), secretSet: () => musicSecrets.has("soundcloud") };
   const changeAny = (id: IntegrationId, change: { install: true } | { remove: true } | { enabled: boolean }): string | null => {
     if (id === "alexa") return changeAlexaConfig((a) => changeAlexa(a, change));
@@ -277,6 +289,16 @@ export async function createApp(opts: AppOptions) {
       return err;
     }
     if (id === "audius") return changeAudiusConfig((s) => changeAudius(s, change));
+    if (id === "chrome") {
+      const err = changeChromeConfig((c) => changeChrome(c, change, chromePlugin.status().helper));
+      if (err) return err;
+      // the work behind the switch happens in the background; the plugin screen shows how it goes
+      if ("install" in change) void chromePlugin.setup();
+      else if ("remove" in change) void chromePlugin.forget().catch(() => {});
+      else if (change.enabled) void chromePlugin.connect();
+      else void chromePlugin.disconnect().catch(() => {});
+      return null;
+    }
     if (id === "soundcloud") {
       const err = changeSoundcloudConfig((s) => changeSoundcloud(s, change, musicSecrets.has("soundcloud")));
       if (!err && "remove" in change) {
@@ -308,12 +330,12 @@ export async function createApp(opts: AppOptions) {
       },
     },
     integrations: {
-      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub),
+      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin),
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : id === "chrome" ? config.chrome : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && id !== "chrome" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {
@@ -464,7 +486,7 @@ export async function createApp(opts: AppOptions) {
     channels: channelHub,
     brokers: brokerHub,
     music: musicHub,
-    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub)) },
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin)) },
   });
 
   const clients = new Set<ClientConn>();
@@ -655,9 +677,10 @@ export async function createApp(opts: AppOptions) {
   const catalogDir = opts.pluginCatalogDir ?? firstExistingDir([process.env.FRIEND_PLUGIN_CATALOG, resolve(here, "plugins"), resolve(here, "../../..", "plugins")]) ?? resolve(here, "plugins");
   const pluginsApi: PluginsApi = {
     list: () => {
+      void chromePlugin.refresh(); // so the next look at the screen knows whether the extension was switched on since
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin) };
     },
     install: async (id, pin, ip) => {
       if (isIntegrationId(id)) {
@@ -710,7 +733,8 @@ export async function createApp(opts: AppOptions) {
   };
 
   const connectorsApi: ConnectorsApi = {
-    list: () => ({ connectors: hub.list(), presets: PRESETS }),
+    // Chrome control is a plugin when this Friend has its own copy: the plugins screen offers it, so it is not offered here a second time
+    list: () => ({ connectors: hub.list(), presets: chromeBundled ? PRESETS.filter((p) => p.id !== "chrome") : PRESETS }),
     add: async (input, pin, ip) => {
       await requirePin(pin, ip);
       try {
@@ -742,7 +766,7 @@ export async function createApp(opts: AppOptions) {
       }
     },
     quickCheck: (preset) => {
-      const c = quickCheck(preset, { home: opts.quick?.home });
+      const c = quickCheck(preset, { home: opts.quick?.home, bundled: chromeBundled });
       if (!c) throw new HttpError(404, "That is not a one-click connector.");
       return c;
     },
@@ -750,12 +774,12 @@ export async function createApp(opts: AppOptions) {
       if (!isQuickPreset(preset)) throw new HttpError(404, "That is not a one-click connector.");
       await requirePin(pin, ip);
       audit.log("owner", "connector.quick_install", { preset, ip });
-      return quickInstall(preset, { hub, run: opts.quick?.run ?? runCommand, home: opts.quick?.home });
+      return quickInstall(preset, { hub, run: opts.quick?.run ?? runCommand, home: opts.quick?.home, bundled: chromeBundled });
     },
     quickConnect: async (preset, pin, ip) => {
       if (!isQuickPreset(preset)) throw new HttpError(404, "That is not a one-click connector.");
       await requirePin(pin, ip);
-      const result = await quickConnect(preset, { hub, run: opts.quick?.run ?? runCommand, home: opts.quick?.home });
+      const result = await quickConnect(preset, { hub, run: opts.quick?.run ?? runCommand, home: opts.quick?.home, bundled: chromeBundled });
       audit.log("owner", "connector.quick_connect", { preset, ok: result.ok, extension: result.extension, ip });
       return result;
     },
@@ -1317,7 +1341,18 @@ export async function createApp(opts: AppOptions) {
     },
     async start(): Promise<{ port: number }> {
       heartbeat.start();
-      hub.startAll(); // connectors that were on come back in the background; Friend does not wait for them
+      // connectors that were on come back in the background; Friend does not wait for them. Chrome control comes back through its plugin,
+      // which also corrects a connector saved for a copy of the program that is no longer where it was.
+      // an owner who connected Chrome control before it was a plugin keeps it, switched on as it was
+      const before = hub.list().find((c) => c.id === "chrome");
+      if (before && !config.chrome.installed) {
+        changeChromeConfig((c) => {
+          Object.assign(c, { installed: true, enabled: before.enabled });
+          return null;
+        });
+      }
+      hub.startAll({ except: config.chrome.enabled ? ["chrome"] : [] });
+      if (config.chrome.enabled) void chromePlugin.connect();
       channelHub.apply(); // Telegram starts listening when it is switched on
       brokerTimer = setInterval(() => void brokerHub.tick(new Date()).catch(() => {}), opts.brokerTickMs ?? 60_000);
       brokerTimer.unref?.();

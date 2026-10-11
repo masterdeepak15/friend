@@ -53,6 +53,25 @@ await build({
   logLevel: "info",
 });
 
+// Chrome control is a plugin of Friend, so it travels inside this package: the same program, bundled with what it needs,
+// plus the browser extension and the folder layout its own setup expects (dist/ next to extension/ and package.json).
+const chrome = join(repo, "packages/chrome-control");
+const chromeOut = join(dist, "chrome-control");
+await build({
+  entryPoints: { index: join(chrome, "src/index.ts"), "native-host": join(chrome, "src/native-host.ts") },
+  outdir: join(chromeOut, "dist"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node20",
+  banner: { js: "import { createRequire as __friendCreateRequire } from 'node:module'; const require = __friendCreateRequire(import.meta.url);" },
+  legalComments: "none",
+  logLevel: "info",
+});
+cpSync(join(chrome, "extension"), join(chromeOut, "extension"), { recursive: true });
+cpSync(join(chrome, "LICENSE"), join(chromeOut, "LICENSE"));
+cpSync(join(chrome, "package.json"), join(chromeOut, "package.json"));
+
 const keep = (src) => !/(^|[\\/])(__pycache__|node_modules|\.venv|\.pytest_cache)([\\/]|$)|\.pyc$/.test(src);
 cpSync(web, join(dist, "web"), { recursive: true });
 cpSync(join(repo, "plugins"), join(dist, "plugins"), { recursive: true, filter: keep });

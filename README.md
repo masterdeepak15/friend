@@ -153,7 +153,7 @@ Example: `friend config set voice.speakTyped false` keeps typed messages silent.
 | `FRIEND_HOME` | The folder where Friend keeps its data (default: `.friend` in your home folder). Use another folder to keep a separate test copy. |
 | `FRIEND_ANTHROPIC_KEY` | An API key to use when none is saved. |
 | `FRIEND_PYTHON` | The Python program to use for voice, if the usual ones are not the right version. |
-| `FRIEND_WEB_DIR`, `FRIEND_PLUGIN_CATALOG`, `FRIEND_VOICE_DIR` | Where the web app, the bundled plugins and the Python voice code are, for unusual installs. |
+| `FRIEND_WEB_DIR`, `FRIEND_PLUGIN_CATALOG`, `FRIEND_VOICE_DIR`, `FRIEND_CHROME_CONTROL` | Where the web app, the bundled plugins, the Python voice code and the Chrome control program (its `index.js`) are, for unusual installs. |
 | `FRIEND_DEMO_PORT` | The port `pnpm demo` listens on (default 8788). |
 
 ### From the source code
@@ -225,7 +225,7 @@ pnpm friend claude status
 
 A connector gives Friend the tools of an outside program or service through the MCP standard. Open **Esc, then Connectors** (or type `/connectors`). Ready-made entries:
 
-- **Chrome control**: one click. Press **Connect**; Friend adds `npx -y chrome-control-mcp` for you (the same as `claude mcp add chrome-control -- npx -y chrome-control-mcp`) and starts it, asking only for your PIN. If it is not installed yet, Friend says so ("please install it first") and can install it in the background (`npx -y chrome-control-mcp setup`). The one step only you can do is loading the extension in Chrome (chrome://extensions, Developer mode, Load unpacked); Friend tells you whether the extension is connected.
+- **Chrome control** is a plugin that comes with Friend, so there is nothing else to install (no npm package, no `claude mcp add`). Open **Plugins**, install **Chrome control** (PIN), and Friend sets it up by itself from the copy inside it: the small helper Chrome needs and the extension folder. The one step only you can do is loading that folder in Chrome (chrome://extensions, Developer mode, Load unpacked; Configure shows the folder with a Copy button) and switching the extension on from its icon. Then switch the plugin on (PIN); Friend connects, and the plugin page shows whether the extension is linked. Every browser action still asks for your approval. Removing the plugin only removes Friend's connection; the helper and the extension stay, because other programs on your PC may use them. See [docs/guides/chrome-control.md](docs/guides/chrome-control.md).
 - **Gmail**: a community Gmail MCP server (`@gongrzhe/server-gmail-autoauth-mcp`). You create the Google OAuth credentials and sign in on Google's own page; **Friend never sees your Google password**. More mail and calendar connectors can be added the same way ("Something else": any program or any server by address).
 
 How it is kept safe:

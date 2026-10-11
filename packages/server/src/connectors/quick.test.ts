@@ -202,3 +202,54 @@ describe("readExtensionState", () => {
     expect(readExtensionState("{broken json")).toBe("unknown");
   });
 });
+
+describe("the copy that comes with Friend", () => {
+  it("is what setup runs, so nothing is downloaded and nothing else is installed", async () => {
+    const h = home(false);
+    const calls: string[][] = [];
+    const run: QuickRunner = async (cmd, args) => {
+      calls.push([cmd, ...args]);
+      install(h);
+      return { code: 0, stdout: "" };
+    };
+    const r = await quickInstall("chrome", { hub: newHub(), run, home: h, bundled: FAKE });
+    expect(calls).toEqual([[process.execPath, FAKE, "setup", "--no-claude", "--no-open", "--no-flag"]]);
+    expect(r.ok).toBe(true);
+    expect(r.message).not.toMatch(/npx/);
+  });
+  it("tells a failed setup in words that do not send the owner to npm", async () => {
+    const r = await quickInstall("chrome", { hub: newHub(), run: async () => ({ code: 1, stdout: "boom" }), home: home(false), bundled: FAKE });
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/did not finish/);
+    expect(r.message).not.toMatch(/npx|npm/);
+  });
+  it("is checked as part of Friend: not set up yet, press Install", () => {
+    const c = quickCheck("chrome", { home: home(false), bundled: FAKE })!;
+    expect(c).toMatchObject({ ready: false, installCommand: `"${process.execPath}" "${FAKE}" setup` });
+    expect(c.message).toMatch(/comes with Friend.*not set up/i);
+    expect(c.message).not.toMatch(/npm|npx/);
+  });
+  it("is what the connector runs: Friend's own node on the bundled file", async () => {
+    const h = newHub();
+    const r = await quickConnect("chrome", { hub: h, run: never, home: home(true), bundled: FAKE });
+    expect(r).toMatchObject({ ok: true, extension: "connected", connector: { status: "ready", tools: 3 } });
+    expect(h.command("chrome")).toEqual({ command: process.execPath, args: [FAKE] });
+  });
+  it("replaces an older connector that ran another copy (npx, or Friend in another folder), without adding a second", async () => {
+    const h = newHub();
+    await h.add({ ...real, command: process.execPath, args: [FAKE, "--ext-off"] });
+    const r = await quickConnect("chrome", { hub: h, run: never, home: home(true), bundled: FAKE });
+    expect(r).toMatchObject({ ok: true, extension: "connected" });
+    expect(h.list()).toHaveLength(1);
+    expect(h.command("chrome")).toEqual({ command: process.execPath, args: [FAKE] });
+  });
+  it("keeps a connector that already runs this copy, and switches it on again if it was off", async () => {
+    const h = newHub();
+    const hm = home(true);
+    await quickConnect("chrome", { hub: h, run: never, home: hm, bundled: FAKE });
+    await h.setEnabled("chrome", false);
+    const back = await quickConnect("chrome", { hub: h, run: never, home: hm, bundled: FAKE });
+    expect(back).toMatchObject({ ok: true, connector: { status: "ready" } });
+    expect(h.list()).toHaveLength(1);
+  });
+});

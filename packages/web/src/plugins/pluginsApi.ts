@@ -33,6 +33,8 @@ export interface IntegrationEntry {
   /** What is wrong or what to do next, in one line. */
   detail: string;
   steps: { text: string; done: boolean }[];
+  /** What is not secret, such as the folder of the Chrome extension. */
+  settings?: Record<string, string | boolean>;
 }
 
 export interface PluginList {

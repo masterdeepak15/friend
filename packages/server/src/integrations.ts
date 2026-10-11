@@ -1,15 +1,16 @@
 import type { AlexaHub } from "./alexa/hub";
 import type { BrokerHub } from "./brokers/hub";
 import type { ChannelHub } from "./channels/hub";
+import type { ChromeStatus } from "./connectors/chromePlugin";
 import type { AudiusHub } from "./music/audius";
 import type { SoundCloudHub } from "./music/soundcloud";
 import type { SpotifyHub } from "./music/spotify";
-import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type Config, type MusicConfig } from "./config";
+import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type ChromeConfig, type Config, type MusicConfig } from "./config";
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
 export type ChannelIntegrationId = "telegram" | "twilio";
-export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius"];
+export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius" | "chrome";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "chrome"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -42,6 +43,7 @@ const META: Record<IntegrationId, { name: string; description: string }> = {
   spotify: { name: "Spotify", description: "Play and search your own Spotify account from Friend: ask for a song, an artist or a playlist. Sign-in is through Spotify's own page. Playing needs Spotify Premium on your account, and a free app of your own at developer.spotify.com." },
   soundcloud: { name: "SoundCloud", description: "Play and search your own SoundCloud account from Friend: ask for a track or an artist. Sign-in is through SoundCloud's own page. Needs a free app of your own at soundcloud.com/you/apps (SoundCloud decides who gets one), and some tracks only play with the right SoundCloud plan." },
   audius: { name: "Audius", description: "Free music from Audius, an open music service: ask for a track or an artist. No account, no key and no payment: install it and switch it on. Mostly independent artists." },
+  chrome: { name: "Chrome control", description: "Lets Friend open pages, read them, click and type in your own Chrome, through an extension. It comes with Friend: nothing else to install. Every action still asks for your approval, and while it is on, Friend can act as you on the sites it allows." },
   zerodha: { name: "Zerodha", description: "Read-only look at your Zerodha portfolio: ask Friend how it is doing, or have a report sent to Telegram or WhatsApp every morning and at market close. Friend cannot place orders. Needs a free Kite Connect app." },
 };
 
@@ -54,9 +56,10 @@ export const PUBLIC_SETTINGS: Record<IntegrationId, readonly string[]> = {
   spotify: [],
   soundcloud: [],
   audius: [],
+  chrome: [],
 };
 
-export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }, audius?: Pick<AudiusHub, "status">): IntegrationView[] {
+export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }, audius?: Pick<AudiusHub, "status">, chrome?: { status(): ChromeStatus }): IntegrationView[] {
   const status = hub.status();
   const t = config.channels.telegram;
   const w = config.channels.twilio;
@@ -83,6 +86,26 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     if (!au.installed) return { state: "not-installed", detail: "" };
     if (!au.enabled) return { state: "off", detail: "Switched off." };
     return aus?.connected ? { state: "online", detail: "Ready." } : { state: "needs-setup", detail: aus?.needs ?? "Switch it on." };
+  };
+  const ch = config.chrome;
+  const chs = chrome?.status();
+  const chSteps: IntegrationStep[] = [
+    { text: "Set Chrome control up. It comes with Friend: nothing to download.", done: !!chs?.helper },
+    { text: "Load the extension in Chrome: open chrome://extensions, turn on Developer mode, press Load unpacked, and choose the folder shown in Configure.", done: chs?.extension === "connected" },
+    { text: "Switch the plugin on.", done: ch.enabled },
+    { text: "Click the extension's icon in Chrome and switch it on.", done: chs?.extension === "connected" },
+  ];
+  const chState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!ch.installed) return { state: "not-installed", detail: "" };
+    if (chs?.installing) return { state: "connecting", detail: "Setting up Chrome control…" };
+    if (!chs?.helper) return { state: "needs-setup", detail: chs?.error ?? "Chrome control is not set up on this PC yet (press Configure)." };
+    if (!ch.enabled) return { state: "off", detail: "Switched off." };
+    const c = chs.connector;
+    if (!c || c.status === "connecting") return { state: "connecting", detail: "Connecting…" };
+    if (c.status === "error") return { state: "error", detail: c.error ?? "Chrome control did not start." };
+    if (chs.extension === "off") return { state: "needs-setup", detail: "Load the extension in Chrome and switch it on (press Configure)." };
+    if (chs.extension === "connected") return { state: "online", detail: "Connected to your Chrome. Every action still asks for your approval." };
+    return { state: "online", detail: "Running. Check that the extension is switched on in Chrome (click its icon)." };
   };
   const sc = config.music.soundcloud;
   const scs = soundcloud?.status();
@@ -186,6 +209,7 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { id: "spotify", ...META.spotify, kind: "integration", installed: sp.installed, enabled: sp.enabled, ...spState(), steps: spSteps, settings: { clientId: sp.clientId }, secrets: {} },
     { id: "soundcloud", ...META.soundcloud, kind: "integration", installed: sc.installed, enabled: sc.enabled, ...scState(), steps: scSteps, settings: { clientId: sc.clientId }, secrets: { clientSecret: scSecret } },
     { id: "audius", ...META.audius, kind: "integration", installed: au.installed, enabled: au.enabled, ...auState(), steps: auSteps, settings: {}, secrets: {} },
+    { id: "chrome", ...META.chrome, kind: "integration", installed: ch.installed, enabled: ch.enabled, ...chState(), steps: chSteps, settings: chs?.extensionFolder ? { extensionFolder: chs.extensionFolder } : {}, secrets: {} },
   ];
 }
 
@@ -292,7 +316,23 @@ export function changeAudius(audius: MusicConfig["audius"], change: { install: t
   return null;
 }
 
+/** The same for Chrome control: it can only be switched on once it is set up (`helper`). Removing it leaves the helper alone, other programs use it too. */
+export function changeChrome(chrome: ChromeConfig, change: { install: true } | { remove: true } | { enabled: boolean }, helper: boolean): string | null {
+  if ("install" in change) {
+    chrome.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    Object.assign(chrome, { installed: false, enabled: false });
+    return null;
+  }
+  if (!chrome.installed) return `${META.chrome.name} is not installed yet.`;
+  if (change.enabled && !helper) return "Chrome control is not set up yet. Press Configure and wait for the setup to finish, then switch it on.";
+  chrome.enabled = change.enabled;
+  return null;
+}
+
 /** Plain words about the integrations the assistant can set up, for its context. Spotify is left out: only the owner connects it. */
 export function integrationSummary(views: IntegrationView[]): string {
-  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.filter((v) => v.id !== "spotify" && v.id !== "soundcloud" && v.id !== "audius").map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
+  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.filter((v) => v.id !== "spotify" && v.id !== "soundcloud" && v.id !== "audius" && v.id !== "chrome").map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
 }
