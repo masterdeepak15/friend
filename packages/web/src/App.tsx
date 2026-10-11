@@ -23,6 +23,9 @@ import { useAudioUnlock } from "./voice/unlock";
 import { ElsewhereCard } from "./overlay/ElsewhereCard";
 import { useScreenReport } from "./layout/screen";
 import { HouseholdPanel } from "./voice/HouseholdPanel";
+import { QuickLaunch, type LauncherItem } from "./hud/QuickLaunch";
+import { MusicPlayerView } from "./music/MusicPlayer";
+import { commandToAction, useMusicPlayer } from "./music/useMusicPlayer";
 
 type Phase = "loading" | "setup" | "login" | "stage";
 
@@ -41,6 +44,24 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [menuRequest, setMenuRequest] = useState(0);
   const [help, setHelp] = useState<SlashCommand[] | null>(null);
   const panels = usePanels(state.view);
+  // The player lives here, not in its panel, so it keeps playing (and the assistant keeps control) while the panel is hidden.
+  const player = useMusicPlayer({ music: state.music, cmd: state.musicCmd, send, connection: state.connection });
+  const animations = state.hud?.animations ?? "full";
+  const launch = (item: LauncherItem) => {
+    const { type, value } = item.action;
+    if (type === "url") window.open(value, "_blank", "noopener,noreferrer");
+    else if (type === "prompt") send({ type: "chat.send", text: value });
+    else if (type === "music") {
+      const action = commandToAction({ action: value } as Parameters<typeof commandToAction>[0]);
+      if (action) player.dispatch(action);
+    } else if (value === "plugins") setManagingPlugins(true);
+    else if (value === "settings") setSettingsOpen("model");
+    else if (value === "chat" || value === "tasks") panels.toggle(value, true);
+    else if (value === "music") {
+      panels.toggle("music", true);
+      if (player.state.view === "hidden") player.dispatch({ type: "view", view: "mini" });
+    }
+  };
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
 
   // Once per visit, when speech works but nobody's voice is enrolled yet, say how to turn recognition on.
@@ -158,11 +179,15 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         showStatus={state.viewKnown && panels.show.status}
         showClock={state.viewKnown && panels.show.clock}
         profile={state.viewKnown && panels.show.profile ? { ownerName: state.ownerName, speaker: state.speaker } : null}
+        assistantName={state.assistantName}
+        hud={state.hud}
         send={send}
         dispatch={dispatch}
       >
         {state.viewKnown && panels.show.chat && <ChatPanel lines={state.chat} live={state.chatLive} onSend={(text) => send({ type: "chat.send", text })} onClose={() => panels.toggle("chat", false)} />}
         {state.viewKnown && panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
+        {state.viewKnown && panels.show.launcher && state.hud && <QuickLaunch items={state.hud.launcher} animations={animations} onAction={launch} />}
+        {state.viewKnown && panels.show.music && <MusicPlayerView player={player} music={state.music} animations={animations} />}
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
         {household && <HouseholdPanel onClose={() => setHousehold(false)} />}
         {managingPlugins && (

@@ -1,4 +1,4 @@
-import type { ClientMsg, PendingApproval } from "@friend/protocol";
+import type { ClientMsg, HudView, PendingApproval } from "@friend/protocol";
 import type { ReactNode } from "react";
 import type { Alert, Connection, LocalAction, StageViewState, VoiceChallenge, VoiceMode } from "../store";
 import { ProfileBadge } from "./ProfileBadge";
@@ -31,17 +31,20 @@ export interface OverlayProps {
   showClock?: boolean;
   /** The shield with the name of whoever is talking: pass it to draw the profile badge. */
   profile?: { ownerName: string; speaker: StageViewState["speaker"] } | null;
+  /** The assistant's name and the owner's widget settings (profile tag, date and time, animations). */
+  assistantName?: string;
+  hud?: HudView | null;
   send: (m: ClientMsg) => void;
   dispatch: (a: LocalAction) => void;
 }
 
 /** Layer 4: always above whatever the agent has put on the stage. */
-export function Overlay({ approval, challenge, cameraStream, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, showStatus = true, showClock = true, profile = null, send, dispatch }: OverlayProps) {
+export function Overlay({ approval, challenge, cameraStream, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, showStatus = true, showClock = true, profile = null, assistantName = "", hud = null, send, dispatch }: OverlayProps) {
   return (
-    <div data-overlay className="overlay" style={{ position: "fixed", inset: 0, zIndex: 1000, pointerEvents: "none" }}>
+    <div data-overlay data-hud-anim={hud?.animations ?? "full"} className="overlay" style={{ position: "fixed", inset: 0, zIndex: 1000, pointerEvents: "none" }}>
       {showStatus && <StatusBadge connection={connection} deviceOnline={deviceOnline} approval={approval} voiceMode={voiceMode} busy={busy} activity={activity} />}
-      {showClock && <Clock />}
-      {profile && <ProfileBadge ownerName={profile.ownerName} speaker={profile.speaker} />}
+      {showClock && <Clock {...(hud ? { clock: hud.clock } : {})} />}
+      {profile && <ProfileBadge ownerName={profile.ownerName} speaker={profile.speaker} assistantName={assistantName} terminalLabel={hud?.terminalLabel ?? "TERMINAL"} busy={busy} listening={voiceMode === "listening"} />}
       <MicIndicator mode={voiceMode} />
       {cameraStream && <CameraIndicator stream={cameraStream} />}
       <AlertToast alerts={alerts} dispatch={dispatch} />
