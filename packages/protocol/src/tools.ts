@@ -309,6 +309,52 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "music.play",
+    description: "Play music from the owner's music folder on their Friend screen. Search by words (a song, an artist, an album, a mood in the title); with nothing given it plays everything. shuffle true starts shuffled. mode: replace the queue (default), add to its end, or play next. Say in a few words what is playing; never read out file paths.",
+    input: z.object({ query: z.string().max(200).optional(), title: z.string().max(200).optional(), artist: z.string().max(200).optional(), album: z.string().max(200).optional(), shuffle: z.boolean().optional(), mode: z.enum(["replace", "add", "next"]).optional(), limit: z.number().int().min(1).max(500).optional() }).strict(),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "music.control",
+    description: "Control the music player: pause, resume, toggle, stop, next, previous, seek (seconds or percent), volume (level 0 to 100, or delta to step), mute (on true/false), shuffle (on), repeat (mode off, all or one), view (mini, full or hidden).",
+    input: z
+      .object({
+        action: z.enum(["pause", "resume", "toggle", "stop", "next", "previous", "seek", "volume", "mute", "shuffle", "repeat", "view"]),
+        level: z.number().min(0).max(100).optional(),
+        delta: z.number().min(-100).max(100).optional(),
+        seconds: z.number().min(0).optional(),
+        percent: z.number().min(0).max(100).optional(),
+        on: z.boolean().optional(),
+        mode: z.enum(["off", "all", "one"]).optional(),
+        view: z.enum(["mini", "full", "hidden"]).optional(),
+      })
+      .strict(),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "music.queue",
+    description: "The play queue: add tracks found by a search, remove one by its number (counting from 1), clear it, or show it.",
+    input: z.object({ action: z.enum(["add", "remove", "clear", "show"]), query: z.string().max(200).optional(), index: z.number().int().min(1).optional() }).strict(),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "music.search",
+    description: "Find tracks in the owner's music folder by words in the title, artist or album, and how many match. Use it before playing when you are unsure what they have.",
+    input: z.object({ query: z.string().max(200), limit: z.number().int().min(1).max(15).optional() }).strict(),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "music.nowplaying",
+    description: "What the music player is doing: the track, artist, album, position, volume, shuffle, repeat and queue.",
+    input: z.object({}).strict(),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
     name: "settings.get",
     description: "Read the owner's current settings (model provider and model names, fallback, Ollama address, voice options, the view). The API key is never included.",
     input: z.object({}),
@@ -591,6 +637,16 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return `Remove ${visible(String(a.id ?? ""))} and forget its tokens`;
     case "message.send":
       return `Send a ${visible(String(a.channel ?? ""))} message to ${visible(String(a.to ?? ""))}:\n${visible(clip(String(a.text ?? ""), 600))}`;
+    case "music.play":
+      return `Play music${a.query || a.artist || a.album || a.title ? `: ${visible(clip(String([a.query, a.title, a.artist, a.album].filter(Boolean).join(" ")), 120))}` : ""}`;
+    case "music.control":
+      return `Music: ${visible(String(a.action ?? ""))}`;
+    case "music.queue":
+      return `Music queue: ${visible(String(a.action ?? ""))}`;
+    case "music.search":
+      return `Search the music for: ${visible(clip(String(a.query ?? ""), 120))}`;
+    case "music.nowplaying":
+      return "See what the music player is doing";
     case "message.inbox":
       return "Read the messages other people sent you";
     case "portfolio.summary":

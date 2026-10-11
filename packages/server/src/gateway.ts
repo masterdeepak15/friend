@@ -63,6 +63,8 @@ export interface GatewayDeps {
   brokers?: BrokersApi;
   /** Alexa: the skill's endpoint (called by Amazon) and the owner's device list. */
   alexa?: AlexaApi;
+  /** The owner's music: the list, the audio and the covers. */
+  music?: MusicApi;
   /** Files the owner approved to be shown (file.present); the media route answers 404 without it. */
   media?: { lookup(id: string): { path: string; mime: string; size: number } | null };
 }
@@ -97,6 +99,15 @@ export interface AlexaApi {
   allow(short: string, name: string, pin: string, ip: string): Promise<unknown>;
   forget(short: string): boolean;
   packageFile(name: string): { type: string; text: string } | null;
+}
+
+/** What the music routes need from the app. Nothing here is a path the browser could ask for: only ids Friend made. */
+export interface MusicApi {
+  library(q: { q?: string; offset?: number; limit?: number }): unknown | Promise<unknown>;
+  /** The audio file behind a track id, checked just now, or null. */
+  track(id: string): Promise<{ path: string; mime: string } | null>;
+  cover(id: string): Promise<{ mime: string; data: Buffer } | null>;
+  rescan(): Promise<{ count: number; truncated: boolean; problem?: string }>;
 }
 
 /** What the settings routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -594,6 +605,45 @@ export function createGateway(deps: GatewayDeps) {
       return brokerError(reply, e);
     }
   });
+
+  // ---- the owner's music (signed-in browsers only; byte ranges so the player can seek) ----
+  const musicWindow = new SlidingWindow(240, 60_000);
+  const musicGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    const session = token ? auth.resolveSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "Unauthorized" });
+    if (!musicWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 5).send({ error: "Too many requests" });
+    if (!deps.music) return reply.code(503).send({ error: "Music is not available" });
+  };
+  app.get<{ Querystring: { q?: string; offset?: string; limit?: string } }>("/api/music/library", { onRequest: musicGuard }, async (req, reply) => {
+    reply.header("cache-control", "no-store");
+    const q = typeof req.query.q === "string" ? req.query.q.slice(0, 200) : "";
+    return deps.music!.library({ q, offset: Number(req.query.offset) || 0, limit: Number(req.query.limit) || 100 });
+  });
+  app.get<{ Params: { id: string } }>("/api/music/track/:id", { onRequest: musicGuard }, async (req, reply) => {
+    const file = await deps.music!.track(req.params.id);
+    if (!file) return reply.code(404).send({ error: "Not found" });
+    const info = await fsp.stat(file.path).catch(() => null);
+    if (!info || !info.isFile()) return reply.code(404).send({ error: "The file is gone" });
+    const size = info.size;
+    reply.header("accept-ranges", "bytes").header("x-content-type-options", "nosniff").header("cache-control", "private, max-age=300");
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    if (range && (range[1] || range[2])) {
+      let start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      let end = range[1] && range[2] ? Number(range[2]) : size - 1;
+      end = Math.min(end, size - 1);
+      if (!(start <= end) || start >= size) return reply.code(416).header("content-range", `bytes */${size}`).send();
+      start = Math.max(0, start);
+      return reply.code(206).header("content-range", `bytes ${start}-${end}/${size}`).header("content-length", end - start + 1).type(file.mime).send(createReadStream(file.path, { start, end }));
+    }
+    return reply.header("content-length", size).type(file.mime).send(createReadStream(file.path));
+  });
+  app.get<{ Params: { id: string } }>("/api/music/cover/:id", { onRequest: musicGuard }, async (req, reply) => {
+    const cover = await deps.music!.cover(req.params.id);
+    if (!cover) return reply.code(404).send({ error: "No cover" });
+    return reply.header("x-content-type-options", "nosniff").header("cache-control", "private, max-age=3600").type(cover.mime).send(cover.data);
+  });
+  app.post("/api/music/rescan", { onRequest: musicGuard }, async () => deps.music!.rescan());
 
   // ---- Alexa ----
   // Amazon calls this with a signed JSON body. The signature covers the exact bytes, so it is read as raw bytes (32 KB at most).

@@ -16,19 +16,23 @@ import { CameraBroker } from "./camera";
 import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
 import { AlexaHub, fetchAmazonCert } from "./alexa/hub";
+import { MusicHub } from "./music/hub";
+import { MusicLibrary } from "./music/library";
 import { buildSkillPackage, packageFileNames } from "./alexa/package";
 import { portfolioSpeech, statusSpeech, tasksSpeech } from "./alexa/fast";
 import { summarize } from "./brokers/portfolio";
 import { BrokerHub } from "./brokers/hub";
 
 const PORTFOLIO_SKILL = "portfolio-assistant";
+/** The type each kind of audio file is sent as. */
+const MIME: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", flac: "audio/flac" };
 import { changeAlexa, changeBroker, changeIntegration, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
 import { WeatherService, weatherSummary } from "./weather";
-import { dirname, resolve } from "node:path";
+import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Tasks } from "./tasks";
 import { join } from "node:path";
@@ -161,6 +165,10 @@ export async function createApp(opts: AppOptions) {
   const brokerHub = new BrokerHub({ config, dataDir: opts.dataDir, db, audit, channels: channelHub, fetch: opts.brokerFetch, publicBase: () => config.publicUrl ?? null });
   brokerHub.apply();
   let brokerTimer: ReturnType<typeof setInterval> | undefined;
+  // The owner's music: the folder is a setting; the player itself runs in the browser and the assistant controls it through the hub.
+  const musicLibrary = new MusicLibrary({ folder: () => config.music.folder, extensions: () => config.music.extensions, maxTracks: () => config.music.maxTracks, scanDepth: () => config.music.scanDepth });
+  const musicHub = new MusicHub({ library: musicLibrary });
+  void musicLibrary.scan().catch(() => {});
   const memory = new Memory(db);
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
@@ -257,6 +265,7 @@ export async function createApp(opts: AppOptions) {
     audit.log(how.actor, "settings.changed", { changed: applied.changed, ...(how.ip ? { ip: how.ip } : {}) });
     if (applied.changed.some((k) => k.startsWith("channels"))) channelHub.apply();
     if (applied.changed.some((k) => k.startsWith("brokers"))) brokerHub.apply();
+    if (applied.changed.some((k) => k.startsWith("music."))) void musicLibrary.scan().catch(() => {});
     if (applied.providerChanged && switchable) {
       const swap = () => {
         const old = switchable.swap(makeProvider());
@@ -371,6 +380,7 @@ export async function createApp(opts: AppOptions) {
     media,
     channels: channelHub,
     brokers: brokerHub,
+    music: musicHub,
     integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub)) },
   });
 
@@ -893,6 +903,23 @@ export async function createApp(opts: AppOptions) {
       },
       twilioInbound: (url, params, signature) => channelHub.handleTwilio(url, params, signature),
     },
+    music: {
+      library: async (q) => {
+        await musicLibrary.ready();
+        const stats = musicLibrary.stats();
+        return { ...musicLibrary.list(q), folderSet: stats.folderSet, library: { tracks: stats.tracks, artists: stats.artists, albums: stats.albums, scannedAt: stats.scannedAt } };
+      },
+      track: async (id) => {
+        await musicLibrary.ready();
+        const path = await musicLibrary.resolve(id);
+        return path ? { path, mime: MIME[extname(path).slice(1).toLowerCase()] ?? "application/octet-stream" } : null;
+      },
+      cover: async (id) => {
+        await musicLibrary.ready();
+        return musicLibrary.cover(id);
+      },
+      rescan: () => musicLibrary.scan(),
+    },
     alexa: {
       handle: (raw, headers) => alexaHub.handle(raw, headers),
       status: () => alexaHub.status(),
@@ -958,12 +985,16 @@ export async function createApp(opts: AppOptions) {
     },
     onClientConnect: (_session, conn) => {
       clients.add(conn);
+      musicHub.attach(conn);
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
       conn.send(statusMsg());
       conn.send(uiMsg());
       const pending = challenges.current();
       if (pending) conn.send({ type: "voice.challenge", id: pending.id, text: pending.text });
-      return () => clients.delete(conn);
+      return () => {
+        clients.delete(conn);
+        musicHub.detach(conn);
+      };
     },
     onClientMessage: (_session, msg: ClientMsg, conn) => {
       switch (msg.type) {
@@ -1011,6 +1042,9 @@ export async function createApp(opts: AppOptions) {
           break;
         case "ui.screen":
           stage.setScreen(msg);
+          break;
+        case "music.state":
+          musicHub.onState(conn, msg.state);
           break;
         case "stage.move": {
           // the owner dragged or resized an object: it keeps the box they left it in, kept inside the safe part of the screen

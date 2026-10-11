@@ -5,6 +5,7 @@ import type { CameraBroker } from "../camera";
 import type { CodeBox } from "../codebox";
 import type { MediaStore } from "../media";
 import type { BrokerHub } from "../brokers/hub";
+import type { MusicHub } from "../music/hub";
 import { partText } from "../brokers/tooltext";
 import type { ChannelHub } from "../channels/hub";
 import { createHash } from "node:crypto";
@@ -58,6 +59,8 @@ export interface AgentDeps {
   channels?: Pick<ChannelHub, "send" | "inbox">;
   /** The owner's stock broker (Zerodha), read only. Without it the portfolio and report tools report they are unavailable. */
   brokers?: Pick<BrokerHub, "status" | "snapshot" | "report" | "schedules" | "loginLink">;
+  /** The music player on the owner's screen. Without it the music tools report they are unavailable. */
+  music?: Pick<MusicHub, "play" | "control" | "queue" | "search" | "nowPlaying">;
   /** One line about which integrations (Telegram, WhatsApp/SMS) are installed and how far they are, for the model's context. */
   integrations?: { summary(): string };
   /** The owner's saved notes. Without it the memory tools report they are unavailable. */
@@ -474,6 +477,7 @@ export class Agent {
     }
     if (call.name === "file.present" && !d.media) return fail("Showing files is not available.");
     if (call.name.startsWith("message.") && !d.channels) return fail("Messaging is not available.");
+    if (call.name.startsWith("music.") && !d.music) return fail("Music is not available.");
     if ((call.name.startsWith("portfolio.") || call.name.startsWith("reports.")) && !d.brokers) return fail("The portfolio is not available.");
     if (d.brokers && (call.name.startsWith("portfolio.") ? call.name !== "portfolio.status" : call.name === "reports.run")) {
       const z = d.brokers.status("zerodha");
@@ -590,6 +594,22 @@ export class Agent {
       const shot = await d.screen!.request(ctx.emit, signal);
       d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: shot.ok });
       return shot.ok ? { text: "Picture of the Friend screen taken. Sandbox pages, video and PDFs appear empty in it, whatever they really show.", isError: false, image: { mime: shot.mime, data: shot.data } } : fail(shot.error);
+    }
+
+    if (call.name.startsWith("music.")) {
+      const m = d.music!;
+      const out =
+        call.name === "music.play"
+          ? m.play(args)
+          : call.name === "music.control"
+            ? m.control(args as never)
+            : call.name === "music.queue"
+              ? m.queue(args as never)
+              : call.name === "music.search"
+                ? m.search(args as never)
+                : m.nowPlaying();
+      d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "music.control" || call.name === "music.queue" ? { action: args.action } : {}, tier, ok: out.ok });
+      return out.ok ? { text: out.text, isError: false } : fail(out.text);
     }
 
     if (call.name.startsWith("portfolio.") || call.name.startsWith("reports.")) {

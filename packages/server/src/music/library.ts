@@ -68,6 +68,11 @@ export class MusicLibrary {
     return this.running;
   }
 
+  /** Waits for a scan that is under way (the list is only complete after it). */
+  async ready(): Promise<void> {
+    await this.running?.catch(() => {});
+  }
+
   private async doScan(): Promise<ScanResult> {
     const at = Date.now();
     const chosen = this.o.folder().trim();
