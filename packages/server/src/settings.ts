@@ -2,7 +2,7 @@ import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
 import { invocationNameProblem } from "./alexa/invocation";
-import { isValidTimeZone, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
+import { isValidTimeZone, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
 const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
@@ -54,6 +54,14 @@ export const SettingsPatch = z
           .partial()
           .strict(),
         timezone: z.string().trim().min(1).max(60),
+        currencySymbol: z.string().trim().min(1).max(4),
+        currencyName: z.string().trim().min(1).max(20),
+        numberLocale: z.string().trim().min(2).max(35),
+        concentrationPct: z.number().int().min(5).max(90),
+        bigDropPct: z.number().int().min(1).max(50),
+        cacheSeconds: z.number().int().min(5).max(300),
+        maxSchedules: z.number().int().min(1).max(50),
+        maxTriesPerDay: z.number().int().min(1).max(10),
         skipDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A date like 2026-10-02")).max(100),
         loginReminderMinutes: z.number().int().min(0).max(120),
       })
@@ -144,7 +152,20 @@ export interface SettingsView {
     twilio: { installed: boolean; enabled: boolean; accountSid: string; tokenSet: boolean; smsFrom: string; whatsappFrom: string; ownerNumber: string };
   };
   /** The secret itself is never sent to the screen. */
-  brokers: { zerodha: { installed: boolean; enabled: boolean; apiKey: string; secretSet: boolean }; timezone: string; skipDates: string[]; loginReminderMinutes: number };
+  brokers: {
+    zerodha: { installed: boolean; enabled: boolean; apiKey: string; secretSet: boolean };
+    timezone: string;
+    skipDates: string[];
+    loginReminderMinutes: number;
+    currencySymbol: string;
+    currencyName: string;
+    numberLocale: string;
+    concentrationPct: number;
+    bigDropPct: number;
+    cacheSeconds: number;
+    maxSchedules: number;
+    maxTriesPerDay: number;
+  };
   trading: { level: "read" };
   /** The ids of allowed Amazon accounts are shown shortened. */
   alexa: { installed: boolean; enabled: boolean; skillId: string; invocationName: string; allowed: { id: string; name: string }[] };
@@ -173,6 +194,14 @@ export function settingsView(c: Config): SettingsView {
       timezone: c.brokers.timezone,
       skipDates: [...c.brokers.skipDates],
       loginReminderMinutes: c.brokers.loginReminderMinutes,
+      currencySymbol: c.brokers.currencySymbol,
+      currencyName: c.brokers.currencyName,
+      numberLocale: c.brokers.numberLocale,
+      concentrationPct: c.brokers.concentrationPct,
+      bigDropPct: c.brokers.bigDropPct,
+      cacheSeconds: c.brokers.cacheSeconds,
+      maxSchedules: c.brokers.maxSchedules,
+      maxTriesPerDay: c.brokers.maxTriesPerDay,
     },
     trading: { level: c.trading.level },
     alexa: {
@@ -238,6 +267,8 @@ export function applySettings(config: Config, raw: unknown): Applied {
 
   if (p.brokers?.timezone !== undefined && !isValidTimeZone(p.brokers.timezone)) throw new SettingsError("brokers.timezone: That is not a time zone, try one like Asia/Kolkata.");
 
+  if (p.brokers?.numberLocale !== undefined && !validNumberLocale(p.brokers.numberLocale)) throw new SettingsError("brokers.numberLocale: That is not a number format this PC knows, try one like en-IN or en-US.");
+
   if (p.alexa?.invocationName) {
     const problem = invocationNameProblem(p.alexa.invocationName);
     if (problem) throw new SettingsError(`alexa.invocationName: ${problem}`);
@@ -299,6 +330,9 @@ export function applySettings(config: Config, raw: unknown): Applied {
     if (rest.timezone !== undefined) config.brokers.timezone = rest.timezone;
     if (rest.skipDates !== undefined) config.brokers.skipDates = sanitizeBrokers({ skipDates: rest.skipDates }).skipDates;
     if (rest.loginReminderMinutes !== undefined) config.brokers.loginReminderMinutes = rest.loginReminderMinutes;
+    for (const k of ["currencySymbol", "currencyName", "numberLocale", "concentrationPct", "bigDropPct", "cacheSeconds", "maxSchedules", "maxTriesPerDay"] as const) {
+      if (rest[k] !== undefined) (config.brokers as unknown as Record<string, unknown>)[k] = rest[k];
+    }
   }
   if (p.alexa) {
     config.alexa.installed = true; // configuring it is installing it

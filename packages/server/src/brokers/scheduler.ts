@@ -2,7 +2,7 @@ import type { ReportSchedules, Schedule } from "./schedules";
 
 export type { Schedule } from "./schedules";
 
-const MAX_TRIES_PER_DAY = 3;
+const DEFAULT_TRIES_PER_DAY = 3;
 const WEEKDAYS: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
 
 /** The calendar day (YYYY-MM-DD) in a time zone. */
@@ -25,6 +25,8 @@ export interface SchedulerDeps {
   zone: () => string;
   /** Dates (YYYY-MM-DD) the owner keeps no reports on: market holidays, a holiday of their own. */
   skipDates: () => string[];
+  /** How many times a report is tried in a day before it is given up until tomorrow (the owner's setting; default 3). */
+  maxTries?: () => number;
   /** Sends one report. Throwing means it could not be sent. */
   run: (s: Schedule) => Promise<void>;
 }
@@ -47,7 +49,7 @@ export class ReportScheduler {
     let sent = 0;
     for (const s of this.d.schedules.list()) {
       if (!s.enabled || s.lastRunDay === day || !s.days.includes(weekday) || time < s.time) continue;
-      if (this.d.schedules.noteAttempt(s.id, day) > MAX_TRIES_PER_DAY) continue;
+      if (this.d.schedules.noteAttempt(s.id, day) > (this.d.maxTries?.() ?? DEFAULT_TRIES_PER_DAY)) continue;
       try {
         await this.d.run(s);
         this.d.schedules.markRun(s.id, day);

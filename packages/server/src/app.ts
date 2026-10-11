@@ -392,7 +392,7 @@ export async function createApp(opts: AppOptions) {
         const got = await brokerHub.snapshot("zerodha");
         if (!got.ok) return got.sessionExpired ? "Zerodha needs you to log in first." : got.error;
         if (!got.snapshot.holdings.ok) return "I could not read your holdings just now.";
-        return portfolioSpeech(summarize(got.snapshot.holdings.data), locale.startsWith("hi") ? "hi" : "en");
+        return portfolioSpeech(summarize(got.snapshot.holdings.data), locale.startsWith("hi") ? "hi" : "en", { money: { symbol: config.brokers.currencySymbol, locale: config.brokers.numberLocale }, currencyName: config.brokers.currencyName });
       },
       WeatherIntent: async (_locale, slots) => {
         if (!slots.city) return "Tell me which city, for example: what is the weather in Pune.";

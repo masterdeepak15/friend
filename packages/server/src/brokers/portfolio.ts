@@ -71,7 +71,8 @@ export class Portfolio {
   constructor(
     private provider: BrokerProvider,
     private clock: () => number = Date.now,
-    private ttlMs = 30_000,
+    /** How long a read is kept, in milliseconds; a function, so the owner's setting applies as soon as it changes. */
+    private ttlMs: number | (() => number) = 30_000,
   ) {}
 
   invalidate(): void {
@@ -79,7 +80,7 @@ export class Portfolio {
   }
 
   snapshot(): Promise<PortfolioSnapshot> {
-    if (this.cached && this.clock() - this.cached.at < this.ttlMs) return Promise.resolve(this.cached);
+    if (this.cached && this.clock() - this.cached.at < (typeof this.ttlMs === "function" ? this.ttlMs() : this.ttlMs)) return Promise.resolve(this.cached);
     this.inflight ??= this.read().finally(() => {
       this.inflight = null;
     });

@@ -388,7 +388,7 @@ export class Agent {
       case "portfolio.orders": {
         const got = await b.snapshot("zerodha");
         if (!got.ok) return { ok: false, text: got.sessionExpired ? ended : got.error };
-        return { ok: true, text: partText(name.slice("portfolio.".length) as "holdings", got.snapshot, zone) };
+        return { ok: true, text: partText(name.slice("portfolio.".length) as "holdings", got.snapshot, zone, { symbol: this.deps.config.brokers.currencySymbol, locale: this.deps.config.brokers.numberLocale }) };
       }
       case "reports.list": {
         const all = b.schedules.list();

@@ -1,21 +1,31 @@
 import type { PortfolioSummary } from "../brokers/portfolio";
-import { formatInr } from "../brokers/report";
+import { DEFAULT_MONEY, formatMoney, type MoneyOptions } from "../brokers/money";
 import type { TaskRow } from "../tasks";
 import type { Lang } from "./phrases";
 
-/** "1,23,456.50 rupees": Indian grouping, no rupee sign (Alexa reads the word better), no ".00". */
-const rupees = (n: number, lang: Lang): string => `${formatInr(Math.abs(n)).replace("₹", "").replace(/\.00$/, "")} ${lang === "hi" ? "रुपये" : "rupees"}`;
+/** What the owner's settings say about money: the number format and the word spoken for the currency. */
+export interface SpeechMoney {
+  money?: MoneyOptions;
+  currencyName?: string;
+}
+
+/** "1,23,456.50 rupees": the owner's number format with no sign (Alexa reads the word better), no ".00", and their currency word. */
+const rupees = (n: number, lang: Lang, o: SpeechMoney = {}): string => {
+  const word = o.currencyName ?? "rupees";
+  const spoken = lang === "hi" && word === "rupees" ? "रुपये" : word;
+  return `${formatMoney(Math.abs(n), { symbol: "", locale: (o.money ?? DEFAULT_MONEY).locale }).replace(/[.,]00$/, "")} ${spoken}`;
+};
 const pct = (n: number): string => String(Math.round(Math.abs(n) * 100) / 100);
 
 /** The portfolio in a few spoken sentences. Figures only: nothing about what to buy or sell. */
-export function portfolioSpeech(s: PortfolioSummary, lang: Lang): string {
+export function portfolioSpeech(s: PortfolioSummary, lang: Lang, o: SpeechMoney = {}): string {
   if (s.value === 0 && s.invested === 0) return lang === "hi" ? "आपके खाते में अभी कोई होल्डिंग नहीं है।" : "You have no holdings right now.";
   const up = s.dayChange >= 0;
   const gain = s.pnl >= 0;
   if (lang === "hi") {
-    return `आपका पोर्टफोलियो ${rupees(s.value, lang)} का है। आज यह ${pct(s.dayChangePct)} प्रतिशत ${up ? "ऊपर" : "नीचे"} है। कुल ${gain ? "मुनाफ़ा" : "घाटा"} ${rupees(s.pnl, lang)} है।`;
+    return `आपका पोर्टफोलियो ${rupees(s.value, lang, o)} का है। आज यह ${pct(s.dayChangePct)} प्रतिशत ${up ? "ऊपर" : "नीचे"} है। कुल ${gain ? "मुनाफ़ा" : "घाटा"} ${rupees(s.pnl, lang, o)} है।`;
   }
-  return `Your portfolio is worth ${rupees(s.value, lang)}. It is ${up ? "up" : "down"} ${pct(s.dayChangePct)} percent today, ${rupees(s.dayChange, lang)}. Overall you have a ${gain ? "profit" : "loss"} of ${rupees(s.pnl, lang)}.`;
+  return `Your portfolio is worth ${rupees(s.value, lang, o)}. It is ${up ? "up" : "down"} ${pct(s.dayChangePct)} percent today, ${rupees(s.dayChange, lang, o)}. Overall you have a ${gain ? "profit" : "loss"} of ${rupees(s.pnl, lang, o)}.`;
 }
 
 const FIRST_TASKS = 3;

@@ -78,6 +78,20 @@ export function sanitizeAlexa(raw: unknown): AlexaConfig {
 }
 
 export interface BrokersConfig {
+  /** How money is written in reports, tool text and speech. */
+  currencySymbol: string;
+  /** The word spoken for the currency ("rupees", "dollars"). */
+  currencyName: string;
+  /** The number format: en-IN groups as 1,23,456.50, en-US as 123,456.50, de-DE as 123.456,50. */
+  numberLocale: string;
+  /** Report warnings: a holding above this share of the portfolio (percent), or down more than this today (percent). */
+  concentrationPct: number;
+  bigDropPct: number;
+  /** How long an account read is kept, seconds (so chat and reports do not hit the broker's rate limit). */
+  cacheSeconds: number;
+  /** How many report schedules there may be, and how many times a report is tried in a day. */
+  maxSchedules: number;
+  maxTriesPerDay: number;
   /** `installed`: added from the plugins screen (or configured by an earlier version). `enabled`: switched on. The secret is write-only. */
   zerodha: { installed: boolean; enabled: boolean; apiKey: string; apiSecret: string | null };
   /** The owner's time zone, for report times. */
@@ -93,6 +107,16 @@ export interface TradingConfig {
 }
 
 export const DEFAULT_TIMEZONE = "Asia/Kolkata";
+
+/** Whether the number format is a locale this PC knows. */
+export const validNumberLocale = (l: unknown): l is string => {
+  if (typeof l !== "string" || !l || l.length > 35) return false;
+  try {
+    return Intl.NumberFormat.supportedLocalesOf([l]).length === 1;
+  } catch {
+    return false;
+  }
+};
 
 export const isValidTimeZone = (z: unknown): z is string => {
   if (typeof z !== "string" || !z) return false;
@@ -115,7 +139,16 @@ export function sanitizeBrokers(raw: unknown): BrokersConfig {
   const z = (r.zerodha && typeof r.zerodha === "object" ? r.zerodha : {}) as Record<string, unknown>;
   const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
   const reminder = typeof r.loginReminderMinutes === "number" && Number.isFinite(r.loginReminderMinutes) ? Math.min(120, Math.max(0, Math.round(r.loginReminderMinutes))) : 15;
+  const num = (v: unknown, min: number, max: number, def: number): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : def);
   return {
+    currencySymbol: str(r.currencySymbol, 4) || "₹",
+    currencyName: str(r.currencyName, 20) || "rupees",
+    numberLocale: validNumberLocale(r.numberLocale) ? (r.numberLocale as string) : "en-IN",
+    concentrationPct: num(r.concentrationPct, 5, 90, 30),
+    bigDropPct: num(r.bigDropPct, 1, 50, 5),
+    cacheSeconds: num(r.cacheSeconds, 5, 300, 30),
+    maxSchedules: num(r.maxSchedules, 1, 50, 20),
+    maxTriesPerDay: num(r.maxTriesPerDay, 1, 10, 3),
     zerodha: {
       installed: z.installed === true || (z.installed === undefined && (z.enabled === true || !!str(z.apiKey, 64))),
       enabled: z.enabled === true,

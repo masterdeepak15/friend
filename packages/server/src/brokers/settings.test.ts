@@ -13,7 +13,20 @@ const fresh = () => {
 describe("the defaults", () => {
   it("start with nothing installed, India's time zone, a 15 minute login reminder and read-only trading", () => {
     const { config } = fresh();
-    expect(config.brokers).toEqual({ zerodha: { installed: false, enabled: false, apiKey: "", apiSecret: null }, timezone: "Asia/Kolkata", skipDates: [], loginReminderMinutes: 15 });
+    expect(config.brokers).toEqual({
+      zerodha: { installed: false, enabled: false, apiKey: "", apiSecret: null },
+      timezone: "Asia/Kolkata",
+      skipDates: [],
+      loginReminderMinutes: 15,
+      currencySymbol: "₹",
+      currencyName: "rupees",
+      numberLocale: "en-IN",
+      concentrationPct: 30,
+      bigDropPct: 5,
+      cacheSeconds: 30,
+      maxSchedules: 20,
+      maxTriesPerDay: 3,
+    });
     expect(config.trading).toEqual({ level: "read" });
   });
 });

@@ -3,7 +3,7 @@ import type { ChannelHub } from "../channels/hub";
 import type { Config } from "../config";
 import type { Db } from "../db";
 import { Portfolio, type PortfolioSnapshot } from "./portfolio";
-import { buildReport, type ReportKind } from "./report";
+import { buildReport, type ReportKind, type ReportOptions } from "./report";
 import { localDay, localTime, localWeekday, ReportScheduler, type Schedule } from "./scheduler";
 import { ReportSchedules } from "./schedules";
 import { BrokerSessions } from "./session";
@@ -37,6 +37,9 @@ export type ReportResult = { ok: true; text: string } | { ok: false; error: stri
 export type SnapshotResult = { ok: true; snapshot: PortfolioSnapshot; caps: Capabilities; broker: string; zone: string } | { ok: false; error: string; sessionExpired?: boolean };
 export type LoginResult = { ok: true } | { ok: false; error: string };
 
+/** The money format and warning levels the owner chose. */
+export const reportOptions = (b: Config["brokers"]): ReportOptions => ({ money: { symbol: b.currencySymbol, locale: b.numberLocale }, concentrationPct: b.concentrationPct, bigDropPct: b.bigDropPct });
+
 const NAMES: Record<string, string> = { zerodha: "Zerodha" };
 const minutes = (hhmm: string): number => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 
@@ -53,11 +56,12 @@ export class BrokerHub {
   private linkDay: string | null = null;
 
   constructor(private d: BrokerHubDeps) {
-    this.schedules = new ReportSchedules(d.db);
+    this.schedules = new ReportSchedules(d.db, () => d.config.brokers.maxSchedules);
     this.sessions = new BrokerSessions(d.dataDir, this.now);
     this.scheduler = new ReportScheduler({
       schedules: this.schedules,
       zone: () => d.config.brokers.timezone,
+      maxTries: () => d.config.brokers.maxTriesPerDay,
       skipDates: () => d.config.brokers.skipDates,
       run: (s) => this.deliver(s),
     });
@@ -76,7 +80,7 @@ export class BrokerHub {
     if (!usable) this.providers.delete("zerodha");
     else if (!have || have.made !== made) {
       const provider = createZerodha({ apiKey: z.apiKey, apiSecret: z.apiSecret!, fetch: this.d.fetch, clock: this.now });
-      this.providers.set("zerodha", { provider, portfolio: new Portfolio(provider, this.now), made });
+      this.providers.set("zerodha", { provider, portfolio: new Portfolio(provider, this.now, () => this.d.config.brokers.cacheSeconds * 1000), made });
     }
     const now = this.providers.get("zerodha");
     if (now) {
@@ -169,7 +173,7 @@ export class BrokerHub {
   async report(id: string, kind: ReportKind = "custom"): Promise<ReportResult> {
     const got = await this.snapshot(id);
     if (!got.ok) return got;
-    const text = buildReport({ snapshot: got.snapshot, kind, caps: got.caps, now: new Date(this.now()), broker: got.broker, zone: got.zone });
+    const text = buildReport({ snapshot: got.snapshot, kind, caps: got.caps, now: new Date(this.now()), broker: got.broker, zone: got.zone, options: reportOptions(this.d.config.brokers) });
     this.d.audit.log("system", "broker.report", { broker: id, kind, lines: text.split("\n").length });
     return { ok: true, text };
   }

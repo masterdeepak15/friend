@@ -1,5 +1,5 @@
 import type { PortfolioSnapshot, Section } from "./portfolio";
-import { formatInr } from "./report";
+import { DEFAULT_MONEY, formatMoney, type MoneyOptions } from "./money";
 
 export type PartName = "holdings" | "positions" | "funds" | "orders";
 
@@ -12,7 +12,8 @@ const asOf = (at: number, zone: string): string =>
 const rows = <T>(items: T[], line: (x: T) => string): string[] => [...items.slice(0, MAX_ROWS).map(line), ...(items.length > MAX_ROWS ? [`...and ${items.length - MAX_ROWS} more`] : [])];
 
 /** One part of the account as plain text for the model: every number is the broker's, none is made up. Money is rupees. */
-export function partText(part: PartName, snap: PortfolioSnapshot, zone: string): string {
+export function partText(part: PartName, snap: PortfolioSnapshot, zone: string, money: MoneyOptions = DEFAULT_MONEY): string {
+  const formatInr = (n: number) => formatMoney(n, money);
   const section = snap[part] as Section<unknown>;
   if (!section.ok) return `Could not read the ${part}: ${WHY[section.kind] ?? section.error.slice(0, 100)}.`;
   const head = `Zerodha ${part} as of ${asOf(snap.at, zone)}:`;

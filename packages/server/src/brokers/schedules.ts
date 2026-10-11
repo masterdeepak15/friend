@@ -55,7 +55,11 @@ const toSchedule = (r: Row): Schedule => ({
 
 /** The owner's report schedules, kept in the database. Everything is checked on the way in. */
 export class ReportSchedules {
-  constructor(private db: Db) {}
+  /** `max`: how many schedules there may be (the owner's setting). */
+  constructor(
+    private db: Db,
+    private max: () => number = () => MAX_SCHEDULES,
+  ) {}
 
   list(): Schedule[] {
     return (this.db.prepare("select id, name, broker, kind, time, days, channel, commentary, enabled, last_run_day from report_schedules order by id").all() as Row[]).map(toSchedule);
@@ -70,7 +74,8 @@ export class ReportSchedules {
     if (days.length === 0 || days.length !== new Set(s.days).size) throw new Error("Choose the days as numbers 1 (Monday) to 7 (Sunday).");
     if (!CHANNELS.includes(s.channel)) throw new Error("The channel must be telegram, whatsapp or sms.");
     if (typeof s.broker !== "string" || !/^[a-z0-9-]{1,40}$/.test(s.broker)) throw new Error("That is not a broker id.");
-    if (this.list().length >= MAX_SCHEDULES) throw new Error(`There can be at most ${MAX_SCHEDULES} schedules.`);
+    const limit = this.max();
+    if (this.list().length >= limit) throw new Error(`There can be at most ${limit} schedules.`);
     const info = this.db
       .prepare("insert into report_schedules (name, broker, kind, time, days, channel, commentary, enabled) values (?, ?, ?, ?, ?, ?, ?, ?)")
       .run(name, s.broker, s.kind, s.time, days.join(","), s.channel, s.commentary ? 1 : 0, s.enabled ? 1 : 0);
