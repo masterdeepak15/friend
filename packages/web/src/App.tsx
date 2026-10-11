@@ -39,7 +39,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [household, setHousehold] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);
   const [pluginFocus, setPluginFocus] = useState<string | undefined>(undefined);
-  const [settingsOpen, setSettingsOpen] = useState<null | "model" | "look">(null);
+  const [settingsOpen, setSettingsOpen] = useState<null | "model" | "look" | "widgets">(null);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [menuRequest, setMenuRequest] = useState(0);
   const [help, setHelp] = useState<SlashCommand[] | null>(null);
@@ -51,16 +51,23 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     const { type, value } = item.action;
     if (type === "url") window.open(value, "_blank", "noopener,noreferrer");
     else if (type === "prompt") send({ type: "chat.send", text: value });
-    else if (type === "music") {
+    else if (type === "music" || (type === "panel" && value === "music")) {
+      if (!state.music?.folderSet) {
+        dispatch({ type: "alert.add", level: "info", text: "No music folder is chosen yet. Pick one in Settings, Widgets, and the player opens." });
+        setSettingsOpen("widgets");
+        return;
+      }
+      if (type === "panel") {
+        panels.toggle("music", true);
+        if (player.state.view === "hidden") player.dispatch({ type: "view", view: "mini" });
+        return;
+      }
       const action = commandToAction({ action: value } as Parameters<typeof commandToAction>[0]);
       if (action) player.dispatch(action);
     } else if (value === "plugins") setManagingPlugins(true);
     else if (value === "settings") setSettingsOpen("model");
     else if (value === "chat" || value === "tasks") panels.toggle(value, true);
-    else if (value === "music") {
-      panels.toggle("music", true);
-      if (player.state.view === "hidden") player.dispatch({ type: "view", view: "mini" });
-    }
+
   };
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
 
