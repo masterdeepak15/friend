@@ -48,7 +48,7 @@ export interface MusicSettings {
   repeat: "off" | "all" | "one";
   visualizer: boolean;
   startView: "mini" | "full";
-  defaultSource: "local" | "spotify" | "soundcloud" | "any";
+  defaultSource: "local" | "spotify" | "soundcloud" | "audius" | "any";
   searchLimit: number;
   output: "screen" | "host";
   hostPlayer: string;
@@ -56,6 +56,7 @@ export interface MusicSettings {
   /** The Spotify plugin entry; changed only through the plugin, never from the settings screen. */
   spotify: { installed: boolean; enabled: boolean; clientId: string };
   soundcloud: { installed: boolean; enabled: boolean; clientId: string };
+  audius: { installed: boolean; enabled: boolean };
 }
 /** The screen widgets: profile tag, date and time, quick-launch buttons, animations. */
 export interface HudSettings {

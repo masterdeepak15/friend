@@ -23,8 +23,9 @@ const coverId = (id: string): string | null => {
 };
 const isSpotify = (id: string): boolean => parseRef(id)?.source === "spotify";
 const isSoundCloud = (id: string): boolean => parseRef(id)?.source === "soundcloud";
-type Service = "spotify" | "soundcloud";
-const SERVICE_LABEL: Record<Service, string> = { spotify: "Spotify", soundcloud: "SoundCloud" };
+const isAudius = (id: string): boolean => parseRef(id)?.source === "audius";
+type Service = "spotify" | "soundcloud" | "audius";
+const SERVICE_LABEL: Record<Service, string> = { spotify: "Spotify", soundcloud: "SoundCloud", audius: "Audius" };
 
 function useCover(id: string | undefined): string | null {
   const [ok, setOk] = useState<boolean>(id ? (covers.get(id) ?? false) : false);
@@ -69,7 +70,7 @@ function useServiceInfo(): Partial<Record<Service, ServiceInfo>> | null {
       .then((r) => (r.ok ? r.json() : null))
       .then((j: { sources?: { id: string; status: { connected: boolean; needs: string | null } }[] } | null) => {
         const out: Partial<Record<Service, ServiceInfo>> = {};
-        for (const id of ["spotify", "soundcloud"] as const) {
+        for (const id of ["spotify", "soundcloud", "audius"] as const) {
           const s = j?.sources?.find((x) => x.id === id)?.status;
           if (s) out[id] = { connected: s.connected, needs: s.needs };
         }
@@ -216,7 +217,7 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
   const [source, setSource] = useState<"folder" | Service>("folder");
   const [found, setFound] = useState<{ tracks: Row[]; total: number } | null>(null);
   const services = useServiceInfo();
-  const connected = (["spotify", "soundcloud"] as const).filter((s) => services?.[s]?.connected);
+  const connected = (["spotify", "soundcloud", "audius"] as const).filter((s) => services?.[s]?.connected);
   const onService = source !== "folder" && connected.includes(source) ? source : null;
   const serviceNeeds = onService ? services?.[onService]?.needs : null;
   useEffect(() => {
@@ -287,6 +288,7 @@ function Playlist({ player, anim }: { player: Player; anim: Anim }) {
                   {track.artist || track.album}
                   {isSpotify(track.id) && <em className="hud-source">SPOTIFY</em>}
                   {isSoundCloud(track.id) && <em className="hud-source">SOUNDCLOUD</em>}
+                  {isAudius(track.id) && <em className="hud-source">AUDIUS</em>}
                 </small>
               </button>
               {tab === "library" && (
@@ -348,6 +350,7 @@ export function MusicPlayerView({ player, music, animations }: { player: Player;
               {current ? [current.artist, current.album].filter(Boolean).join(" — ") : "Press play, or ask for some music."}
               {current && isSpotify(current.id) && <em className="hud-source">SPOTIFY</em>}
               {current && isSoundCloud(current.id) && <em className="hud-source">SOUNDCLOUD</em>}
+              {current && isAudius(current.id) && <em className="hud-source">AUDIUS</em>}
               {player.remote && <em className="hud-source">THIS PC</em>}
             </small>
           </div>

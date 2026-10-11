@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { WidgetsTab } from "./WidgetsTab";
 import { diffSettings, type HudSettings, type MusicSettings, type SettingsView } from "./settingsApi";
 
-const music: MusicSettings = { folder: "C:\Music", extensions: ["mp3", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" }, soundcloud: { installed: false, enabled: false, clientId: "" } };
+const music: MusicSettings = { folder: "C:\Music", extensions: ["mp3", "flac"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" }, soundcloud: { installed: false, enabled: false, clientId: "" }, audius: { installed: false, enabled: false } };
 const hud: HudSettings = { terminalLabel: "TERMINAL", clock: { hour12: true, seconds: false, locale: "" }, launcher: [{ id: "a", label: "Chat", icon: "C", action: { type: "panel", value: "chat" } }], animations: "full" };
 const base = { provider: "claude", model: "m", apiKeySet: false, view: "companion", music, hud, look: {}, ollama: {}, claudeCode: {}, voice: {} } as unknown as SettingsView;
 

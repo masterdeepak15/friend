@@ -65,6 +65,7 @@ export function IntegrationConfig({
   const isAlexa = integration.id === "alexa";
   const isSpotify = integration.id === "spotify";
   const isSoundCloud = integration.id === "soundcloud";
+  const isAudius = integration.id === "audius";
 
   useEffect(() => {
     alive.current = true;
@@ -91,7 +92,7 @@ export function IntegrationConfig({
 
   // only what was changed goes to the server
   const patch = (): Record<string, unknown> => {
-    if (isSpotify || isSoundCloud) return {}; // its client id, Connect and Disconnect each ask for the PIN themselves
+    if (isSpotify || isSoundCloud || isAudius) return {}; // its client id, Connect and Disconnect each ask for the PIN themselves
     if (isAlexa) {
       if (!savedA) return {};
       const a: Record<string, unknown> = changedKeys(draftA, savedA, ALEXA_OPTION_KEYS);
@@ -199,6 +200,7 @@ export function IntegrationConfig({
         !isAlexa &&
         !isSpotify &&
         !isSoundCloud &&
+        !isAudius &&
         saved &&
         (isTelegram ? (
           <TelegramForm view={{ ...draft.telegram, enabled: integration.enabled }} secret={secret} setSecret={setSecret} api={channelsApi} />
@@ -212,7 +214,7 @@ export function IntegrationConfig({
         </p>
       )}
       <div className="approval-actions">
-        {!isSpotify && !isSoundCloud && (
+        {!isSpotify && !isSoundCloud && !isAudius && (
           <button type="button" style={touch} className="primary" disabled={!dirty || busy || (isAlexa && alexaProblem(draftA) !== null)} onClick={() => setAsking(true)}>
             {dirty ? "Save…" : "Save"}
           </button>
