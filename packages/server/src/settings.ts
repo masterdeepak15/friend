@@ -114,6 +114,7 @@ export const SettingsPatch = z
         maxHeight: z.number().int().min(VIDEO_LIMITS.maxHeight.min).max(VIDEO_LIMITS.maxHeight.max),
         maxMinutes: z.number().int().min(VIDEO_LIMITS.maxMinutes.min).max(VIDEO_LIMITS.maxMinutes.max),
         allowedSites: z.array(z.string().trim().max(200)).max(VIDEO_LIMITS.sites.max),
+        autoInstall: z.boolean(),
         ytdlp: z.string().trim().max(260).refine((v) => programProblem(v) === null, { message: "That is not a program name or path. Use a name like yt-dlp, or a path with no spaces." }),
         ffmpeg: z.string().trim().max(260).refine((v) => programProblem(v) === null, { message: "That is not a program name or path. Use a name like ffmpeg, or a path with no spaces." }),
       })

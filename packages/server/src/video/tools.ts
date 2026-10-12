@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import type { Config } from "../config";
 import { findMpv, type FindResult } from "../music/mpv";
+import { managedPath } from "./provision";
 import type { HelperStatus, VideoStatus } from "./types";
 
 export type HelperName = "yt-dlp" | "ffmpeg";
@@ -10,6 +11,8 @@ export type HelperName = "yt-dlp" | "ffmpeg";
 export interface FindHelperDeps {
   /** What the owner set (a name or a path), or empty to look around. */
   program: string;
+  /** The copy Friend downloaded itself (tried after the owner's own choice and before the PATH). */
+  managed?: string;
   platform?: NodeJS.Platform;
   env?: Record<string, string | undefined>;
   exists?: (p: string) => boolean;
@@ -102,7 +105,7 @@ export async function findHelper(name: HelperName, d: FindHelperDeps): Promise<F
   };
   const set = d.program.trim();
   if (set) return (await tryOne(set)) ?? { found: false, install: `The program set in Settings is not ${name}, or does not start. Use ${name}, or clear the setting so Friend can look for it. ${installFor(name, platform)}` };
-  for (const c of [name, ...places(name, platform, env)]) {
+  for (const c of [...(d.managed ? [d.managed] : []), name, ...places(name, platform, env)]) {
     const r = await tryOne(c);
     if (r) return r;
   }
@@ -112,11 +115,13 @@ export async function findHelper(name: HelperName, d: FindHelperDeps): Promise<F
 const asStatus = (r: FindResult): HelperStatus => (r.found ? { found: true, version: r.version, path: r.path } : { found: false, install: r.install });
 
 /** Which of the three programs web video uses are on this PC (a look, not a change). */
-export async function videoStatus(config: Pick<Config, "video" | "music">, deps: Omit<FindHelperDeps, "program"> = {}): Promise<VideoStatus> {
+export async function videoStatus(config: Pick<Config, "video" | "music">, deps: Omit<FindHelperDeps, "program" | "managed"> & { dataDir?: string } = {}): Promise<VideoStatus> {
+  const { dataDir, ...find } = deps;
+  const managed = (name: HelperName) => (dataDir ? managedPath(dataDir, name, deps.platform) : undefined);
   const [ytdlp, ffmpeg, mpv] = await Promise.all([
-    findHelper("yt-dlp", { ...deps, program: config.video.ytdlp }),
-    findHelper("ffmpeg", { ...deps, program: config.video.ffmpeg }),
-    findMpv({ ...deps, program: config.music.hostPlayer }),
+    findHelper("yt-dlp", { ...find, program: config.video.ytdlp, managed: managed("yt-dlp") }),
+    findHelper("ffmpeg", { ...find, program: config.video.ffmpeg, managed: managed("ffmpeg") }),
+    findMpv({ ...find, program: config.music.hostPlayer }),
   ]);
   return { ytdlp: asStatus(ytdlp), ffmpeg: asStatus(ffmpeg), mpv: asStatus(mpv) };
 }

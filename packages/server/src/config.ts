@@ -66,6 +66,8 @@ export interface VideoConfig {
   /** The yt-dlp and ffmpeg programs the owner chose (a name or a path); empty means find them. */
   ytdlp: string;
   ffmpeg: string;
+  /** Friend downloads yt-dlp and ffmpeg itself when they are missing (from the projects' own release pages, checked), so nothing is installed by hand. */
+  autoInstall: boolean;
 }
 
 export interface ChromeConfig {
@@ -168,6 +170,7 @@ export function sanitizeVideo(raw: unknown): VideoConfig {
     allowedSites: normalizeSites(r.allowedSites),
     ytdlp: program(r.ytdlp),
     ffmpeg: program(r.ffmpeg),
+    autoInstall: r.autoInstall !== false,
   };
 }
 

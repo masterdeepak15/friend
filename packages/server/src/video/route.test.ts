@@ -30,14 +30,34 @@ let cookie = "";
 const base = () => `http://127.0.0.1:${port}`;
 let proc = fakeSpawn();
 
-async function boot(on = true) {
+let openedUrls: string[] = [];
+let provisionCalls: string[][] = [];
+async function boot(on = true, over: { status?: VideoStatus } = {}) {
   proc = fakeSpawn();
+  openedUrls = [];
+  provisionCalls = [];
   const run: YtRun = async () => ({ code: 0, out: JSON.stringify(youtube), err: "" });
   app = await createApp({
     dataDir: mkdtempSync(join(tmpdir(), "friend-videoroute-")),
     provider: new FakeProvider([]),
     config: { port: 0, roots: [] },
-    video: { run, spawn: proc.spawn as never, status: async () => OK, resolve: async () => ["93.184.216.34"] },
+    video: {
+      run,
+      spawn: proc.spawn as never,
+      status: async () => over.status ?? OK,
+      resolve: async () => ["93.184.216.34"],
+      openBrowser: async (url) => {
+        openedUrls.push(url);
+        return true;
+      },
+      provisioner: {
+        ensure: async (names) => {
+          provisionCalls.push([...names]);
+          return { ok: true };
+        },
+        state: () => ({ busy: false, tools: {} }),
+      },
+    },
   });
   if (on) Object.assign(app.config.video, { installed: true, enabled: true });
   port = (await app.start()).port;
@@ -65,6 +85,65 @@ describe("the plugin page's questions", () => {
     const ck = await fetch(base() + "/api/plugins/video/check", { method: "POST", headers: { ...j, cookie }, body: "{}" });
     expect(ck.status).toBe(200);
     expect(await ck.json()).toMatchObject({ ytdlp: { found: true } });
+  });
+});
+
+describe("a browser window on the PC", () => {
+  const NO_MPV: VideoStatus = { ...OK, mpv: { found: false, install: "mpv is not installed." } };
+  const ticketUrl = async (): Promise<URL> => {
+    Object.assign(app.config.video, { output: "host" });
+    const r = await app.video.play({ url: "https://www.youtube.com/watch?v=abc" });
+    if (!r.ok) throw new Error(`play failed: ${JSON.stringify(r)}`);
+    return new URL(openedUrls[0]!);
+  };
+
+  it("opens Friend's own address with a ticket, which plays without signing in on this PC", async () => {
+    await boot(true, { status: NO_MPV });
+    const u = await ticketUrl();
+    expect(u.pathname).toMatch(/^\/api\/video\/[0-9a-f]{32}$/);
+    expect(u.hostname).toBe("127.0.0.1");
+    expect(u.searchParams.get("o")).toMatch(/^[0-9a-f]{32}$/);
+    const pending = fetch(`${base()}${u.pathname}${u.search}`); // no cookie: this is the PC's own browser
+    for (let i = 0; i < 100 && proc.children.length === 0; i++) await new Promise((r) => setTimeout(r, 20));
+    proc.children[0]!.finish(0);
+    const res = await pending;
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("FMP4DATA");
+  });
+
+  it("turns away a wrong ticket, a ticket for another video, and no ticket at all", async () => {
+    await boot(true, { status: NO_MPV });
+    const u = await ticketUrl();
+    expect((await fetch(`${base()}${u.pathname}?o=${"0".repeat(32)}`)).status).toBe(401);
+    expect((await fetch(`${base()}/api/video/${"1".repeat(32)}?o=${u.searchParams.get("o")}`)).status).toBe(401);
+    expect((await fetch(`${base()}${u.pathname}`)).status).toBe(401);
+    expect((await fetch(`${base()}${u.pathname}?o=not-a-ticket`)).status).toBe(401);
+    expect(proc.calls).toEqual([]);
+  });
+});
+
+describe("the owner's \"set it up\" button", () => {
+  it("downloads the programs by itself, for the signed-in owner only", async () => {
+    await boot();
+    expect((await fetch(base() + "/api/plugins/video/prepare", { method: "POST", headers: j, body: "{}" })).status).toBe(401);
+    const r = await fetch(base() + "/api/plugins/video/prepare", { method: "POST", headers: { ...j, cookie }, body: "{}" });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ ytdlp: { found: true } });
+  });
+  it("is done when the plugin is installed or switched on, without anyone pressing it", async () => {
+    await boot(false, { status: { ...OK, ytdlp: { found: false }, ffmpeg: { found: false } } });
+    const post = (path: string, body: unknown) => fetch(base() + path, { method: "POST", headers: { ...j, cookie }, body: JSON.stringify(body) });
+    expect((await post("/api/plugins/install", { id: "video", pin: owner.pin })).status).toBe(200);
+    for (let i = 0; i < 100 && provisionCalls.length === 0; i++) await new Promise((r) => setTimeout(r, 20));
+    expect(provisionCalls[0]).toEqual(["yt-dlp", "ffmpeg"]);
+  });
+  it("does not download when the owner turned automatic download off", async () => {
+    await boot(false, { status: { ...OK, ytdlp: { found: false }, ffmpeg: { found: false } } });
+    app.config.video.autoInstall = false;
+    const post = (path: string, body: unknown) => fetch(base() + path, { method: "POST", headers: { ...j, cookie }, body: JSON.stringify(body) });
+    await post("/api/plugins/install", { id: "video", pin: owner.pin });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(provisionCalls).toEqual([]);
   });
 });
 

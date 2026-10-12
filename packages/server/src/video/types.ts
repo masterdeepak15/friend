@@ -13,4 +13,6 @@ export interface VideoStatus {
   ytdlp: HelperStatus;
   ffmpeg: HelperStatus;
   mpv: HelperStatus;
+  /** How Friend's own download of the programs is going, when it has been asked to get them. */
+  setup?: { busy: boolean; message: string | null; error: string | null };
 }

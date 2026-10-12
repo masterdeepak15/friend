@@ -14,6 +14,7 @@ import type { ProviderEvent } from "../provider/types";
 import { StageState } from "../stage";
 import type { VideoResult } from "../video/hub";
 import { Agent } from "./loop";
+import { buildSystemPrompt } from "./prompt";
 
 const call = (id: string, name: string, args: unknown = {}): ProviderEvent => ({ type: "tool_call", id, name, args });
 const text = (t: string): ProviderEvent => ({ type: "text_delta", text: t });
@@ -62,6 +63,29 @@ beforeEach(async () => {
       assistantName: () => "Jarvis",
       ...(video ? { video: video as never } : {}),
     });
+});
+
+describe("what the assistant is told about videos", () => {
+  const owner = () => buildSystemPrompt("Jarvis", "scene=conversation");
+  it("knows video.play, video.control and video.check", () => {
+    const p = owner();
+    for (const t of ["video.play", "video.control", "video.check"]) expect(p, t).toContain(t);
+  });
+  it("is told to play a video or a song from YouTube inside Friend, and never to open the site in the owner's browser", () => {
+    const p = owner();
+    expect(p).toMatch(/video, a song or a clip from YouTube or any website, use video\.play/i);
+    expect(p).toMatch(/Never open the site in the owner's Chrome or any browser/i);
+    expect(p).toMatch(/browser tools/i);
+  });
+  it("is told which tool is for which music: the folder and the music services use music.play, YouTube uses video.play", () => {
+    const p = owner();
+    expect(p).toMatch(/music\.play does not play YouTube: use video\.play/);
+  });
+  it("is told what to do when Web video is off or a helper is missing: say so, never fall back to the browser", () => {
+    const p = owner();
+    expect(p).toMatch(/Web video is not switched on.*Plugins, Web video/s);
+    expect(p).toMatch(/not (?:a )?reason to open (?:it in )?(?:a|the) browser|instead of opening/i);
+  });
 });
 
 describe("playing a video by asking", () => {

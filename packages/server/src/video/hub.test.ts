@@ -34,7 +34,21 @@ function fakeHost(over: { openError?: string } = {}): VideoHostLike & { calls: u
   };
 }
 
-function make(over: { video?: Record<string, unknown>; status?: VideoStatus; json?: unknown; host?: VideoHostLike } = {}) {
+/** A stand-in for the downloader: it fills in what is missing after a moment, or never, or fails. */
+function fakeProvisioner(over: { onEnsure?: () => Promise<{ ok: true } | { ok: false; error: string }>; busy?: boolean } = {}) {
+  const calls: string[][] = [];
+  return {
+    calls,
+    ensure: async (names: string[]) => {
+      calls.push([...names]);
+      return over.onEnsure ? over.onEnsure() : ({ ok: true } as const);
+    },
+    state: () => ({ busy: over.busy ?? false, tools: {} as Record<string, { phase: string; percent?: number | null; error?: string }> }),
+  };
+}
+
+function make(over: { video?: Record<string, unknown>; status?: VideoStatus; json?: unknown; host?: VideoHostLike; provisioner?: ReturnType<typeof fakeProvisioner>; statuses?: VideoStatus[]; browser?: boolean; browserWorks?: boolean } = {}) {
+  const opened: string[] = [];
   const ytCalls: string[][] = [];
   const run: YtRun = async (_cmd, args) => {
     ytCalls.push(args);
@@ -43,7 +57,7 @@ function make(over: { video?: Record<string, unknown>; status?: VideoStatus; jso
   const proc = fakeSpawn();
   let now = 1_000_000;
   let statusCalls = 0;
-  const cfg = { video: { installed: true, enabled: true, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", ...over.video }, music: { hostPlayer: "" } };
+  const cfg = { video: { installed: true, enabled: true, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true, ...over.video }, music: { hostPlayer: "" } };
   const hub = new VideoHub({
     config: () => cfg as never,
     run,
@@ -51,12 +65,23 @@ function make(over: { video?: Record<string, unknown>; status?: VideoStatus; jso
     resolve: async () => ["93.184.216.34"],
     status: async () => {
       statusCalls++;
-      return over.status ?? OK;
+      return over.statuses ? over.statuses[Math.min(statusCalls - 1, over.statuses.length - 1)]! : (over.status ?? OK);
     },
+    provisioner: over.provisioner as never,
+    waitMs: 20,
+    ...(over.browser
+      ? {
+          windowUrl: (id: string, nonce: string) => `http://127.0.0.1:8787/api/video/${id}?o=${nonce}`,
+          openBrowser: async (url: string) => {
+            opened.push(url);
+            return over.browserWorks !== false;
+          },
+        }
+      : {}),
     host: over.host,
     clock: () => now,
   });
-  return { hub, ytCalls, proc, advance: (ms: number) => (now += ms), statusCalls: () => statusCalls, cfg };
+  return { hub, ytCalls, proc, opened, advance: (ms: number) => (now += ms), statusCalls: () => statusCalls, cfg };
 }
 const URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 const srcId = (src: string) => /^\/api\/video\/([0-9a-f]{32})$/.exec(src)![1]!;
@@ -235,6 +260,122 @@ describe("playing in a window on the PC", () => {
   it("says so when this Friend has no player for the PC", async () => {
     const t = make({ video: { output: "host" } });
     expect(await t.hub.play({ url: URL })).toEqual({ ok: false, text: expect.stringMatching(/window on this PC is not available/i) });
+  });
+});
+
+describe("a browser window on the PC, when there is no mpv", () => {
+  const NO_MPV: VideoStatus = { ...OK, mpv: { found: false, install: "mpv is not installed." } };
+  it("opens Friend's own video address in the PC's browser, which needs nothing installed beyond ffmpeg", async () => {
+    const t = make({ status: NO_MPV, video: { output: "host" }, browser: true });
+    const r = await t.hub.play({ url: URL });
+    expect(r).toEqual({ ok: true, text: 'Playing "Never Gonna Give You Up" by Rick Astley in a browser window on this PC.' });
+    expect(t.opened).toHaveLength(1);
+    expect(t.opened[0]).toMatch(/^http:\/\/127\.0\.0\.1:8787\/api\/video\/[0-9a-f]{32}\?o=[0-9a-f]{32}$/);
+  });
+  it("prefers mpv when it is there", async () => {
+    const host = fakeHost();
+    const t = make({ video: { output: "host" }, host, browser: true });
+    await t.hub.play({ url: URL });
+    expect(host.calls[0]![0]).toBe("open");
+    expect(t.opened).toEqual([]);
+  });
+  it("lets only that address and that ticket in without signing in, and only for a while", async () => {
+    const t = make({ status: NO_MPV, video: { output: "host" }, browser: true });
+    await t.hub.play({ url: URL });
+    const [, id, nonce] = /video\/([0-9a-f]{32})\?o=([0-9a-f]{32})/.exec(t.opened[0]!)!;
+    expect(t.hub.ticketOk(id!, nonce!)).toBe(true);
+    expect(t.hub.ticketOk(id!, "0".repeat(32))).toBe(false);
+    expect(t.hub.ticketOk("1".repeat(32), nonce!)).toBe(false);
+    expect(t.hub.ticketOk(id!, "not-a-ticket")).toBe(false);
+    t.advance(11 * 60 * 1000);
+    expect(t.hub.ticketOk(id!, nonce!)).toBe(false);
+  });
+  it("says so when the browser could not be opened", async () => {
+    const t = make({ status: NO_MPV, video: { output: "host" }, browser: true, browserWorks: false });
+    expect(await t.hub.play({ url: URL })).toEqual({ ok: false, text: expect.stringMatching(/could not open a browser window/i) });
+  });
+  it("needs ffmpeg for that, and downloads it when it is missing", async () => {
+    const prov = fakeProvisioner();
+    const t = make({ statuses: [{ ...NO_MPV, ffmpeg: { found: false } }, NO_MPV], provisioner: prov, video: { output: "host" }, browser: true });
+    await t.hub.play({ url: URL });
+    expect(prov.calls).toEqual([["ffmpeg"]]); // only what is missing
+  });
+  it("stop ends the stream; pause, resume, volume and seek point to the player in the window", async () => {
+    const t = make({ status: NO_MPV, video: { output: "host" }, browser: true });
+    await t.hub.play({ url: URL });
+    const [, id] = /video\/([0-9a-f]{32})/.exec(t.opened[0]!)!;
+    (await t.hub.streamOf(id!))!;
+    for (const action of ["pause", "resume", "volume", "seek"] as const) expect(await t.hub.control({ action }), action).toEqual({ ok: true, text: expect.stringMatching(/player in the browser window/i) });
+    expect((await t.hub.control({ action: "stop" })).ok).toBe(true);
+    expect(t.proc.children[0]!.killed).toBe(true);
+  });
+  it("still says to install mpv when there is no way to open a browser", async () => {
+    const t = make({ status: NO_MPV, video: { output: "host" }, host: fakeHost() });
+    const r = await t.hub.play({ url: URL });
+    expect(r).toEqual({ ok: false, text: expect.stringMatching(/mpv/) });
+  });
+});
+
+describe("setting the helper programs up by itself", () => {
+  const MISSING: VideoStatus = { ...OK, ytdlp: { found: false, install: "yt-dlp is not installed." }, ffmpeg: { found: false, install: "ffmpeg is not installed." } };
+
+  it("downloads what is missing when someone asks for a video, then plays it in the same request", async () => {
+    const prov = fakeProvisioner();
+    const t = make({ statuses: [MISSING, OK], provisioner: prov });
+    const r = await t.hub.play({ url: URL });
+    expect(prov.calls).toEqual([["yt-dlp", "ffmpeg"]]);
+    expect(r).toMatchObject({ ok: true, show: { id: "video-now" } });
+  });
+
+  it("asks only for what the chosen place to play needs: the PC window needs no ffmpeg", async () => {
+    const prov = fakeProvisioner();
+    const t = make({ statuses: [{ ...OK, ytdlp: { found: false } }, OK], provisioner: prov, video: { output: "host" }, host: fakeHost() });
+    await t.hub.play({ url: URL });
+    expect(prov.calls).toEqual([["yt-dlp"]]);
+  });
+
+  it("does not download anything when everything is there", async () => {
+    const prov = fakeProvisioner();
+    await make({ provisioner: prov }).hub.play({ url: URL });
+    expect(prov.calls).toEqual([]);
+  });
+
+  it("does not download when the owner turned that off, and says how to install by hand instead", async () => {
+    const prov = fakeProvisioner();
+    const r = await make({ status: MISSING, provisioner: prov, video: { autoInstall: false } }).hub.play({ url: URL });
+    expect(prov.calls).toEqual([]);
+    expect(r).toEqual({ ok: false, text: expect.stringMatching(/yt-dlp is not installed/) });
+  });
+
+  it("says plainly when the download failed, with its reason", async () => {
+    const prov = fakeProvisioner({ onEnsure: async () => ({ ok: false, error: "Friend could not download ffmpeg. Check the internet connection and try again." }) });
+    const r = await make({ status: MISSING, provisioner: prov }).hub.play({ url: URL });
+    expect(r).toEqual({ ok: false, text: expect.stringMatching(/could not download ffmpeg/) });
+  });
+
+  it("says it is still downloading, instead of making the owner wait for a big download, and carries on in the background", async () => {
+    let finish!: (v: { ok: true }) => void;
+    const slow = new Promise<{ ok: true }>((r) => (finish = r));
+    const prov = fakeProvisioner({ onEnsure: () => slow });
+    const t = make({ status: MISSING, provisioner: prov });
+    const r = await t.hub.play({ url: URL });
+    expect(r).toEqual({ ok: false, text: expect.stringMatching(/downloading the video tools.*first time only.*ask again in a minute/i) });
+    finish({ ok: true });
+  });
+
+  it("prepare() downloads whatever the plugin needs and then looks again, so the plugin page is true", async () => {
+    const prov = fakeProvisioner();
+    const t = make({ statuses: [MISSING, OK], provisioner: prov });
+    await t.hub.prepare();
+    expect(prov.calls).toEqual([["yt-dlp", "ffmpeg"]]);
+    expect(t.hub.status()).toMatchObject({ ytdlp: { found: true }, ffmpeg: { found: true } });
+  });
+
+  it("shows how the setup is going next to what was found", async () => {
+    const prov = fakeProvisioner({ busy: true });
+    const t = make({ provisioner: prov });
+    await t.hub.refresh();
+    expect(t.hub.status()?.setup).toMatchObject({ busy: true });
   });
 });
 

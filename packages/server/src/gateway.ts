@@ -55,6 +55,10 @@ export interface GatewayDeps {
     status(): Promise<unknown>;
     /** Looks again. */
     check(): Promise<unknown>;
+    /** Downloads what is missing (when allowed), then looks again. */
+    prepare(): Promise<unknown>;
+    /** A browser on this PC may watch this video without signing in: it has the ticket Friend made for it. */
+    ticketOk(id: string, ticket: string): boolean;
   };
   /** Managing connectors from the owner's screen; the routes answer 503 without it. */
   connectors?: ConnectorsApi;
@@ -540,9 +544,12 @@ export function createGateway(deps: GatewayDeps) {
   });
 
   // ---- web video: made as it is watched (ffmpeg), for signed-in browsers only, at addresses Friend made ----
-  app.get<{ Params: { id: string } }>("/api/video/:id", async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { o?: string } }>("/api/video/:id", async (req, reply) => {
     const token = req.cookies[COOKIE_NAME];
-    if (!token || !auth.resolveSession(token)) return reply.code(401).send({ error: "Unauthorized" });
+    const signedIn = !!token && !!auth.resolveSession(token);
+    // the PC's own browser, opened by Friend for one video: no sign-in, but the ticket Friend made, and only from this PC
+    const ticket = typeof req.query.o === "string" && !!deps.video?.ticketOk(req.params.id, req.query.o) && LOOPBACK.has(req.socket.remoteAddress ?? "");
+    if (!signedIn && !ticket) return reply.code(401).send({ error: "Unauthorized" });
     if (!deps.video) return reply.code(404).send({ error: "Not found" });
     let handle: Awaited<ReturnType<NonNullable<GatewayDeps["video"]>["stream"]>>;
     try {
@@ -933,6 +940,10 @@ export function createGateway(deps: GatewayDeps) {
   app.post("/api/plugins/video/check", { onRequest: pluginGuard }, async (_req, reply) => {
     if (!deps.video) return reply.code(404).send({ error: "Not found" });
     return deps.video.check();
+  });
+  app.post("/api/plugins/video/prepare", { onRequest: pluginGuard }, async (_req, reply) => {
+    if (!deps.video) return reply.code(404).send({ error: "Not found" });
+    return deps.video.prepare();
   });
 
   // ---- Chrome control (owner session: the page's own routes; the key: the addresses other PCs use) ----

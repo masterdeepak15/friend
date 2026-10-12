@@ -3,9 +3,10 @@ import type { spawn } from "node:child_process";
 import type { VideoOutput } from "@friend/protocol";
 import type { Config } from "../config";
 import { resolveVideo, type ResolveDeps, type VideoInfo, type YtRun } from "./resolve";
+import type { Provisioner, ToolName } from "./provision";
 import { startStream, type StreamHandle } from "./stream";
 import { videoStatus } from "./tools";
-import type { VideoStatus } from "./types";
+import type { HelperStatus, VideoStatus } from "./types";
 
 /** The window on the PC (mpv). It is its own piece so the hub can be tested without a real player. */
 export interface VideoHostLike {
@@ -28,6 +29,14 @@ export interface VideoHubDeps {
   status?: () => Promise<VideoStatus>;
   host?: VideoHostLike;
   clock?: () => number;
+  /** Downloads yt-dlp and ffmpeg when they are missing. Without it nothing is downloaded. */
+  provisioner?: Pick<Provisioner, "ensure" | "state">;
+  /** How long a request waits for a download before it says it is still going (default 25 seconds). */
+  waitMs?: number;
+  /** The address a browser on this PC can use to watch a video (Friend's own, with a ticket). */
+  windowUrl?: (id: string, ticket: string) => string;
+  /** Opens an address in the PC's browser. */
+  openBrowser?: (url: string) => Promise<boolean>;
 }
 
 export interface PlayArgs {
@@ -57,6 +66,8 @@ interface Token {
   expires: number;
 }
 
+const TICKET_MS = 10 * 60 * 1000;
+
 const CARD = "video-now";
 const TTL_MS = 6 * 3600 * 1000;
 const MAX_TOKENS = 20;
@@ -73,7 +84,8 @@ export class VideoHub {
   private tokens = new Map<string, Token>();
   private streams: { id: string; handle: StreamHandle }[] = [];
   private cached: { status: VideoStatus; at: number } | null = null;
-  private now: { output: VideoOutput; title: string; uploader: string; info: VideoInfo } | null = null;
+  private now: { output: VideoOutput; title: string; uploader: string; info: VideoInfo; via?: "mpv" | "browser" } | null = null;
+  private tickets = new Map<string, { id: string; expires: number }>();
 
   constructor(private d: VideoHubDeps) {}
 
@@ -81,9 +93,49 @@ export class VideoHub {
     return (this.d.clock ?? Date.now)();
   }
 
-  /** What was found last time it looked (null before the first look). */
+  /** What was found last time it looked (null before the first look), with how the download of the programs is going. */
   status(): VideoStatus | null {
-    return this.cached?.status ?? null;
+    return this.cached ? { ...this.cached.status, setup: this.setup() } : null;
+  }
+
+  private setup(): NonNullable<VideoStatus["setup"]> {
+    const st = this.d.provisioner?.state();
+    if (!st) return { busy: false, message: null, error: null };
+    const entries = Object.entries(st.tools) as [ToolName, { phase: string; percent?: number | null; error?: string }][];
+    const active = entries.find(([, t]) => t.phase === "downloading" || t.phase === "unpacking");
+    const message = active ? (active[1].phase === "unpacking" ? `Unpacking ${active[0]}…` : `Downloading ${active[0]}${typeof active[1].percent === "number" ? ` ${active[1].percent}%` : ""}…`) : null;
+    const failed = entries.find(([, t]) => t.phase === "error");
+    return { busy: st.busy, message, error: failed?.[1].error ?? null };
+  }
+
+  /**
+   * The helper programs the chosen place to play needs: yt-dlp always; ffmpeg for the screen and for a browser window on the PC;
+   * a window of mpv needs no ffmpeg. mpv itself is the owner's: when it is not there a browser window is used instead.
+   */
+  private wanted(output: VideoOutput, status: VideoStatus | null): ToolName[] {
+    const mpvWindow = output === "host" && (status?.mpv.found ?? false) && !!this.d.host;
+    return mpvWindow ? ["yt-dlp"] : ["yt-dlp", "ffmpeg"];
+  }
+
+  /** Whether a browser on this PC may watch this video without signing in: only with the ticket Friend made for it, and only for a while. */
+  ticketOk(id: string, ticket: string): boolean {
+    if (!TOKEN.test(id) || !TOKEN.test(ticket)) return false;
+    const t = this.tickets.get(ticket);
+    if (!t || t.id !== id || t.expires <= this.clock()) return false;
+    return this.tokens.has(id);
+  }
+
+  private missing(status: VideoStatus, names: ToolName[]): ToolName[] {
+    return names.filter((n) => !(n === "yt-dlp" ? status.ytdlp : status.ffmpeg).found);
+  }
+
+  /** Downloads what the plugin needs (if the owner allows it) and looks again. Called when the plugin is installed or switched on. */
+  async prepare(): Promise<void> {
+    const cfg = this.d.config().video;
+    const status = await this.ensureStatus();
+    const need = this.missing(status, this.wanted(cfg.output, status));
+    if (need.length && cfg.autoInstall && this.d.provisioner) await this.d.provisioner.ensure(need);
+    await this.refresh();
   }
 
   async refresh(): Promise<VideoStatus> {
@@ -122,11 +174,24 @@ export class VideoHub {
     const cfg = this.d.config().video;
     if (!cfg.installed || !cfg.enabled) return { ok: false, text: "Web video is not switched on. The owner can install and turn it on in Plugins, Web video." };
     const output: VideoOutput = args.output ?? cfg.output;
-    const status = await this.ensureStatus();
+    let status = await this.ensureStatus();
+    const need = this.missing(status, this.wanted(output, status));
+    if (need.length && cfg.autoInstall && this.d.provisioner) {
+      // the programs are fetched by Friend itself; a big download is carried on in the background if it takes long
+      const job = this.d.provisioner.ensure(need);
+      const first = await Promise.race([job.then((r) => ({ r })), new Promise<{ slow: true }>((res) => setTimeout(() => res({ slow: true }), this.d.waitMs ?? 25_000))]);
+      if ("slow" in first) {
+        void job.then(() => this.refresh()).catch(() => {});
+        return { ok: false, text: "Friend is downloading the video tools it needs (first time only, it can take a minute or two). Ask again in a minute." };
+      }
+      if (!first.r.ok) return { ok: false, text: first.r.error };
+      status = await this.refresh();
+    }
     if (!status.ytdlp.found) return { ok: false, text: status.ytdlp.install ?? "yt-dlp is not found on this PC." };
-    if (output === "screen" && !status.ffmpeg.found) return { ok: false, text: status.ffmpeg.install ?? "ffmpeg is not found on this PC." };
-    if (output === "host" && !status.mpv.found) return { ok: false, text: status.mpv.install ?? "mpv is not found on this PC." };
-    if (output === "host" && !this.d.host) return { ok: false, text: "Playing in a window on this PC is not available." };
+    const mpvWindow = output === "host" && status.mpv.found && !!this.d.host;
+    const browserWindow = output === "host" && !mpvWindow && !!this.d.openBrowser && !!this.d.windowUrl;
+    if ((output === "screen" || browserWindow) && !status.ffmpeg.found) return { ok: false, text: status.ffmpeg.install ?? "ffmpeg is not found on this PC." };
+    if (output === "host" && !mpvWindow && !browserWindow) return { ok: false, text: status.mpv.found ? "Playing in a window on this PC is not available." : (status.mpv.install ?? "mpv is not found on this PC.") };
 
     const r = await resolveVideo({ url: args.url, query: args.query }, { ytdlp: status.ytdlp.path ?? "yt-dlp", video: cfg, run: this.d.run, resolve: this.d.resolve });
     if (!r.ok) return { ok: false, text: r.error };
@@ -135,11 +200,21 @@ export class VideoHub {
     const what = `"${info.title}"${info.uploader ? ` by ${info.uploader}` : ""}`;
 
     await this.stopEverything();
-    if (output === "host") {
+    if (mpvWindow) {
       const opened = await this.d.host!.open(info.webpage || args.url || "", { start, maxHeight: cfg.maxHeight });
       if (!opened.ok) return { ok: false, text: opened.error };
-      this.now = { output, title: info.title, uploader: info.uploader, info };
+      this.now = { output, title: info.title, uploader: info.uploader, info, via: "mpv" };
       return { ok: true, text: `Playing ${what} in a window on this PC.` };
+    }
+    if (browserWindow) {
+      const show = this.issue(info, start);
+      const id = /\/api\/video\/([0-9a-f]{32})$/.exec(show.props.src)![1]!;
+      const ticket = randomBytes(16).toString("hex");
+      this.tickets.set(ticket, { id, expires: this.clock() + TICKET_MS });
+      const ok = await this.d.openBrowser!(this.d.windowUrl!(id, ticket)).catch(() => false);
+      if (!ok) return { ok: false, text: "Friend could not open a browser window on this PC." };
+      this.now = { output, title: info.title, uploader: info.uploader, info, via: "browser" };
+      return { ok: true, text: `Playing ${what} in a browser window on this PC.` };
     }
     const show = this.issue(info, start);
     this.now = { output, title: info.title, uploader: info.uploader, info };
@@ -183,6 +258,7 @@ export class VideoHub {
     }
     const now = this.now;
     if (!now) return { ok: false, text: "Nothing is playing." };
+    if (now.output === "host" && now.via === "browser") return { ok: true, text: "The video is in a browser window on this PC: use the player in the browser window for pause, play, volume and the time." };
     if (now.output === "host") {
       const host = this.d.host!;
       try {
@@ -207,13 +283,13 @@ export class VideoHub {
   nowPlaying(): string {
     const n = this.now;
     if (!n) return "Nothing is playing.";
-    return `Playing "${n.title}"${n.uploader ? ` by ${n.uploader}` : ""} ${n.output === "host" ? "in a window on this PC" : "on the Friend screen"}.`;
+    return `Playing "${n.title}"${n.uploader ? ` by ${n.uploader}` : ""} ${n.output === "host" ? (n.via === "browser" ? "in a browser window on this PC" : "in a window on this PC") : "on the Friend screen"}.`;
   }
 
   /** What is found and what is missing, in words, for the assistant to pass on. */
   async check(): Promise<{ ok: true; text: string }> {
     const s = await this.refresh();
-    const line = (name: string, h: VideoStatus[keyof VideoStatus], need: string) => (h.found ? `${name} ${h.version ?? ""} (found)`.replace("  ", " ") : `${name}: not found (${need}). ${h.install ?? ""}`.trim());
+    const line = (name: string, h: HelperStatus, need: string) => (h.found ? `${name} ${h.version ?? ""} (found)`.replace("  ", " ") : `${name}: not found (${need}). ${h.install ?? ""}`.trim());
     return { ok: true, text: [line("yt-dlp", s.ytdlp, "needed for every video"), line("ffmpeg", s.ffmpeg, "needed to play on the Friend screen"), line("mpv", s.mpv, "needed to play in a window on this PC")].join("\n") };
   }
 

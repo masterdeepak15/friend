@@ -28,6 +28,17 @@ describe("finding yt-dlp", () => {
     expect(await findHelper("yt-dlp", { ...none, platform: "darwin" })).toEqual({ found: false, install: expect.stringMatching(/brew install yt-dlp/) });
     expect(await findHelper("yt-dlp", { ...none, platform: "linux" })).toEqual({ found: false, install: expect.stringMatching(/pipx install yt-dlp/) });
   });
+  it("prefers the copy Friend downloaded itself over the PATH, and the owner's own choice over both", async () => {
+    const mine = "C:/Users/me/.friend/tools/yt-dlp.exe";
+    const run = runOf({ [mine]: "2026.10.01", "yt-dlp": "2025.01.01", "C:\\x\\yt-dlp.exe": "2026.02.02" });
+    const base = { platform: "win32" as const, env: {}, exists: (p: string) => p === mine || p.startsWith("C:\\x"), run };
+    expect(await findHelper("yt-dlp", { ...base, program: "", managed: mine })).toMatchObject({ found: true, path: mine, version: "2026.10.01" });
+    expect(await findHelper("yt-dlp", { ...base, program: "C:\\x\\yt-dlp.exe", managed: mine })).toMatchObject({ found: true, path: "C:\\x\\yt-dlp.exe" });
+  });
+  it("falls back to the PATH when Friend has not downloaded one yet", async () => {
+    const run = runOf({ "yt-dlp": "2026.01.01" });
+    expect(await findHelper("yt-dlp", { program: "", managed: "/home/me/.friend/tools/yt-dlp", platform: "linux", env: {}, exists: () => false, run })).toMatchObject({ found: true, path: "yt-dlp" });
+  });
   it("does not take a program that answers something else", async () => {
     expect(await findHelper("yt-dlp", { program: "", platform: "linux", env: {}, exists: () => false, run: runOf({ "yt-dlp": "command not found" }) })).toMatchObject({ found: false });
   });

@@ -11,6 +11,9 @@ import { bundledChromeControl, ChromePlugin } from "./connectors/chromePlugin";
 import { bundledExtensionDir, chromeAddresses, chromeToken } from "./connectors/chromeRemote";
 import { zipDirectory } from "./zip";
 import { VideoHost } from "./video/host";
+import { openInBrowser } from "./video/open";
+import { Provisioner } from "./video/provision";
+import { spawn as spawnProgram } from "node:child_process";
 import { VideoHub, type VideoHostLike } from "./video/hub";
 import type { YtRun } from "./video/resolve";
 import type { VideoStatus } from "./video/types";
@@ -117,7 +120,17 @@ export interface AppOptions {
   /** Where Chrome control itself listens on this PC, and how its MCP server is started when nothing answers (tests). */
   chromeRemote?: { httpPort?: number; wsPort?: number; startServer?: () => Promise<void> };
   /** Web video's programs, for tests: how yt-dlp and ffmpeg are run, what is found, and the window on the PC. */
-  video?: { run?: YtRun; spawn?: typeof import("node:child_process").spawn; status?: () => Promise<VideoStatus>; resolve?: (host: string) => Promise<string[]>; host?: VideoHostLike };
+  video?: {
+    run?: YtRun;
+    spawn?: typeof import("node:child_process").spawn;
+    status?: () => Promise<VideoStatus>;
+    resolve?: (host: string) => Promise<string[]>;
+    host?: VideoHostLike;
+    /** Opens an address in the PC's browser. */
+    openBrowser?: (url: string) => Promise<boolean>;
+    /** Downloads yt-dlp and ffmpeg. */
+    provisioner?: Pick<Provisioner, "ensure" | "state">;
+  };
   quick?: { run?: QuickRunner; home?: string; /** Chrome control's index.js that comes with Friend (tests); null: none, so the npm package is used. */ bundled?: string | null };
   /** Where weather comes from. Defaults to Open-Meteo. */
   weather?: Pick<WeatherService, "get">;
@@ -222,12 +235,18 @@ export async function createApp(opts: AppOptions) {
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
   const hub = new McpHub(new ConnectorStore(opts.dataDir));
+  let listenPort = config.port;
+  const provisioner = opts.video?.provisioner ?? new Provisioner({ dataDir: opts.dataDir });
   const videoHub: VideoHub = new VideoHub({
     config: () => config,
     run: opts.video?.run,
     spawn: opts.video?.spawn,
     status: opts.video?.status,
     resolve: opts.video?.resolve,
+    provisioner,
+    // a video for the PC's own browser: Friend's own address on this PC, with a ticket (a window of mpv is used when mpv is there)
+    windowUrl: (id, ticket) => `${config.https ? "https" : "http"}://127.0.0.1:${listenPort}/api/video/${id}?o=${ticket}`,
+    openBrowser: opts.video?.openBrowser ?? openInBrowser,
     host: opts.video?.host ?? new VideoHost({ program: () => config.music.hostPlayer, ytdlp: () => videoHub.status()?.ytdlp.path ?? config.video.ytdlp, dataDir: opts.dataDir }),
   });
   const chromeBundled = opts.quick?.bundled !== undefined ? opts.quick.bundled : bundledChromeControl();
@@ -316,7 +335,11 @@ export async function createApp(opts: AppOptions) {
       return err;
     }
     if (id === "audius") return changeAudiusConfig((s) => changeAudius(s, change));
-    if (id === "video") return changeVideoConfig((v) => changeVideo(v, change));
+    if (id === "video") {
+      const err = changeVideoConfig((v) => changeVideo(v, change));
+      if (!err && ("install" in change || ("enabled" in change && change.enabled))) void videoHub.prepare().catch(() => {});
+      return err;
+    }
     if (id === "chrome") {
       const err = changeChromeConfig((c) => changeChrome(c, change, chromePlugin.status().helper));
       if (err) return err;
@@ -862,7 +885,13 @@ export async function createApp(opts: AppOptions) {
     ...(tls ? { tls } : {}),
     connectors: connectorsApi,
     chrome: chromeRemoteApi,
-    video: { stream: (id) => videoHub.streamOf(id), status: async () => videoHub.status() ?? (await videoHub.refresh()), check: () => videoHub.refresh() },
+    video: {
+      stream: (id) => videoHub.streamOf(id),
+      status: async () => videoHub.status() ?? (await videoHub.refresh()),
+      check: () => videoHub.refresh().then(() => videoHub.status()),
+      prepare: () => videoHub.prepare().then(() => videoHub.status()),
+      ticketOk: (id, ticket) => videoHub.ticketOk(id, ticket),
+    },
     voicePreview: async (id) => {
       if (!voice || !voiceAvailable()) throw new HttpError(503, "Voice is not available. Run: friend voice setup");
       const indian = [...HINDI_VOICES, ...MARATHI_VOICES].some((v) => v.id === id) || id === config.voice.hindiVoice || id === config.voice.marathiVoice;
@@ -1420,7 +1449,7 @@ export async function createApp(opts: AppOptions) {
         });
       }
       hub.startAll({ except: config.chrome.enabled ? ["chrome"] : [] });
-      if (config.video.installed) void videoHub.refresh().catch(() => {});
+      if (config.video.installed) void (config.video.enabled ? videoHub.prepare() : videoHub.refresh()).catch(() => {});
       if (config.chrome.enabled) void chromePlugin.connect();
       if (config.chrome.installed && config.chrome.remote) void chromeRemoteApi.ensureServer().catch(() => {});
       channelHub.apply(); // Telegram starts listening when it is switched on
@@ -1432,7 +1461,9 @@ export async function createApp(opts: AppOptions) {
         for (const id of gone) broadcast({ type: "stage", command: { cmd: "hide", id } });
         if (gone.length) for (const follow of stage.settleNow()) broadcast({ type: "stage", command: follow });
       }, opts.expireIntervalMs ?? 1000);
-      return gateway.listen();
+      const listening = await gateway.listen();
+      listenPort = listening.port; // a browser on this PC is pointed at the port Friend really got
+      return listening;
     },
     async stop(): Promise<void> {
       stopped = true;
