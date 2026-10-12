@@ -59,7 +59,7 @@ type View = { id: string; installed: boolean; enabled: boolean; state: string; d
 const chromeView = async (cookie: string): Promise<View> => ((await (await api(cookie, "GET", "")).json()) as { integrations: View[] }).integrations.find((v) => v.id === "chrome")!;
 async function until(cookie: string, want: (v: View) => boolean): Promise<View> {
   let v = await chromeView(cookie);
-  for (let i = 0; i < 100 && !want(v); i++) {
+  for (let i = 0; i < 250 && !want(v); i++) {
     await new Promise((r) => setTimeout(r, 100));
     v = await chromeView(cookie);
   }

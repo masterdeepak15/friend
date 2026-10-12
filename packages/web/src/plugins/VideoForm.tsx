@@ -208,6 +208,7 @@ export function VideoForm({ api = httpVideoApi }: { api?: VideoApi }) {
     <div className="settings-section">
       {st && (
         <>
+          <h4 className="plugins-heading">Helper programs on this PC</h4>
           <ol className="integration-steps">
             <HelperLine name="yt-dlp" h={st.ytdlp} need="finds the video, needed for every video" />
             <HelperLine name="ffmpeg" h={st.ffmpeg} need="needed to play on the Friend screen" />
