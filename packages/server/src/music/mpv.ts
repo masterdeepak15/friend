@@ -113,6 +113,8 @@ export interface MpvDeps {
   resolve?: () => Promise<FindResult>;
   requestTimeoutMs?: number;
   connectTimeoutMs?: number;
+  /** Replaces the command line mpv is started with (the video window needs a window and yt-dlp; the music player must not have them). */
+  argv?: (pipe: string) => string[];
 }
 
 let counter = 0;
@@ -165,7 +167,8 @@ export class Mpv {
     const pipe = this.pipePath();
     let child: ChildProcess;
     try {
-      child = (this.d.spawn ?? nodeSpawn)(found.path, ["--no-video", "--idle=yes", "--no-terminal", "--force-window=no", "--ytdl=no", "--load-scripts=no", "--access-references=no", "--tls-verify=yes", `--input-ipc-server=${pipe}`], { stdio: "ignore", windowsHide: true });
+      const args = this.d.argv ? this.d.argv(pipe) : ["--no-video", "--idle=yes", "--no-terminal", "--force-window=no", "--ytdl=no", "--load-scripts=no", "--access-references=no", "--tls-verify=yes", `--input-ipc-server=${pipe}`];
+      child = (this.d.spawn ?? nodeSpawn)(found.path, args, { stdio: "ignore", windowsHide: true });
     } catch {
       return { ok: false, error: "mpv could not be started." };
     }
@@ -272,6 +275,11 @@ export class Mpv {
     const r = await this.start();
     if (!r.ok) throw new Error(r.error);
     await this.request(command);
+  }
+
+  /** Any command mpv understands (a property to set, for example), started with mpv if it is not running yet. */
+  send(command: unknown[]): Promise<void> {
+    return this.cmd(command);
   }
 
   async load(file: string): Promise<void> {
