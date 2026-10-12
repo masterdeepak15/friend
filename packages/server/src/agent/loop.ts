@@ -6,6 +6,7 @@ import type { CodeBox } from "../codebox";
 import type { MediaStore } from "../media";
 import type { BrokerHub } from "../brokers/hub";
 import type { MusicHub } from "../music/hub";
+import type { VideoHub } from "../video/hub";
 import { partText } from "../brokers/tooltext";
 import type { ChannelHub } from "../channels/hub";
 import { createHash } from "node:crypto";
@@ -61,6 +62,8 @@ export interface AgentDeps {
   brokers?: Pick<BrokerHub, "status" | "snapshot" | "report" | "schedules" | "loginLink">;
   /** The music player on the owner's screen. Without it the music tools report they are unavailable. */
   music?: Pick<MusicHub, "play" | "control" | "queue" | "search" | "nowPlaying">;
+  /** Playing videos from the internet (YouTube and other sites). Without it the video tools report they are unavailable. */
+  video?: Pick<VideoHub, "play" | "control" | "check" | "nowPlaying">;
   /** One line about which integrations (Telegram, WhatsApp/SMS) are installed and how far they are, for the model's context. */
   integrations?: { summary(): string };
   /** The owner's saved notes. Without it the memory tools report they are unavailable. */
@@ -479,6 +482,7 @@ export class Agent {
     if (call.name === "message.send_file" && d.channels && !d.media) return fail("Sending files is not available.");
     if (call.name.startsWith("message.") && !d.channels) return fail("Messaging is not available.");
     if (call.name.startsWith("music.") && !d.music) return fail("Music is not available.");
+    if (call.name.startsWith("video.") && !d.video) return fail("Web video is not available.");
     if ((call.name.startsWith("portfolio.") || call.name.startsWith("reports.")) && !d.brokers) return fail("The portfolio is not available.");
     if (d.brokers && (call.name.startsWith("portfolio.") ? call.name !== "portfolio.status" : call.name === "reports.run")) {
       const z = d.brokers.status("zerodha");
@@ -615,6 +619,21 @@ export class Agent {
               : m.nowPlaying());
       d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "music.control" || call.name === "music.queue" ? { action: args.action } : {}, tier, ok: out.ok });
       return out.ok ? { text: out.text, isError: false } : fail(out.text);
+    }
+
+    if (call.name.startsWith("video.")) {
+      const v = d.video!;
+      const out = call.name === "video.play" ? await v.play(args as never) : call.name === "video.control" ? await v.control(args as never) : await v.check();
+      d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "video.control" ? { action: args.action } : call.name === "video.play" ? { output: args.output } : {}, tier, ok: out.ok });
+      if (!out.ok) return fail(out.text);
+      // the picture goes on the screen as a video card whose source is a Friend address, never the site's own
+      const extra = out as { show?: { id: string; props: { title: string; src: string } }; hide?: string };
+      if (extra.show) {
+        const shown = runStageTool("stage.show", { object: { id: extra.show.id, type: "video", props: extra.show.props, placement: "auto" } }, d.stage, ctx.emit);
+        if (!shown.ok) return fail(shown.error);
+      }
+      if (extra.hide) runStageTool("stage.hide", { id: extra.hide }, d.stage, ctx.emit);
+      return { text: out.text, isError: false };
     }
 
     if (call.name.startsWith("portfolio.") || call.name.startsWith("reports.")) {

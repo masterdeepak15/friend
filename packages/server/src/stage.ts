@@ -32,6 +32,8 @@ function sandboxError(type: string, props: Record<string, unknown>, requireHtml:
 
 /** Where a picture, clip or document may come from: only a file the owner approved through file.present. Never a web address. */
 export const MEDIA_SRC = /^\/api\/media\/[0-9a-f]{32}$/;
+/** A video from the internet is played through Friend: this address is made by Friend (web video), and only a video card may use it. */
+export const VIDEO_SRC = /^\/api\/video\/[0-9a-f]{32}$/;
 const NOT_IN_COMPOSITE = new Set(["group", "tabs", "sandbox"]);
 const MAX_PARTS = 8;
 const MEDIA_TYPES = new Set(["image", "video", "pdf"]);
@@ -55,7 +57,7 @@ export function propsError(type: string, props: Record<string, unknown>, require
   const sandbox = sandboxError(type, props, requireAll);
   if (sandbox) return sandbox;
   if (MEDIA_TYPES.has(type) && (requireAll || "src" in props)) {
-    if (typeof props.src !== "string" || !MEDIA_SRC.test(props.src)) return `An ${type} object needs src from file.present (a file the owner approved), not a web address.`;
+    if (typeof props.src !== "string" || !(MEDIA_SRC.test(props.src) || (type === "video" && VIDEO_SRC.test(props.src)))) return `An ${type} object needs src from file.present (a file the owner approved), not a web address.`;
   }
   if (type === "gallery" && (requireAll || "items" in props)) {
     const items = props.items;

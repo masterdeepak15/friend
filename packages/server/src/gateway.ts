@@ -48,6 +48,8 @@ export interface GatewayDeps {
   plugins?: PluginsApi;
   /** Chrome control reached from outside on Friend's own address (/chrome/mcp and /chrome/ws), and the extension to download. */
   chrome?: ChromeRemoteApi;
+  /** Web video: the screen asks for a video at /api/video/<id>, an address Friend made. */
+  video?: { stream(id: string): Promise<{ stream: import("node:stream").Readable; stop(): void } | null> };
   /** Managing connectors from the owner's screen; the routes answer 503 without it. */
   connectors?: ConnectorsApi;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
@@ -529,6 +531,23 @@ export function createGateway(deps: GatewayDeps) {
       return reply.code(206).header("content-range", `bytes ${start}-${end}/${size}`).header("content-length", end - start + 1).type(grant.mime).send(createReadStream(grant.path, { start, end }));
     }
     return reply.header("content-length", size).type(grant.mime).send(createReadStream(grant.path));
+  });
+
+  // ---- web video: made as it is watched (ffmpeg), for signed-in browsers only, at addresses Friend made ----
+  app.get<{ Params: { id: string } }>("/api/video/:id", async (req, reply) => {
+    const token = req.cookies[COOKIE_NAME];
+    if (!token || !auth.resolveSession(token)) return reply.code(401).send({ error: "Unauthorized" });
+    if (!deps.video) return reply.code(404).send({ error: "Not found" });
+    let handle: Awaited<ReturnType<NonNullable<GatewayDeps["video"]>["stream"]>>;
+    try {
+      handle = await deps.video.stream(req.params.id);
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+    if (!handle) return reply.code(404).send({ error: "That video is not available any more." });
+    // whoever stops watching (a closed tab, another video) ends ffmpeg
+    reply.raw.once("close", () => handle!.stop());
+    return reply.header("content-type", "video/mp4").header("accept-ranges", "none").header("cache-control", "no-store").header("x-content-type-options", "nosniff").send(handle.stream);
   });
 
   // ---- Telegram, SMS and WhatsApp ----

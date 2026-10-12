@@ -92,6 +92,19 @@ export class VideoHub {
     return status;
   }
 
+  private looking = false;
+
+  /** Looks again for the helper programs in the background when the last look is old, so the plugin page stays true. */
+  poke(maxAgeMs = 15_000): void {
+    if (this.looking || (this.cached && this.clock() - this.cached.at < maxAgeMs)) return;
+    this.looking = true;
+    void this.refresh()
+      .catch(() => {})
+      .finally(() => {
+        this.looking = false;
+      });
+  }
+
   private async ensureStatus(): Promise<VideoStatus> {
     return this.cached && this.clock() - this.cached.at < STATUS_MS ? this.cached.status : this.refresh();
   }
@@ -136,6 +149,8 @@ export class VideoHub {
   /** The screen asks for the video at the address `play` gave it. Null when the address is not one Friend made, or is old. */
   async streamOf(id: string): Promise<StreamHandle | null> {
     if (!TOKEN.test(id)) return null;
+    const cfg = this.d.config().video;
+    if (!cfg.installed || !cfg.enabled) return null; // switched off: an address made a moment ago stops working too
     const t = this.tokens.get(id);
     if (!t || t.expires <= this.clock()) {
       this.tokens.delete(id);
@@ -145,7 +160,6 @@ export class VideoHub {
     const ffmpeg = status.ffmpeg.found ? status.ffmpeg.path : undefined;
     if (!ffmpeg) return null;
     while (this.streams.length >= MAX_STREAMS) this.streams.shift()!.handle.stop();
-    const cfg = this.d.config().video;
     const handle = startStream(ffmpeg, t.info, { startSec: t.startSec, maxHeight: cfg.maxHeight, maxMinutes: cfg.maxMinutes }, { spawn: this.d.spawn });
     const entry = { id, handle };
     this.streams.push(entry);

@@ -10,6 +10,10 @@ import { isQuickPreset, quickCheck, quickConnect, quickInstall, type QuickRunner
 import { bundledChromeControl, ChromePlugin } from "./connectors/chromePlugin";
 import { bundledExtensionDir, chromeAddresses, chromeToken } from "./connectors/chromeRemote";
 import { zipDirectory } from "./zip";
+import { VideoHost } from "./video/host";
+import { VideoHub, type VideoHostLike } from "./video/hub";
+import type { YtRun } from "./video/resolve";
+import type { VideoStatus } from "./video/types";
 import { runCommand } from "./connectors/run";
 import { ConnectorStore } from "./connectors/store";
 import { Approvals } from "./approvals";
@@ -112,6 +116,8 @@ export interface AppOptions {
   /** The one-click connectors: how their install command is run and where the person's home folder is (tests). */
   /** Where Chrome control itself listens on this PC, and how its MCP server is started when nothing answers (tests). */
   chromeRemote?: { httpPort?: number; wsPort?: number; startServer?: () => Promise<void> };
+  /** Web video's programs, for tests: how yt-dlp and ffmpeg are run, what is found, and the window on the PC. */
+  video?: { run?: YtRun; spawn?: typeof import("node:child_process").spawn; status?: () => Promise<VideoStatus>; resolve?: (host: string) => Promise<string[]>; host?: VideoHostLike };
   quick?: { run?: QuickRunner; home?: string; /** Chrome control's index.js that comes with Friend (tests); null: none, so the npm package is used. */ bundled?: string | null };
   /** Where weather comes from. Defaults to Open-Meteo. */
   weather?: Pick<WeatherService, "get">;
@@ -216,6 +222,14 @@ export async function createApp(opts: AppOptions) {
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
   const hub = new McpHub(new ConnectorStore(opts.dataDir));
+  const videoHub: VideoHub = new VideoHub({
+    config: () => config,
+    run: opts.video?.run,
+    spawn: opts.video?.spawn,
+    status: opts.video?.status,
+    resolve: opts.video?.resolve,
+    host: opts.video?.host ?? new VideoHost({ program: () => config.music.hostPlayer, ytdlp: () => videoHub.status()?.ytdlp.path ?? config.video.ytdlp, dataDir: opts.dataDir }),
+  });
   const chromeBundled = opts.quick?.bundled !== undefined ? opts.quick.bundled : bundledChromeControl();
   const chromePlugin = new ChromePlugin({ hub, run: opts.quick?.run ?? runCommand, home: opts.quick?.home, bundled: chromeBundled });
   /** Changes the integrations in memory and in the saved file (only this change reaches the file), then restarts what needs it. Returns the reason it could not be done. */
@@ -344,7 +358,7 @@ export async function createApp(opts: AppOptions) {
       },
     },
     integrations: {
-      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin),
+      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub),
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
@@ -500,7 +514,8 @@ export async function createApp(opts: AppOptions) {
     channels: channelHub,
     brokers: brokerHub,
     music: musicHub,
-    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin)) },
+    video: videoHub,
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub)) },
   });
 
   const clients = new Set<ClientConn>();
@@ -691,10 +706,11 @@ export async function createApp(opts: AppOptions) {
   const catalogDir = opts.pluginCatalogDir ?? firstExistingDir([process.env.FRIEND_PLUGIN_CATALOG, resolve(here, "plugins"), resolve(here, "../../..", "plugins")]) ?? resolve(here, "plugins");
   const pluginsApi: PluginsApi = {
     list: () => {
+      videoHub.poke(); // the helper programs may have been installed since the last look
       void chromePlugin.refresh(); // so the next look at the screen knows whether the extension was switched on since
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub) };
     },
     install: async (id, pin, ip) => {
       if (isIntegrationId(id)) {
@@ -846,6 +862,7 @@ export async function createApp(opts: AppOptions) {
     ...(tls ? { tls } : {}),
     connectors: connectorsApi,
     chrome: chromeRemoteApi,
+    video: { stream: (id) => videoHub.streamOf(id) },
     voicePreview: async (id) => {
       if (!voice || !voiceAvailable()) throw new HttpError(503, "Voice is not available. Run: friend voice setup");
       const indian = [...HINDI_VOICES, ...MARATHI_VOICES].some((v) => v.id === id) || id === config.voice.hindiVoice || id === config.voice.marathiVoice;
@@ -1384,6 +1401,8 @@ export async function createApp(opts: AppOptions) {
     memory,
     tasks,
     plugins,
+    /** Playing videos from the internet. */
+    video: videoHub,
     /** Tell every client the voice sidecar went up or down. */
     notifyStatus(): void {
       broadcast(statusMsg());
@@ -1401,6 +1420,7 @@ export async function createApp(opts: AppOptions) {
         });
       }
       hub.startAll({ except: config.chrome.enabled ? ["chrome"] : [] });
+      if (config.video.installed) void videoHub.refresh().catch(() => {});
       if (config.chrome.enabled) void chromePlugin.connect();
       if (config.chrome.installed && config.chrome.remote) void chromeRemoteApi.ensureServer().catch(() => {});
       channelHub.apply(); // Telegram starts listening when it is switched on
@@ -1417,6 +1437,7 @@ export async function createApp(opts: AppOptions) {
     async stop(): Promise<void> {
       stopped = true;
       hostPlayer.dispose();
+      videoHub.dispose();
       heartbeat.stop();
       channelHub.stop();
       if (brokerTimer) clearInterval(brokerTimer);

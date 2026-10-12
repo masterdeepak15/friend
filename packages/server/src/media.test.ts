@@ -100,6 +100,12 @@ describe("what the stage accepts", () => {
     expect(show(stage, "image", { src: `/api/media/${"a".repeat(32)}` })).toMatchObject({ ok: true });
     expect(show(stage, "gallery", { items: [{ src: "https://x/y.png" }] })).toMatchObject({ ok: false });
     expect(show(stage, "gallery", { items: [{ src: `/api/media/${"b".repeat(32)}` }] })).toMatchObject({ ok: true });
+    // a web video comes through Friend's own video address, and only a video card may use it
+    expect(show(stage, "video", { src: `/api/video/${"c".repeat(32)}` })).toMatchObject({ ok: true });
+    expect(show(stage, "image", { src: `/api/video/${"c".repeat(32)}` })).toMatchObject({ ok: false });
+    expect(show(stage, "gallery", { items: [{ src: `/api/video/${"c".repeat(32)}` }] })).toMatchObject({ ok: false });
+    expect(show(stage, "video", { src: "/api/video/../../etc/passwd" })).toMatchObject({ ok: false });
+    expect(show(stage, "video", { src: "https://www.youtube.com/watch?v=x" })).toMatchObject({ ok: false });
   });
 
   it("checks the parts of a group and of tabs", () => {
