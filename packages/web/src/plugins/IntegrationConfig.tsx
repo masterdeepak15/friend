@@ -7,6 +7,7 @@ import { AlexaForm, alexaProblem, httpAlexaApi, type AlexaApi } from "./AlexaFor
 import { ChromeForm, httpChromeApi, type ChromeApi } from "./ChromeForm";
 import { SoundCloudForm, httpSoundCloudApi, type SoundCloudApi } from "./SoundCloudForm";
 import { SpotifyForm, httpSpotifyApi, type SpotifyApi } from "./SpotifyForm";
+import { VideoForm, httpVideoApi, type VideoApi } from "./VideoForm";
 import { ZerodhaForm, httpBrokersApi, type BrokersApi } from "./ZerodhaForm";
 import type { IntegrationEntry } from "./pluginsApi";
 
@@ -38,6 +39,7 @@ export function IntegrationConfig({
   spotifyApi = httpSpotifyApi,
   soundcloudApi = httpSoundCloudApi,
   chromeApi = httpChromeApi,
+  videoApi = httpVideoApi,
 }: {
   integration: IntegrationEntry;
   onBack: () => void;
@@ -48,6 +50,7 @@ export function IntegrationConfig({
   spotifyApi?: SpotifyApi;
   soundcloudApi?: SoundCloudApi;
   chromeApi?: ChromeApi;
+  videoApi?: VideoApi;
 }) {
   const [saved, setSaved] = useState<ChannelsView | null>(null);
   const [draft, setDraft] = useState<ChannelsView>(EMPTY);
@@ -70,7 +73,8 @@ export function IntegrationConfig({
   const isSoundCloud = integration.id === "soundcloud";
   const isAudius = integration.id === "audius";
   const isChrome = integration.id === "chrome";
-  const nothingToSave = isSpotify || isSoundCloud || isAudius || isChrome;
+  const isVideo = integration.id === "video";
+  const nothingToSave = isSpotify || isSoundCloud || isAudius || isChrome || isVideo;
 
   useEffect(() => {
     alive.current = true;
@@ -200,6 +204,7 @@ export function IntegrationConfig({
       {isSpotify && <SpotifyForm api={spotifyApi} />}
       {isSoundCloud && <SoundCloudForm api={soundcloudApi} />}
       {isChrome && <ChromeForm api={chromeApi} />}
+      {isVideo && <VideoForm api={videoApi} />}
       {isAlexa && savedA && <AlexaForm view={draftA} setView={setDraftA} api={alexaApi} />}
       {isZerodha && savedB && <ZerodhaForm view={draftB} setView={setDraftB} secret={secret} setSecret={setSecret} api={brokersApi} />}
       {!isZerodha &&
@@ -208,6 +213,7 @@ export function IntegrationConfig({
         !isSoundCloud &&
         !isAudius &&
         !isChrome &&
+        !isVideo &&
         saved &&
         (isTelegram ? (
           <TelegramForm view={{ ...draft.telegram, enabled: integration.enabled }} secret={secret} setSecret={setSecret} api={channelsApi} />

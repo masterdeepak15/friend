@@ -10,6 +10,9 @@ const rec = (v: unknown): Props => (typeof v === "object" && v !== null ? (v as 
 /** The only place a picture, clip or document may come from: a file the owner approved through file.present. */
 export const MEDIA_SRC = /^\/api\/media\/[0-9a-f]{32}$/;
 const safeSrc = (v: unknown): string | null => (typeof v === "string" && MEDIA_SRC.test(v) ? v : null);
+/** A video from the internet is played through Friend: an address Friend made, never the site's own. Only a video card may use it. */
+export const VIDEO_SRC = /^\/api\/video\/[0-9a-f]{32}$/;
+const webVideoSrc = (v: unknown): string | null => (typeof v === "string" && VIDEO_SRC.test(v) ? v : null);
 
 const Title = ({ props }: { props: Props }) => (str(props.title) ? <h3 className="obj-title">{str(props.title)}</h3> : null);
 
@@ -114,12 +117,25 @@ export function Img({ props }: { props: Props }) {
   );
 }
 
+/** One clip. A web video starts by itself (the owner just asked for it), says it is being prepared until the first picture comes, and says so when it cannot be played. */
+function VideoPlayer({ src, web, title }: { src: string; web: boolean; title: string }) {
+  const [state, setState] = useState<"loading" | "ready" | "failed">(web ? "loading" : "ready");
+  if (state === "failed") return <p className="obj-empty">This video could not be played. Ask Friend to try again, or to play it in a window on the PC.</p>;
+  return (
+    <>
+      <video src={src} controls playsInline autoPlay={web} preload={web ? "auto" : "metadata"} aria-label={title} onLoadedData={() => setState("ready")} onError={() => setState("failed")} />
+      {web && state === "loading" && <p className="obj-empty">Preparing the video…</p>}
+    </>
+  );
+}
+
 export function Video({ props }: { props: Props }) {
-  const src = safeSrc(props.src);
+  const web = webVideoSrc(props.src);
+  const src = web ?? safeSrc(props.src);
   return (
     <div className="obj-media">
       <Title props={props} />
-      {src ? <video src={src} controls playsInline preload="metadata" aria-label={str(props.title) || "Video"} /> : <p className="obj-empty">This clip is not available.</p>}
+      {src ? <VideoPlayer key={src} src={src} web={web !== null} title={str(props.title) || "Video"} /> : <p className="obj-empty">This clip is not available.</p>}
     </div>
   );
 }

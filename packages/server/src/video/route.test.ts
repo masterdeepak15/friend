@@ -54,6 +54,20 @@ const idOf = async (): Promise<string> => {
   return /\/api\/video\/([0-9a-f]{32})$/.exec(r.show.props.src)![1]!;
 };
 
+describe("the plugin page's questions", () => {
+  it("tell the owner which helper programs are found, and look again on request", async () => {
+    await boot();
+    expect((await fetch(base() + "/api/plugins/video/status")).status).toBe(401);
+    expect((await fetch(base() + "/api/plugins/video/check", { method: "POST", headers: j, body: "{}" })).status).toBe(401);
+    const st = await fetch(base() + "/api/plugins/video/status", { headers: { cookie } });
+    expect(st.status).toBe(200);
+    expect(await st.json()).toMatchObject({ ytdlp: { found: true, version: "1" }, ffmpeg: { found: true }, mpv: { found: true } });
+    const ck = await fetch(base() + "/api/plugins/video/check", { method: "POST", headers: { ...j, cookie }, body: "{}" });
+    expect(ck.status).toBe(200);
+    expect(await ck.json()).toMatchObject({ ytdlp: { found: true } });
+  });
+});
+
 describe("the video address", () => {
   it("is only for the signed-in owner, and knows only addresses Friend made", async () => {
     await boot();

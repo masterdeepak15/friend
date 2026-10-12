@@ -49,7 +49,13 @@ export interface GatewayDeps {
   /** Chrome control reached from outside on Friend's own address (/chrome/mcp and /chrome/ws), and the extension to download. */
   chrome?: ChromeRemoteApi;
   /** Web video: the screen asks for a video at /api/video/<id>, an address Friend made. */
-  video?: { stream(id: string): Promise<{ stream: import("node:stream").Readable; stop(): void } | null> };
+  video?: {
+    stream(id: string): Promise<{ stream: import("node:stream").Readable; stop(): void } | null>;
+    /** Which of yt-dlp, ffmpeg and mpv are on this PC (the last look, or a new one when there is none). */
+    status(): Promise<unknown>;
+    /** Looks again. */
+    check(): Promise<unknown>;
+  };
   /** Managing connectors from the owner's screen; the routes answer 503 without it. */
   connectors?: ConnectorsApi;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
@@ -917,6 +923,16 @@ export function createGateway(deps: GatewayDeps) {
     } catch (e) {
       return pluginError(reply, e, "remove");
     }
+  });
+
+  // ---- web video, the plugin page's questions (owner session only) ----
+  app.get("/api/plugins/video/status", { onRequest: pluginGuard }, async (_req, reply) => {
+    if (!deps.video) return reply.code(404).send({ error: "Not found" });
+    return deps.video.status();
+  });
+  app.post("/api/plugins/video/check", { onRequest: pluginGuard }, async (_req, reply) => {
+    if (!deps.video) return reply.code(404).send({ error: "Not found" });
+    return deps.video.check();
   });
 
   // ---- Chrome control (owner session: the page's own routes; the key: the addresses other PCs use) ----

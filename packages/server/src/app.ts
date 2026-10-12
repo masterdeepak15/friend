@@ -862,7 +862,7 @@ export async function createApp(opts: AppOptions) {
     ...(tls ? { tls } : {}),
     connectors: connectorsApi,
     chrome: chromeRemoteApi,
-    video: { stream: (id) => videoHub.streamOf(id) },
+    video: { stream: (id) => videoHub.streamOf(id), status: async () => videoHub.status() ?? (await videoHub.refresh()), check: () => videoHub.refresh() },
     voicePreview: async (id) => {
       if (!voice || !voiceAvailable()) throw new HttpError(503, "Voice is not available. Run: friend voice setup");
       const indian = [...HINDI_VOICES, ...MARATHI_VOICES].some((v) => v.id === id) || id === config.voice.hindiVoice || id === config.voice.marathiVoice;
