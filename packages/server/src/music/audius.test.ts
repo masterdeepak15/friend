@@ -170,6 +170,32 @@ describe("fetchAudio", () => {
     expect(fake.requests.at(-1)!.headers.range).toBe("bytes=0-9");
   });
 
+  it("follows the content node's redirect to the storage the audio really is in, whatever its path (the real Audius does this now)", async () => {
+    const { fake, hub } = setup();
+    fake.nodeRedirect = "https://validator.eeba4a6ca56a0d87af802270217c2a51.r2.cloudflarestorage.com/28p/QmAbc?X-Amz-Algorithm=AWS4-HMAC-SHA256&hop=1";
+    const r = await hub.fetchAudio("https://creatornode.audius.co/tracks/cidstream/Qm1", "bytes=0-9");
+    expect(r.ok && r.res.status).toBe(206);
+    expect(fake.requests.at(-1)!.url).toContain("r2.cloudflarestorage.com/28p/QmAbc");
+    expect(fake.requests.at(-1)!.headers.range).toBe("bytes=0-9");
+  });
+
+  it("is as strict about where a later hop goes as about the first: https, a public name, no login, no odd port, nothing private", async () => {
+    const { fake, hub } = setup();
+    for (const to of ["http://storage.example.org/a?hop=1", "https://127.0.0.1/a?hop=1", "https://user:pw@storage.example.org/a?hop=1", "https://storage.example.org:8443/a?hop=1", "https://localhost/a?hop=1", "https://printer.local/a?hop=1", "https://127.0.0.1.nip.io/a?hop=1"]) {
+      fake.nodeRedirect = to;
+      const before = fake.requests.length;
+      const r = await hub.fetchAudio("https://creatornode.audius.co/tracks/cidstream/Qm1");
+      expect(r, to).toEqual({ ok: false, error: expect.stringMatching(/will not follow/i) });
+      expect(fake.requests.length - before, to).toBe(1); // only the content node itself was asked
+    }
+  });
+
+  it("still wants the address Audius's own API hands out to be a content node's stream address", async () => {
+    const { fake, hub } = setup();
+    fake.node = "https://validator.abc.r2.cloudflarestorage.com/28p/QmAbc?hop=1";
+    expect((await hub.streamOf("95wro")).ok).toBe(false);
+  });
+
   it("follows a redirect to another vetted node, refuses a foreign one, and stops after three hops", async () => {
     const { fake, hub } = setup();
     fake.nodeRedirect = "https://other-node.example.org/tracks/cidstream/Qm2?hop=1";

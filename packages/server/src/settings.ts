@@ -1,6 +1,7 @@
 import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
+import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS } from "@friend/protocol";
 import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, MUSIC_OUTPUTS, programProblem, LAUNCHER_ACTIONS, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS } from "@friend/protocol";
 import { statSync } from "node:fs";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
@@ -103,6 +104,18 @@ export const SettingsPatch = z
         hostPlayer: z.string().trim().max(260).refine((v) => programProblem(v) === null, { message: "That is not a program name or path. Use a name like mpv, or a path with no spaces." }),
         spotifyDevice: z.string().trim().max(100),
         searchLimit: z.number().int().min(MUSIC_LIMITS.searchLimit.min).max(MUSIC_LIMITS.searchLimit.max),
+      })
+      .partial()
+      .strict(),
+    /** Web video: where it plays, how sharp, how long, which sites, and the helper programs. Switching the plugin on or off is the plugins list, not here. */
+    video: z
+      .object({
+        output: z.enum(VIDEO_OUTPUTS),
+        maxHeight: z.number().int().min(VIDEO_LIMITS.maxHeight.min).max(VIDEO_LIMITS.maxHeight.max),
+        maxMinutes: z.number().int().min(VIDEO_LIMITS.maxMinutes.min).max(VIDEO_LIMITS.maxMinutes.max),
+        allowedSites: z.array(z.string().trim().max(200)).max(VIDEO_LIMITS.sites.max),
+        ytdlp: z.string().trim().max(260).refine((v) => programProblem(v) === null, { message: "That is not a program name or path. Use a name like yt-dlp, or a path with no spaces." }),
+        ffmpeg: z.string().trim().max(260).refine((v) => programProblem(v) === null, { message: "That is not a program name or path. Use a name like ffmpeg, or a path with no spaces." }),
       })
       .partial()
       .strict(),
@@ -211,6 +224,7 @@ export interface SettingsView {
   };
   trading: { level: "read" };
   music: Config["music"];
+  video: Config["video"];
   hud: Config["hud"];
   /** The ids of allowed Amazon accounts are shown shortened. */
   alexa: {
@@ -264,6 +278,7 @@ export function settingsView(c: Config): SettingsView {
     },
     trading: { level: c.trading.level },
     music: { ...c.music, extensions: [...c.music.extensions], spotify: { ...c.music.spotify }, soundcloud: { ...c.music.soundcloud }, audius: { ...c.music.audius } },
+    video: { ...c.video, allowedSites: [...c.video.allowedSites] },
     hud: { ...c.hud, clock: { ...c.hud.clock }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
     alexa: {
       installed: c.alexa.installed,
@@ -307,6 +322,7 @@ export function refuseForAgent(raw: unknown): void {
   const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
   if ("brokers" in r || "trading" in r) throw new SettingsError("Broker accounts and the trading level can only be changed by the owner on the settings screen.");
   if ("music" in r || "hud" in r) throw new SettingsError("The music folder and the screen widgets can only be changed by the owner on the settings screen.");
+  if ("video" in r) throw new SettingsError("Video settings (which programs run, where videos play, which sites) can only be changed by the owner on the settings screen.");
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
   if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
@@ -432,6 +448,11 @@ export function applySettings(config: Config, raw: unknown): Applied {
     }
   }
   if (p.music) Object.assign(config.music, p.music);
+  if (p.video) {
+    const { allowedSites, ...rest } = p.video;
+    Object.assign(config.video, rest);
+    if (allowedSites) config.video.allowedSites = normalizeSites(allowedSites);
+  }
   if (p.hud) {
     const { clock, launcher, ...rest } = p.hud;
     Object.assign(config.hud, rest);

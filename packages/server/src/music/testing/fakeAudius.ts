@@ -38,7 +38,8 @@ export function fakeAudius(): FakeAudius {
       const headers = Object.fromEntries(new Headers(init?.headers).entries());
       f.requests.push({ url, headers });
       if (f.hang) return new Promise<Response>((_res, rej) => init?.signal?.addEventListener("abort", () => rej(new Error("aborted"))));
-      if (u.pathname.startsWith("/tracks/cidstream/")) {
+      // the content nodes now answer with a redirect to object storage, whose address has another path
+      if (u.pathname.startsWith("/tracks/cidstream/") || u.host.endsWith(".r2.cloudflarestorage.com")) {
         if (f.nodeRedirect && !u.searchParams.has("hop")) return new Response(null, { status: 302, headers: { location: f.nodeRedirect } });
         const range = headers.range;
         return new Response("AUDIOBYTES", { status: range ? 206 : 200, headers: { "content-type": "audio/mpeg", ...(range ? { "content-range": "bytes 0-9/10" } : {}) } });

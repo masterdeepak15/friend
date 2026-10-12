@@ -10,3 +10,4 @@ export * from "./alexa";
 export * from "./hud";
 export * from "./musicRef";
 export * from "./musicQueue";
+export * from "./video";

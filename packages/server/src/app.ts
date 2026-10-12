@@ -36,7 +36,7 @@ import { BrokerHub } from "./brokers/hub";
 const PORTFOLIO_SKILL = "portfolio-assistant";
 /** The type each kind of audio file is sent as. */
 const MIME: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", flac: "audio/flac" };
-import { changeAlexa, changeBroker, changeChrome, changeIntegration, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
+import { changeAlexa, changeBroker, changeChrome, changeIntegration, changeVideo, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -275,6 +275,15 @@ export async function createApp(opts: AppOptions) {
     saveConfig(saved);
     return null;
   };
+  /** The same for the web video part of the saved file. */
+  const changeVideoConfig = (fn: (s: Config["video"]) => string | null): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.video);
+    if (err) return err;
+    fn(config.video);
+    saveConfig(saved);
+    return null;
+  };
   /** The same for the Chrome control part of the saved file. */
   const changeChromeConfig = (fn: (s: Config["chrome"]) => string | null): string | null => {
     const saved = loadConfig(opts.dataDir);
@@ -293,6 +302,7 @@ export async function createApp(opts: AppOptions) {
       return err;
     }
     if (id === "audius") return changeAudiusConfig((s) => changeAudius(s, change));
+    if (id === "video") return changeVideoConfig((v) => changeVideo(v, change));
     if (id === "chrome") {
       const err = changeChromeConfig((c) => changeChrome(c, change, chromePlugin.status().helper));
       if (err) return err;
@@ -338,8 +348,8 @@ export async function createApp(opts: AppOptions) {
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : id === "chrome" ? config.chrome : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && id !== "chrome" && Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : id === "chrome" ? config.chrome : id === "video" ? config.video : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && id !== "chrome" && id !== "video" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {

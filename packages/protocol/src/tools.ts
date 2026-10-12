@@ -363,6 +363,27 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "video.play",
+    description: "Play a video from the internet: a link to YouTube or almost any video site, or words to search for on YouTube (a title, a channel, a topic). It plays on the owner's Friend screen (output screen) or in a window on the PC (output host); leave output out to use the owner's choice. start is where to begin, in seconds. Say in a few words what is playing. If Friend is missing a helper program the tool says which one and how to install it: pass that on in plain words.",
+    input: z.object({ url: z.string().max(2000).optional(), query: z.string().max(200).optional(), output: z.enum(["screen", "host"]).optional(), start: z.number().min(0).max(86400).optional() }).strict(),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "video.control",
+    description: "Control the video that is playing: pause, resume, stop, seek (seconds from the start), volume (level 0 to 100). On the Friend screen the owner also has the video's own buttons.",
+    input: z.object({ action: z.enum(["pause", "resume", "stop", "seek", "volume"]), seconds: z.number().min(0).max(86400).optional(), level: z.number().min(0).max(100).optional() }).strict(),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "video.check",
+    description: "Check whether Friend can play videos from the internet: which helper programs (yt-dlp, ffmpeg, mpv) are found, what is missing and the command to install it. Use it when a video will not play.",
+    input: z.object({}).strict(),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
     name: "settings.get",
     description: "Read the owner's current settings (model provider and model names, fallback, Ollama address, voice options, the view). The API key is never included.",
     input: z.object({}),
@@ -657,6 +678,12 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return `Search the music for: ${visible(clip(String(a.query ?? ""), 120))}`;
     case "music.nowplaying":
       return "See what the music player is doing";
+    case "video.play":
+      return a.url ? `Play the video ${visible(clip(String(a.url), 200))}` : `Find and play a video: ${visible(clip(String(a.query ?? ""), 120))}`;
+    case "video.control":
+      return `Video: ${visible(String(a.action ?? ""))}`;
+    case "video.check":
+      return "Check what Friend needs to play videos";
     case "message.inbox":
       return "Read the messages other people sent you";
     case "portfolio.summary":

@@ -1,3 +1,4 @@
+import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, type VideoOutput } from "@friend/protocol";
 import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, type DefaultSource, launcherProblem, MUSIC_OUTPUTS, type MusicOutput, programProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME, type AlexaLocale } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
@@ -46,9 +47,25 @@ export interface Config {
   music: MusicConfig;
   /** Chrome control, the plugin that lets Friend use the owner's own Chrome (it comes with Friend). Only the owner changes it. */
   chrome: ChromeConfig;
+  /** Playing videos from the internet (YouTube and other sites), on the screen or in a PC window. */
+  video: VideoConfig;
   /** The screen widgets: profile label, date and time, quick-launch buttons, animations. */
   hud: HudConfig;
   dataDir: string;
+}
+
+export interface VideoConfig {
+  installed: boolean;
+  enabled: boolean;
+  /** Where a video plays by default: the Friend screen, or a window on the PC. */
+  output: VideoOutput;
+  maxHeight: number;
+  maxMinutes: number;
+  /** Only these sites (and their sub-domains) may be played; empty means any public site. */
+  allowedSites: string[];
+  /** The yt-dlp and ffmpeg programs the owner chose (a name or a path); empty means find them. */
+  ytdlp: string;
+  ffmpeg: string;
 }
 
 export interface ChromeConfig {
@@ -136,6 +153,22 @@ function sanitizeSpotify(raw: unknown): MusicConfig["spotify"] {
   const id = typeof r.clientId === "string" ? r.clientId.trim() : "";
   const clientId = CLIENT_ID.test(id) ? id : "";
   return { installed: r.installed === true || (r.installed === undefined && (r.enabled === true || clientId !== "")), enabled: r.enabled === true, clientId };
+}
+
+export function sanitizeVideo(raw: unknown): VideoConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const num = (v: unknown, o: { min: number; max: number; def: number }): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(o.max, Math.max(o.min, Math.round(v))) : o.def);
+  const program = (v: unknown): string => (typeof v === "string" && programProblem(v.trim()) === null ? v.trim() : "");
+  return {
+    installed: r.installed === true || (r.installed === undefined && r.enabled === true),
+    enabled: r.enabled === true,
+    output: (VIDEO_OUTPUTS as readonly unknown[]).includes(r.output) ? (r.output as VideoOutput) : "screen",
+    maxHeight: num(r.maxHeight, VIDEO_LIMITS.maxHeight),
+    maxMinutes: num(r.maxMinutes, VIDEO_LIMITS.maxMinutes),
+    allowedSites: normalizeSites(r.allowedSites),
+    ytdlp: program(r.ytdlp),
+    ffmpeg: program(r.ffmpeg),
+  };
 }
 
 export function sanitizeChrome(raw: unknown): ChromeConfig {
@@ -555,6 +588,7 @@ const defaults = (dataDir: string): Config => ({
   alexa: sanitizeAlexa({}),
   music: sanitizeMusic({}),
   chrome: sanitizeChrome({}),
+  video: sanitizeVideo({}),
   hud: sanitizeHud({}),
   dataDir,
 });
@@ -605,6 +639,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     alexa: sanitizeAlexa(stored.alexa),
     music: sanitizeMusic(stored.music),
     chrome: sanitizeChrome(stored.chrome),
+    video: sanitizeVideo(stored.video),
     hud: sanitizeHud(stored.hud),
     dataDir,
   };

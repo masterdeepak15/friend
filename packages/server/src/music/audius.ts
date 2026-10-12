@@ -13,8 +13,10 @@ const MAX_HOPS = 3;
  * An address Audius's own API redirected a stream to. Audius spreads its audio over many content nodes run by other people, so a fixed
  * list of hosts is impossible; what is checked instead is that it is a plain https address of a public name (no address numbers,
  * no local names, no login, no odd port) with the stream path, so Friend can never be sent to something on the owner's own network.
+ * A content node may itself redirect to the storage the audio is kept in (an address with another path), so the later hops of a
+ * download are checked the same way except for the path (`anyPath`): the address Audius's own API hands out always has to be a stream path.
  */
-export function isAudiusAddress(address: string): boolean {
+export function isAudiusAddress(address: string, anyPath = false): boolean {
   try {
     const u = new URL(address);
     if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443")) return false;
@@ -23,7 +25,7 @@ export function isAudiusAddress(address: string): boolean {
     const labels = h.split(".");
     if (labels.length < 2 || labels.some((l) => l === "")) return false;
     if (h === "localhost" || /\.(local|localhost|localdomain|internal|lan|home|corp|intranet|test|example|invalid|arpa|onion)$/.test(h)) return false;
-    return u.pathname.startsWith("/tracks/cidstream/");
+    return anyPath || u.pathname.startsWith("/tracks/cidstream/");
   } catch {
     return false;
   }
@@ -182,7 +184,7 @@ export class AudiusHub implements MusicSource {
   async fetchAudio(address: string, range?: string, signal?: AbortSignal): Promise<{ ok: true; res: Response } | { ok: false; error: string }> {
     let next = address;
     for (let hop = 0; hop <= MAX_HOPS; hop++) {
-      if (!isAudiusAddress(next) || !(await this.publicName(next))) return { ok: false, error: "Audius sent the audio somewhere Friend will not follow." };
+      if (!isAudiusAddress(next, hop > 0) || !(await this.publicName(next))) return { ok: false, error: "Audius sent the audio somewhere Friend will not follow." };
       let res: Response;
       try {
         const ctl = new AbortController();

@@ -145,7 +145,7 @@ describe("the plugins list", () => {
   it("offers Alexa, and removing it forgets the skill id and the allowed Echoes", async () => {
     const t = await boot();
     const plugins = (await t.json("/api/plugins")) as { integrations: { id: string; installed: boolean; state: string }[] };
-    expect(plugins.integrations.map((i) => i.id)).toEqual(["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "chrome"]);
+    expect(plugins.integrations.map((i) => i.id)).toEqual(["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "chrome", "video"]);
     expect(plugins.integrations.find((i) => i.id === "alexa")).toMatchObject({ installed: true });
     await t.api("/api/plugins/alexa", { method: "DELETE" });
     // the skill id, the name and the allowed Echoes are forgotten; the owner's other Alexa preferences stay

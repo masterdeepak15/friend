@@ -2,15 +2,16 @@ import type { AlexaHub } from "./alexa/hub";
 import type { BrokerHub } from "./brokers/hub";
 import type { ChannelHub } from "./channels/hub";
 import type { ChromeStatus } from "./connectors/chromePlugin";
+import type { VideoStatus } from "./video/types";
 import type { AudiusHub } from "./music/audius";
 import type { SoundCloudHub } from "./music/soundcloud";
 import type { SpotifyHub } from "./music/spotify";
-import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type ChromeConfig, type Config, type MusicConfig } from "./config";
+import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type ChromeConfig, type Config, type MusicConfig, type VideoConfig } from "./config";
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
 export type ChannelIntegrationId = "telegram" | "twilio";
-export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius" | "chrome";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "chrome"];
+export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius" | "chrome" | "video";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "chrome", "video"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -44,6 +45,7 @@ const META: Record<IntegrationId, { name: string; description: string }> = {
   soundcloud: { name: "SoundCloud", description: "Play and search your own SoundCloud account from Friend: ask for a track or an artist. Sign-in is through SoundCloud's own page. Needs a free app of your own at soundcloud.com/you/apps (SoundCloud decides who gets one), and some tracks only play with the right SoundCloud plan." },
   audius: { name: "Audius", description: "Free music from Audius, an open music service: ask for a track or an artist. No account, no key and no payment: install it and switch it on. Mostly independent artists." },
   chrome: { name: "Chrome control", description: "Lets Friend open pages, read them, click and type in your own Chrome, through an extension. It comes with Friend: nothing else to install. Every action still asks for your approval, and while it is on, Friend can act as you on the sites it allows." },
+  video: { name: "Web video", description: "Play videos from YouTube and almost any video site, on your Friend screen or in a window on this PC: ask for a video by name or give a link. Uses the free programs yt-dlp and ffmpeg (and mpv for a PC window), which you install once; nothing is downloaded to your disk." },
   zerodha: { name: "Zerodha", description: "Read-only look at your Zerodha portfolio: ask Friend how it is doing, or have a report sent to Telegram or WhatsApp every morning and at market close. Friend cannot place orders. Needs a free Kite Connect app." },
 };
 
@@ -57,9 +59,10 @@ export const PUBLIC_SETTINGS: Record<IntegrationId, readonly string[]> = {
   soundcloud: [],
   audius: [],
   chrome: [],
+  video: [],
 };
 
-export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }, audius?: Pick<AudiusHub, "status">, chrome?: { status(): ChromeStatus }): IntegrationView[] {
+export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }, audius?: Pick<AudiusHub, "status">, chrome?: { status(): ChromeStatus }, video?: { status(): VideoStatus }): IntegrationView[] {
   const status = hub.status();
   const t = config.channels.telegram;
   const w = config.channels.twilio;
@@ -106,6 +109,27 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     if (chs.extension === "off") return { state: "needs-setup", detail: "Load the extension in Chrome and switch it on (press Configure)." };
     if (chs.extension === "connected") return { state: "online", detail: "Connected to your Chrome. Every action still asks for your approval." };
     return { state: "online", detail: "Running. Check that the extension is switched on in Chrome (click its icon)." };
+  };
+  const vd = config.video;
+  const vs = video?.status();
+  // which helper programs the chosen place to play needs: the screen needs yt-dlp and ffmpeg, a window on the PC needs yt-dlp and mpv
+  const vdNeeds = (): { name: string; install?: string }[] => {
+    if (!vs) return [];
+    const need = [{ name: "yt-dlp", h: vs.ytdlp }, vd.output === "host" ? { name: "mpv", h: vs.mpv } : { name: "ffmpeg", h: vs.ffmpeg }];
+    return need.filter((n) => !n.h.found).map((n) => ({ name: n.name, ...(n.h.install ? { install: n.h.install } : {}) }));
+  };
+  const vdSteps: IntegrationStep[] = [
+    { text: `Install the helper programs once: yt-dlp and ${vd.output === "host" ? "mpv" : "ffmpeg"} (Configure shows the command for this PC).`, done: !!vs && vdNeeds().length === 0 },
+    { text: "Switch the plugin on.", done: vd.enabled },
+    { text: "Ask Friend to play a video, or give it a link.", done: vd.installed && vd.enabled && !!vs && vdNeeds().length === 0 },
+  ];
+  const vdState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!vd.installed) return { state: "not-installed", detail: "" };
+    if (!vs) return { state: "connecting", detail: "Looking for the helper programs…" };
+    const missing = vdNeeds();
+    if (missing.length) return { state: "needs-setup", detail: `${missing.map((m) => m.name).join(" and ")} ${missing.length > 1 ? "are" : "is"} not found on this PC (press Configure).` };
+    if (!vd.enabled) return { state: "off", detail: "Switched off." };
+    return { state: "online", detail: `Ready. Videos play ${vd.output === "host" ? "in a window on this PC" : "on your Friend screen"}.` };
   };
   const sc = config.music.soundcloud;
   const scs = soundcloud?.status();
@@ -210,6 +234,7 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { id: "soundcloud", ...META.soundcloud, kind: "integration", installed: sc.installed, enabled: sc.enabled, ...scState(), steps: scSteps, settings: { clientId: sc.clientId }, secrets: { clientSecret: scSecret } },
     { id: "audius", ...META.audius, kind: "integration", installed: au.installed, enabled: au.enabled, ...auState(), steps: auSteps, settings: {}, secrets: {} },
     { id: "chrome", ...META.chrome, kind: "integration", installed: ch.installed, enabled: ch.enabled, ...chState(), steps: chSteps, settings: chs?.extensionFolder ? { extensionFolder: chs.extensionFolder } : {}, secrets: {} },
+    { id: "video", ...META.video, kind: "integration", installed: vd.installed, enabled: vd.enabled, ...vdState(), steps: vdSteps, settings: {}, secrets: {} },
   ];
 }
 
@@ -316,6 +341,21 @@ export function changeAudius(audius: MusicConfig["audius"], change: { install: t
   return null;
 }
 
+/** The same for web video. Removing it forgets the helper programs the owner chose; the owner's other video settings stay. */
+export function changeVideo(video: VideoConfig, change: { install: true } | { remove: true } | { enabled: boolean }): string | null {
+  if ("install" in change) {
+    video.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    Object.assign(video, { installed: false, enabled: false, ytdlp: "", ffmpeg: "" });
+    return null;
+  }
+  if (!video.installed) return `${META.video.name} is not installed yet.`;
+  video.enabled = change.enabled;
+  return null;
+}
+
 /** The same for Chrome control: it can only be switched on once it is set up (`helper`). Removing it leaves the helper alone, other programs use it too. */
 export function changeChrome(chrome: ChromeConfig, change: { install: true } | { remove: true } | { enabled: boolean }, helper: boolean): string | null {
   if ("install" in change) {
@@ -334,5 +374,5 @@ export function changeChrome(chrome: ChromeConfig, change: { install: true } | {
 
 /** Plain words about the integrations the assistant can set up, for its context. Spotify is left out: only the owner connects it. */
 export function integrationSummary(views: IntegrationView[]): string {
-  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.filter((v) => v.id !== "spotify" && v.id !== "soundcloud" && v.id !== "audius" && v.id !== "chrome").map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
+  return `Integrations (plugins you can install and set up for the owner with the integrations tools): ${views.filter((v) => v.id !== "spotify" && v.id !== "soundcloud" && v.id !== "audius" && v.id !== "chrome" && v.id !== "video").map((v) => `${v.name} (${v.id}): ${v.state === "not-installed" ? "not installed" : `${v.state}${v.detail ? ` - ${v.detail}` : ""}`}`).join("; ")}.`;
 }
