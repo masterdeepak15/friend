@@ -112,24 +112,32 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
   };
   const vd = config.video;
   const vs = video?.status();
-  // which helper programs the chosen place to play needs: the screen needs yt-dlp and ffmpeg, a window on the PC needs yt-dlp and mpv
+  // which helper programs the chosen place to play needs: yt-dlp always; ffmpeg for the screen, and for a browser window on the PC
+  // (a window of mpv needs no ffmpeg, but mpv is the owner's: without it a browser window is used)
+  const vdMpvWindow = vd.output === "host" && !!vs?.mpv.found;
   const vdNeeds = (): { name: string; install?: string }[] => {
     if (!vs) return [];
-    const need = [{ name: "yt-dlp", h: vs.ytdlp }, vd.output === "host" ? { name: "mpv", h: vs.mpv } : { name: "ffmpeg", h: vs.ffmpeg }];
+    const need = [{ name: "yt-dlp", h: vs.ytdlp }, ...(vdMpvWindow ? [] : [{ name: "ffmpeg", h: vs.ffmpeg }])];
     return need.filter((n) => !n.h.found).map((n) => ({ name: n.name, ...(n.h.install ? { install: n.h.install } : {}) }));
   };
   const vdSteps: IntegrationStep[] = [
-    { text: `Install the helper programs once: yt-dlp and ${vd.output === "host" ? "mpv" : "ffmpeg"} (Configure shows the command for this PC).`, done: !!vs && vdNeeds().length === 0 },
+    { text: "Friend gets the helper programs (yt-dlp and ffmpeg) by itself when you turn the plugin on: nothing to install.", done: !!vs && vdNeeds().length === 0 },
     { text: "Switch the plugin on.", done: vd.enabled },
     { text: "Ask Friend to play a video, or give it a link.", done: vd.installed && vd.enabled && !!vs && vdNeeds().length === 0 },
   ];
   const vdState = (): Pick<IntegrationView, "state" | "detail"> => {
     if (!vd.installed) return { state: "not-installed", detail: "" };
     if (!vs) return { state: "connecting", detail: "Looking for the helper programs…" };
+    if (vs.setup?.busy) return { state: "connecting", detail: vs.setup.message ?? "Setting up the video tools…" };
     const missing = vdNeeds();
-    if (missing.length) return { state: "needs-setup", detail: `${missing.map((m) => m.name).join(" and ")} ${missing.length > 1 ? "are" : "is"} not found on this PC (press Configure).` };
+    if (missing.length) {
+      const names = missing.map((m) => m.name).join(" and ");
+      if (vs.setup?.error) return { state: "needs-setup", detail: vs.setup.error };
+      if (vd.autoInstall) return { state: "needs-setup", detail: `${names} ${missing.length > 1 ? "are" : "is"} not on this PC yet. Friend downloads ${missing.length > 1 ? "them" : "it"} by itself when you turn the plugin on.` };
+      return { state: "needs-setup", detail: `${names} ${missing.length > 1 ? "are" : "is"} not found on this PC (press Configure).` };
+    }
     if (!vd.enabled) return { state: "off", detail: "Switched off." };
-    return { state: "online", detail: `Ready. Videos play ${vd.output === "host" ? "in a window on this PC" : "on your Friend screen"}.` };
+    return { state: "online", detail: `Ready. Videos play ${vd.output === "host" ? (vdMpvWindow ? "in a window on this PC" : "in a browser window on this PC") : "on your Friend screen"}.` };
   };
   const sc = config.music.soundcloud;
   const scs = soundcloud?.status();

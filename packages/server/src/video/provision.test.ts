@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { managedPath, Provisioner, toolPlan, ALLOWED_HOSTS, type Extract } from "./provision";
+import type { YtRun } from "./resolve";
 
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
 
@@ -168,5 +169,41 @@ describe("downloading what is missing", () => {
     const p = new Provisioner({ dataDir: dir, fetch: fake, extract, platform: "win32", arch: "x64" });
     expect(await p.ensure(["yt-dlp"])).toEqual({ ok: false, error: expect.stringMatching(/could not download yt-dlp/i) });
     expect(hops.some((h) => h.includes("evil.example.com"))).toBe(false);
+  });
+});
+
+describe("keeping yt-dlp up to date", () => {
+  const WEEK = 7 * 24 * 3600 * 1000;
+  function setup() {
+    const t = make();
+    let now = 1_000_000_000_000;
+    const runs: string[][] = [];
+    const run: YtRun = async (cmd, args) => {
+      runs.push([cmd, ...args]);
+      return { code: 0, out: "Updated", err: "" };
+    };
+    const p = new Provisioner({ dataDir: t.dir, fetch: t.network.fetch, extract, platform: "win32", arch: "x64", run, now: () => now });
+    return { t, p, runs, advance: (ms: number) => (now += ms), dir: t.dir };
+  }
+
+  it("asks yt-dlp to update itself, at most once a week, and only for the copy Friend downloaded", async () => {
+    const x = setup();
+    await x.p.update(); // nothing downloaded yet: nothing to update
+    expect(x.runs).toEqual([]);
+    await x.p.ensure(["yt-dlp"]);
+    await x.p.update();
+    expect(x.runs).toEqual([[managedPath(x.dir, "yt-dlp", "win32"), "-U"]]);
+    await x.p.update();
+    expect(x.runs).toHaveLength(1);
+    x.advance(WEEK + 1000);
+    await x.p.update();
+    expect(x.runs).toHaveLength(2);
+  });
+
+  it("does not stop anything when the update fails, and tries again the next day, not at once", async () => {
+    const x = setup();
+    await x.p.ensure(["yt-dlp"]);
+    const failing = new Provisioner({ dataDir: x.dir, fetch: x.t.network.fetch, extract, platform: "win32", arch: "x64", run: async () => { throw new Error("spawn failed"); }, now: () => 1_000_000_000_000 });
+    await expect(failing.update()).resolves.toBeUndefined();
   });
 });

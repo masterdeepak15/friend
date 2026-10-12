@@ -16,17 +16,21 @@ export interface VideoSettingsView {
   allowedSites: string[];
   ytdlp: string;
   ffmpeg: string;
+  /** Friend downloads yt-dlp and ffmpeg itself when they are missing. */
+  autoInstall: boolean;
 }
 
 export interface VideoInfo {
   settings: VideoSettingsView;
-  status: { ytdlp: HelperInfo; ffmpeg: HelperInfo; mpv: HelperInfo };
+  status: { ytdlp: HelperInfo; ffmpeg: HelperInfo; mpv: HelperInfo; setup?: { busy: boolean; message: string | null; error: string | null } };
 }
 
 export interface VideoApi {
   info(): Promise<VideoInfo>;
   /** Looks for the helper programs again (the owner may have just installed one). */
   recheck(): Promise<VideoInfo["status"]>;
+  /** Downloads what is missing (no PIN: it only fetches the programs, checked, into Friend's own folder), then looks again. */
+  prepare(): Promise<VideoInfo["status"]>;
   /** Only the settings that changed. Needs the PIN. */
   save(patch: Record<string, unknown>, pin: string): Promise<void>;
 }
@@ -48,7 +52,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-const EMPTY: VideoSettingsView = { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "" };
+const EMPTY: VideoSettingsView = { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true };
 
 export const httpVideoApi: VideoApi = {
   info: async () => {
@@ -56,6 +60,7 @@ export const httpVideoApi: VideoApi = {
     return { settings: s.video ?? EMPTY, status: st };
   },
   recheck: () => call<VideoInfo["status"]>("/api/plugins/video/check", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }),
+  prepare: () => call<VideoInfo["status"]>("/api/plugins/video/prepare", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }),
   save: async (patch, pin) => {
     await call("/api/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin, settings: { video: patch } }) });
   },
@@ -69,7 +74,7 @@ const MAX_MINUTES = 600;
 const parseSites = (text: string): string[] => text.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
 const sitesText = (list: string[]): string => list.join(", ");
 
-function HelperLine({ name, h, need }: { name: string; h: HelperInfo; need: string }) {
+function HelperLine({ name, h, need, auto }: { name: string; h: HelperInfo; need: string; auto: string | null }) {
   return (
     <li className={h.found ? "done" : undefined}>
       {h.found ? (
@@ -79,6 +84,7 @@ function HelperLine({ name, h, need }: { name: string; h: HelperInfo; need: stri
       ) : (
         <>
           <strong>{name} not found</strong> <small>({need})</small>
+          {auto && <div className="auth-note">{auto}</div>}
           {h.install && <div className="auth-note">{h.install}</div>}
         </>
       )}
@@ -90,7 +96,7 @@ function HelperLine({ name, h, need }: { name: string; h: HelperInfo; need: stri
  * The Configure page of Web video: which helper programs are on this PC (and how to install the rest), and the owner's choices:
  * where videos play, how sharp, how long, which sites, and the program paths. Saved with the PIN; only what changed is sent.
  */
-export function VideoForm({ api = httpVideoApi }: { api?: VideoApi }) {
+export function VideoForm({ api = httpVideoApi, pollMs = 2000 }: { api?: VideoApi; pollMs?: number }) {
   const [info, setInfo] = useState<VideoInfo | null>(null);
   const [draft, setDraft] = useState<VideoSettingsView>(EMPTY);
   const [sites, setSites] = useState("");
@@ -123,6 +129,19 @@ export function VideoForm({ api = httpVideoApi }: { api?: VideoApi }) {
     };
   }, [load]);
 
+  // while Friend is downloading the programs, look again now and then so the page shows how far it is (and what is ready when it is done)
+  const downloading = info?.status.setup?.busy === true;
+  useEffect(() => {
+    if (!downloading || pollMs <= 0) return;
+    const timer = setInterval(() => {
+      void api
+        .info()
+        .then((i) => alive.current && setInfo((cur) => (cur ? { ...cur, status: i.status } : i)))
+        .catch(() => {});
+    }, pollMs);
+    return () => clearInterval(timer);
+  }, [downloading, pollMs, api]);
+
   const saved = info?.settings ?? EMPTY;
   const minutesNumber = Number(minutes);
   const minutesProblem = !Number.isInteger(minutesNumber) || minutesNumber < MIN_MINUTES || minutesNumber > MAX_MINUTES ? `Use a whole number of minutes from ${MIN_MINUTES} to ${MAX_MINUTES}.` : null;
@@ -134,6 +153,7 @@ export function VideoForm({ api = httpVideoApi }: { api?: VideoApi }) {
     if (!minutesProblem && minutesNumber !== saved.maxMinutes) c.maxMinutes = minutesNumber;
     const list = parseSites(sites);
     if (JSON.stringify(list) !== JSON.stringify(saved.allowedSites)) c.allowedSites = list;
+    if (draft.autoInstall !== saved.autoInstall) c.autoInstall = draft.autoInstall;
     if (draft.ytdlp.trim() !== saved.ytdlp) c.ytdlp = draft.ytdlp.trim();
     if (draft.ffmpeg.trim() !== saved.ffmpeg) c.ffmpeg = draft.ffmpeg.trim();
     return c;
@@ -146,6 +166,19 @@ export function VideoForm({ api = httpVideoApi }: { api?: VideoApi }) {
     setError(null);
     try {
       const status = await api.recheck();
+      if (alive.current) setInfo((i) => (i ? { ...i, status } : i));
+    } catch (e) {
+      if (alive.current) setError((e as Error).message);
+    } finally {
+      if (alive.current) setBusy(false);
+    }
+  };
+
+  const prepare = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const status = await api.prepare();
       if (alive.current) setInfo((i) => (i ? { ...i, status } : i));
     } catch (e) {
       if (alive.current) setError((e as Error).message);
@@ -204,23 +237,41 @@ export function VideoForm({ api = httpVideoApi }: { api?: VideoApi }) {
   }
 
   const st = info?.status;
+  const setup = st?.setup;
+  const auto = (names: string): string | null => (draft.autoInstall ? `Friend downloads ${names} by itself when it is needed (or press Download now).` : null);
+  const lacking = !!st && (!st.ytdlp.found || !st.ffmpeg.found);
   return (
     <div className="settings-section">
       {st && (
         <>
           <h4 className="plugins-heading">Helper programs on this PC</h4>
           <ol className="integration-steps">
-            <HelperLine name="yt-dlp" h={st.ytdlp} need="finds the video, needed for every video" />
-            <HelperLine name="ffmpeg" h={st.ffmpeg} need="needed to play on the Friend screen" />
-            <HelperLine name="mpv" h={st.mpv} need="needed to play in a window on this PC" />
+            <HelperLine name="yt-dlp" h={st.ytdlp} need="finds the video, needed for every video" auto={auto("it")} />
+            <HelperLine name="ffmpeg" h={st.ffmpeg} need="makes the video playable, needed for the Friend screen" auto={auto("it")} />
+            <HelperLine name="mpv" h={st.mpv} need="optional: a window of its own on this PC; without it a browser window is used" auto={null} />
           </ol>
+          {setup?.busy && <p className="auth-note">{setup.message ?? "Setting up the video tools…"}</p>}
+          {!setup?.busy && setup?.error && (
+            <p role="alert" className="auth-error">
+              {setup.error}
+            </p>
+          )}
           <div className="approval-actions">
+            {lacking && draft.autoInstall && !setup?.busy && (
+              <button type="button" style={touch} className="primary" disabled={busy} onClick={() => void prepare()}>
+                Download now
+              </button>
+            )}
             <button type="button" style={touch} disabled={busy} onClick={() => void recheck()}>
               Check again
             </button>
           </div>
         </>
       )}
+      <label className="settings-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <input type="checkbox" checked={draft.autoInstall} onChange={(e) => setDraft({ ...draft, autoInstall: e.target.checked })} />
+        <span>Let Friend download yt-dlp and ffmpeg by itself (recommended)</span>
+      </label>
       <label className="settings-field">
         <span>Where videos play</span>
         <select value={draft.output} onChange={(e) => setDraft({ ...draft, output: e.target.value as "screen" | "host" })}>
@@ -270,7 +321,7 @@ export function VideoForm({ api = httpVideoApi }: { api?: VideoApi }) {
           {dirty ? "Save…" : "Save"}
         </button>
       </div>
-      <small className="auth-note">Friend does not install these programs: it only looks for them. Videos stay on the site; nothing is saved to your disk. Some sites need a login or are not available in every country, and those cannot be played.</small>
+      <small className="auth-note">Friend downloads the two programs from their projects' own release pages (github.com), checks them against the published checksums and keeps them in its own folder, never anywhere else on your PC. Videos stay on the site; nothing is saved to your disk. Some sites need a login or are not available in every country, and those cannot be played.</small>
     </div>
   );
 }

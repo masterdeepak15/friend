@@ -13,13 +13,14 @@ const typePin = async (pin: string) => {
 };
 const found = (version: string) => ({ found: true, version });
 const info = (over: Partial<VideoInfo> = {}): VideoInfo => ({
-  settings: { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "" },
+  settings: { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true },
   status: { ytdlp: found("2026.10.01"), ffmpeg: found("7.1"), mpv: found("0.39") },
   ...over,
 });
 const api = (i: VideoInfo = info()): VideoApi => ({
   info: vi.fn(async () => i),
   recheck: vi.fn(async () => i.status),
+  prepare: vi.fn(async () => i.status),
   save: vi.fn(async () => {}),
 });
 
@@ -39,19 +40,71 @@ describe("the Web video Configure page", () => {
     expect(screen.getAllByText(/not found/i).length).toBeGreaterThanOrEqual(2);
   });
 
+  it("says the missing programs are downloaded by Friend itself, and offers to do it now, with no PIN", async () => {
+    const missing = info({ status: { ytdlp: { found: false, install: "yt-dlp is not installed." }, ffmpeg: { found: false, install: "ffmpeg is not installed." }, mpv: found("0.39") } });
+    const a = api(missing);
+    (a.prepare as ReturnType<typeof vi.fn>).mockResolvedValueOnce(info().status);
+    render(<VideoForm api={a} />);
+    expect((await screen.findAllByText(/Friend downloads (it|them) by itself/i)).length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("button", { name: /download now/i }));
+    expect(await screen.findByText(/yt-dlp 2026\.10\.01/)).toBeTruthy();
+    expect(a.prepare).toHaveBeenCalledTimes(1);
+  });
+
+  it("has nothing to download when everything is there", async () => {
+    render(<VideoForm api={api()} />);
+    await screen.findByText(/yt-dlp 2026/);
+    expect(screen.queryByRole("button", { name: /download now/i })).toBeNull();
+  });
+
+  it("shows how far the download is, and looks again by itself until it is done", async () => {
+    const busy = info({ status: { ytdlp: { found: false }, ffmpeg: { found: false }, mpv: found("0.39"), setup: { busy: true, message: "Downloading ffmpeg 40%…", error: null } } });
+    const a = api(busy);
+    let n = 0;
+    (a.info as ReturnType<typeof vi.fn>).mockImplementation(async () => (n++ < 1 ? busy : info()));
+    render(<VideoForm api={a} pollMs={20} />);
+    expect(await screen.findByText(/Downloading ffmpeg 40%/)).toBeTruthy();
+    expect(await screen.findByText(/yt-dlp 2026\.10\.01/)).toBeTruthy();
+    expect(screen.queryByText(/Downloading ffmpeg/)).toBeNull();
+  });
+
+  it("shows why a download failed, and a button to try again", async () => {
+    const failed = info({ status: { ytdlp: { found: false }, ffmpeg: found("7.1"), mpv: found("0.39"), setup: { busy: false, message: null, error: "Friend could not download yt-dlp. Check the internet connection and try again." } } });
+    render(<VideoForm api={api(failed)} />);
+    expect(await screen.findByText(/could not download yt-dlp/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /download now/i })).toBeTruthy();
+  });
+
+  it("says mpv is optional: without it a browser window is used", async () => {
+    render(<VideoForm api={api(info({ status: { ytdlp: found("1"), ffmpeg: found("1"), mpv: { found: false, install: "mpv is not installed." } } }))} />);
+    expect(await screen.findByText(/without it a browser window is used/i)).toBeTruthy();
+  });
+
+  it("can turn the automatic download off, and on again, with the PIN like any setting", async () => {
+    const a = api();
+    render(<VideoForm api={a} />);
+    const box = (await screen.findByLabelText(/download.*by itself/i)) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    await userEvent.click(box);
+    await userEvent.click(screen.getByRole("button", { name: /^save/i }));
+    await typePin("123456");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(a.save).toHaveBeenCalledWith({ autoInstall: false }, "123456"));
+  });
+
   it("looks again on request, with no PIN, and shows the new answer", async () => {
     const missing = info({ status: { ytdlp: { found: false, install: "yt-dlp is not installed." }, ffmpeg: found("7.1"), mpv: found("0.39") } });
     const a = api(missing);
     (a.recheck as ReturnType<typeof vi.fn>).mockResolvedValueOnce(info().status);
     render(<VideoForm api={a} />);
-    await screen.findByText(/yt-dlp is not installed/);
+    await screen.findAllByText(/yt-dlp is not installed/);
     await userEvent.click(screen.getByRole("button", { name: /check again/i }));
     expect(await screen.findByText(/yt-dlp 2026\.10\.01/)).toBeTruthy();
     expect(a.recheck).toHaveBeenCalledTimes(1);
   });
 
   it("starts from what is saved, and cannot be saved until something changes", async () => {
-    render(<VideoForm api={api(info({ settings: { output: "host", maxHeight: 480, maxMinutes: 90, allowedSites: ["youtube.com", "vimeo.com"], ytdlp: "C:/t/yt-dlp.exe", ffmpeg: "" } }))} />);
+    render(<VideoForm api={api(info({ settings: { output: "host", maxHeight: 480, maxMinutes: 90, allowedSites: ["youtube.com", "vimeo.com"], ytdlp: "C:/t/yt-dlp.exe", ffmpeg: "", autoInstall: true } }))} />);
     expect((await screen.findByLabelText(/where videos play/i) as HTMLSelectElement).value).toBe("host");
     expect((screen.getByLabelText(/picture quality/i) as HTMLSelectElement).value).toBe("480");
     expect((screen.getByLabelText(/longest video/i) as HTMLInputElement).value).toBe("90");
@@ -72,7 +125,7 @@ describe("the Web video Configure page", () => {
   });
 
   it("sends the allowed sites as a list, however they were separated, and an empty box as an empty list", async () => {
-    const a = api(info({ settings: { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: ["youtube.com"], ytdlp: "", ffmpeg: "" } }));
+    const a = api(info({ settings: { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: ["youtube.com"], ytdlp: "", ffmpeg: "", autoInstall: true } }));
     render(<VideoForm api={a} />);
     const box = await screen.findByLabelText(/allowed sites/i);
     await userEvent.clear(box);

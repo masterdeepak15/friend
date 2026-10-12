@@ -30,7 +30,7 @@ export interface VideoHubDeps {
   host?: VideoHostLike;
   clock?: () => number;
   /** Downloads yt-dlp and ffmpeg when they are missing. Without it nothing is downloaded. */
-  provisioner?: Pick<Provisioner, "ensure" | "state">;
+  provisioner?: Pick<Provisioner, "ensure" | "state"> & Partial<Pick<Provisioner, "update">>;
   /** How long a request waits for a download before it says it is still going (default 25 seconds). */
   waitMs?: number;
   /** The address a browser on this PC can use to watch a video (Friend's own, with a ticket). */
@@ -136,6 +136,7 @@ export class VideoHub {
     const need = this.missing(status, this.wanted(cfg.output, status));
     if (need.length && cfg.autoInstall && this.d.provisioner) await this.d.provisioner.ensure(need);
     await this.refresh();
+    if (cfg.autoInstall) void this.d.provisioner?.update?.().catch(() => {}); // a week-old yt-dlp is asked to update itself
   }
 
   async refresh(): Promise<VideoStatus> {

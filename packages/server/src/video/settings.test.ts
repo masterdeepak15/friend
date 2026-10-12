@@ -90,8 +90,28 @@ describe("the video plugin in the plugins list", () => {
     config.video.enabled = true;
     expect(view(config, status())).toMatchObject({ state: "online" });
     config.video.output = "host";
-    expect(view(config, status({ mpv: { found: false } }))).toMatchObject({ state: "needs-setup", detail: expect.stringMatching(/mpv/) });
-    expect(view(config, status({ ffmpeg: { found: false } }))).toMatchObject({ state: "online" }); // the PC window does not need ffmpeg
+    expect(view(config, status({ mpv: { found: false } }))).toMatchObject({ state: "online", detail: expect.stringMatching(/browser window/i) }); // no mpv: a browser window is used
+    expect(view(config, status({ mpv: { found: false }, ffmpeg: { found: false } }))).toMatchObject({ state: "needs-setup", detail: expect.stringMatching(/ffmpeg/) });
+    expect(view(config, status({ ffmpeg: { found: false } }))).toMatchObject({ state: "online" }); // an mpv window does not need ffmpeg
+  });
+  it("says Friend is downloading the programs, and how far it is", () => {
+    const { config } = fresh();
+    config.video = { ...config.video, installed: true, enabled: true };
+    const missing = { ytdlp: { found: false }, ffmpeg: { found: false } };
+    expect(view(config, status({ ...missing, setup: { busy: true, message: "Downloading yt-dlp 42%…", error: null } }))).toMatchObject({ state: "connecting", detail: "Downloading yt-dlp 42%…" });
+    expect(view(config, status({ ...missing, setup: { busy: true, message: null, error: null } })).state).toBe("connecting");
+  });
+  it("says Friend will download what is missing by itself, and shows why a download failed", () => {
+    const { config } = fresh();
+    config.video = { ...config.video, installed: true };
+    const missing = { ytdlp: { found: false }, ffmpeg: { found: false } };
+    expect(view(config, status({ ...missing, setup: { busy: false, message: null, error: null } }))).toMatchObject({ state: "needs-setup", detail: expect.stringMatching(/yt-dlp and ffmpeg.*download.*by itself/i) });
+    expect(view(config, status({ ...missing, setup: { busy: false, message: null, error: "Friend could not download yt-dlp. Check the internet connection and try again." } }))).toMatchObject({ state: "needs-setup", detail: expect.stringMatching(/could not download yt-dlp/) });
+  });
+  it("asks for the programs by hand only when the owner turned the download off", () => {
+    const { config } = fresh();
+    config.video = { ...config.video, installed: true, autoInstall: false };
+    expect(view(config, status({ ytdlp: { found: false, install: "yt-dlp is not installed. Install it once with: winget install yt-dlp." }, setup: { busy: false, message: null, error: null } }))).toMatchObject({ state: "needs-setup", detail: expect.stringMatching(/not found on this PC/) });
   });
   it("lists the steps and shows no setting the assistant could write", () => {
     const { config } = fresh();

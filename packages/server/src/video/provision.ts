@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, copyFileSync, statSync } from "node:fs";
+import { chmodSync, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, copyFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ytRun, type YtRun } from "./resolve";
 
 export type ToolName = "yt-dlp" | "ffmpeg";
 
@@ -64,6 +65,9 @@ export interface ProvisionDeps {
   arch?: string;
   /** Called whenever the progress changes. */
   onChange?: () => void;
+  /** Runs yt-dlp to update itself (tests). */
+  run?: YtRun;
+  now?: () => number;
 }
 
 const MAX_BYTES = 500_000_000;
@@ -147,6 +151,26 @@ export class Provisioner {
   private set(name: ToolName, phase: ToolPhase): void {
     this.tools[name] = phase;
     this.d.onChange?.();
+  }
+
+  /**
+   * Sites change often and an old yt-dlp stops working, so the copy Friend downloaded is asked to update itself (its own `-U`) when
+   * a week has passed. A failure is nothing to stop for: it is tried again later.
+   */
+  async update(): Promise<void> {
+    const file = managedPath(this.d.dataDir, "yt-dlp", this.platform);
+    if (!existsSync(file)) return;
+    const stamp = join(this.d.dataDir, "tools", ".yt-dlp-updated");
+    const now = (this.d.now ?? Date.now)();
+    const WEEK = 7 * 24 * 3600 * 1000;
+    if (existsSync(stamp) && now - statSync(stamp).mtimeMs < WEEK) return;
+    try {
+      writeFileSync(stamp, "");
+      utimesSync(stamp, now / 1000, now / 1000); // marked first: a failing update is not tried again at once
+      await (this.d.run ?? ytRun)(file, ["-U"], { timeoutMs: 120_000, maxBytes: 100_000 });
+    } catch {
+      /* the old copy still works; the next week tries again */
+    }
   }
 
   private has(name: ToolName): boolean {
