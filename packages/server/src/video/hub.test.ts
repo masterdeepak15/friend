@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { VideoHub, type VideoHostLike } from "./hub";
 import type { YtRun } from "./resolve";
+import { managedPath } from "./provision";
 import { fakeSpawn } from "./testing/fakeProcess";
 import type { VideoStatus } from "./types";
 
@@ -313,6 +314,22 @@ describe("a browser window on the PC, when there is no mpv", () => {
     const t = make({ status: NO_MPV, video: { output: "host" }, host: fakeHost() });
     const r = await t.hub.play({ url: URL });
     expect(r).toEqual({ ok: false, text: expect.stringMatching(/mpv/) });
+  });
+});
+
+describe("finding the programs Friend downloaded", () => {
+  it("looks in Friend's own tools folder when it looks for the helpers, so a program it just downloaded is found at once", async () => {
+    const dataDir = "C:/Users/me/.friend";
+    const yt = managedPath(dataDir, "yt-dlp", "win32");
+    const ff = managedPath(dataDir, "ffmpeg", "win32");
+    const hub = new VideoHub({
+      config: () => ({ video: { installed: true, enabled: true, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true }, music: { hostPlayer: "" } }) as never,
+      dataDir,
+      find: { platform: "win32", env: {}, exists: (p) => p === yt || p === ff, run: async (cmd) => (cmd === yt ? { code: 0, out: "2026.10.01" } : cmd === ff ? { code: 0, out: "ffmpeg version 7.1" } : { code: -1, out: "" }) },
+    });
+    const s = await hub.refresh();
+    expect(s.ytdlp).toMatchObject({ found: true, path: yt, version: "2026.10.01" });
+    expect(s.ffmpeg).toMatchObject({ found: true, path: ff });
   });
 });
 

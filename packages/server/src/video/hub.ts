@@ -5,7 +5,7 @@ import type { Config } from "../config";
 import { resolveVideo, type ResolveDeps, type VideoInfo, type YtRun } from "./resolve";
 import type { Provisioner, ToolName } from "./provision";
 import { startStream, type StreamHandle } from "./stream";
-import { videoStatus } from "./tools";
+import { videoStatus, type FindHelperDeps } from "./tools";
 import type { HelperStatus, VideoStatus } from "./types";
 
 /** The window on the PC (mpv). It is its own piece so the hub can be tested without a real player. */
@@ -27,6 +27,10 @@ export interface VideoHubDeps {
   resolve?: ResolveDeps["resolve"];
   /** Looks for the helper programs (tests). */
   status?: () => Promise<VideoStatus>;
+  /** Friend's data folder: the programs it downloaded are in its tools folder, and are looked for first. */
+  dataDir?: string;
+  /** How the programs are looked for (tests). */
+  find?: Omit<FindHelperDeps, "program" | "managed">;
   host?: VideoHostLike;
   clock?: () => number;
   /** Downloads yt-dlp and ffmpeg when they are missing. Without it nothing is downloaded. */
@@ -140,7 +144,7 @@ export class VideoHub {
   }
 
   async refresh(): Promise<VideoStatus> {
-    const status = await (this.d.status ?? (() => videoStatus(this.d.config())))();
+    const status = await (this.d.status ?? (() => videoStatus(this.d.config(), { ...this.d.find, dataDir: this.d.dataDir })))();
     this.cached = { status, at: this.clock() };
     return status;
   }

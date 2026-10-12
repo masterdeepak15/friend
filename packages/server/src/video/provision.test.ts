@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { managedPath, Provisioner, toolPlan, ALLOWED_HOSTS, type Extract } from "./provision";
+import { zipDirectory } from "../zip";
+import { managedPath, Provisioner, toolPlan, ALLOWED_HOSTS, zipExtract, type Extract, type ToolPlan } from "./provision";
 import type { YtRun } from "./resolve";
 
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
@@ -205,5 +206,90 @@ describe("keeping yt-dlp up to date", () => {
     await x.p.ensure(["yt-dlp"]);
     const failing = new Provisioner({ dataDir: x.dir, fetch: x.t.network.fetch, extract, platform: "win32", arch: "x64", run: async () => { throw new Error("spawn failed"); }, now: () => 1_000_000_000_000 });
     await expect(failing.update()).resolves.toBeUndefined();
+  });
+});
+
+describe("unpacking a zip without any other program", () => {
+  const plan = { name: "ffmpeg", file: "ffmpeg.exe", url: "https://github.com/x", archive: "zip", inside: "bin/ffmpeg.exe", sums: { url: "", name: "" } } as ToolPlan;
+  function zipWith(files: Record<string, Buffer | string>): string {
+    const root = mkdtempSync(join(tmpdir(), "friend-zipsrc-"));
+    for (const [name, data] of Object.entries(files)) {
+      const p = join(root, "ffmpeg-master-latest-win64-gpl", name);
+      mkdirSync(join(p, ".."), { recursive: true });
+      writeFileSync(p, data);
+    }
+    const out = join(mkdtempSync(join(tmpdir(), "friend-zipout-")), "a.zip");
+    writeFileSync(out, zipDirectory(root, "ffmpeg-master-latest-win64-gpl-top"));
+    return out;
+  }
+  it("takes the one program out of the archive, wherever the archive's own folder starts, whatever else is in it", async () => {
+    const big = Buffer.alloc(300_000, 7);
+    const zip = zipWith({ "bin/ffmpeg.exe": big, "bin/ffplay.exe": "other", "doc/readme.txt": "x".repeat(2000) });
+    const dest = join(mkdtempSync(join(tmpdir(), "friend-zipdest-")), "ffmpeg.exe");
+    await zipExtract(zip, plan, dest);
+    expect(readFileSync(dest)).toEqual(big);
+  });
+  it("says it is not there when the archive does not hold it", async () => {
+    const zip = zipWith({ "bin/other.exe": "x" });
+    await expect(zipExtract(zip, plan, join(mkdtempSync(join(tmpdir(), "friend-zipdest-")), "ffmpeg.exe"))).rejects.toThrow(/not in the archive/i);
+  });
+  it("says so for a file that is not a zip", async () => {
+    const bad = join(mkdtempSync(join(tmpdir(), "friend-zipbad-")), "bad.zip");
+    writeFileSync(bad, "this is not a zip file at all");
+    await expect(zipExtract(bad, plan, bad + ".out")).rejects.toThrow();
+  });
+  it("is what Friend uses for a zip: it does not depend on which tar is on the PATH", async () => {
+    const zip = zipWith({ "bin/ffmpeg.exe": "PROGRAM" });
+    const root = mkdtempSync(join(tmpdir(), "friend-prov-"));
+    const archiveBytes = readFileSync(zip);
+    const fake = (async (input: unknown) => {
+      const url = String(input);
+      if (url.endsWith("/checksums.sha256")) return new Response(`${sha(archiveBytes)}  ffmpeg-master-latest-win64-gpl.zip\n`);
+      return new Response(archiveBytes);
+    }) as unknown as typeof fetch;
+    const p = new Provisioner({ dataDir: root, fetch: fake, platform: "win32", arch: "x64" }); // no extract given: the real one
+    expect(await p.ensure(["ffmpeg"])).toEqual({ ok: true });
+    expect(readFileSync(join(root, "tools", "ffmpeg.exe")).toString()).toBe("PROGRAM");
+  });
+});
+
+describe("a download that breaks half way", () => {
+  it("is tried again once, and works the second time", async () => {
+    let attempts = 0;
+    const fake = (async (input: unknown) => {
+      const url = String(input);
+      if (url.endsWith("/SHA2-256SUMS")) return new Response(`${sha(YT)}  yt-dlp.exe\n`);
+      attempts++;
+      if (attempts === 1) {
+        const body = new ReadableStream({ start: (c) => { c.enqueue(new Uint8Array([1, 2, 3])); c.error(new Error("connection reset")); } });
+        return new Response(body, { headers: { "content-length": "1000" } });
+      }
+      return new Response(YT);
+    }) as unknown as typeof fetch;
+    const dir = mkdtempSync(join(tmpdir(), "friend-provision-"));
+    const p = new Provisioner({ dataDir: dir, fetch: fake, extract, platform: "win32", arch: "x64" });
+    expect(await p.ensure(["yt-dlp"])).toEqual({ ok: true });
+    expect(attempts).toBe(2);
+  });
+  it("gives up after that and says so, and tells the owner's log why", async () => {
+    const reasons: string[] = [];
+    const fake = (async (input: unknown) => {
+      if (String(input).endsWith("/SHA2-256SUMS")) return new Response(`${sha(YT)}  yt-dlp.exe\n`);
+      return new Response(new ReadableStream({ start: (c) => c.error(new Error("connection reset")) }));
+    }) as unknown as typeof fetch;
+    const dir = mkdtempSync(join(tmpdir(), "friend-provision-"));
+    const p = new Provisioner({ dataDir: dir, fetch: fake, extract, platform: "win32", arch: "x64", onError: (name, why) => reasons.push(`${name}: ${why}`) });
+    expect(await p.ensure(["yt-dlp"])).toEqual({ ok: false, error: expect.stringMatching(/could not download yt-dlp/i) });
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/^yt-dlp: /);
+  });
+  it("reports why unpacking failed, in the log and not in the owner's sentence", async () => {
+    const reasons: string[] = [];
+    const dir = mkdtempSync(join(tmpdir(), "friend-provision-"));
+    const t = net();
+    const p = new Provisioner({ dataDir: dir, fetch: t.fetch, extract: async () => { throw new Error("tar failed: bad archive"); }, platform: "win32", arch: "x64", onError: (n, why) => reasons.push(why) });
+    const r = await p.ensure(["ffmpeg"]);
+    expect(r).toEqual({ ok: false, error: expect.stringMatching(/could not unpack ffmpeg/i) });
+    expect(reasons[0]).toMatch(/bad archive/);
   });
 });

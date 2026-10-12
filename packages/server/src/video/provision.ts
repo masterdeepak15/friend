@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, copyFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, copyFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { open } from "node:fs/promises";
+import { createInflateRaw } from "node:zlib";
+import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
 import { ytRun, type YtRun } from "./resolve";
 
@@ -65,6 +68,8 @@ export interface ProvisionDeps {
   arch?: string;
   /** Called whenever the progress changes. */
   onChange?: () => void;
+  /** Told why a download or an unpacking failed (for the owner's log: the sentence the owner sees is kept plain). */
+  onError?: (name: ToolName, reason: string) => void;
   /** Runs yt-dlp to update itself (tests). */
   run?: YtRun;
   now?: () => number;
@@ -73,6 +78,54 @@ export interface ProvisionDeps {
 const MAX_BYTES = 500_000_000;
 const MAX_HOPS = 5;
 const hostOk = (host: string) => ALLOWED_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+
+/**
+ * Takes one program out of a zip, with no other program: the zip's list of files is read from its end, and only that one file is
+ * unpacked (streamed, so a big archive is never held in memory). It does not matter which `tar` happens to be on the PATH.
+ */
+export const zipExtract: Extract = async (archive, plan, dest) => {
+  const want = `/${(plan.inside ?? plan.file).replace(/\\/g, "/")}`;
+  const fh = await open(archive, "r");
+  try {
+    const size = (await fh.stat()).size;
+    const tailLen = Math.min(size, 65_557);
+    const tail = Buffer.alloc(tailLen);
+    await fh.read(tail, 0, tailLen, size - tailLen);
+    const eocd = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    if (eocd < 0) throw new Error("not a zip file");
+    const count = tail.readUInt16LE(eocd + 10);
+    const cdSize = tail.readUInt32LE(eocd + 12);
+    const cdOffset = tail.readUInt32LE(eocd + 16);
+    if (cdOffset === 0xffffffff || cdSize === 0xffffffff) throw new Error("zip64 archives are not supported");
+    const cd = Buffer.alloc(cdSize);
+    await fh.read(cd, 0, cdSize, cdOffset);
+    let p = 0;
+    for (let i = 0; i < count && p + 46 <= cd.length; i++) {
+      if (cd.readUInt32LE(p) !== 0x02014b50) break;
+      const method = cd.readUInt16LE(p + 10);
+      const csize = cd.readUInt32LE(p + 20);
+      const nlen = cd.readUInt16LE(p + 28);
+      const xlen = cd.readUInt16LE(p + 30);
+      const clen = cd.readUInt16LE(p + 32);
+      const local = cd.readUInt32LE(p + 42);
+      const name = cd.subarray(p + 46, p + 46 + nlen).toString("utf8").replace(/\\/g, "/");
+      p += 46 + nlen + xlen + clen;
+      if (!(`/${name}`.endsWith(want) || (!want.slice(1).includes("/") && name === want.slice(1)))) continue;
+      const head = Buffer.alloc(30);
+      await fh.read(head, 0, 30, local);
+      if (head.readUInt32LE(0) !== 0x04034b50) throw new Error("bad zip entry");
+      const dataStart = local + 30 + head.readUInt16LE(26) + head.readUInt16LE(28);
+      const raw = createReadStream(archive, { start: dataStart, end: dataStart + csize - 1 });
+      if (method === 8) await pipeline(raw, createInflateRaw(), createWriteStream(dest));
+      else if (method === 0) await pipeline(raw, createWriteStream(dest));
+      else throw new Error("unsupported zip compression");
+      return;
+    }
+    throw new Error("The program was not in the archive.");
+  } finally {
+    await fh.close();
+  }
+};
 
 /** Unpacks one program from a zip or tar.xz with the system's own tar (Windows 10 and later, macOS and Linux all have one). */
 export const tarExtract: Extract = (archive, plan, dest) =>
@@ -215,20 +268,35 @@ export class Provisioner {
       const list = await this.text(plan.sums.url);
       const want = checksumFor(list, plan.sums.name);
       if (!want) return fail(`Friend could not check the ${name} download: no published checksum was found for it.`);
-      const got = await this.file(plan.url, part, (percent) => this.set(name, { phase: "downloading", percent }));
-      if (got.error) return fail(got.error === "big" ? `The download of ${name} is too big to be right, so Friend stopped.` : `Friend could not download ${name}. Check the internet connection and try again.`);
+      let got = await this.file(plan.url, part, (percent) => this.set(name, { phase: "downloading", percent }));
+      if (got.error === "failed") {
+        // a connection that broke half way: one more try
+        rmSync(part, { force: true });
+        got = await this.file(plan.url, part, (percent) => this.set(name, { phase: "downloading", percent }));
+      }
+      if (got.error) {
+        this.d.onError?.(name, got.error === "big" ? "too big" : got.why ?? "download failed");
+        return fail(got.error === "big" ? `The download of ${name} is too big to be right, so Friend stopped.` : `Friend could not download ${name}. Check the internet connection and try again.`);
+      }
       if (got.sha !== want) return fail(`The ${name} that was downloaded did not match its published checksum, so Friend threw it away.`);
       if (plan.archive === "none") {
         renameSync(part, final);
       } else {
         this.set(name, { phase: "unpacking" });
-        await (this.d.extract ?? tarExtract)(part, plan, final);
+        try {
+          await (this.d.extract ?? (plan.archive === "zip" ? zipExtract : tarExtract))(part, plan, final);
+        } catch (e) {
+          rmSync(final, { force: true });
+          this.d.onError?.(name, `unpacking: ${(e as Error).message}`);
+          return fail(`Friend could not unpack ${name}. Install it with your package manager, then press Check again.`);
+        }
       }
       if (this.platform !== "win32") chmodSync(final, 0o755);
       this.set(name, { phase: "ready" });
       return { ok: true };
-    } catch {
+    } catch (e) {
       rmSync(final, { force: true });
+      this.d.onError?.(name, (e as Error).message);
       return fail(`Friend could not download ${name}. Check the internet connection and try again.`);
     } finally {
       rmSync(part, { force: true });
@@ -264,12 +332,12 @@ export class Provisioner {
     return (await res.text()).slice(0, 2_000_000);
   }
 
-  private async file(url: string, dest: string, progress: (percent: number | null) => void): Promise<{ sha: string; error?: undefined } | { sha?: undefined; error: "big" | "failed" }> {
+  private async file(url: string, dest: string, progress: (percent: number | null) => void): Promise<{ sha: string; error?: undefined; why?: undefined } | { sha?: undefined; error: "big" | "failed"; why?: string }> {
     let res: Response;
     try {
       res = await this.open(url);
-    } catch {
-      return { error: "failed" };
+    } catch (e) {
+      return { error: "failed", why: (e as Error).message };
     }
     const total = Number(res.headers.get("content-length") ?? 0);
     if (total > MAX_BYTES) {
@@ -304,11 +372,11 @@ export class Provisioner {
         out.end(() => resolve());
         out.on("error", reject);
       });
-    } catch {
+    } catch (e) {
       out.destroy();
-      return { error: "failed" };
+      return { error: "failed", why: (e as Error).message };
     }
-    if (!existsSync(dest) || statSync(dest).size === 0) return { error: "failed" };
+    if (!existsSync(dest) || statSync(dest).size === 0) return { error: "failed", why: "empty download" };
     return { sha: hash.digest("hex") };
   }
 }

@@ -1,33 +1,39 @@
 # Web video (plugin)
 
-Ask Friend to play a video from YouTube or almost any other video site, on your Friend screen or in a window on your PC.
-It works on Windows, macOS and Linux, and in any browser, including a phone.
+Ask Friend to play a video, or a song, from YouTube or almost any other video site. It plays **inside Friend**: on your Friend screen,
+in a card with its own controls, or in a window on your PC. It never opens YouTube in your Chrome. It works on Windows, macOS and
+Linux, and in any browser, including a phone.
 
-## Set it up (once)
+## Set it up: there is nothing to install
 
-1. Install the three free helper programs. Friend never installs them for you and does not ship them: it only looks for them.
+1. Open **Plugins**, press **Install** on **Web video** (PIN), then **Turn on** (PIN).
+2. That is all. Friend gets the two programs it needs by itself, the first time (about 190 MB, one minute or two):
+   **yt-dlp** (finds the video) and **ffmpeg** (makes it playable in the browser). The plugin page shows the progress. If you ask for
+   a video before it is done, Friend says it is downloading and to ask again in a minute.
 
-   | | Windows | macOS | Linux |
-   |---|---|---|---|
-   | **yt-dlp** (finds the video) | `winget install yt-dlp` | `brew install yt-dlp` | `pipx install yt-dlp` |
-   | **ffmpeg** (plays it on the Friend screen) | `winget install ffmpeg` | `brew install ffmpeg` | `sudo apt install ffmpeg` |
-   | **mpv** (the window on the PC, optional) | `winget install mpv` | `brew install mpv` | `sudo apt install mpv` |
-
-   Keep yt-dlp up to date (`yt-dlp -U`): sites change often and old versions stop working.
-2. Open **Plugins**, press **Install** on **Web video** (PIN), then **Turn on** (PIN).
-3. Press **Configure**. It lists which programs Friend found (press **Check again** after installing one), and lets you choose where
-   videos play, the picture quality, the longest video, which sites are allowed, and the program paths if they are in an unusual place.
-   Changes need your PIN.
+Where the programs come from, and how they are kept safe:
+- Each is downloaded over https from its project's own release page (github.com, and one macOS build site), and checked against the
+  checksum that project publishes. A download that does not match is thrown away.
+- They are kept in Friend's own folder (`tools` inside Friend's data folder) and nowhere else on your PC. Nothing is installed
+  system-wide, and nothing needs administrator rights.
+- yt-dlp is asked to update itself once a week (sites change often, and an old yt-dlp stops working).
+- If you already have yt-dlp or ffmpeg installed, Friend uses yours when you choose its path in Configure; otherwise it uses its own
+  copy first and then whatever is on the PATH.
+- If you prefer to install them yourself, switch off **Let Friend download yt-dlp and ffmpeg by itself** in Configure (PIN). Configure
+  then shows the install command for your system.
 
 ## Use it
 
-- "Play lofi hip hop on YouTube", "play this: https://youtu.be/...", "play it in a window on the PC".
+- "Play lofi hip hop on YouTube", "play this: https://youtu.be/...", "play some Arijit Singh songs on YouTube", "play it on the PC".
 - "Pause", "continue", "jump to 2 minutes", "volume 40", "stop the video".
 - If a video will not play, ask "why will the video not play": Friend checks the helper programs and tells you what is missing.
 
-On the **Friend screen** the video is a card with its own buttons. Friend makes the video as you watch (ffmpeg), so nothing is saved
-to disk; to jump far ahead, ask Friend ("jump to 10 minutes") and it restarts from there. In a **window on the PC** mpv plays it with
-full seeking, subtitles and full screen.
+Where it plays (Configure, **Where videos play**; one request can say "on the PC"):
+- **On the Friend screen:** a card with the browser's own play, volume and full-screen buttons. Friend makes the video as you watch
+  (ffmpeg), so nothing is saved to disk; to jump far ahead, ask Friend ("jump to 10 minutes") and it restarts from there.
+- **In a window on this PC:** if you have **mpv** installed, a window of its own with full seeking, subtitles and full screen, which
+  Friend can pause, seek and set the volume of. Without mpv, Friend opens a **browser window** on this PC with the same video, and
+  you use that player's own buttons. mpv is optional and Friend never installs it.
 
 ## What it will and will not do
 

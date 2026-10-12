@@ -236,7 +236,7 @@ export async function createApp(opts: AppOptions) {
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
   const hub = new McpHub(new ConnectorStore(opts.dataDir));
   let listenPort = config.port;
-  const provisioner = opts.video?.provisioner ?? new Provisioner({ dataDir: opts.dataDir });
+  const provisioner = opts.video?.provisioner ?? new Provisioner({ dataDir: opts.dataDir, onError: (name, why) => audit.log("system", "video.provision_failed", { name, why: why.slice(0, 200) }) });
   const videoHub: VideoHub = new VideoHub({
     config: () => config,
     run: opts.video?.run,
@@ -244,6 +244,7 @@ export async function createApp(opts: AppOptions) {
     status: opts.video?.status,
     resolve: opts.video?.resolve,
     provisioner,
+    dataDir: opts.dataDir,
     // a video for the PC's own browser: Friend's own address on this PC, with a ticket (a window of mpv is used when mpv is there)
     windowUrl: (id, ticket) => `${config.https ? "https" : "http"}://127.0.0.1:${listenPort}/api/video/${id}?o=${ticket}`,
     openBrowser: opts.video?.openBrowser ?? openInBrowser,

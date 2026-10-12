@@ -20,8 +20,10 @@ Friend does not decode video itself. It uses three open-source programs that exi
 | **ffmpeg** | Turns what yt-dlp found into something every browser can play, as it arrives (H.264 video + AAC audio in a fragmented MP4). |
 | **mpv** | The PC window (already used by the music player). mpv uses yt-dlp itself, so it plays the same links with seeking and subtitles. |
 
-Friend never installs them silently and never bundles them (licences, size, updates: yt-dlp must be kept current). The plugin page
-shows which are found and the one command to install what is missing for the owner's system (winget, brew, apt, pip).
+**Update (same day, the owner's instruction "no manual installation"):** Friend downloads yt-dlp and ffmpeg by itself when the plugin
+is installed or turned on, into its own tools folder (https only, from the projects' release pages, SHA-256 checked, a setting can
+turn it off), and keeps yt-dlp current. mpv stays the owner's: without it the PC output is a browser window on the PC, opened with a
+single-use ticket address. Nothing is bundled in the npm package (size, licences).
 
 ## Two outputs
 
