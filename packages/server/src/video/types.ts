@@ -2,6 +2,8 @@
 export interface HelperStatus {
   found: boolean;
   version?: string;
+  /** The name or path that worked, for starting it. */
+  path?: string;
   /** One sentence on how to install it, when it is missing. */
   install?: string;
 }

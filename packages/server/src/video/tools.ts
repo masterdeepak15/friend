@@ -109,7 +109,7 @@ export async function findHelper(name: HelperName, d: FindHelperDeps): Promise<F
   return { found: false, install: installFor(name, platform) };
 }
 
-const asStatus = (r: FindResult): HelperStatus => (r.found ? { found: true, version: r.version } : { found: false, install: r.install });
+const asStatus = (r: FindResult): HelperStatus => (r.found ? { found: true, version: r.version, path: r.path } : { found: false, install: r.install });
 
 /** Which of the three programs web video uses are on this PC (a look, not a change). */
 export async function videoStatus(config: Pick<Config, "video" | "music">, deps: Omit<FindHelperDeps, "program"> = {}): Promise<VideoStatus> {
