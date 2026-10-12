@@ -47,7 +47,10 @@ function render() {
   $("engage").setAttribute("aria-checked", String(on));
   $("engageLbl").textContent = on ? "DISENGAGE LINK" : "ENGAGE LINK";
 
-  $("tPort").textContent = state.port || 8765;
+  // an address with a path (wss://name/chrome/ws) carries its own port, so the port box does not apply to it
+  const hasPath = hostName(state.host).includes("/");
+  $("tPort").textContent = hasPath ? "IN ADDRESS" : state.port || 8765;
+  $("port").disabled = hasPath;
   const key = $("tKey");
   key.className = "";
   if (!state.token) {
