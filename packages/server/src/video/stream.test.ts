@@ -30,6 +30,8 @@ describe("the ffmpeg command", () => {
     expect(a.filter((x) => x === "-i")).toHaveLength(2);
     expect(a[idx(a, "-c:v") + 1]).toBe("copy");
     expect(a[idx(a, "-c:a") + 1]).toBe("copy");
+    // sound from a live stream or a TS segment is raw ADTS AAC; MP4 needs it converted, or ffmpeg stops after a few seconds
+    expect(a[idx(a, "-bsf:a") + 1]).toBe("aac_adtstoasc");
     expect(a.join(" ")).toContain("-map 0:v:0 -map 1:a:0");
     expect(a.slice(-2)).toEqual(["mp4", "pipe:1"]);
     expect(a[idx(a, "-movflags") + 1]).toBe("frag_keyframe+empty_moov+default_base_moof");
@@ -60,6 +62,7 @@ describe("the ffmpeg command", () => {
     expect(a[idx(a, "-vf") + 1]).toBe("scale=-2:'min(ih,480)'");
     expect(a).toContain("yuv420p");
     expect(a[idx(a, "-c:a") + 1]).toBe("aac");
+    expect(a).not.toContain("-bsf:a"); // converted sound is already in the right form
   });
 
   it("reads one address that holds both, and takes the sound only if there is one", () => {

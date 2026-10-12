@@ -31,7 +31,7 @@ export function ffmpegArgs(info: VideoInfo, o: StreamOptions): string[] {
   if (info.transcodeVideo) args.push("-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-vf", `scale=-2:'min(ih,${Math.round(o.maxHeight)})'`);
   else args.push("-c:v", "copy");
   if (info.transcodeAudio) args.push("-c:a", "aac", "-b:a", "128k", "-ac", "2");
-  else args.push("-c:a", "copy");
+  else args.push("-c:a", "copy", "-bsf:a", "aac_adtstoasc");
   args.push("-max_muxing_queue_size", "1024", "-t", String(Math.round(o.maxMinutes * 60)), "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1");
   return args;
 }
