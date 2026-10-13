@@ -1,5 +1,7 @@
 import { loadConfig } from "@friend/server";
 import crossSpawn from "cross-spawn";
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 import type { IO } from "../cli";
 import { daemonCommand, realDeps, running, type DaemonDeps } from "./daemon";
 
@@ -18,6 +20,10 @@ export interface UpgradeDeps {
   /** Starts the background Friend again, using the newly installed program. */
   startAgain(): Promise<number>;
   daemon: DaemonDeps;
+  /** Writes the "start by itself" setup again with the program that was just installed (a no-op when it was never switched on). */
+  refreshAutostart?(): Promise<void>;
+  /** Where `--auto` writes what happened (a file; tests replace it). */
+  log?(line: string): void;
 }
 
 const real: UpgradeDeps = {
@@ -44,6 +50,12 @@ const real: UpgradeDeps = {
       child.on("error", () => resolve(1));
       child.on("close", (code) => resolve(code ?? 1));
     }),
+  refreshAutostart: () =>
+    new Promise<void>((resolve) => {
+      const child = crossSpawn("friend", ["autostart", "refresh"], { stdio: "ignore" }); // the new program, not the one that is running this
+      child.on("error", () => resolve());
+      child.on("close", () => resolve());
+    }),
   daemon: realDeps,
 };
 
@@ -54,13 +66,29 @@ const newer = (a: string, b: string): boolean => {
   return false;
 };
 
-/** `friend upgrade`: stops the background Friend, installs the newest version, and starts it again. */
-export async function upgradeCommand(args: string[], io: IO, deps: UpgradeDeps = real): Promise<number> {
+/** `friend upgrade`: stops the background Friend, installs the newest version, and starts it again. `--auto` is how Friend updates itself: the same, with what happened written to update.log. */
+export async function upgradeCommand(args: string[], io0: IO, deps: UpgradeDeps = real): Promise<number> {
   const force = args.includes("--force");
-  if (args.some((a) => a !== "--force")) {
-    io.err("Usage: friend upgrade [--force]");
+  const auto = args.includes("--auto");
+  if (args.some((a) => a !== "--force" && a !== "--auto")) {
+    io0.err("Usage: friend upgrade [--force] [--auto]");
     return 1;
   }
+  const log = deps.log ?? ((line: string) => appendFileSync(join(io0.dataDir, "update.log"), `${new Date().toISOString()} ${line}
+`));
+  const io: IO = auto
+    ? {
+        ...io0,
+        out: (l) => {
+          io0.out(l);
+          log(l);
+        },
+        err: (l) => {
+          io0.err(l);
+          log(l);
+        },
+      }
+    : io0;
   const current = deps.current();
   io.out(`Installed: ${current}`);
   const latest = await deps.latest();
@@ -93,6 +121,7 @@ export async function upgradeCommand(args: string[], io: IO, deps: UpgradeDeps =
     return 1;
   }
   io.out(`Upgraded ${current} → ${latest}.`);
+  await deps.refreshAutostart?.().catch(() => {});
   if (wasRunning) return deps.startAgain();
   io.out("Start it with: friend start   (or in the background: friend daemon start)");
   return 0;

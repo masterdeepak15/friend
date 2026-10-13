@@ -67,6 +67,9 @@ const PARSERS: Record<string, (v: string) => unknown> = {
 };
 
 const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
+  updates: {
+    auto: bool,
+  },
   voice: {
     enabled: bool,
     sttModel: nonEmpty,
@@ -142,6 +145,7 @@ export const KEY_HELP: Record<string, string> = {
   allowedOrigins: "extra web addresses allowed to connect, separated by commas",
   allowedHosts: "extra host names that may reach Friend (for example my-pc), separated by commas",
   trustProxy: "true when Friend sits behind your own reverse proxy",
+  "updates.auto": "true or false: look for a newer Friend when it starts and install it by itself while Friend is not busy (false: only when you run friend upgrade or press Update now)",
   "voice.enabled": "true or false: use speech at all",
   "voice.sttModel": "listening model: tiny, base, small, large-v3-turbo … (bigger is more accurate and slower; Marathi and far-from-mic speech do best with small or large-v3-turbo)",
   "voice.ttsVoice": "speaking voice (easier: friend voice setup, or Settings)",

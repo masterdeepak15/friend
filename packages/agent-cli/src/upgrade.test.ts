@@ -92,6 +92,44 @@ describe("friend upgrade", () => {
     expect(t.steps).toEqual(["stopped", "started"]);
   });
 
+  it("writes the autostart setup again with the new program after installing it, so it points at the right place", async () => {
+    const t = setup({ refreshAutostart: async () => void t.steps.push("autostart refreshed") }, { daemonPid: 4242 });
+    expect(await upgradeCommand([], t.io, t.deps)).toBe(0);
+    expect(t.steps).toEqual(["stopped", "installed 0.1.6", "autostart refreshed", "started"]);
+  });
+
+  it("does not touch the autostart setup when nothing was installed", async () => {
+    const t = setup({ latest: async () => "0.1.5", refreshAutostart: async () => void t.steps.push("autostart refreshed") });
+    await upgradeCommand([], t.io, t.deps);
+    const failed = setup({ install: async () => 1, refreshAutostart: async () => void failed.steps.push("autostart refreshed") }, { daemonPid: 4242 });
+    await upgradeCommand([], failed.io, failed.deps);
+    expect(t.steps).toEqual([]);
+    expect(failed.steps).not.toContain("autostart refreshed");
+  });
+
+  it("--auto is what Friend runs to update itself: same steps, and what happened is written to update.log", async () => {
+    const logged: string[] = [];
+    const t = setup({ log: (l) => void logged.push(l) }, { daemonPid: 4242 });
+    expect(await upgradeCommand(["--auto"], t.io, t.deps)).toBe(0);
+    expect(t.steps).toEqual(["stopped", "installed 0.1.6", "started"]);
+    expect(logged.join("\n")).toMatch(/Upgraded 0\.1\.5 → 0\.1\.6/);
+  });
+
+  it("--auto does nothing, quietly, when there is nothing newer", async () => {
+    const logged: string[] = [];
+    const t = setup({ latest: async () => "0.1.5", log: (l) => void logged.push(l) });
+    expect(await upgradeCommand(["--auto"], t.io, t.deps)).toBe(0);
+    expect(t.steps).toEqual([]);
+    expect(logged.join("\n")).toMatch(/already up to date/);
+  });
+
+  it("only logs when run with --auto", async () => {
+    const logged: string[] = [];
+    const t = setup({ log: (l) => void logged.push(l) });
+    await upgradeCommand([], t.io, t.deps);
+    expect(logged).toEqual([]);
+  });
+
   it("shows usage for an unknown option", async () => {
     const t = setup();
     expect(await upgradeCommand(["--wat"], t.io, t.deps)).toBe(1);

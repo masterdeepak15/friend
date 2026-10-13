@@ -11,6 +11,7 @@ import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
 import { TABS, type SettingsTab } from "./tabs";
 import { HoloPanel } from "../orb/HoloPanel";
+import { StartupTab } from "./StartupTab";
 
 export type { SettingsTab };
 
@@ -511,6 +512,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       {tab === "approvals" && approvalsTab}
       {tab === "trading" && <TradingTab level={draft.trading?.level ?? "read"} />}
       {tab === "widgets" && draft.music && draft.hud && <WidgetsTab music={draft.music} hud={draft.hud} onMusic={(p) => setDraft({ ...draft, music: { ...draft.music!, ...p } })} onHud={(p) => setDraft({ ...draft, hud: { ...draft.hud!, ...p } })} />}
+      {tab === "system" && <StartupTab auto={draft.updates?.auto ?? true} onAuto={(on) => setDraft({ ...draft, updates: { auto: on } })} />}
       {tab === "security" && <SecurityTab />}
     </>
   );

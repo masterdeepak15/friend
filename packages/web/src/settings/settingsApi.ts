@@ -90,6 +90,7 @@ export interface SettingsView {
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
   openai?: { url: string; model: string; vision: boolean; apiKeySet: boolean };
   claudeCode: { model: string; command: string; fallback: "ollama" | "none" };
+  updates?: { auto: boolean };
   voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; ttsVoice: string; sttModel: string; hindiVoice?: string; marathiVoice?: string; duck?: boolean; duckPercent?: number };
 }
 
@@ -192,7 +193,8 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
   if ((after.approvals ?? "manual") !== (before.approvals ?? "manual")) patch.approvals = after.approvals ?? "manual";
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
-  for (const group of ["ollama", "claudeCode", "voice", "look"] as const) {
+  for (const group of ["ollama", "claudeCode", "voice", "look", "updates"] as const) {
+    if (!after[group] || !before[group]) continue;
     const changed: Record<string, unknown> = {};
     for (const k of Object.keys(after[group]) as string[]) {
       const a = (after[group] as Record<string, unknown>)[k];

@@ -1,6 +1,6 @@
 {
   "name": "friend-assistant",
-  "version": "0.1.44",
+  "version": "0.1.45",
   "description": "A self-hosted personal AI assistant for your own PC: a full-screen stage, voice, tools with your approval, and your Claude subscription or a local model.",
   "keywords": ["ai", "assistant", "jarvis", "voice", "claude", "ollama", "mcp", "self-hosted"],
   "license": "UNLICENSED",

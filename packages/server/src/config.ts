@@ -28,6 +28,8 @@ export interface Config {
   openai: OpenAiConfig;
   claudeCode: ClaudeCodeConfig;
   voice: VoiceConfig;
+  /** Updating Friend: by itself, or only when the owner says so. */
+  updates: UpdatesConfig;
   /** What the screen shows besides the AI's pictures: minimal, companion (status line and clock) or workspace (also chat and schedule). */
   view: ViewPreset;
   look: LookConfig;
@@ -522,6 +524,13 @@ export interface VoiceConfig {
   duckPercent: number;
 }
 
+export interface UpdatesConfig {
+  /** Look for a newer Friend when it starts, and install it by itself while Friend is not busy. */
+  auto: boolean;
+}
+
+export const sanitizeUpdates = (u: Partial<UpdatesConfig> | undefined): UpdatesConfig => ({ auto: typeof u?.auto === "boolean" ? u.auto : true });
+
 export const DEFAULT_VOICE: VoiceConfig = {
   enabled: true,
   sttModel: "small",
@@ -592,6 +601,7 @@ const defaults = (dataDir: string): Config => ({
   openai: { ...DEFAULT_OPENAI },
   claudeCode: { ...DEFAULT_CLAUDE_CODE },
   voice: { ...DEFAULT_VOICE },
+  updates: sanitizeUpdates(undefined),
   view: "companion",
   look: { ...DEFAULT_LOOK },
   ownerName: "",
@@ -643,6 +653,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     openai: { ...DEFAULT_OPENAI, ...stored.openai },
     claudeCode: sanitizeClaudeCode(stored.claudeCode),
     voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
+    updates: sanitizeUpdates(stored.updates),
     view: stored.view === "minimal" || stored.view === "workspace" ? stored.view : "companion",
     look: sanitizeLook(stored.look),
     ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",

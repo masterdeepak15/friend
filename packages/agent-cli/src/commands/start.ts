@@ -59,6 +59,7 @@ export async function startFriend(opts: StartOptions): Promise<RunningFriend> {
   const voice = sidecar ? new HttpVoiceService({ baseUrl: () => sidecar.baseUrl(), token: secret }) : undefined;
 
   const app = await createApp({
+    system: { checkForUpdates: true }, // looks for a newer Friend after it starts, and updates by itself when that is on
     dataDir: opts.dataDir,
     webDir: findWebDir(opts.webDir),
     voice,

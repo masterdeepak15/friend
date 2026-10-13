@@ -32,7 +32,7 @@ export const realDeps: DaemonDeps = {
   launch(logFile) {
     const fd = openSync(logFile, "a");
     try {
-      const child = spawn(process.execPath, [process.argv[1]!, "start"], { detached: true, stdio: ["ignore", fd, fd], windowsHide: true });
+      const child = spawn(process.execPath, [process.argv[1]!, "start"], { detached: true, stdio: ["ignore", fd, fd], windowsHide: true, env: { ...process.env, FRIEND_DAEMON: "1" } }); // FRIEND_DAEMON: this Friend can restart itself to update
       child.unref();
       return child.pid;
     } finally {

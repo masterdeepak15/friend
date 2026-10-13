@@ -1,4 +1,7 @@
 export { createApp } from "./app";
+export { Autostart, currentSelf, realAutostartDeps } from "./system/autostart";
+export type { AutostartResult, AutostartStatus, SelfCommand } from "./system/autostart";
+export { isNewerVersion } from "./system/updater";
 export { firstExistingDir } from "./assets";
 export type { AppOptions } from "./app";
 export { Audit } from "./audit";

@@ -193,6 +193,7 @@ export const SettingsPatch = z
       })
       .partial()
       .strict(),
+    updates: z.object({ auto: z.boolean() }).partial().strict(),
   })
   .partial()
   .strict();
@@ -252,6 +253,8 @@ export interface SettingsView {
   openai: { url: string; model: string; vision: boolean; apiKeySet: boolean };
   claudeCode: Config["claudeCode"];
   voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "ttsVoice" | "sttModel" | "hindiVoice" | "marathiVoice" | "duck" | "duckPercent">;
+  /** Whether Friend updates itself. */
+  updates: Config["updates"];
 }
 
 export function settingsView(c: Config): SettingsView {
@@ -316,6 +319,7 @@ export function settingsView(c: Config): SettingsView {
       duck: c.voice.duck,
       duckPercent: c.voice.duckPercent,
     },
+    updates: { auto: c.updates.auto },
   };
 }
 
@@ -329,6 +333,7 @@ export function refuseForAgent(raw: unknown): void {
   if ("brokers" in r || "trading" in r) throw new SettingsError("Broker accounts and the trading level can only be changed by the owner on the settings screen.");
   if ("music" in r || "hud" in r) throw new SettingsError("The music folder and the screen widgets can only be changed by the owner on the settings screen.");
   if ("video" in r) throw new SettingsError("Video settings (which programs run, where videos play, which sites) can only be changed by the owner on the settings screen.");
+  if ("updates" in r) throw new SettingsError("Whether Friend updates itself can only be changed by the owner on the settings screen.");
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
   if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
@@ -495,6 +500,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
     if (apiKey) config.openai.apiKey = apiKey;
   }
   if (p.claudeCode) Object.assign(config.claudeCode, p.claudeCode);
+  if (p.updates) Object.assign(config.updates, p.updates);
   if (p.voice) {
     const safe = next.voice;
     for (const k of Object.keys(p.voice) as (keyof Config["voice"])[]) (config.voice as unknown as Record<string, unknown>)[k] = safe[k];

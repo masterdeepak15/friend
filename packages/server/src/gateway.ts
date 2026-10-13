@@ -49,6 +49,7 @@ export interface GatewayDeps {
   plugins?: PluginsApi;
   /** Chrome control reached from outside on Friend's own address (/chrome/mcp and /chrome/ws), and the extension to download. */
   chrome?: ChromeRemoteApi;
+  system?: SystemApi;
   /** Web video: the screen asks for a video at /api/video/<id>, an address Friend made. */
   video?: {
     stream(id: string): Promise<{ stream: import("node:stream").Readable; stop(): void } | null>;
@@ -198,6 +199,16 @@ export interface ChromeRemoteApi {
   banner(): Promise<unknown>;
   /** Adds the flag that hides the banner to the Chrome shortcuts, or restarts Chrome with it. Both need the PIN. */
   bannerAct(what: "hide" | "restart", pin: string, ip: string): Promise<unknown>;
+}
+
+/** Starting Friend by itself when the computer starts, and updating it. The owner's own session; changes need the PIN. */
+export interface SystemApi {
+  info(): Promise<unknown>;
+  check(): Promise<unknown>;
+  /** Installs the newest version and restarts Friend. Needs the PIN. */
+  update(pin: string, ip: string): Promise<unknown>;
+  /** Turns starting by itself on or off. Needs the PIN. */
+  setAutostart(enabled: boolean, pin: string, ip: string): Promise<unknown>;
 }
 
 export interface PluginsApi {
@@ -950,6 +961,47 @@ export function createGateway(deps: GatewayDeps) {
   app.post("/api/plugins/video/prepare", { onRequest: pluginGuard }, async (_req, reply) => {
     if (!deps.video) return reply.code(404).send({ error: "Not found" });
     return deps.video.prepare();
+  });
+
+  // ---- starting by itself and updating (owner session only) ----
+  const systemWindow = new SlidingWindow(30, 60_000);
+  const systemGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    const session = token ? auth.resolveSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "Unauthorized" });
+    if (!systemWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+    if (!deps.system) return reply.code(503).send({ error: "Not available" });
+  };
+  const systemError = (reply: FastifyReply, e: unknown, what: string) => {
+    if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+    audit.log("owner", "system.failed", { what, message: (e as Error).message }); // raw detail stays in the audit log
+    return reply.code(500).send({ error: "That did not work. Try again." });
+  };
+  app.get("/api/system", { onRequest: systemGuard }, async () => deps.system!.info());
+  app.post("/api/system/update/check", { onRequest: systemGuard }, async (_req, reply) => {
+    try {
+      return await deps.system!.check();
+    } catch (e) {
+      return systemError(reply, e, "update.check");
+    }
+  });
+  app.post("/api/system/update/apply", { onRequest: systemGuard }, async (req, reply) => {
+    const body = z.object({ pin: z.string().min(1).max(32) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN" });
+    try {
+      return await deps.system!.update(body.data.pin, req.ip);
+    } catch (e) {
+      return systemError(reply, e, "update.apply");
+    }
+  });
+  app.post("/api/system/autostart", { onRequest: systemGuard }, async (req, reply) => {
+    const body = z.object({ enabled: z.boolean(), pin: z.string().min(1).max(32) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN" });
+    try {
+      return await deps.system!.setAutostart(body.data.enabled, body.data.pin, req.ip);
+    } catch (e) {
+      return systemError(reply, e, "autostart");
+    }
   });
 
   // ---- Chrome control (owner session: the page's own routes; the key: the addresses other PCs use) ----

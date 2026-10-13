@@ -56,7 +56,7 @@ import { join } from "node:path";
 import { loadConfig, saveConfig, type Config } from "./config";
 import { openDb } from "./db";
 import { DeviceHub } from "./devices";
-import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi, type PluginsApi } from "./gateway";
+import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi, type PluginsApi, type SystemApi } from "./gateway";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import { ClaudeCodeProvider } from "./provider/claude-code/provider";
@@ -71,6 +71,9 @@ import { dbWidgetStore } from "./widgets";
 import { ensureTlsCert } from "./tls";
 import { HttpError } from "./http-error";
 import { DuckController } from "./audio/duck";
+import { Autostart, currentSelf, realAutostartDeps, type AutostartDeps, type SelfCommand } from "./system/autostart";
+import { npmLatest, runningVersion, spawnUpgrade } from "./system/npm";
+import { Updater, type UpdaterTimes } from "./system/updater";
 import { Challenges } from "./voice/challenge";
 import { loadOrCreateKey } from "./voice/crypto";
 import { EnrollError, Enrollment } from "./voice/enrollment";
@@ -118,6 +121,20 @@ export interface AppOptions {
   codeBox?: Pick<CodeBox, "run">;
   /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
   pluginCatalogDir?: string;
+  /** Starting Friend when the computer starts, and updating it. Everything has a real default; tests hand in their own. */
+  system?: {
+    /** The program that starts Friend (Node and the Friend program file). */
+    self?: SelfCommand;
+    autostartDeps?: AutostartDeps;
+    /** Look for a newer version after start and now and then. Off unless the program that starts Friend asks for it. */
+    checkForUpdates?: boolean;
+    times?: UpdaterTimes;
+    current?: () => string;
+    latest?: () => Promise<string | null>;
+    /** Whether this Friend can restart itself (it runs in the background). */
+    canApply?: () => boolean;
+    apply?: (version: string) => Promise<boolean> | boolean;
+  };
   /** The one-click connectors: how their install command is run and where the person's home folder is (tests). */
   /** Where Chrome control itself listens on this PC, and how its MCP server is started when nothing answers (tests). */
   chromeRemote?: { httpPort?: number; wsPort?: number; startServer?: () => Promise<void> };
@@ -932,11 +949,43 @@ export async function createApp(opts: AppOptions) {
     },
   });
 
+  // ---- starting by itself when the computer starts, and updating ----
+  const self = opts.system?.self ?? currentSelf();
+  const autostart = new Autostart(opts.system?.autostartDeps ?? realAutostartDeps(opts.dataDir), () => self);
+  const updater = new Updater(
+    {
+      current: opts.system?.current ?? runningVersion,
+      latest: opts.system?.latest ?? (() => npmLatest()),
+      auto: () => config.updates.auto,
+      busy: () => agent.isBusy(),
+      canApply: opts.system?.canApply ?? (() => process.env.FRIEND_DAEMON === "1"), // only Friend in the background can replace itself
+      apply: opts.system?.apply ?? (() => spawnUpgrade(self)),
+      notify: (text) => broadcast({ type: "alert", level: "info", text }),
+    },
+    opts.system?.times,
+  );
+  const systemApi: SystemApi = {
+    info: async () => ({ version: updater.state().current, update: updater.state(), autostart: await autostart.status(), auto: config.updates.auto }),
+    check: () => updater.check(),
+    update: async (pin, ip) => {
+      await requirePin(pin, ip);
+      audit.log("owner", "system.update_now", { ip });
+      return updater.applyNow();
+    },
+    setAutostart: async (enabled, pin, ip) => {
+      await requirePin(pin, ip);
+      audit.log("owner", enabled ? "system.autostart_on" : "system.autostart_off", { ip });
+      const r = enabled ? await autostart.enable() : await autostart.disable();
+      return { ...r, status: await autostart.status() };
+    },
+  };
+
   const tls = config.https ? await ensureTlsCert(opts.dataDir, [...config.allowedHosts, ...(config.publicUrl ? [new URL(config.publicUrl).hostname] : [])]) : undefined;
   const gateway = createGateway({
     ...(tls ? { tls } : {}),
     connectors: connectorsApi,
     chrome: chromeRemoteApi,
+    system: systemApi,
     video: {
       stream: (id) => videoHub.streamOf(id),
       status: async () => videoHub.status() ?? (await videoHub.refresh()),
@@ -1525,12 +1574,14 @@ export async function createApp(opts: AppOptions) {
         for (const id of gone) broadcast({ type: "stage", command: { cmd: "hide", id } });
         if (gone.length) for (const follow of stage.settleNow()) broadcast({ type: "stage", command: follow });
       }, opts.expireIntervalMs ?? 1000);
+      if (opts.system?.checkForUpdates) updater.start();
       const listening = await gateway.listen();
       listenPort = listening.port; // a browser on this PC is pointed at the port Friend really got
       return listening;
     },
     async stop(): Promise<void> {
       stopped = true;
+      updater.stop();
       hostPlayer.dispose();
       videoHub.dispose();
       heartbeat.stop();
