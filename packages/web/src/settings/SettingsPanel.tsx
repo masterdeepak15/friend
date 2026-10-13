@@ -9,17 +9,10 @@ import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_C
 import { DEFAULT_LOOK, diffSettings, type ApprovalMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
-export type SettingsTab = "model" | "voice" | "look" | "approvals" | "trading" | "widgets" | "security";
+import { TABS, type SettingsTab } from "./tabs";
+import { HoloPanel } from "../orb/HoloPanel";
 
-const TABS: { id: SettingsTab; label: string; note: string }[] = [
-  { id: "model", label: "Model", note: "Where Friend thinks" },
-  { id: "voice", label: "Voice", note: "Speaking and listening" },
-  { id: "look", label: "Voice presence", note: "How it looks" },
-  { id: "approvals", label: "Approvals", note: "How much it asks" },
-  { id: "trading", label: "Trading", note: "What Friend may do with money" },
-  { id: "widgets", label: "Widgets", note: "Music, clock, quick launch" },
-  { id: "security", label: "Security", note: "Password and PIN" },
-];
+export type { SettingsTab };
 
 const APPROVAL_CHOICES: { id: ApprovalMode; label: string; note: string }[] = [
   { id: "manual", label: "Ask me (manual)", note: "Friend asks before anything that changes your PC or leaves the safe zone. The most careful." },
@@ -50,7 +43,7 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
  * Owner-opened panel: everything that can safely be changed from the screen, in tabs. Anything that could change what runs
  * or where words are sent needs the PIN (drawn by the client); how the screen looks does not.
  */
-export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "model", preview = playVoicePreview }: { api?: SettingsApi; onClose: () => void; initialTab?: SettingsTab; preview?: (voice: string) => Promise<void> }) {
+export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "model", preview = playVoicePreview, variant = "classic" }: { api?: SettingsApi; onClose: () => void; initialTab?: SettingsTab; preview?: (voice: string) => Promise<void>; variant?: "classic" | "holo" }) {
   const [saved, setSaved] = useState<SettingsView | null>(null);
   const [draft, setDraft] = useState<SettingsView | null>(null);
   const [tab, setTab] = useState<SettingsTab>(initialTab);
@@ -81,14 +74,28 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
     };
   }, [api]);
 
-  const shell = (children: ReactNode, wide = false) => (
-    <div className={`approval settings glass${wide ? " settings-wide" : ""}`} role="dialog" aria-label="Settings" style={{ pointerEvents: "auto" }}>
-      <div className="approval-head">
-        <span className="approval-title">Settings</span>
+  /** What the glass variant needs besides the content: its title, the paging, and what Apply and Undo do. */
+  interface HoloFoot {
+    title?: string;
+    page?: { index: number; total: number; onPrev: () => void; onNext: () => void };
+    dirty?: boolean;
+    onApply?: () => void;
+    onUndo?: () => void;
+    help?: ReactNode;
+  }
+  const shell = (children: ReactNode, wide = false, foot: HoloFoot = {}) =>
+    variant === "holo" ? (
+      <HoloPanel label="Settings" title={foot.title ?? TABS.find((t) => t.id === tab)?.label ?? "Settings"} page={foot.page} help={foot.help} onApply={foot.onApply} onUndo={foot.onUndo} dirty={foot.dirty} busy={busy} onDone={onClose}>
+        {children}
+      </HoloPanel>
+    ) : (
+      <div className={`approval settings glass${wide ? " settings-wide" : ""}`} role="dialog" aria-label="Settings" style={{ pointerEvents: "auto" }}>
+        <div className="approval-head">
+          <span className="approval-title">Settings</span>
+        </div>
+        {children}
       </div>
-      {children}
-    </div>
-  );
+    );
 
   if (!draft || !saved) {
     return shell(
@@ -490,6 +497,58 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
     </div>
   );
 
+  const tabBody = (
+    <>
+      {tab === "model" && modelTab}
+      {tab === "voice" && voiceTab}
+      {tab === "look" && lookTab}
+      {tab === "approvals" && approvalsTab}
+      {tab === "trading" && <TradingTab level={draft.trading?.level ?? "read"} />}
+      {tab === "widgets" && draft.music && draft.hud && <WidgetsTab music={draft.music} hud={draft.hud} onMusic={(p) => setDraft({ ...draft, music: { ...draft.music!, ...p } })} onHud={(p) => setDraft({ ...draft, hud: { ...draft.hud!, ...p } })} />}
+      {tab === "security" && <SecurityTab />}
+    </>
+  );
+  const saveClick = () => {
+    setNote(null);
+    setError(null);
+    if (needsPin(patch)) setAsking(true);
+    else void save();
+  };
+  const undo = () => {
+    setDraft(structuredClone(saved));
+    setApiKey("");
+    setOpenaiKey("");
+  };
+  const messages = (
+    <>
+      {note && !dirty && <p className="auth-note">{note}</p>}
+      {error && (
+        <p role="alert" className="auth-error">
+          {error}
+        </p>
+      )}
+    </>
+  );
+  if (variant === "holo") {
+    const at = TABS.findIndex((t) => t.id === tab);
+    const go = (to: number) => setTab(TABS[(to + TABS.length) % TABS.length]!.id);
+    return shell(
+      <>
+        {tabBody}
+        {messages}
+      </>,
+      true,
+      {
+        title: TABS[at]!.label,
+        page: { index: at, total: TABS.length, onPrev: () => go(at - 1), onNext: () => go(at + 1) },
+        dirty,
+        onApply: saveClick,
+        onUndo: undo,
+        help: <>Fill in the settings and press <b>Apply</b> to save them. Network, folders and safety rules are not here on purpose: change those in the terminal with friend config set.</>,
+      },
+    );
+  }
+
   return shell(
     <>
       <div className="settings-layout">
@@ -512,13 +571,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           ))}
         </div>
         <div className="settings-body" role="tabpanel" id={`settings-panel-${tab}`} aria-labelledby={`settings-tab-${tab}`}>
-          {tab === "model" && modelTab}
-          {tab === "voice" && voiceTab}
-          {tab === "look" && lookTab}
-          {tab === "approvals" && approvalsTab}
-          {tab === "trading" && <TradingTab level={draft.trading?.level ?? "read"} />}
-          {tab === "widgets" && draft.music && draft.hud && <WidgetsTab music={draft.music} hud={draft.hud} onMusic={(p) => setDraft({ ...draft, music: { ...draft.music!, ...p } })} onHud={(p) => setDraft({ ...draft, hud: { ...draft.hud!, ...p } })} />}
-          {tab === "security" && <SecurityTab />}
+          {tabBody}
         </div>
       </div>
 
@@ -534,12 +587,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           style={touch}
           className="primary"
           disabled={!dirty || busy}
-          onClick={() => {
-            setNote(null);
-            setError(null);
-            if (needsPin(patch)) setAsking(true);
-            else void save();
-          }}
+          onClick={saveClick}
         >
           {dirty && !needsPin(patch) ? "Save" : "Save…"}
         </button>
@@ -547,11 +595,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           <button
             type="button"
             style={touch}
-            onClick={() => {
-              setDraft(structuredClone(saved));
-              setApiKey("");
-              setOpenaiKey("");
-            }}
+            onClick={undo}
           >
             Undo changes
           </button>

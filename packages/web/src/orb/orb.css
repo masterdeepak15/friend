@@ -1,0 +1,424 @@
+/* The orb menu and the glass panel. Every colour, size and time is a variable here, so the look is changed in one place. */
+.orb-layer,
+.holo-layer {
+  --orb-cyan: #35f0ff;
+  --orb-cyan-soft: rgba(53, 240, 255, 0.18);
+  --orb-teal: rgba(18, 150, 165, 0.38);
+  --orb-teal-edge: rgba(53, 240, 255, 0.45);
+  --orb-teal-hover: rgba(53, 240, 255, 0.62);
+  --orb-orange: #ff9a2e;
+  --orb-grey: #8b98a3;
+  --orb-ink: #e9fdff;
+  --orb-text: #9fe9f2;
+  --orb-danger: #ff5a6e;
+  --orb-glass: rgba(6, 18, 28, 0.82);
+  --orb-tint: rgba(60, 10, 90, 0.55);
+  --orb-font: Orbitron, Rajdhani, "Segoe UI", system-ui, sans-serif;
+  --orb-open-ms: 250ms;
+  inset: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  font-family: var(--orb-font);
+}
+
+/* ---------------------------------------------------------------- the orb and its rings */
+.orb-backdrop {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, var(--orb-tint), rgba(5, 2, 14, 0.88));
+  backdrop-filter: blur(3px);
+  animation: orb-fade 200ms ease-out;
+}
+.orb-svg {
+  position: relative;
+  width: min(94vmin, 680px);
+  height: min(94vmin, 680px);
+  overflow: visible;
+  pointer-events: none;
+}
+/* the page's own focus outline would draw a box around an SVG group: the glow shows the focus instead */
+.orb-svg .orb-arc:focus-visible,
+.orb-svg .orb-core:focus-visible {
+  outline: none;
+}
+.orb-arc,
+.orb-core {
+  pointer-events: auto;
+  cursor: pointer;
+  outline: none;
+}
+.orb-arc {
+  color: #bff9ff;
+  transform-origin: 0 0;
+  animation: orb-arc-in var(--orb-open-ms) ease-out both;
+}
+.orb-arc path {
+  fill: var(--orb-teal);
+  stroke: var(--orb-teal-edge);
+  stroke-width: 1;
+  transition: fill 160ms ease-out, filter 160ms ease-out;
+}
+.orb-arc:hover path,
+.orb-arc.is-hover path,
+.orb-arc:focus-visible path {
+  fill: var(--orb-teal-hover);
+  filter: drop-shadow(0 0 8px var(--orb-cyan));
+}
+.orb-arc.is-open path,
+.orb-sub.is-on path {
+  fill: rgba(53, 240, 255, 0.5);
+  stroke: var(--orb-cyan);
+}
+.orb-sub.is-danger path {
+  fill: rgba(255, 90, 110, 0.26);
+  stroke: rgba(255, 90, 110, 0.7);
+}
+.orb-sub.is-danger:hover path,
+.orb-sub.is-danger.is-hover path,
+.orb-sub.is-danger:focus-visible path {
+  fill: rgba(255, 90, 110, 0.55);
+  filter: drop-shadow(0 0 8px var(--orb-danger));
+}
+.orb-arc-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  fill: var(--orb-text);
+  pointer-events: none;
+}
+.orb-sub.is-on .orb-arc-label {
+  fill: #fff;
+}
+
+.orb-halo {
+  fill: none;
+  stroke: var(--orb-cyan-soft);
+  stroke-width: 7;
+  filter: blur(3px);
+  animation: orb-pulse 3.2s ease-in-out infinite alternate;
+}
+.orb-disc {
+  stroke: rgba(53, 240, 255, 0.35);
+  stroke-width: 1;
+}
+.orb-ring {
+  fill: none;
+  stroke: var(--orb-cyan);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 5px var(--orb-cyan));
+  transition: filter 200ms ease-out;
+}
+.orb-ticks {
+  fill: none;
+  stroke: rgba(53, 240, 255, 0.6);
+  stroke-width: 5;
+  stroke-dasharray: 1.1 3.014;
+}
+.orb-gauge {
+  fill: none;
+  stroke: var(--orb-orange);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px var(--orb-orange));
+}
+.orb-segments {
+  fill: none;
+  stroke: var(--orb-grey);
+  stroke-width: 3;
+  stroke-dasharray: 9 3.5;
+  opacity: 0.8;
+}
+.orb-name {
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  fill: var(--orb-ink);
+  filter: drop-shadow(0 0 4px var(--orb-cyan));
+  pointer-events: none;
+}
+.orb-caption {
+  font-size: 6.5px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  fill: var(--orb-cyan);
+  pointer-events: none;
+}
+.orb-core:hover .orb-ring,
+.orb-core:focus-visible .orb-ring,
+.orb-hover .orb-ring {
+  filter: drop-shadow(0 0 11px var(--orb-cyan));
+}
+.orb-busy .orb-gauge {
+  transform-origin: 0 0;
+  animation: orb-spin 2.4s linear infinite;
+}
+
+@keyframes orb-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes orb-arc-in {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+}
+@keyframes orb-pulse {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes orb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------- the glass panel */
+.holo-layer {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  padding: 12px;
+}
+.holo-panel {
+  position: relative;
+  pointer-events: auto;
+  width: min(1040px, 100%);
+  max-height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 18px 64px 16px;
+  color: var(--orb-text);
+  background: linear-gradient(180deg, rgba(8, 24, 36, 0.9), var(--orb-glass));
+  border: 1px solid var(--orb-teal-edge);
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
+  backdrop-filter: blur(10px);
+  animation: holo-in 300ms ease-out;
+}
+.holo-panel::before,
+.holo-panel::after {
+  content: "";
+  position: absolute;
+  top: 12%;
+  bottom: 12%;
+  width: 5px;
+  background: linear-gradient(180deg, transparent, var(--orb-cyan), transparent);
+  box-shadow: 0 0 14px var(--orb-cyan);
+}
+.holo-panel::before {
+  left: 14px;
+}
+.holo-panel::after {
+  right: 14px;
+}
+.holo-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.holo-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--orb-ink);
+  text-shadow: 0 0 8px var(--orb-cyan);
+}
+.holo-dots {
+  display: flex;
+  gap: 6px;
+}
+.holo-dots i {
+  width: 18px;
+  height: 3px;
+  background: rgba(53, 240, 255, 0.25);
+}
+.holo-dots i.on {
+  background: var(--orb-cyan);
+  box-shadow: 0 0 8px var(--orb-cyan);
+}
+.holo-page {
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  width: 44px;
+  height: 120px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 54px;
+  line-height: 1;
+  color: var(--orb-cyan);
+  background: rgba(53, 240, 255, 0.07);
+  border: 1px solid var(--orb-teal-edge);
+  cursor: pointer;
+  transition: background 160ms, box-shadow 160ms;
+}
+.holo-page:hover,
+.holo-page:focus-visible {
+  background: rgba(53, 240, 255, 0.22);
+  box-shadow: 0 0 14px var(--orb-cyan);
+  outline: none;
+}
+.holo-prev {
+  left: 24px;
+  clip-path: polygon(100% 0, 0 50%, 100% 100%, 100% 80%, 38% 50%, 100% 20%);
+  background: var(--orb-cyan-soft);
+}
+.holo-next {
+  right: 24px;
+  clip-path: polygon(0 0, 100% 50%, 0 100%, 0 80%, 62% 50%, 0 20%);
+  background: var(--orb-cyan-soft);
+}
+.holo-prev span,
+.holo-next span {
+  position: absolute;
+  inset: 0;
+  font-size: 0;
+}
+.holo-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 6px;
+}
+.holo-foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--orb-teal-edge);
+  background: rgba(53, 240, 255, 0.05);
+}
+.holo-help {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  color: var(--orb-text);
+  opacity: 0.85;
+}
+.holo-help b {
+  color: var(--orb-orange);
+  font-weight: 600;
+}
+.holo-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.holo-btn {
+  min-width: 112px;
+  padding: 10px 18px;
+  font: 600 12px var(--orb-font);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--orb-ink);
+  background: rgba(53, 240, 255, 0.12);
+  border: 1px solid var(--orb-teal-edge);
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  cursor: pointer;
+  transition: background 160ms, box-shadow 160ms;
+}
+.holo-btn:hover:not(:disabled),
+.holo-btn:focus-visible {
+  background: rgba(53, 240, 255, 0.3);
+  box-shadow: 0 0 12px var(--orb-cyan);
+  outline: none;
+}
+.holo-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.holo-btn.quiet {
+  background: transparent;
+  min-width: 0;
+  letter-spacing: 0.18em;
+}
+.holo-btn.warn {
+  border-color: var(--orb-orange);
+  color: var(--orb-orange);
+}
+
+/* the existing settings content, on the dark glass */
+.holo-body .settings-field span {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--orb-text);
+}
+.holo-body input:not([type="checkbox"]):not([type="range"]),
+.holo-body select,
+.holo-body textarea {
+  background: rgba(2, 10, 16, 0.7);
+  color: var(--orb-ink);
+  border: 1px solid var(--orb-teal-edge);
+  border-radius: 0;
+}
+.holo-body input:focus,
+.holo-body select:focus,
+.holo-body textarea:focus {
+  outline: none;
+  border-color: var(--orb-cyan);
+  box-shadow: 0 0 8px rgba(53, 240, 255, 0.5);
+}
+.holo-body .plugins-heading {
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--orb-cyan);
+}
+
+@keyframes holo-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@media (max-width: 720px) {
+  .holo-panel {
+    padding: 14px 14px 12px;
+  }
+  .holo-page {
+    top: 14px;
+    translate: none;
+    height: 36px;
+    width: 40px;
+    font-size: 28px;
+  }
+  .holo-prev {
+    left: 8px;
+  }
+  .holo-next {
+    right: 8px;
+  }
+  .holo-foot {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-backdrop,
+  .orb-arc,
+  .orb-halo,
+  .orb-busy .orb-gauge,
+  .holo-panel {
+    animation: none;
+  }
+  .orb-arc path,
+  .orb-ring,
+  .holo-btn,
+  .holo-page {
+    transition: none;
+  }
+}

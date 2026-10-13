@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { touch } from "./touch";
-
-// Minimal hides the status line and the clock, so it is only chosen on purpose (Settings, /view minimal), never by cycling.
-const NEXT_VIEW = { minimal: "companion", companion: "workspace", workspace: "companion" } as const;
+import { NEXT_VIEW } from "./menuShared";
+import type { SettingsTab } from "../settings/tabs";
 
 export interface OwnerMenuProps {
   muted: boolean;
@@ -24,8 +23,10 @@ export interface OwnerMenuProps {
   onToggleCamera?: () => void;
   /** Opens the plugins panel. */
   onPlugins?: () => void;
+  /** Switch to the orb menu (shown on the classic menu only). */
+  onOrb?: () => void;
   /** Opens the settings panel. */
-  onSettings?: () => void;
+  onSettings?: (tab?: SettingsTab) => void;
   /** Opens the connectors panel. */
   onConnectors?: () => void;
   /** The conversation and schedule panels, and the view they belong to. */
@@ -45,7 +46,7 @@ export interface OwnerMenuProps {
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, onHousehold, handsFreeOn, onToggleHandsFree, assistantName, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, musicOn, onToggleMusic, launcherOn, onToggleLauncher, view, onView, openRequest }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, onHousehold, handsFreeOn, onToggleHandsFree, assistantName, onOrb, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, musicOn, onToggleMusic, launcherOn, onToggleLauncher, view, onView, openRequest }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -187,6 +188,11 @@ export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, vo
               }}
             >
               Family voices
+            </button>
+          )}
+          {onOrb && (
+            <button type="button" style={touch} onClick={onOrb}>
+              Orb menu
             </button>
           )}
           <button type="button" style={touch} onClick={() => post("/api/logout")}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { LoginScreen } from "./auth/LoginScreen";
 import { SetupScreen } from "./auth/SetupScreen";
 import { ConnectorsPanel } from "./connectors/ConnectorsPanel";
@@ -10,6 +10,9 @@ import { ChatPanel } from "./layout/ChatPanel";
 import { resetPositions, usePanels } from "./layout/prefs";
 import { TasksPanel } from "./layout/TasksPanel";
 import { OwnerMenu } from "./overlay/OwnerMenu";
+import { readMenuStyle, saveMenuStyle, type MenuStyle } from "./overlay/menuShared";
+import { OrbMenu, type OrbMenuProps } from "./orb/OrbMenu";
+import type { SettingsTab } from "./settings/tabs";
 import { Overlay } from "./overlay/Overlay";
 import { describeStatus } from "./overlay/StatusBadge";
 import { PluginsPanel } from "./plugins/PluginsPanel";
@@ -41,7 +44,13 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [household, setHousehold] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);
   const [pluginFocus, setPluginFocus] = useState<string | undefined>(undefined);
-  const [settingsOpen, setSettingsOpen] = useState<null | "model" | "look" | "widgets">(null);
+  const [settingsOpen, setSettingsOpen] = useState<null | SettingsTab>(null);
+  const [menuStyle, setMenuStyle] = useState<MenuStyle>(readMenuStyle);
+  const switchMenu = (style: MenuStyle) => {
+    saveMenuStyle(style);
+    setMenuStyle(style);
+  };
+  const MenuTag: ComponentType<OrbMenuProps> = menuStyle === "orb" ? OrbMenu : (OwnerMenu as ComponentType<OrbMenuProps>);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [menuRequest, setMenuRequest] = useState(0);
   const [help, setHelp] = useState<SlashCommand[] | null>(null);
@@ -223,11 +232,15 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
             }}
           />
         )}
-        {settingsOpen && <SettingsPanel initialTab={settingsOpen} onClose={() => setSettingsOpen(null)} />}
+        {settingsOpen && <SettingsPanel initialTab={settingsOpen} variant={menuStyle === "orb" ? "holo" : "classic"} onClose={() => setSettingsOpen(null)} />}
         {connectorsOpen && <ConnectorsPanel onClose={() => setConnectorsOpen(false)} />}
         {help && <HelpPanel commands={help} onClose={() => setHelp(null)} />}
       </Overlay>
-      <OwnerMenu
+      <MenuTag
+        voiceMode={state.voice.mode}
+        busy={state.busy}
+        onClassic={() => switchMenu("classic")}
+        onOrb={() => switchMenu("orb")}
         muted={muted}
         onToggleMute={() => setMuted((m) => !m)}
         onSignedOut={onSignedOut}
@@ -239,7 +252,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         onToggleHandsFree={handsFree.supported ? handsFree.toggle : undefined}
         assistantName={state.assistantName}
         onPlugins={() => setManagingPlugins(true)}
-        onSettings={() => setSettingsOpen("model")}
+        onSettings={(tab) => setSettingsOpen(tab ?? "model")}
         onConnectors={() => setConnectorsOpen(true)}
         cameraOn={state.camera.enabled}
         onToggleCamera={() => dispatch({ type: "camera.enable", value: !state.camera.enabled })}
