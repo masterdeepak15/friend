@@ -34,6 +34,13 @@ describe("voice messages", () => {
     expect(ServerMsg.safeParse({ type: "status", busy: false, deviceOnline: true }).success).toBe(true);
     expect(ServerMsg.safeParse({ type: "status", busy: false, deviceOnline: true, voiceAvailable: "yes" }).success).toBe(false);
   });
+  it("lets the screen say it is listening or Friend is speaking, and the server say how far to turn sound down", () => {
+    expect(ClientMsg.safeParse({ type: "audio.activity", active: true }).success).toBe(true);
+    expect(ClientMsg.safeParse({ type: "audio.activity", active: "yes" }).success).toBe(false);
+    expect(ServerMsg.safeParse({ type: "audio.duck", level: 0.25 }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "audio.duck", level: 1 }).success).toBe(true);
+    for (const level of [-0.1, 1.5, "loud"]) expect(ServerMsg.safeParse({ type: "audio.duck", level }).success, String(level)).toBe(false);
+  });
   it("accepts voice.interrupt from the client", () => {
     expect(ClientMsg.safeParse({ type: "voice.interrupt" }).success).toBe(true);
   });

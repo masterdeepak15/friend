@@ -70,6 +70,7 @@ import { StageState } from "./stage";
 import { dbWidgetStore } from "./widgets";
 import { ensureTlsCert } from "./tls";
 import { HttpError } from "./http-error";
+import { DuckController } from "./audio/duck";
 import { Challenges } from "./voice/challenge";
 import { loadOrCreateKey } from "./voice/crypto";
 import { EnrollError, Enrollment } from "./voice/enrollment";
@@ -436,6 +437,7 @@ export async function createApp(opts: AppOptions) {
       else swap();
     }
     if (applied.changed.includes("voice.ttsVoice")) void warmVoice(config.voice.ttsVoice, voiceBefore);
+    if (applied.changed.some((k) => k === "voice.duck" || k === "voice.duckPercent")) ducker.refresh();
     if (applied.changed.includes("voice.sttModel")) void warmListening(config.voice.sttModel, sttBefore);
     if (applied.changed.includes("voice.hindiVoice")) void warmLanguageVoice(config.voice.hindiVoice);
     if (applied.changed.includes("voice.marathiVoice")) void warmLanguageVoice(config.voice.marathiVoice);
@@ -916,6 +918,20 @@ export async function createApp(opts: AppOptions) {
     },
   };
 
+  /** Music and video are turned down while the owner talks to Friend or Friend speaks. Each screen that says so holds its own claim. */
+  const duckIds = new WeakMap<object, string>();
+  let duckSeq = 0;
+  const duckId = (conn: object): string => duckIds.get(conn) ?? (duckIds.set(conn, `screen-${++duckSeq}`), duckIds.get(conn)!);
+  const ducker = new DuckController({
+    enabled: () => config.voice.duck,
+    percent: () => config.voice.duckPercent,
+    apply: (level) => {
+      broadcast({ type: "audio.duck", level }); // the screens turn down what they play themselves
+      void hostPlayer.duck(level).catch(() => {}); // and the PC's own players
+      void videoHub.duck(level).catch(() => {});
+    },
+  });
+
   const tls = config.https ? await ensureTlsCert(opts.dataDir, [...config.allowedHosts, ...(config.publicUrl ? [new URL(config.publicUrl).hostname] : [])]) : undefined;
   const gateway = createGateway({
     ...(tls ? { tls } : {}),
@@ -1338,11 +1354,13 @@ export async function createApp(opts: AppOptions) {
       conn.send(statusMsg());
       conn.send(uiMsg());
       conn.send({ type: "music.host", state: hostPlayer.state() });
+      if (ducker.level < 1) conn.send({ type: "audio.duck", level: ducker.level });
       const pending = challenges.current();
       if (pending) conn.send({ type: "voice.challenge", id: pending.id, text: pending.text });
       return () => {
         clients.delete(conn);
         musicHub.detach(conn);
+        ducker.drop(duckId(conn)); // never leave the sound down for a screen that is gone
       };
     },
     onClientMessage: (_session, msg: ClientMsg, conn) => {
@@ -1364,6 +1382,9 @@ export async function createApp(opts: AppOptions) {
           break;
         case "voice.interrupt":
           speaker?.interrupt(broadcast);
+          break;
+        case "audio.activity":
+          ducker.set(duckId(conn), msg.active);
           break;
         case "voice.confirm":
           void confirmChallenge(msg.id, msg.pin, conn).catch((e) => audit.log("system", "voice.confirm_error", { message: (e as Error).message }));

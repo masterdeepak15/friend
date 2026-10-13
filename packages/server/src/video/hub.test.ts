@@ -503,3 +503,62 @@ describe("what is playing and what is missing", () => {
     expect(missing.text).toMatch(/ffmpeg.*not found.*winget install ffmpeg/is);
   });
 });
+
+describe("turning the video on the PC down while someone talks", () => {
+  it("turns the PC's player down and back, from the volume it had", async () => {
+    const host = fakeHost();
+    const t = make({ video: { output: "host" }, host });
+    await t.hub.play({ url: URL });
+    host.calls.length = 0;
+    await t.hub.duck(0.25);
+    expect(host.calls).toEqual([["volume", 25]]);
+    await t.hub.duck(1);
+    expect(host.calls.at(-1)).toEqual(["volume", 100]);
+  });
+
+  it("goes back to the volume the owner chose, not to full", async () => {
+    const host = fakeHost();
+    const t = make({ video: { output: "host" }, host });
+    await t.hub.play({ url: URL });
+    await t.hub.control({ action: "volume", level: 80 });
+    host.calls.length = 0;
+    await t.hub.duck(0.5);
+    expect(host.calls).toEqual([["volume", 40]]);
+    await t.hub.duck(1);
+    expect(host.calls.at(-1)).toEqual(["volume", 80]);
+  });
+
+  it("applies a volume the owner asks for meanwhile on top of the lowered level", async () => {
+    const host = fakeHost();
+    const t = make({ video: { output: "host" }, host });
+    await t.hub.play({ url: URL });
+    await t.hub.duck(0.5);
+    host.calls.length = 0;
+    await t.hub.control({ action: "volume", level: 60 });
+    expect(host.calls).toEqual([["volume", 30]]);
+  });
+
+  it("starts a video that begins while someone is talking at the lowered level", async () => {
+    const host = fakeHost();
+    const t = make({ video: { output: "host" }, host });
+    await t.hub.duck(0.5);
+    await t.hub.play({ url: URL });
+    expect(host.calls.at(-1)).toEqual(["volume", 50]);
+  });
+
+  it("leaves a video on the screen alone (the page turns that one down itself)", async () => {
+    const host = fakeHost();
+    const t = make({ host });
+    await t.hub.play({ url: URL });
+    host.calls.length = 0;
+    await t.hub.duck(0.25);
+    expect(host.calls).toEqual([]);
+  });
+
+  it("does nothing when nothing is playing", async () => {
+    const host = fakeHost();
+    const t = make({ video: { output: "host" }, host });
+    await t.hub.duck(0.25);
+    expect(host.calls).toEqual([]);
+  });
+});

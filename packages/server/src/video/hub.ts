@@ -95,6 +95,10 @@ export class VideoHub {
   private tokens = new Map<string, Token>();
   private streams: { id: string; handle: StreamHandle }[] = [];
   private cached: { status: VideoStatus; at: number } | null = null;
+  /** The volume the owner chose for the PC's player (mpv keeps it from one video to the next). */
+  private hostVolume = 100;
+  /** How loud it is while someone talks: 1 is the owner's volume as it is. */
+  private duckLevel = 1;
   private now: { output: VideoOutput; title: string; uploader: string; info?: VideoInfo; embed?: string; via?: "mpv" | "browser" } | null = null;
   private tickets = new Map<string, { id: string; expires: number }>();
 
@@ -259,6 +263,7 @@ export class VideoHub {
       const opened = await this.d.host!.open(info.webpage || args.url || "", { start, maxHeight: cfg.maxHeight });
       if (!opened.ok) return { ok: false, text: opened.error };
       this.now = { output, title: info.title, uploader: info.uploader, info, via: "mpv" };
+      if (this.duckLevel < 1) await this.d.host!.volume(this.hostLevel()).catch(() => {}); // it starts while someone is talking
       return { ok: true, text: `Playing ${what} in a window on this PC.` };
     }
     if (browserWindow) {
@@ -305,6 +310,18 @@ export class VideoHub {
     this.now = null;
   }
 
+  private hostLevel(): number {
+    return Math.round(this.hostVolume * this.duckLevel);
+  }
+
+  /** Turns the video in the PC's own player down (0.25 is a quarter) while someone talks, and back up (1) after. A video on the screen is turned down by the page. */
+  async duck(level: number): Promise<void> {
+    this.duckLevel = Math.max(0, Math.min(1, level));
+    const now = this.now;
+    if (now?.output !== "host" || now.via !== "mpv" || !this.d.host) return;
+    await this.d.host.volume(this.hostLevel()).catch(() => {});
+  }
+
   async control(args: ControlArgs): Promise<VideoResult> {
     if (args.action === "stop") {
       const wasScreen = this.now?.output === "screen";
@@ -320,7 +337,10 @@ export class VideoHub {
         if (args.action === "pause") await host.pause(true);
         else if (args.action === "resume") await host.pause(false);
         else if (args.action === "seek") await host.seek(Math.max(0, args.seconds ?? 0));
-        else await host.volume(Math.max(0, Math.min(100, args.level ?? 50)));
+        else {
+          this.hostVolume = Math.max(0, Math.min(100, args.level ?? 50));
+          await host.volume(this.hostLevel());
+        }
       } catch (e) {
         return { ok: false, text: e instanceof Error ? e.message : "The player did not answer." };
       }

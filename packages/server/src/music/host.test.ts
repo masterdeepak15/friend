@@ -498,3 +498,60 @@ describe("playing Audius through mpv", () => {
     expect(r.text).toMatch(/Audius/);
   });
 });
+
+describe("turning the sound down while someone talks", () => {
+  it("turns mpv down to the level, keeps the owner's own volume, and brings it back", async () => {
+    await player.command(play([folder(1)]));
+    mpv.calls.length = 0;
+    await player.duck(0.25);
+    expect(mpv.calls).toContainEqual(["volume", 15]); // 60 percent of a quarter
+    expect(player.state().volume).toBe(60);
+    mpv.calls.length = 0;
+    await player.duck(1);
+    expect(mpv.calls).toContainEqual(["volume", 60]);
+  });
+
+  it("starts the next track at the lowered level when it begins while someone is talking", async () => {
+    await player.command(play([folder(1), folder(2)]));
+    await player.duck(0.5);
+    mpv.calls.length = 0;
+    await player.command({ action: "next" });
+    expect(mpv.calls).toContainEqual(["volume", 30]);
+  });
+
+  it("applies a volume the owner sets meanwhile on top of the lowered level", async () => {
+    await player.command(play([folder(1)]));
+    await player.duck(0.5);
+    mpv.calls.length = 0;
+    await player.command({ action: "volume", level: 80 });
+    expect(mpv.calls).toContainEqual(["volume", 40]);
+    expect(player.state().volume).toBe(80);
+  });
+
+  it("turns a Spotify device down the same way", async () => {
+    await player.command(play([spot("a")]));
+    sp.controls.length = 0;
+    await player.duck(0.25);
+    expect(sp.controls).toContainEqual(["D1", { action: "volume", percent: 15 }]);
+    sp.controls.length = 0;
+    await player.duck(1);
+    expect(sp.controls).toContainEqual(["D1", { action: "volume", percent: 60 }]);
+  });
+
+  it("does nothing to a player that is not playing, and remembers the level for when it starts", async () => {
+    await player.duck(0.25);
+    expect(mpv.calls).toEqual([]);
+    await player.command(play([folder(1)]));
+    expect(mpv.calls).toContainEqual(["volume", 15]);
+  });
+
+  it("keeps the level within 0 and 1", async () => {
+    await player.command(play([folder(1)]));
+    mpv.calls.length = 0;
+    await player.duck(7);
+    expect(mpv.calls).toContainEqual(["volume", 60]);
+    mpv.calls.length = 0;
+    await player.duck(-1);
+    expect(mpv.calls).toContainEqual(["volume", 0]);
+  });
+});

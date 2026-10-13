@@ -516,6 +516,10 @@ export interface VoiceConfig {
   hindiVoice: string;
   /** The voice for Marathi text (Devanagari). Empty: the main voice reads it. */
   marathiVoice: string;
+  /** Turn music and video down while the owner talks to Friend and while Friend speaks. */
+  duck: boolean;
+  /** How loud they are then, as a percent of how loud they were (0 to 100). */
+  duckPercent: number;
 }
 
 export const DEFAULT_VOICE: VoiceConfig = {
@@ -528,13 +532,17 @@ export const DEFAULT_VOICE: VoiceConfig = {
   challenge: 0.58,
   hindiVoice: DEFAULT_HINDI_VOICE,
   marathiVoice: DEFAULT_MARATHI_VOICE,
+  duck: true,
+  duckPercent: 25,
 };
 
 /** Bad thresholds in an edited config must never make strangers look like the owner, so they fall back to the defaults. */
 export function sanitizeVoice(v: VoiceConfig): VoiceConfig {
   const ok = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
-  if (ok(v.accept) && ok(v.challenge) && v.accept > v.challenge) return v;
-  return { ...v, accept: DEFAULT_VOICE.accept, challenge: DEFAULT_VOICE.challenge };
+  const percent = typeof v.duckPercent === "number" && Number.isFinite(v.duckPercent) ? Math.max(0, Math.min(100, Math.round(v.duckPercent))) : DEFAULT_VOICE.duckPercent;
+  const base = { ...v, duck: typeof v.duck === "boolean" ? v.duck : DEFAULT_VOICE.duck, duckPercent: percent };
+  if (ok(v.accept) && ok(v.challenge) && v.accept > v.challenge) return base;
+  return { ...base, accept: DEFAULT_VOICE.accept, challenge: DEFAULT_VOICE.challenge };
 }
 
 export const DEFAULT_DESTRUCTIVE_PATTERNS = [

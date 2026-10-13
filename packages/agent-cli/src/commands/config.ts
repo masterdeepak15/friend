@@ -16,6 +16,11 @@ const unit = (v: string) => {
   if (v.trim() === "" || !Number.isFinite(n) || n < 0 || n > 1) throw new Error("Expected a number between 0 and 1");
   return n;
 };
+const percent = (v: string) => {
+  const n = Number(v);
+  if (v.trim() === "" || !Number.isFinite(n) || n < 0 || n > 100) throw new Error("Expected a number between 0 and 100");
+  return Math.round(n);
+};
 const httpUrl = (v: string) => {
   let u: URL;
   try {
@@ -76,6 +81,8 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
     },
     language: (v) => (v.trim() === "" ? null : v.trim()),
     speakTyped: bool,
+    duck: bool,
+    duckPercent: percent,
     accept: unit,
     challenge: unit,
   },
@@ -142,6 +149,8 @@ export const KEY_HELP: Record<string, string> = {
   "voice.hindiVoice": "the voice that reads Hindi (Devanagari) text: hi_IN-priyamvada-medium, hi_IN-pratham-medium or hi_IN-rohan-medium; empty uses the main voice",
   "voice.marathiVoice": "the voice that reads Marathi (Devanagari) text: mr_IN-google-medium; empty uses the main voice",
   "voice.speakTyped": "true or false: also speak the replies to typed messages",
+  "voice.duck": "true or false: turn music and video down while you talk to Friend and while it speaks",
+  "voice.duckPercent": "0 to 100: how loud music and video are then, as a percent of how loud they were (25 is a quarter)",
   "voice.accept": "0 to 1: a voice at or above this match is you",
   "voice.challenge": "0 to 1: a voice between this and accept must be confirmed with your PIN",
   "ollama.url": "address of the Ollama server, for example http://127.0.0.1:11434",

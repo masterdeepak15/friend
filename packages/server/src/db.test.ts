@@ -47,9 +47,9 @@ describe("loadConfig", () => {
   });
   it("has voice defaults and merges a partly edited voice section", () => {
     const dir = tmp();
-    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "small", ttsVoice: "en_US-lessac-medium", language: null, speakTyped: true, accept: 0.72, challenge: 0.58, hindiVoice: "hi_IN-priyamvada-medium", marathiVoice: "mr_IN-google-medium" });
+    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "small", ttsVoice: "en_US-lessac-medium", language: null, speakTyped: true, accept: 0.72, challenge: 0.58, hindiVoice: "hi_IN-priyamvada-medium", marathiVoice: "mr_IN-google-medium", duck: true, duckPercent: 25 });
     writeFileSync(join(dir, "config.json"), JSON.stringify({ voice: { sttModel: "small", language: "hi" } }));
-    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "small", ttsVoice: "en_US-lessac-medium", language: "hi", speakTyped: true, accept: 0.72, challenge: 0.58, hindiVoice: "hi_IN-priyamvada-medium", marathiVoice: "mr_IN-google-medium" });
+    expect(loadConfig(dir).voice).toEqual({ enabled: true, sttModel: "small", ttsVoice: "en_US-lessac-medium", language: "hi", speakTyped: true, accept: 0.72, challenge: 0.58, hindiVoice: "hi_IN-priyamvada-medium", marathiVoice: "mr_IN-google-medium", duck: true, duckPercent: 25 });
   });
   it("keeps edited speaker thresholds, but falls back when they are nonsense", () => {
     const dir = tmp();

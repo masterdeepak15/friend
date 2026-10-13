@@ -4,6 +4,8 @@ import { createSocket, type FriendSocket } from "./socket";
 import { initialState, reduce, type LocalAction, type StageViewState } from "./store";
 import { CameraController } from "./camera/controller";
 import { ScreenController } from "./screen/capture";
+import { pageDuck } from "./audio/duck";
+import { useDuckReporting } from "./audio/useDuckReporting";
 import { postUtterance, postWake } from "./voice/api";
 import { chime } from "./voice/chime";
 import { HandsFree } from "./voice/handsfree";
@@ -85,10 +87,12 @@ export function useFriend(onUnauthorized: () => void): {
       const id = (m as { id?: unknown } | null)?.id;
       if ((type === "camera.request" || type === "camera.cancel") && typeof id === "string") void cam.handle({ type, id });
       if ((type === "screen.request" || type === "screen.cancel") && typeof id === "string") void scr.handle({ type, id });
+      if (type === "audio.duck") pageDuck.set((m as { level?: number }).level ?? 1); // music and video on this screen turn down while someone talks
       if (type === "audio.chunk" || type === "audio.stop") ctl.handleServer(m as Parameters<VoiceController["handleServer"]>[0]);
     });
     const offState = s.onState((v) => {
       dispatch({ type: "conn", value: v });
+      if (v !== "open") pageDuck.set(1, 0); // the server cannot say it is over any more: the sound must not stay down
       if (v === "unauthorized") unauthorized.current();
       if (v === "elsewhere") {
         hf.disable(); // another window has Friend now: this one stops listening for the name too
@@ -154,6 +158,8 @@ export function useFriend(onUnauthorized: () => void): {
   );
 
   const send = useCallback((m: ClientMsg) => socket.current?.send(m), []);
+  // say when the owner is talking to Friend or Friend is speaking, so music and video can be turned down meanwhile
+  useDuckReporting(state.voice.mode, send);
   const local = useCallback((a: LocalAction) => dispatch(a), []);
   const voice = useMemo<VoiceControls>(
     () => ({

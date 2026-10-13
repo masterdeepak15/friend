@@ -1,3 +1,4 @@
+import { pageDuck } from "../audio/duck";
 import { commandToAction, parseRef, type ClientMsg, type MusicCommand, type MusicView } from "@friend/protocol";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { Connection } from "../store";
@@ -244,9 +245,18 @@ export function useMusicPlayer({ music, cmd, send, connection, createAudio, crea
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    a.volume = state.volume / 100;
+    a.volume = (state.volume / 100) * pageDuck.level; // turned down while someone talks
     a.muted = state.muted;
   }, [state.volume, state.muted]);
+  // while the owner talks to Friend or Friend speaks, the music is turned down (the owner's own volume is not changed)
+  useEffect(
+    () =>
+      pageDuck.subscribe((level) => {
+        const a = audioRef.current;
+        if (a) a.volume = (stateRef.current.volume / 100) * level;
+      }),
+    [],
+  );
   useEffect(() => {
     const a = audioRef.current;
     if (a && a.src && Math.abs((a.currentTime || 0) - state.position) > SEEK_GAP) a.currentTime = state.position;

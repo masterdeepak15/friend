@@ -297,6 +297,12 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       <label className="settings-check">
         <input type="checkbox" checked={draft.voice.speakTyped} onChange={(e) => set("voice", "speakTyped", e.target.checked)} /> Also speak the replies to typed messages
       </label>
+      <label className="settings-check">
+        <input type="checkbox" checked={draft.voice.duck ?? true} onChange={(e) => set("voice", "duck", e.target.checked)} /> Turn music and video down while I talk and while Friend speaks
+      </label>
+      <Field label={`Volume while talking: ${draft.voice.duckPercent ?? 25}%`} hint="How loud music and video are then, compared with how loud you have them. They come back as they were when nothing is happening.">
+        <input type="range" min={0} max={100} step={5} value={draft.voice.duckPercent ?? 25} disabled={draft.voice.duck === false} onChange={(e) => set("voice", "duckPercent", Number(e.target.value))} />
+      </Field>
       <Field label="Spoken language" hint="Leave empty to detect it by itself: best when you mix English, Hindi and Marathi. Or force one: en, hi, mr.">
         <input value={draft.voice.language ?? ""} maxLength={10} onChange={(e) => set("voice", "language", e.target.value.trim() === "" ? null : e.target.value.trim())} />
       </Field>

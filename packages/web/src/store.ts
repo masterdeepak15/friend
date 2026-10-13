@@ -294,6 +294,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return state.challenge?.id === m.id ? { ...state, challenge: null } : state;
     case "audio.chunk":
     case "audio.stop":
+    case "audio.duck":
       return state; // handled by the audio player, outside the reducer
     case "camera.request":
     case "camera.cancel":

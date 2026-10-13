@@ -141,6 +141,8 @@ export const ServerMsg = z.discriminatedUnion("type", [
     data: z.string(),
   }),
   z.object({ type: z.literal("audio.stop") }),
+  /** How loud music and video should be while the owner talks or Friend speaks: 1 is as it is, 0.25 a quarter. */
+  z.object({ type: z.literal("audio.duck"), level: z.number().min(0).max(1) }),
   /** The owner approved a look through the camera: take one picture and upload it. */
   z.object({ type: z.literal("camera.request"), id: z.string() }),
   /** Stop: the request was answered elsewhere, timed out, or the emergency lock fired. */
@@ -168,6 +170,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stage.event"), objectId: z.string(), event: z.string().max(64) }),
   ApprovalRespond,
   z.object({ type: z.literal("voice.interrupt") }),
+  /** This screen is listening to the owner, or Friend is speaking on it (true), or neither (false). */
+  z.object({ type: z.literal("audio.activity"), active: z.boolean() }),
   z.object({ type: z.literal("voice.confirm"), id: z.string(), pin: z.string().max(32) }),
   z.object({ type: z.literal("voice.cancel"), id: z.string() }),
   z.object({ type: z.literal("camera.denied"), id: z.string(), reason: z.enum(["off", "no-camera", "permission", "busy"]) }),

@@ -54,6 +54,8 @@ export class HostPlayer {
   private chain: Promise<unknown> = Promise.resolve();
   private off: () => void;
   private disposed = false;
+  /** How loud it is while someone talks: 1 is the owner's volume as it is. */
+  private duckLevel = 1;
 
   constructor(private d: HostDeps) {
     const st = d.settings();
@@ -254,13 +256,25 @@ export class HostPlayer {
     if (this.engine === "folder") await this.d.mpv.seek(seconds);
     else if (this.engine === "spotify" && this.deviceId) await this.d.spotify.control(this.deviceId, { action: "seek", ms: Math.round(seconds * 1000) });
   }
+  /** The owner's volume, turned down while someone is talking. */
+  private level(): number {
+    return Math.round(this.s.volume * this.duckLevel);
+  }
+
   private async applyVolume(): Promise<void> {
     if (this.engine === "folder") {
-      await this.d.mpv.volume(this.s.volume);
+      await this.d.mpv.volume(this.level());
       await this.d.mpv.mute(this.s.muted);
     } else if (this.engine === "spotify" && this.deviceId) {
-      await this.d.spotify.control(this.deviceId, { action: "volume", percent: this.s.muted ? 0 : this.s.volume });
+      await this.d.spotify.control(this.deviceId, { action: "volume", percent: this.s.muted ? 0 : this.level() });
     }
+  }
+
+  /** Turns the sound down (0.25 is a quarter) while the owner talks to Friend or Friend speaks, and back up (1) after. The owner's own volume is not changed. */
+  async duck(level: number): Promise<void> {
+    this.duckLevel = Math.max(0, Math.min(1, level));
+    if (this.disposed || !this.engine) return;
+    await this.run(() => this.applyVolume());
   }
 
   // ---- what the engines tell us ----

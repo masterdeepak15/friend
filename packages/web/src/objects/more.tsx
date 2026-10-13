@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { duckMedia, duckYoutube } from "../audio/duck";
 import { sanitizeMarkdown } from "../stage/sanitize";
 
 type Props = Record<string, unknown>;
@@ -120,10 +121,13 @@ export function Img({ props }: { props: Props }) {
 /** One clip. A web video starts by itself (the owner just asked for it), says it is being prepared until the first picture comes, and says so when it cannot be played. */
 function VideoPlayer({ src, web, title }: { src: string; web: boolean; title: string }) {
   const [state, setState] = useState<"loading" | "ready" | "failed">(web ? "loading" : "ready");
+  const ref = useRef<HTMLVideoElement>(null);
+  // turned down while the owner talks to Friend or Friend speaks, and back after
+  useEffect(() => (ref.current ? duckMedia(ref.current) : undefined), [state === "failed"]);
   if (state === "failed") return <p className="obj-empty">This video could not be played. Ask Friend to try again, or to play it in a window on the PC.</p>;
   return (
     <>
-      <video src={src} controls playsInline autoPlay={web} preload={web ? "auto" : "metadata"} aria-label={title} onLoadedData={() => setState("ready")} onError={() => setState("failed")} />
+      <video ref={ref} src={src} controls playsInline autoPlay={web} preload={web ? "auto" : "metadata"} aria-label={title} onLoadedData={() => setState("ready")} onError={() => setState("failed")} />
       {web && state === "loading" && <p className="obj-empty">Preparing the video…</p>}
     </>
   );
@@ -134,11 +138,14 @@ const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 
 function YoutubePlayer({ id, start, title }: { id: string; start: number; title: string }) {
   const [loaded, setLoaded] = useState(false);
-  const q = new URLSearchParams({ autoplay: "1", rel: "0", playsinline: "1", modestbranding: "1" });
+  const ref = useRef<HTMLIFrameElement>(null);
+  useEffect(() => (ref.current ? duckYoutube(ref.current) : undefined), [id]);
+  const q = new URLSearchParams({ autoplay: "1", rel: "0", playsinline: "1", modestbranding: "1", enablejsapi: "1" }); // enablejsapi: so the sound can be turned down while someone talks
   if (start > 0) q.set("start", String(start));
   return (
     <>
       <iframe
+        ref={ref}
         className="obj-youtube"
         src={`https://www.youtube-nocookie.com/embed/${id}?${q.toString()}`}
         title={title}
