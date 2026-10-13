@@ -6,11 +6,10 @@ const STATUS_TEXT: Record<number, string> = {
   503: "Voice is not available. Run: friend voice setup",
 };
 
-/** Uploads one recording to the gateway; resolves with what Friend heard ("" when nothing intelligible). */
-export async function postUtterance(audio: Blob, signal?: AbortSignal): Promise<{ text: string }> {
+async function upload(url: string, audio: Blob, signal?: AbortSignal): Promise<{ text: string; wake?: boolean }> {
   let res: Response;
   try {
-    res = await fetch("/api/voice/utterance", {
+    res = await fetch(url, {
       method: "POST",
       headers: { "content-type": audio.type || "audio/webm" },
       body: audio,
@@ -29,6 +28,20 @@ export async function postUtterance(audio: Blob, signal?: AbortSignal): Promise<
     }
     throw new Error(detail || STATUS_TEXT[res.status] || `The voice request failed (${res.status}).`);
   }
-  const json = (await res.json()) as { text?: unknown };
-  return { text: typeof json.text === "string" ? json.text : "" };
+  const json = (await res.json()) as { text?: unknown; wake?: unknown };
+  return { text: typeof json.text === "string" ? json.text : "", wake: json.wake === true };
+}
+
+/** Uploads one recording to the gateway; resolves with what Friend heard ("" when nothing intelligible). */
+export async function postUtterance(audio: Blob, signal?: AbortSignal): Promise<{ text: string }> {
+  return { text: (await upload("/api/voice/utterance", audio, signal)).text };
+}
+
+/**
+ * Hands-free: uploads what was said and asks whether it began with the assistant's name. `wake` is true when it did; then `text`
+ * is the request that came with it (already running) or "" when only the name was said.
+ */
+export async function postWake(audio: Blob, signal?: AbortSignal): Promise<{ text: string; wake: boolean }> {
+  const r = await upload("/api/voice/utterance?wake=1", audio, signal);
+  return { text: r.text, wake: r.wake === true };
 }

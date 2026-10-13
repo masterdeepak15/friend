@@ -1,10 +1,13 @@
 import type { ClientMsg } from "@friend/protocol";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createSocket, type FriendSocket } from "./socket";
 import { initialState, reduce, type LocalAction, type StageViewState } from "./store";
 import { CameraController } from "./camera/controller";
 import { ScreenController } from "./screen/capture";
-import { postUtterance } from "./voice/api";
+import { postUtterance, postWake } from "./voice/api";
+import { chime } from "./voice/chime";
+import { HandsFree } from "./voice/handsfree";
+import { Listener } from "./voice/listener";
 import { VoiceController } from "./voice/controller";
 
 export interface VoiceControls {
@@ -20,12 +23,16 @@ export function useFriend(onUnauthorized: () => void): {
   send: (m: ClientMsg) => void;
   dispatch: (a: LocalAction) => void;
   voice: VoiceControls;
+  /** Hands-free listening for the assistant's name. It is a choice of this device, remembered here. */
+  handsFree: { on: boolean; supported: boolean; toggle: () => void };
   useHere: () => void;
 } {
   const [state, dispatch] = useReducer(reduce as (s: StageViewState, a: unknown) => StageViewState, initialState);
   const socket = useRef<FriendSocket | null>(null);
   const controller = useRef<VoiceController | null>(null);
   const camera = useRef<CameraController | null>(null);
+  const hands = useRef<HandsFree | null>(null);
+  const [handsOn, setHandsOn] = useState(false);
   const unauthorized = useRef(onUnauthorized);
   unauthorized.current = onUnauthorized;
   const latest = useRef(state);
@@ -41,6 +48,15 @@ export function useFriend(onUnauthorized: () => void): {
       available: () => latest.current.voice.available,
     });
     controller.current = ctl;
+    const hf = new HandsFree({
+      makeListener: (o) => new Listener(o),
+      wake: postWake,
+      command: postUtterance,
+      busy: () => latest.current.voice.mode !== "idle",
+      chime,
+      dispatch: (a) => dispatch(a),
+    });
+    hands.current = hf;
     const cam = new CameraController({
       send: (m) => s.send(m),
       dispatch: (a) => dispatch(a),
@@ -75,6 +91,8 @@ export function useFriend(onUnauthorized: () => void): {
       dispatch({ type: "conn", value: v });
       if (v === "unauthorized") unauthorized.current();
       if (v === "elsewhere") {
+        hf.disable(); // another window has Friend now: this one stops listening for the name too
+        setHandsOn(false);
         ctl.blur(); // another window has Friend now: this one stops listening and speaking
         cam.dispose();
         scr.dispose();
@@ -83,6 +101,8 @@ export function useFriend(onUnauthorized: () => void): {
     return () => {
       offMsg();
       offState();
+      hf.disable();
+      hands.current = null;
       ctl.dispose();
       cam.dispose();
       scr.dispose();
@@ -98,6 +118,41 @@ export function useFriend(onUnauthorized: () => void): {
     if (!state.camera.enabled) camera.current?.dispose();
   }, [state.camera.enabled]);
 
+  // hands-free stops collecting while Friend talks or a key is held
+  useEffect(() => {
+    hands.current?.sync();
+  }, [state.voice.mode]);
+
+  const setHands = useCallback(async (on: boolean) => {
+    const hf = hands.current;
+    if (!hf) return;
+    if (on) await hf.enable();
+    else hf.disable();
+    setHandsOn(hf.enabled);
+    try {
+      localStorage.setItem("friend.handsFree", hf.enabled ? "1" : "0");
+    } catch {
+      /* private window: the choice just is not remembered */
+    }
+  }, []);
+
+  // this device was left listening for the name: start again once speech is known to be available
+  const wasOn = useRef(false);
+  useEffect(() => {
+    if (wasOn.current || !state.voice.available) return;
+    wasOn.current = true;
+    try {
+      if (localStorage.getItem("friend.handsFree") === "1" && Listener.supported()) void setHands(true);
+    } catch {
+      /* no storage */
+    }
+  }, [state.voice.available, setHands]);
+
+  const handsFree = useMemo(
+    () => ({ on: handsOn, supported: Listener.supported(), toggle: () => void setHands(!hands.current?.enabled) }),
+    [handsOn, setHands],
+  );
+
   const send = useCallback((m: ClientMsg) => socket.current?.send(m), []);
   const local = useCallback((a: LocalAction) => dispatch(a), []);
   const voice = useMemo<VoiceControls>(
@@ -110,5 +165,5 @@ export function useFriend(onUnauthorized: () => void): {
     [],
   );
   const useHere = useCallback(() => socket.current?.takeOver(), []);
-  return { state, send, dispatch: local, voice, useHere };
+  return { state, send, dispatch: local, voice, handsFree, useHere };
 }

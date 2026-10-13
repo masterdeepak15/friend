@@ -10,7 +10,7 @@ const voice = { pressStart() {}, pressEnd() {}, blur() {}, unlock() {} };
 
 function show(over: Partial<StageViewState>) {
   const dispatch = vi.fn();
-  (useFriend as Mock).mockReturnValue({ state: { ...initialState, connection: "open", deviceOnline: true, ...over }, send: vi.fn(), dispatch, voice });
+  (useFriend as Mock).mockReturnValue({ state: { ...initialState, connection: "open", deviceOnline: true, ...over }, send: vi.fn(), dispatch, voice, handsFree: { on: false, supported: false, toggle() {} } });
   return dispatch;
 }
 const badge = () => screen.queryByTestId("status-badge");

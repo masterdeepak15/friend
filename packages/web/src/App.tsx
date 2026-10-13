@@ -32,7 +32,7 @@ import { musicReturnNotice } from "./music/returnNotice";
 type Phase = "loading" | "setup" | "login" | "stage";
 
 export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
-  const { state, send, dispatch, voice, useHere } = useFriend(onSignedOut);
+  const { state, send, dispatch, voice, handsFree, useHere } = useFriend(onSignedOut);
   useVoiceKeys(voice);
   useAudioUnlock(voice);
   useScreenReport(send, state.connection);
@@ -235,6 +235,9 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         voiceEnrolled={state.voice.enrolled}
         onEnroll={() => setEnrolling(true)}
         onHousehold={() => setHousehold(true)}
+        handsFreeOn={handsFree.on}
+        onToggleHandsFree={handsFree.supported ? handsFree.toggle : undefined}
+        assistantName={state.assistantName}
         onPlugins={() => setManagingPlugins(true)}
         onSettings={() => setSettingsOpen("model")}
         onConnectors={() => setConnectorsOpen(true)}

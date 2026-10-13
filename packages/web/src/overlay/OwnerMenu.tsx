@@ -14,6 +14,11 @@ export interface OwnerMenuProps {
   onEnroll?: () => void;
   /** Opens the panel for the other people of the household. */
   onHousehold?: () => void;
+  /** Hands-free: listen for the assistant's name instead of waiting for the key. This device only. */
+  handsFreeOn?: boolean;
+  onToggleHandsFree?: () => void;
+  /** The assistant's name, shown in the switch so the owner knows what to say. */
+  assistantName?: string;
   /** The camera switch. The camera stays off until the owner turns it on here. */
   cameraOn?: boolean;
   onToggleCamera?: () => void;
@@ -40,7 +45,7 @@ export interface OwnerMenuProps {
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, onHousehold, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, musicOn, onToggleMusic, launcherOn, onToggleLauncher, view, onView, openRequest }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, onHousehold, handsFreeOn, onToggleHandsFree, assistantName, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, musicOn, onToggleMusic, launcherOn, onToggleLauncher, view, onView, openRequest }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -89,6 +94,11 @@ export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, vo
           <button type="button" style={touch} onClick={onToggleMute}>
             {muted ? "Unmute stage" : "Mute stage"}
           </button>
+          {voiceAvailable && onToggleHandsFree && (
+            <button type="button" style={touch} aria-pressed={!!handsFreeOn} onClick={onToggleHandsFree} title={assistantName ? `Say "Hey ${assistantName}" and then your request` : undefined}>
+              {handsFreeOn ? "Hands-free: on" : "Hands-free: off"}
+            </button>
+          )}
           {onToggleCamera && (
             <button type="button" style={touch} aria-pressed={!!cameraOn} onClick={onToggleCamera}>
               {cameraOn ? "Camera: on" : "Camera: off"}

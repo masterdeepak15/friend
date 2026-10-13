@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { postUtterance } from "./api";
+import { postUtterance, postWake } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -51,5 +51,24 @@ describe("postUtterance", () => {
       throw new TypeError("fetch failed");
     }));
     await expect(postUtterance(blob)).rejects.toThrow(/could not reach friend/i);
+  });
+});
+
+describe("postWake", () => {
+  it("asks the hands-free route and says whether the name was heard", async () => {
+    const fetchMock = vi.fn(async () => reply(200, { text: "open it", wake: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await postWake(blob)).toEqual({ text: "open it", wake: true });
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("/api/voice/utterance?wake=1");
+  });
+
+  it("reads a missing wake as not woken", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => reply(200, { text: "" })));
+    expect(await postWake(blob)).toEqual({ text: "", wake: false });
+  });
+
+  it("throws what the server said, like the ordinary route", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => reply(409, {}, false)));
+    await expect(postWake(blob)).rejects.toThrow("busy with the last request");
   });
 });
