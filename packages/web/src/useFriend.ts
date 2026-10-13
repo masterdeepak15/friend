@@ -52,7 +52,7 @@ export function useFriend(onUnauthorized: () => void): {
       makeListener: (o) => new Listener(o),
       wake: postWake,
       command: postUtterance,
-      busy: () => latest.current.voice.mode !== "idle",
+      mode: () => latest.current.voice.mode,
       chime,
       dispatch: (a) => dispatch(a),
     });

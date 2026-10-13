@@ -10,9 +10,9 @@ export interface SegmenterOptions {
 export type SegmentEvent = { type: "start" } | { type: "end"; ms: number; speechMs: number; forced: boolean };
 
 /** Speech counts when the level is this many times the room's usual level (plus a little, so a dead-quiet room still works). */
-const MARGIN = 2.2;
-const SLACK = 0.012;
-const MIN_THRESHOLD = 0.02;
+const MARGIN = 3;
+const SLACK = 0.02;
+const MIN_THRESHOLD = 0.04;
 
 /**
  * Cuts a stream of loudness readings into utterances. Pure: give it the level and the time, it says when speech starts and ends.
@@ -31,7 +31,7 @@ export class Segmenter {
   private speechMs = 0;
 
   constructor(opts: SegmenterOptions = {}) {
-    this.minSpeechMs = opts.minSpeechMs ?? 250;
+    this.minSpeechMs = opts.minSpeechMs ?? 300;
     this.endSilenceMs = opts.endSilenceMs ?? 800;
     this.maxMs = opts.maxMs ?? 8000;
   }
