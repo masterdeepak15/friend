@@ -18,7 +18,7 @@ def main() -> int:
     ap.add_argument("--port", type=int, default=0, help="0 picks a free port")
     ap.add_argument("--fake", action="store_true", help="use stub engines (tests)")
     ap.add_argument("--data-dir", default=None, help="folder holding downloaded models")
-    ap.add_argument("--stt-model", default="base")
+    ap.add_argument("--stt-model", default="small")
     ap.add_argument("--tts-voice", default="en_US-lessac-medium")
     args = ap.parse_args()
     token = args.token or os.environ.get("FRIEND_VOICE_TOKEN")

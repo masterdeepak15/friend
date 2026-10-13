@@ -103,7 +103,7 @@ describe("settings routes", () => {
 
   it("say which settings need a restart", async () => {
     const cookie = await boot();
-    const res = await put(cookie, { voice: { sttModel: "small", ttsVoice: "en_US-amy-medium" } });
+    const res = await put(cookie, { voice: { sttModel: "base", ttsVoice: "en_US-amy-medium" } });
     expect(((await res.json()) as { restart: string[] }).restart).toEqual(["voice.sttModel"]); // the speaking voice is loaded live
   });
 

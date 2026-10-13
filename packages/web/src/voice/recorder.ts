@@ -51,7 +51,7 @@ export class Recorder {
     try {
       this.leaveSession = captureSession(); // on an iPhone the microphone can not open while the audio is "playback only"
       try {
-        const open = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        const open = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
         try {
           this.stream = await open();
         } catch (first) {

@@ -520,7 +520,7 @@ export interface VoiceConfig {
 
 export const DEFAULT_VOICE: VoiceConfig = {
   enabled: true,
-  sttModel: "base",
+  sttModel: "small",
   ttsVoice: "en_US-lessac-medium",
   language: null,
   speakTyped: true,

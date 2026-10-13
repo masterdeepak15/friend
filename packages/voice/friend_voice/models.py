@@ -46,7 +46,7 @@ def ensure_speaker_model(directory: Path, url: str = SPEAKER_URL, sha256: str = 
     return target
 
 
-def load_engines(data_dir: Optional[str], stt_model: str = "base", tts_voice: str = "en_US-lessac-medium") -> Engines:
+def load_engines(data_dir: Optional[str], stt_model: str = "small", tts_voice: str = "en_US-lessac-medium") -> Engines:
     root = Path(data_dir) if data_dir else Path.home() / ".friend" / "voice" / "models"
     root.mkdir(parents=True, exist_ok=True)
     speaker = None

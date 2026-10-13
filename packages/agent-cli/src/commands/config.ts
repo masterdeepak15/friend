@@ -136,7 +136,7 @@ export const KEY_HELP: Record<string, string> = {
   allowedHosts: "extra host names that may reach Friend (for example my-pc), separated by commas",
   trustProxy: "true when Friend sits behind your own reverse proxy",
   "voice.enabled": "true or false: use speech at all",
-  "voice.sttModel": "listening model: tiny, base, small, … (bigger is more accurate and slower)",
+  "voice.sttModel": "listening model: tiny, base, small, large-v3-turbo … (bigger is more accurate and slower; Marathi and far-from-mic speech do best with small or large-v3-turbo)",
   "voice.ttsVoice": "speaking voice (easier: friend voice setup, or Settings)",
   "voice.language": "force a spoken language such as en, hi or mr, or empty to detect it (empty is best when you mix languages)",
   "voice.hindiVoice": "the voice that reads Hindi (Devanagari) text: hi_IN-priyamvada-medium, hi_IN-pratham-medium or hi_IN-rohan-medium; empty uses the main voice",

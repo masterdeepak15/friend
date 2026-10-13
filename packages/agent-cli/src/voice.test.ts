@@ -56,7 +56,7 @@ describe("friend voice setup", () => {
     expect(dl.cwd).toBe("/repo/packages/voice");
     expect(dl.args.join(" ")).toContain(p.models.replace(/\\/g, "/"));
     const marker = JSON.parse(readFileSync(p.marker, "utf8"));
-    expect(marker).toMatchObject({ python: p.python, sttModel: "base", ttsVoice: "en_US-lessac-medium" });
+    expect(marker).toMatchObject({ python: p.python, sttModel: "small", ttsVoice: "en_US-lessac-medium" });
     expect(text()).toMatch(/voice is ready/i);
   });
 
