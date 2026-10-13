@@ -55,7 +55,7 @@ afterEach(async () => {
 
 describe("what Friend runs, and what it cannot do", () => {
   it("starts one lean Claude Code with only the bridge: no built-in tools, no other MCP servers, no hooks or commands", async () => {
-    const p = setup([[{ text: "Hello there." }]]);
+    const p = setup([[{ text: "Hello there." }]], { webSearch: false });
     await run(p, req([text("hi")]));
     const [s] = starts();
     const a = s!.argv!;
@@ -476,5 +476,30 @@ describe("starting a conversation over", () => {
     await p.resetSession();
     await run(p, req([text("a"), said("One."), text("b")]));
     expect(starts()).toHaveLength(2);
+  });
+});
+
+describe("searching the web", () => {
+  it("lets the owner's Claude search the web, and nothing else it brings along", async () => {
+    const p = setup([[{ text: "ok" }]], { webSearch: true });
+    await run(p, req([text("what is the nifty today?")]));
+    const a = starts()[0]!.argv!;
+    expect(flagValue(a, "--tools")).toBe("WebSearch");
+    expect(flagValue(a, "--allowedTools")).toBe("WebSearch,mcp__friend__fs__list,mcp__friend__camera__snap");
+    for (const bad of ["WebFetch", "Bash", "Read", "Write", "Edit"]) expect(flagValue(a, "--tools")).not.toContain(bad);
+  });
+
+  it("keeps every built-in tool off when web search is switched off", async () => {
+    const p = setup([[{ text: "ok" }]], { webSearch: false });
+    await run(p, req([text("hi")]));
+    expect(flagValue(starts()[0]!.argv!, "--tools")).toBe("");
+    expect(flagValue(starts()[0]!.argv!, "--allowedTools")).not.toContain("WebSearch");
+  });
+
+  it("never gives a guest the web", async () => {
+    const p = setup([[{ text: "hello" }]], { webSearch: true });
+    await run(p, req([text("hi")], { session: "guest", tools: [] }));
+    expect(flagValue(starts()[0]!.argv!, "--tools")).toBe("");
+    expect(starts()[0]!.argv).toContain("--no-session-persistence");
   });
 });

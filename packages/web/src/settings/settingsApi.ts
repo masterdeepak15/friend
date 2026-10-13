@@ -89,7 +89,7 @@ export interface SettingsView {
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
   openai?: { url: string; model: string; vision: boolean; apiKeySet: boolean };
-  claudeCode: { model: string; command: string; fallback: "ollama" | "none" };
+  claudeCode: { model: string; command: string; fallback: "ollama" | "none"; webSearch?: boolean };
   updates?: { auto: boolean };
   session?: { autoCompact: boolean; compactAtTokens: number };
   voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; ttsVoice: string; sttModel: string; hindiVoice?: string; marathiVoice?: string; duck?: boolean; duckPercent?: number };

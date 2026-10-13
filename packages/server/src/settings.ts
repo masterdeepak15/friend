@@ -173,6 +173,7 @@ export const SettingsPatch = z
         model: modelName,
         command: z.string().trim().min(1).max(260).regex(word, "The command is one word or path without spaces"),
         fallback: z.enum(["ollama", "none"]),
+        webSearch: z.boolean(),
       })
       .partial()
       .strict(),

@@ -13,6 +13,8 @@ export interface ClaudeCodeOptions {
   model?: string;
   /** The command to run. Defaults to `claude`. */
   command?: string;
+  /** Lets the owner's Claude search the web with its own WebSearch tool (a guest never gets it). Off unless asked for. */
+  webSearch?: boolean;
   /** Arguments that come before Claude's own (tests run a fake script this way). */
   commandArgs?: string[];
   env?: Record<string, string>;
@@ -370,15 +372,16 @@ export class ClaudeCodeProvider implements Provider {
     }
     const resume = conv.guest ? null : conv.sessionId;
     const model = this.opts.model ?? "sonnet";
+    const web = !conv.guest && !!this.opts.webSearch;
     const args = [
       ...(this.opts.commandArgs ?? []),
       "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
       "--model", model,
-      "--strict-mcp-config", "--disable-slash-commands", "--tools", "", "--setting-sources", "local",
+      "--strict-mcp-config", "--disable-slash-commands", "--tools", web ? "WebSearch" : "", "--setting-sources", "local",
       "--system-prompt", req.system,
       ...(conv.guest
         ? ["--no-session-persistence"]
-        : ["--mcp-config", join(this.home, "mcp.json"), "--allowedTools", req.tools.map((t) => `mcp__friend__${encodeToolName(t.name)}`).join(","), ...(resume ? ["--resume", resume] : [])]),
+        : ["--mcp-config", join(this.home, "mcp.json"), "--allowedTools", [...(web ? ["WebSearch"] : []), ...req.tools.map((t) => `mcp__friend__${encodeToolName(t.name)}`)].join(","), ...(resume ? ["--resume", resume] : [])]),
     ];
     const proc: ClaudeProc = new ClaudeProc(
       {

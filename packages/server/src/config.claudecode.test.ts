@@ -14,13 +14,13 @@ const withConfig = (cfg: unknown) => {
 
 describe("claudeCode settings", () => {
   it("default to a good model, the plain command, and Ollama as the safety net", () => {
-    expect(DEFAULT_CLAUDE_CODE).toEqual({ model: "sonnet", command: "claude", fallback: "ollama" });
+    expect(DEFAULT_CLAUDE_CODE).toEqual({ model: "sonnet", command: "claude", fallback: "ollama", webSearch: true });
     expect(loadConfig(fresh()).claudeCode).toEqual(DEFAULT_CLAUDE_CODE);
   });
 
   it("keeps what was set and fills in the rest", () => {
-    expect(withConfig({ claudeCode: { model: "haiku" } }).claudeCode).toEqual({ model: "haiku", command: "claude", fallback: "ollama" });
-    expect(withConfig({ claudeCode: { fallback: "none", command: "C:/tools/claude.exe" } }).claudeCode).toEqual({ model: "sonnet", command: "C:/tools/claude.exe", fallback: "none" });
+    expect(withConfig({ claudeCode: { model: "haiku" } }).claudeCode).toEqual({ model: "haiku", command: "claude", fallback: "ollama", webSearch: true });
+    expect(withConfig({ claudeCode: { fallback: "none", command: "C:/tools/claude.exe" } }).claudeCode).toEqual({ model: "sonnet", command: "C:/tools/claude.exe", fallback: "none", webSearch: true });
   });
 
   it("fall back to the defaults for values that make no sense", () => {
@@ -37,5 +37,11 @@ describe("claudeCode settings", () => {
 
   it("accept claude-code as the provider", () => {
     expect(withConfig({ provider: "claude-code" }).provider).toBe("claude-code");
+  });
+
+  it("lets Claude search the web unless it is switched off", () => {
+    expect(withConfig({}).claudeCode.webSearch).toBe(true);
+    expect(withConfig({ claudeCode: { webSearch: false } }).claudeCode.webSearch).toBe(false);
+    expect(withConfig({ claudeCode: { webSearch: "no" } }).claudeCode.webSearch).toBe(true);
   });
 });

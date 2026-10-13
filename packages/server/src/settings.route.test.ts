@@ -90,7 +90,7 @@ describe("settings routes", () => {
       const res = await put(cookie, bad);
       expect(res.status, JSON.stringify(bad)).toBe(400);
     }
-    expect(loadConfig(dir).claudeCode).toEqual({ model: "sonnet", command: "claude", fallback: "ollama" });
+    expect(loadConfig(dir).claudeCode).toEqual({ model: "sonnet", command: "claude", fallback: "ollama", webSearch: true });
     expect(app.config.bind).toBe("127.0.0.1");
   });
 

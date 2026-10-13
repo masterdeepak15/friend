@@ -240,6 +240,10 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
               <option value="none">Show an error</option>
             </select>
           </Field>
+          <label className="settings-check">
+            <input type="checkbox" checked={draft.claudeCode.webSearch ?? true} onChange={(e) => set("claudeCode", "webSearch", e.target.checked)} /> Let Claude search the web
+          </label>
+          <p className="auth-note">For prices, news and anything else that changes: Claude looks it up instead of answering from memory. Only searching, never opening pages on this PC.</p>
           <Field label="Claude Code command" hint="Leave as it is unless the program is somewhere else.">
             <input value={draft.claudeCode.command} onChange={(e) => set("claudeCode", "command", e.target.value)} />
           </Field>

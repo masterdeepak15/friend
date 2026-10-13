@@ -433,9 +433,11 @@ export interface ClaudeCodeConfig {
   command: string;
   /** Where to turn when Claude Code cannot answer (not signed in, plan limit reached): the local Ollama model, or nowhere. */
   fallback: "ollama" | "none";
+  /** Let Claude search the web with its own WebSearch tool, so it can answer about today (prices, news) instead of from memory. */
+  webSearch: boolean;
 }
 
-export const DEFAULT_CLAUDE_CODE: ClaudeCodeConfig = { model: "sonnet", command: "claude", fallback: "ollama" };
+export const DEFAULT_CLAUDE_CODE: ClaudeCodeConfig = { model: "sonnet", command: "claude", fallback: "ollama", webSearch: true };
 
 /** A model or command is one word: anything with spaces could smuggle extra arguments, so such values are cut or replaced. */
 export function sanitizeClaudeCode(raw: unknown): ClaudeCodeConfig {
@@ -449,6 +451,7 @@ export function sanitizeClaudeCode(raw: unknown): ClaudeCodeConfig {
     model: word(r.model, DEFAULT_CLAUDE_CODE.model),
     command: word(r.command, DEFAULT_CLAUDE_CODE.command),
     fallback: r.fallback === "none" ? "none" : "ollama",
+    webSearch: r.webSearch !== false,
   };
 }
 

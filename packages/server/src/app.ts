@@ -188,7 +188,7 @@ export async function createApp(opts: AppOptions) {
   /** Builds the model backend from the current settings; called again when the owner changes them on screen. */
   const makeProvider = (): Provider => {
     if (config.provider === "claude-code") {
-      const cc = new ClaudeCodeProvider({ dataDir: opts.dataDir, model: config.claudeCode.model, command: config.claudeCode.command });
+      const cc = new ClaudeCodeProvider({ dataDir: opts.dataDir, model: config.claudeCode.model, command: config.claudeCode.command, webSearch: config.claudeCode.webSearch });
       return config.claudeCode.fallback === "ollama" ? new FallbackProvider(cc, new OllamaProvider({ ...config.ollama }), (reason) => tellFallback(reason)) : cc;
     }
     if (config.provider === "ollama") return new OllamaProvider({ ...config.ollama });
