@@ -78,7 +78,7 @@ describe("friend config set for Claude Code", () => {
     }
     const c = loadConfig(t.dataDir);
     expect(c.provider).toBe("claude-code");
-    expect(c.claudeCode).toEqual({ model: "haiku", command: "C:/tools/claude.exe", fallback: "none" });
+    expect(c.claudeCode).toEqual({ model: "haiku", command: "C:/tools/claude.exe", fallback: "none", webSearch: true });
   });
 
   it("refuses values that make no sense", async () => {

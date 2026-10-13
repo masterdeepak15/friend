@@ -70,6 +70,34 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
   updates: {
     auto: bool,
   },
+  session: {
+    autoCompact: bool,
+    compactAtTokens: (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 50_000 || n > 800_000) throw new Error("Expected a whole number of tokens from 50000 to 800000");
+      return n;
+    },
+  },
+  web: {
+    enabled: bool,
+    provider: (v) => {
+      if (v !== "duckduckgo" && v !== "brave" && v !== "tavily" && v !== "searxng") throw new Error("Source must be duckduckgo, brave, tavily or searxng");
+      return v;
+    },
+    searxngUrl: (v) => {
+      if (v.trim() === "") return "";
+      let u: URL;
+      try {
+        u = new URL(v.trim());
+      } catch {
+        throw new Error("Expected a web address such as http://localhost:8080, or empty");
+      }
+      if ((u.protocol !== "http:" && u.protocol !== "https:") || u.username || u.password) throw new Error("Expected an http or https address with no login in it");
+      return v.trim();
+    },
+    braveKey: (v) => (v.trim() === "" ? null : v.trim()),
+    tavilyKey: (v) => (v.trim() === "" ? null : v.trim()),
+  },
   voice: {
     enabled: bool,
     sttModel: nonEmpty,
@@ -95,6 +123,7 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
       return v.trim();
     },
     command: nonEmpty,
+    webSearch: bool,
     fallback: (v) => {
       if (v !== "ollama" && v !== "none") throw new Error("Fallback must be ollama or none");
       return v;
@@ -168,6 +197,14 @@ export const KEY_HELP: Record<string, string> = {
   "claudeCode.model": "model for your Claude subscription: sonnet, haiku, opus or a full name",
   "claudeCode.command": "the command that starts Claude Code, if it is not on the PATH",
   "claudeCode.fallback": "ollama or none: what to use when Claude is unavailable",
+  "claudeCode.webSearch": "true or false: let Claude search the web with its own WebSearch tool (Claude Code model only)",
+  "session.autoCompact": "true or false: when Claude's own conversation grows past session.compactAtTokens, write short notes and start a fresh one by itself",
+  "session.compactAtTokens": "50000 to 800000: how big Claude's conversation may grow before it is tidied up (default 100000)",
+  "web.enabled": "true or false: give every model the tools web.search and web.read",
+  "web.provider": "where web.search asks: duckduckgo (free, no key), brave, tavily or searxng",
+  "web.searxngUrl": "the address of your own SearXNG server, for example http://localhost:8080 (used when web.provider is searxng)",
+  "web.braveKey": "your Brave Search key (stored in your private config file; empty removes it)",
+  "web.tavilyKey": "your Tavily key (stored in your private config file; empty removes it)",
 };
 
 const allKeys = () => [...Object.keys(PARSERS), ...Object.entries(GROUPS).flatMap(([g, f]) => Object.keys(f).map((k) => `${g}.${k}`))];
@@ -196,7 +233,7 @@ export async function configCommand(args: string[], io: IO): Promise<number> {
       io.err(`Unknown setting "${key}". Settings: ${allKeys().join(", ")}`);
       return 1;
     }
-    (cfg[group as "voice" | "ollama" | "openai" | "claudeCode"] as unknown as Record<string, unknown>)[field] = parse(value);
+    (cfg[group as "voice" | "ollama" | "openai" | "claudeCode" | "session" | "web" | "updates"] as unknown as Record<string, unknown>)[field] = parse(value);
   } else {
     const parse = PARSERS[key];
     if (!parse) {

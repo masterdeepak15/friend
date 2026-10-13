@@ -47,6 +47,8 @@ export interface AgentDeps {
   usage?: (e: { source: string; input: number; output: number }) => void;
   /** Whether to start the model's own conversation over by itself when it grows past `limit` tokens. Read each time, so a change applies at once. */
   session?: { auto(): { on: boolean; limit: number } };
+  /** web.search and web.read. Without it, or when switched off, the model is not offered them. */
+  web?: { enabled(): boolean; run(name: string, args: unknown, signal?: AbortSignal): Promise<{ ok: boolean; text: string }> };
   policy: PolicyEngine;
   approvals: Approvals;
   devices: Pick<DeviceHub, "exec" | "hasOnline" | "targetName">;
@@ -264,12 +266,14 @@ export class Agent {
       const earlier = member ? earlierOf(this.memberTalk.get(ctx.person!.id), d.tasks?.now() ?? Date.now()) : [];
       const messages: Msg[] = isolated ? [...earlier, userMsg] : loadHistory(d.db);
       const pluginTools = (d.plugins?.toolDefs() ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
-      const tools =
+      const webOn = !!d.web?.enabled();
+      const tools = (
         ctx.trust === "owner"
           ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])]
           : member
             ? toolSpecs().filter((t) => MEMBER_TOOLS.has(t.name))
-            : [];
+            : []
+      ).filter((t) => webOn || !t.name.startsWith("web."));
       let nudged = false;
 
       // Clear requests for real data (weather in a named city, the computer's stats) are answered with the real tools
@@ -644,6 +648,12 @@ export class Agent {
       if (r.timedOut) return fail("The plugin tool ran past its time limit.");
       if (r.exitCode !== 0) return fail(`The plugin tool failed (exit code ${r.exitCode}).${r.stderr ? `\n${r.stderr}` : ""}`);
       return { text: r.stdout || "(no output)", isError: false };
+    }
+
+    if (call.name === "web.search" || call.name === "web.read") {
+      if (!d.web?.enabled()) return fail("Web search is switched off.");
+      const r = await d.web.run(call.name, args, this.abort?.signal);
+      return r.ok ? { text: r.text, isError: false } : fail(r.text);
     }
 
     if (call.name === "weather.get") {

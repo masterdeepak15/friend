@@ -56,6 +56,10 @@ import { join } from "node:path";
 import { loadConfig, saveConfig, type Config } from "./config";
 import { openDb } from "./db";
 import { UsageLog, USAGE_KEEP_DAYS } from "./usage";
+import { safeFetch } from "./web/fetch";
+import { duckDuckGo } from "./web/providers";
+import { webSearch } from "./web/search";
+import { chooseSearch, runWebTool, type WebToolDeps } from "./web/tools";
 import { DeviceHub } from "./devices";
 import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi, type PluginsApi, type SystemApi } from "./gateway";
 import { PolicyEngine } from "./policy/engine";
@@ -202,6 +206,12 @@ export async function createApp(opts: AppOptions) {
     if (config.provider === "ollama") return { provider: "ollama", model: config.ollama.model };
     if (config.provider === "openai") return { provider: "openai", model: config.openai.model };
     return { provider: "claude", model: config.model };
+  };
+  const webToolDeps: WebToolDeps = {
+    enabled: () => config.web.enabled,
+    search: webSearch({ choose: () => chooseSearch(config.web), fallback: duckDuckGo(), audit: (e) => audit.log("agent", "web.search", e) }),
+    fetch: (url, signal) => safeFetch(url, { signal }),
+    audit: (e) => audit.log("agent", "web.read", e),
   };
   const switchable = opts.provider ? null : new SwitchableProvider(makeProvider());
   const provider: Provider = opts.provider ?? switchable!;
@@ -570,6 +580,10 @@ export async function createApp(opts: AppOptions) {
     provider,
     usage: (e) => usageLog.record({ ...e, ...modelInUse() }),
     session: { auto: () => ({ on: config.session.autoCompact, limit: config.session.compactAtTokens }) },
+    web: {
+      enabled: () => config.web.enabled,
+      run: (name, args, signal) => runWebTool(name, args, webToolDeps, signal),
+    },
     policy,
     approvals,
     devices,
