@@ -212,7 +212,7 @@ describe("a household member speaking", () => {
     const first = provider.calls[0]!;
     expect(first.system).toMatch(/Priya/);
     expect(first.system).toMatch(/not the owner/i);
-    expect(first.tools.map((t) => t.name).sort()).toEqual(["stage.hide", "stage.mood", "stage.presence", "stage.scene", "stage.show", "stage.update", "weather.get"]);
+    expect(first.tools.map((t) => t.name).sort()).toEqual(["stage.hide", "stage.mood", "stage.presence", "stage.scene", "stage.show", "stage.update", "weather.get", "web.search"]);
     expect(first.session).toBe("guest"); // a separate conversation from the owner's
     expect(first.messages).toHaveLength(1);
 

@@ -10,7 +10,7 @@ export const ASK_EVERY_TIME = new Set(["camera.snap", "message.send_file"]);
  * What a recognized person of the household (not the owner) may use: the weather and the screen's pictures. Nothing
  * that reads files, runs commands, uses the camera, changes settings or touches the owner's notes and schedule.
  */
-export const MEMBER_TOOLS = new Set(["weather.get", "stage.scene", "stage.show", "stage.update", "stage.hide", "stage.presence", "stage.mood"]);
+export const MEMBER_TOOLS = new Set(["weather.get", "web.search", "stage.scene", "stage.show", "stage.update", "stage.hide", "stage.presence", "stage.mood"]);
 
 /** What a voice from a speaker device (Alexa) may do without asking: look things up, show them, and add a reminder. */
 import { isNeverByVoice } from "../alexa/constants";
