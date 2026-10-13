@@ -1,4 +1,4 @@
-export type SettingsTab = "model" | "voice" | "look" | "approvals" | "trading" | "widgets" | "system" | "security";
+export type SettingsTab = "model" | "voice" | "look" | "approvals" | "trading" | "widgets" | "system" | "usage" | "security";
 
 export const TABS: { id: SettingsTab; label: string; note: string }[] = [
   { id: "model", label: "Model", note: "Where Friend thinks" },
@@ -8,5 +8,6 @@ export const TABS: { id: SettingsTab; label: string; note: string }[] = [
   { id: "trading", label: "Trading", note: "What Friend may do with money" },
   { id: "widgets", label: "Widgets", note: "Music, clock, quick launch" },
   { id: "system", label: "Startup", note: "Start with the computer, updates" },
+  { id: "usage", label: "Usage", note: "Tokens used, day by day" },
   { id: "security", label: "Security", note: "Password and PIN" },
 ];

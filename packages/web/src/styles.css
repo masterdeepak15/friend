@@ -218,6 +218,21 @@ button { cursor: pointer; }
 /* the list can grow as plugins are added: the title stays put and the list scrolls inside the window */
 .plugins-body { overflow-y: auto; min-height: 0; padding-right: 4px; }
 .plugins-heading { margin: 14px 0 6px; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.usage-totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.usage-totals div { display: grid; gap: 2px; padding: 8px 10px; background: rgba(255, 255, 255, 0.04); text-align: center; }
+.usage-totals strong { font-size: 1.35rem; color: var(--accent); }
+.usage-totals span { font-size: 0.74rem; color: var(--muted); }
+.usage-bars { display: flex; align-items: flex-end; gap: 2px; height: 96px; margin: 8px 0 12px; }
+.usage-bar-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; }
+.usage-bar { width: 100%; min-height: 1px; background: var(--accent); opacity: 0.8; border-radius: 2px 2px 0 0; }
+.usage-bar-day { font-size: 0.6rem; color: var(--muted); }
+.usage-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.usage-table th, .usage-table td { padding: 4px 6px; text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.usage-table th:first-child { text-align: left; font-weight: 400; }
+.usage-table thead th { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.usage-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 0.84rem; }
+.usage-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 6px 10px; background: rgba(255, 255, 255, 0.04); }
+.usage-list li span:last-child { color: var(--muted); }
 .plugin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .plugin-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; padding: 8px 10px; background: rgba(255, 255, 255, 0.04); }
 .plugin-info { min-width: 0; flex: 1 1 180px; } /* on a narrow screen the buttons go under the name instead of pushing out of the window */

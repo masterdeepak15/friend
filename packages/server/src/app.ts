@@ -55,6 +55,7 @@ import { Tasks } from "./tasks";
 import { join } from "node:path";
 import { loadConfig, saveConfig, type Config } from "./config";
 import { openDb } from "./db";
+import { UsageLog, USAGE_KEEP_DAYS } from "./usage";
 import { DeviceHub } from "./devices";
 import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi, type PluginsApi, type SystemApi } from "./gateway";
 import { PolicyEngine } from "./policy/engine";
@@ -172,6 +173,8 @@ export async function createApp(opts: AppOptions) {
   const config = { ...loadConfig(opts.dataDir), ...opts.config };
   const db = openDb(opts.dataDir);
   const audit = new Audit(db);
+  const usageLog = new UsageLog(db);
+  usageLog.prune(USAGE_KEEP_DAYS);
   const auth = new Auth(db, audit);
   const policy = new PolicyEngine(db, config);
   const devices = new DeviceHub();
@@ -191,6 +194,14 @@ export async function createApp(opts: AppOptions) {
     if (config.provider === "ollama") return new OllamaProvider({ ...config.ollama });
     if (config.provider === "openai") return new OpenAiProvider({ ...config.openai });
     return config.apiKey ? new ClaudeProvider({ apiKey: config.apiKey, model: config.model }) : new MissingKeyProvider();
+  };
+  /** Which model answers right now, for the token count: read when a turn ends because the owner can switch it while Friend runs. */
+  const modelInUse = (): { provider: string; model: string } => {
+    if (opts.provider) return { provider: "custom", model: "custom" };
+    if (config.provider === "claude-code") return { provider: "claude-code", model: config.claudeCode.model };
+    if (config.provider === "ollama") return { provider: "ollama", model: config.ollama.model };
+    if (config.provider === "openai") return { provider: "openai", model: config.openai.model };
+    return { provider: "claude", model: config.model };
   };
   const switchable = opts.provider ? null : new SwitchableProvider(makeProvider());
   const provider: Provider = opts.provider ?? switchable!;
@@ -226,7 +237,7 @@ export async function createApp(opts: AppOptions) {
         if (m.type === "caption.delta") reply += m.text;
         else if (m.type === "caption.end") reply += "\n";
       };
-      await agent.runTurn(text, { trust: "owner", emit, ip: `channel:${via}` });
+      await agent.runTurn(text, { trust: "owner", emit, ip: `channel:${via}`, source: "channel" });
       return reply.trim();
     },
   });
@@ -557,6 +568,7 @@ export async function createApp(opts: AppOptions) {
     mcp: hub,
     admin,
     provider,
+    usage: (e) => usageLog.record({ ...e, ...modelInUse() }),
     policy,
     approvals,
     devices,
@@ -601,7 +613,7 @@ export async function createApp(opts: AppOptions) {
     store: { config: () => config.alexa, update: (fn) => void changeAlexaConfig(fn) },
     verify: { fetchCert: opts.alexaFetchCert ?? fetchAmazonCert, roots: opts.alexaRoots },
     clock: Date.now,
-    agent: { isBusy: () => agent.isBusy(), runTurn: (text, ctx) => agent.runTurn(text, ctx) },
+    agent: { isBusy: () => agent.isBusy(), runTurn: (text, ctx) => agent.runTurn(text, { source: "task", ...ctx }) },
     broadcast,
     screenOpen: () => clients.size > 0,
     fast: {
@@ -736,7 +748,7 @@ export async function createApp(opts: AppOptions) {
       if (m.type === "caption.delta" && epoch === lockEpoch) talk?.push(m.text); // locked meanwhile: stay silent
       broadcast(m);
     };
-    await agent.runTurn(text, { trust, emit, ip, ...(person ? { person } : {}), ...(spoken ? { spoken } : {}) });
+    await agent.runTurn(text, { trust, emit, ip, source: "voice", ...(person ? { person } : {}), ...(spoken ? { spoken } : {}) });
     await talk?.end();
   }
 
@@ -986,6 +998,7 @@ export async function createApp(opts: AppOptions) {
     connectors: connectorsApi,
     chrome: chromeRemoteApi,
     system: systemApi,
+    usage: usageLog,
     video: {
       stream: (id) => videoHub.streamOf(id),
       status: async () => videoHub.status() ?? (await videoHub.refresh()),
@@ -1420,7 +1433,7 @@ export async function createApp(opts: AppOptions) {
             void runVoiceTurn(msg.text, conn.ip, lockEpoch).catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
           } else {
             void agent
-              .runTurn(msg.text, { trust: "owner", emit: broadcast, ip: conn.ip })
+              .runTurn(msg.text, { trust: "owner", emit: broadcast, ip: conn.ip, source: "chat" })
               .catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
           }
           break;

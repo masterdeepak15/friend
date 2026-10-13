@@ -1,4 +1,5 @@
 import fastifyCookie from "@fastify/cookie";
+import type { UsageApi } from "./usage";
 import fastifyStatic from "@fastify/static";
 import { ClientMsg, type ServerMsg } from "@friend/protocol";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from "fastify";
@@ -50,6 +51,8 @@ export interface GatewayDeps {
   /** Chrome control reached from outside on Friend's own address (/chrome/mcp and /chrome/ws), and the extension to download. */
   chrome?: ChromeRemoteApi;
   system?: SystemApi;
+  /** Token counts for the Usage page and riend usage. */
+  usage?: UsageApi;
   /** Web video: the screen asks for a video at /api/video/<id>, an address Friend made. */
   video?: {
     stream(id: string): Promise<{ stream: import("node:stream").Readable; stop(): void } | null>;
@@ -1002,6 +1005,19 @@ export function createGateway(deps: GatewayDeps) {
     } catch (e) {
       return systemError(reply, e, "autostart");
     }
+  });
+
+  // ---- token usage (owner session only; counts, never words) ----
+  const usageGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    if (!(token && auth.resolveSession(token))) return reply.code(401).send({ error: "Unauthorized" });
+    if (!deps.usage) return reply.code(503).send({ error: "Not available" });
+  };
+  app.get("/api/usage", { onRequest: usageGuard }, async (req) => deps.usage!.summary(Number((req.query as { days?: string }).days ?? 30)));
+  app.delete("/api/usage", { onRequest: usageGuard }, async () => {
+    const removed = deps.usage!.clear();
+    audit.log("owner", "usage.cleared", { removed });
+    return { removed };
   });
 
   // ---- Chrome control (owner session: the page's own routes; the key: the addresses other PCs use) ----

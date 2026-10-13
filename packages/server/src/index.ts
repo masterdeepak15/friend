@@ -14,6 +14,8 @@ export { ensureTlsCert, tlsHosts } from "./tls";
 export { loadConfig, saveConfig, defaultDataDir, configPath } from "./config";
 export type { Config } from "./config";
 export { openDb } from "./db";
+export { UsageLog, localDay } from "./usage";
+export type { UsageSummary, UsageApi } from "./usage";
 export { PolicyEngine } from "./policy/engine";
 export { HttpVoiceService, FakeVoice } from "./voice/service";
 export type { VoiceService } from "./voice/service";

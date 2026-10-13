@@ -42,6 +42,8 @@ export const MAX_RESULT_CHARS = 24_000;
 
 export interface AgentDeps {
   provider: Provider;
+  /** Gets the tokens a turn used (counts only, never words). The provider and model are added by whoever supplies this. */
+  usage?: (e: { source: string; input: number; output: number }) => void;
   policy: PolicyEngine;
   approvals: Approvals;
   devices: Pick<DeviceHub, "exec" | "hasOnline" | "targetName">;
@@ -109,6 +111,8 @@ export interface TurnCtx {
   person?: { id: number; name: string };
   /** The language the speech recognizer heard (for example "hi" or "mr"), when the request was spoken. */
   spoken?: string;
+  /** Where the request came from (voice, chat, task, channel), for the token count. */
+  source?: string;
 }
 
 /** What a household member said and was answered in the last while, kept in memory only: it is never written to disk. */
@@ -157,6 +161,7 @@ export class Agent {
       return;
     }
     this.busy = true;
+    const spent = { input: 0, output: 0 };
     this.scenesThisTurn = 0;
     const stage = (cmd: Parameters<StageState["apply"]>[0]) => {
       d.stage.apply(cmd);
@@ -228,7 +233,10 @@ export class Agent {
           languageNote(text, ctx.spoken, voiceGender(devanagariLanguage(text) === "mr" || ctx.spoken?.toLowerCase().startsWith("mr") ? "mr" : "hi", { main: d.config.voice.ttsVoice, hindi: d.config.voice.hindiVoice || undefined, marathi: d.config.voice.marathiVoice || undefined })),
         );
         for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: isolated ? "guest" : "owner", messages, tools, signal: abort.signal })) {
-          if (ev.type === "text_delta") {
+          if (ev.type === "usage") {
+            spent.input += ev.input;
+            spent.output += ev.output;
+          } else if (ev.type === "text_delta") {
             if (!assistantText) {
               stage({ cmd: "presence", state: "speaking" });
               emit({ type: "activity", text: "Answering" });
@@ -295,6 +303,7 @@ export class Agent {
       d.audit.log("system", "agent.error", { message: (e as Error).message });
       emit({ type: "caption.delta", text: "Sorry, something went wrong on my side." });
     } finally {
+      if (d.usage && (spent.input > 0 || spent.output > 0)) d.usage({ source: ctx.source ?? "other", ...spent });
       if (member && lastAnswer) {
         // only the words, never tool results: a short, plain thread that the next question can lean on
         const lines: Msg[] = [...earlierOf(this.memberTalk.get(ctx.person!.id), d.tasks?.now() ?? Date.now()), { role: "user", content: [{ type: "text", text }] }, { role: "assistant", content: [{ type: "text", text: lastAnswer }] }];

@@ -178,4 +178,20 @@ create table report_schedules (
 );
 `,
   },
+  {
+    id: 11,
+    sql: `
+create table usage (
+  id integer primary key autoincrement,
+  at integer not null,
+  day text not null,
+  provider text not null,
+  model text not null,
+  source text not null,
+  input integer not null,
+  output integer not null
+);
+create index usage_day on usage (day);
+`,
+  },
 ];
