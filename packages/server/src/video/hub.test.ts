@@ -105,6 +105,13 @@ describe("a YouTube video on the Friend screen: YouTube's own player, nothing to
     expect(prov.calls).toEqual([]);
   });
 
+  it("plays a video that its owner blocked from other sites through Friend, without being asked", async () => {
+    const blocked = (async () => new Response("no", { status: 401 })) as unknown as typeof fetch;
+    const t = make({ fetch: blocked });
+    const r = await t.hub.play({ url: YT_URL });
+    expect(r).toMatchObject({ ok: true, show: { props: { src: expect.stringMatching(/^\/api\/video\/[0-9a-f]{32}$/) } } });
+  });
+
   it("starts where the owner asked", async () => {
     const r = await make().hub.play({ url: YT_URL, start: 95 });
     expect(r).toMatchObject({ ok: true, show: { props: { embed: "dQw4w9WgXcQ", start: 95 } } });

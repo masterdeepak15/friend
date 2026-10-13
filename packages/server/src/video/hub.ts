@@ -198,7 +198,7 @@ export class VideoHub {
   }
 
   /** A YouTube video in YouTube's own player, inside the card. A link needs nothing; a search needs yt-dlp, for the list of results only. */
-  private async playEmbedded(args: PlayArgs, linkId: string | null, cfg: Config["video"]): Promise<VideoResult> {
+  private async playEmbedded(args: PlayArgs, linkId: string | null, cfg: Config["video"]): Promise<VideoResult | null> {
     const start = typeof args.start === "number" && args.start > 0 ? Math.floor(args.start) : 0;
     let id: string;
     let title: string;
@@ -207,7 +207,9 @@ export class VideoHub {
       const v = await vetVideoUrl(args.url!, { allowedSites: cfg.allowedSites, ...(this.d.resolve ? { resolve: this.d.resolve } : {}) });
       if (!v.ok) return { ok: false, text: v.error };
       id = linkId;
-      ({ title, uploader } = await titleOfYoutube(id, { fetch: this.d.fetch }));
+      const t = await titleOfYoutube(id, { fetch: this.d.fetch });
+      if (!t.embeddable) return null;
+      ({ title, uploader } = t);
     } else {
       const sites = cfg.allowedSites;
       if (sites.length && !sites.some((s) => s === "youtube.com" || s.endsWith(".youtube.com"))) return { ok: false, text: `A search uses YouTube, which is not on your allowed list (${sites.join(", ")}).` };
@@ -231,7 +233,10 @@ export class VideoHub {
     // a YouTube video on the screen plays in YouTube's own player: no download, no ffmpeg (a link needs no program at all)
     if (output === "screen" && (args.mode ?? cfg.youtube) === "embed") {
       const ytId = args.url ? youtubeId(args.url) : null;
-      if (ytId || (!args.url && args.query && args.query.trim())) return this.playEmbedded(args, ytId, cfg);
+      if (ytId || (!args.url && args.query && args.query.trim())) {
+        const emb = await this.playEmbedded(args, ytId, cfg);
+        if (emb) return emb; // null: the owner of that video does not let it play on other sites, so it goes through Friend
+      }
     }
     let status = await this.ensureStatus();
     const got = await this.ensureTools(this.missing(status, this.wanted(output, status)), cfg);

@@ -31,16 +31,18 @@ export function youtubeId(raw: string): string | null {
 const clean = (v: unknown, max: number): string => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "");
 
 /** The title and channel of a video from YouTube's own public title service: no program, no sign-in. A plain name when it does not answer. */
-export async function titleOfYoutube(id: string, d: { fetch?: typeof fetch; timeoutMs?: number } = {}): Promise<{ title: string; uploader: string }> {
-  const fallback = { title: "YouTube video", uploader: "" };
+export async function titleOfYoutube(id: string, d: { fetch?: typeof fetch; timeoutMs?: number } = {}): Promise<{ title: string; uploader: string; embeddable: boolean }> {
+  const fallback = { title: "YouTube video", uploader: "", embeddable: true };
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), d.timeoutMs ?? 5000);
   try {
     const url = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`;
     const res = await (d.fetch ?? fetch)(url, { signal: ctl.signal });
+    // a video whose owner does not let it play on other sites is answered with 401 (or 403): it must not go in the embedded player
+    if (res.status === 401 || res.status === 403) return { ...fallback, embeddable: false };
     if (!res.ok) return fallback;
     const j = (await res.json()) as { title?: unknown; author_name?: unknown };
-    return { title: clean(j.title, 200) || fallback.title, uploader: clean(j.author_name, 100) };
+    return { title: clean(j.title, 200) || fallback.title, uploader: clean(j.author_name, 100), embeddable: true };
   } catch {
     return fallback;
   } finally {

@@ -47,13 +47,19 @@ describe("the title of a YouTube video, without any program", () => {
     return new Response(JSON.stringify({ title: "Never Gonna Give You Up", author_name: "Rick Astley" }), { headers: { "content-type": "application/json" } });
   }) as unknown as typeof fetch;
   it("asks YouTube's own public title service, and gives the title and the channel", async () => {
-    expect(await titleOfYoutube("dQw4w9WgXcQ", { fetch: fetchOk })).toEqual({ title: "Never Gonna Give You Up", uploader: "Rick Astley" });
+    expect(await titleOfYoutube("dQw4w9WgXcQ", { fetch: fetchOk })).toEqual({ title: "Never Gonna Give You Up", uploader: "Rick Astley", embeddable: true });
   });
   it("falls back to a plain name when that does not answer in time or answers badly", async () => {
     const down = (async () => new Response("no", { status: 404 })) as unknown as typeof fetch;
     const hang = ((_: unknown, init?: RequestInit) => new Promise((_res, rej) => init?.signal?.addEventListener("abort", () => rej(new Error("aborted"))))) as unknown as typeof fetch;
     const junk = (async () => new Response("<html>", { status: 200 })) as unknown as typeof fetch;
-    for (const f of [down, hang, junk]) expect(await titleOfYoutube("dQw4w9WgXcQ", { fetch: f, timeoutMs: 50 })).toEqual({ title: "YouTube video", uploader: "" });
+    for (const f of [down, hang, junk]) expect(await titleOfYoutube("dQw4w9WgXcQ", { fetch: f, timeoutMs: 50 })).toEqual({ title: "YouTube video", uploader: "", embeddable: true });
+  });
+  it("knows a video that its owner does not let play on other sites (YouTube answers 401 for it)", async () => {
+    for (const status of [401, 403]) {
+      const f = (async () => new Response("Unauthorized", { status })) as unknown as typeof fetch;
+      expect(await titleOfYoutube("dQw4w9WgXcQ", { fetch: f })).toMatchObject({ embeddable: false });
+    }
   });
   it("never puts anything but the id in the address it asks for", async () => {
     let asked = "";

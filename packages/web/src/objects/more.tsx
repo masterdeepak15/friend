@@ -157,7 +157,7 @@ export function Video({ props }: { props: Props }) {
     const id = typeof props.embed === "string" && YOUTUBE_ID.test(props.embed) ? props.embed : null;
     const start = typeof props.start === "number" && props.start > 0 && props.start <= 86400 ? Math.floor(props.start) : 0;
     return (
-      <div className="obj-media">
+      <div className="obj-media obj-media-fill">
         <Title props={props} />
         {id ? <YoutubePlayer key={`${id}-${start}`} id={id} start={start} title={str(props.title) || "YouTube video"} /> : <p className="obj-empty">This clip is not available.</p>}
       </div>
