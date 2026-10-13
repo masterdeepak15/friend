@@ -92,6 +92,7 @@ export class HandsFree {
     if (this.state === "awaiting") return void this.request(audio);
     if (this.deps.busy()) return;
     this.state = "checking";
+    this.deps.dispatch({ type: "voice.mode", mode: "transcribing" }); // shows that something was heard and is being checked
     const ac = new AbortController();
     this.abort = ac;
     try {
@@ -103,6 +104,7 @@ export class HandsFree {
     } finally {
       if (this.abort === ac) this.abort = null;
       if (this.state === "checking") this.state = "armed";
+      if (this.state === "armed") this.deps.dispatch({ type: "voice.mode", mode: "idle" });
     }
   }
 

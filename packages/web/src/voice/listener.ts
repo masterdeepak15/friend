@@ -75,6 +75,7 @@ export class Listener {
         this.analyser = this.ctx.createAnalyser();
         this.analyser.fftSize = 1024;
         this.ctx.createMediaStreamSource(this.stream).connect(this.analyser);
+        void this.ctx.resume().catch(() => {}); // a meter that starts suspended reads only silence
       } catch {
         this.release();
         throw new Error("This browser cannot listen continuously here.");
@@ -115,6 +116,7 @@ export class Listener {
   private tick(): void {
     if (!this.opened) return;
     const now = this.now();
+    if (this.ctx && this.ctx.state !== "running") void this.ctx.resume().catch(() => {});
     if (this.paused) {
       if (now - this.recStartedAt >= ROTATE_MS) this.restartRecording();
       return;

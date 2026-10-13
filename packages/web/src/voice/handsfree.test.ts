@@ -68,6 +68,18 @@ describe("saying the assistant's name instead of holding a key", () => {
     expect(alerts()).toEqual([]);
   });
 
+  it("shows that it is working while it checks what was said", async () => {
+    let release!: (v: { text: string; wake: boolean }) => void;
+    wake.mockImplementationOnce(() => new Promise((r) => (release = r)));
+    await hf.enable();
+    onUtterance(blob());
+    await tick();
+    expect(modes().at(-1)).toBe("transcribing");
+    release({ text: "", wake: false });
+    await tick();
+    expect(modes().at(-1)).toBe("idle");
+  });
+
   it("lets the server run a request that came with the name, with no sound or waiting", async () => {
     wake.mockResolvedValueOnce({ text: "open it", wake: true });
     await hf.enable();

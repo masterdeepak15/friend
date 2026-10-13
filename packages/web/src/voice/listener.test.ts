@@ -46,8 +46,18 @@ class FakeAnalyser {
     a.forEach((_, i) => (a[i] = i % 2 ? sample : 256 - sample));
   }
 }
+let contexts: FakeAudioContext[] = [];
 class FakeAudioContext {
   closed = false;
+  state = "suspended"; // a browser starts the meter suspended until it is allowed to make sound
+  resumed = 0;
+  constructor() {
+    contexts.push(this);
+  }
+  async resume() {
+    this.resumed++;
+    this.state = "running";
+  }
   createMediaStreamSource() {
     return { connect() {} };
   }
@@ -79,6 +89,7 @@ beforeEach(() => {
   clock = 0;
   stream = null;
   recorders = [];
+  contexts = [];
   heard = [];
   errors = [];
   quiet();
@@ -182,5 +193,22 @@ describe("listening all the time", () => {
   it("explains a refused microphone", async () => {
     vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: vi.fn(async () => Promise.reject(Object.assign(new Error("x"), { name: "NotAllowedError" }))) } });
     await expect(make().start()).rejects.toThrow(/permission was denied/);
+  });
+
+  it("wakes the audio meter, because a suspended one hears only silence", async () => {
+    const l = make();
+    await l.start();
+    expect(contexts[0]!.resumed).toBeGreaterThanOrEqual(1);
+    l.stop();
+  });
+
+  it("wakes it again if the browser suspends it later", async () => {
+    const l = make();
+    await l.start();
+    contexts[0]!.state = "suspended";
+    const before = contexts[0]!.resumed;
+    await advance(200);
+    expect(contexts[0]!.resumed).toBeGreaterThan(before);
+    l.stop();
   });
 });
