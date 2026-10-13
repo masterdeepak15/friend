@@ -251,34 +251,42 @@
   position: absolute;
   top: 50%;
   translate: 0 -50%;
-  width: 44px;
-  height: 120px;
-  display: grid;
-  place-items: center;
+  width: 52px;
+  height: 140px;
   padding: 0;
-  font-size: 54px;
-  line-height: 1;
   color: var(--orb-cyan);
-  background: rgba(53, 240, 255, 0.07);
-  border: 1px solid var(--orb-teal-edge);
+  background: transparent;
+  border: 0;
   cursor: pointer;
-  transition: background 160ms, box-shadow 160ms;
 }
-.holo-page:hover,
+/* the whole button is the target; only the chevron on it is drawn */
+.holo-page::before {
+  content: "";
+  position: absolute;
+  inset: 10px 8px;
+  background: var(--orb-cyan);
+  opacity: 0.45;
+  transition: opacity 160ms, filter 160ms;
+}
+.holo-prev::before {
+  clip-path: polygon(100% 0, 0 50%, 100% 100%, 100% 82%, 36% 50%, 100% 18%);
+}
+.holo-next::before {
+  clip-path: polygon(0 0, 100% 50%, 0 100%, 0 82%, 64% 50%, 0 18%);
+}
+.holo-page:hover::before,
+.holo-page:focus-visible::before {
+  opacity: 1;
+  filter: drop-shadow(0 0 8px var(--orb-cyan));
+}
 .holo-page:focus-visible {
-  background: rgba(53, 240, 255, 0.22);
-  box-shadow: 0 0 14px var(--orb-cyan);
   outline: none;
 }
 .holo-prev {
-  left: 24px;
-  clip-path: polygon(100% 0, 0 50%, 100% 100%, 100% 80%, 38% 50%, 100% 20%);
-  background: var(--orb-cyan-soft);
+  left: 18px;
 }
 .holo-next {
-  right: 24px;
-  clip-path: polygon(0 0, 100% 50%, 0 100%, 0 80%, 62% 50%, 0 20%);
-  background: var(--orb-cyan-soft);
+  right: 18px;
 }
 .holo-prev span,
 .holo-next span {
@@ -351,6 +359,128 @@
   color: var(--orb-orange);
 }
 
+/* the plugins: tabs, and cards six to a page */
+.holo-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.holo-tab {
+  padding: 8px 18px;
+  font: 600 12px var(--orb-font);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--orb-text);
+  background: transparent;
+  border: 1px solid var(--orb-teal-edge);
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  cursor: pointer;
+  transition: background 160ms, box-shadow 160ms;
+}
+.holo-tab small {
+  margin-left: 6px;
+  color: var(--orb-cyan);
+}
+.holo-tab:hover,
+.holo-tab:focus-visible {
+  background: rgba(53, 240, 255, 0.14);
+  outline: none;
+}
+.holo-tab.on {
+  color: var(--orb-ink);
+  background: rgba(53, 240, 255, 0.26);
+  box-shadow: 0 0 12px rgba(53, 240, 255, 0.5);
+}
+.holo-cards {
+  display: grid;
+  align-content: start;
+  min-height: min(432px, 55vh); /* a short last page does not make the panel jump */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.holo-card {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+  min-height: 132px;
+  padding: 12px 14px;
+  background: rgba(53, 240, 255, 0.05);
+  border: 1px solid var(--orb-teal-edge);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  transition: background 160ms;
+}
+.holo-card:hover {
+  background: rgba(53, 240, 255, 0.1);
+}
+.holo-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  justify-content: space-between;
+}
+.holo-card-head strong {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--orb-ink);
+}
+.holo-card-head small,
+.holo-version {
+  color: var(--orb-text);
+  opacity: 0.75;
+}
+.holo-card-note {
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.holo-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.holo-badge {
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.holo-badge.on {
+  color: var(--orb-cyan);
+  box-shadow: 0 0 8px rgba(53, 240, 255, 0.4);
+}
+.holo-badge.off {
+  color: var(--orb-grey);
+}
+.holo-badge.warn {
+  color: var(--orb-orange);
+}
+.holo-badge.error {
+  color: var(--orb-danger);
+}
+.holo-btn.sm {
+  min-width: 0;
+  padding: 7px 12px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+}
+.holo-btn.go {
+  background: rgba(53, 240, 255, 0.26);
+}
+.holo-btn.warn {
+  background: transparent;
+}
+@media (max-width: 720px) {
+  .holo-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* the existing settings content, on the dark glass */
 .holo-body .settings-field span {
   letter-spacing: 0.08em;
@@ -391,17 +521,19 @@
     padding: 14px 14px 12px;
   }
   .holo-page {
-    top: 14px;
+    top: 10px;
     translate: none;
-    height: 36px;
-    width: 40px;
-    font-size: 28px;
+    height: 44px;
+    width: 52px;
+  }
+  .holo-page::before {
+    inset: 8px 12px;
   }
   .holo-prev {
-    left: 8px;
+    left: 4px;
   }
   .holo-next {
-    right: 8px;
+    right: 4px;
   }
   .holo-foot {
     grid-template-columns: 1fr;

@@ -18,10 +18,12 @@ export interface HoloPanelProps {
   /** Something is being saved. */
   busy?: boolean;
   onUndo?: () => void;
+  /** Another footer button, shown before Done (for example Reload). */
+  extra?: ReactNode;
 }
 
 /** The glass panel every orb setting opens in: side bars, paging arrows, and a footer with help text, APPLY and DONE. */
-export function HoloPanel({ label, title, page, children, help, onApply, onDone, dirty = false, busy = false, onUndo }: HoloPanelProps) {
+export function HoloPanel({ label, title, page, children, help, onApply, onDone, dirty = false, busy = false, onUndo, extra }: HoloPanelProps) {
   const [warning, setWarning] = useState(false);
   return (
     <div className="holo-layer" style={{ pointerEvents: "none" }}>
@@ -67,6 +69,7 @@ export function HoloPanel({ label, title, page, children, help, onApply, onDone,
             <>
               <p className="holo-help">{help}</p>
               <div className="holo-actions">
+                {extra}
                 {dirty && onUndo && (
                   <button type="button" className="holo-btn quiet" onClick={onUndo}>
                     Undo

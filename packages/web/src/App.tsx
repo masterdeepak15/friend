@@ -225,6 +225,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         {household && <HouseholdPanel onClose={() => setHousehold(false)} />}
         {managingPlugins && (
           <PluginsPanel
+            variant={menuStyle === "orb" ? "holo" : "classic"}
             {...(pluginFocus ? { initialConfigure: pluginFocus } : {})}
             onClose={() => {
               setManagingPlugins(false);
