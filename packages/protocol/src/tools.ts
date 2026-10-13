@@ -364,8 +364,8 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "video.play",
-    description: "Play a video or a song from the internet inside Friend: a link to YouTube or almost any video site, or words to search for on YouTube (a title, a channel, a topic). Use this, not the browser: never open the site in Chrome. It plays on the owner's Friend screen (output screen) or in a window on the PC (output host); leave output out to use the owner's choice. start is where to begin, in seconds. Say in a few words what is playing. If Friend is missing a helper program the tool says which one and how to install it: pass that on in plain words.",
-    input: z.object({ url: z.string().max(2000).optional(), query: z.string().max(200).optional(), output: z.enum(["screen", "host"]).optional(), start: z.number().min(0).max(86400).optional() }).strict(),
+    description: "Play a video or a song from the internet inside Friend: a link to YouTube or almost any video site, or words to search for on YouTube (a title, a channel, a topic). Use this, not the browser: never open the site in Chrome. It plays on the owner's Friend screen (output screen) or in a window on the PC (output host); leave output out to use the owner's choice. start is where to begin, in seconds. A YouTube video normally plays in YouTube's own player inside the card; if it will not play there (the owner of the video blocked it from being shown elsewhere), call again with mode stream, which plays it through Friend. Say in a few words what is playing. If Friend is missing a helper program the tool says which one and how to install it: pass that on in plain words.",
+    input: z.object({ url: z.string().max(2000).optional(), query: z.string().max(200).optional(), output: z.enum(["screen", "host"]).optional(), start: z.number().min(0).max(86400).optional(), mode: z.enum(["embed", "stream"]).optional() }).strict(),
     baseTier: "T1",
     target: "gateway",
   },

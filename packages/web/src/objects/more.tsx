@@ -129,7 +129,40 @@ function VideoPlayer({ src, web, title }: { src: string; web: boolean; title: st
   );
 }
 
+/** YouTube's own player, by the video's id and nothing else: the id is checked here again, so no address or markup can get in. */
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+
+function YoutubePlayer({ id, start, title }: { id: string; start: number; title: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const q = new URLSearchParams({ autoplay: "1", rel: "0", playsinline: "1", modestbranding: "1" });
+  if (start > 0) q.set("start", String(start));
+  return (
+    <>
+      <iframe
+        className="obj-youtube"
+        src={`https://www.youtube-nocookie.com/embed/${id}?${q.toString()}`}
+        title={title}
+        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+        allowFullScreen
+        referrerPolicy="strict-origin-when-cross-origin"
+        onLoad={() => setLoaded(true)}
+      />
+      {!loaded && <p className="obj-empty">Loading the player…</p>}
+    </>
+  );
+}
+
 export function Video({ props }: { props: Props }) {
+  if (props.embed !== undefined) {
+    const id = typeof props.embed === "string" && YOUTUBE_ID.test(props.embed) ? props.embed : null;
+    const start = typeof props.start === "number" && props.start > 0 && props.start <= 86400 ? Math.floor(props.start) : 0;
+    return (
+      <div className="obj-media">
+        <Title props={props} />
+        {id ? <YoutubePlayer key={`${id}-${start}`} id={id} start={start} title={str(props.title) || "YouTube video"} /> : <p className="obj-empty">This clip is not available.</p>}
+      </div>
+    );
+  }
   const web = webVideoSrc(props.src);
   const src = web ?? safeSrc(props.src);
   return (

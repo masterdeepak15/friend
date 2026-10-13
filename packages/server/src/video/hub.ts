@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
 import type { spawn } from "node:child_process";
-import type { VideoOutput } from "@friend/protocol";
+import type { VideoOutput, VideoYoutube } from "@friend/protocol";
 import type { Config } from "../config";
 import { resolveVideo, type ResolveDeps, type VideoInfo, type YtRun } from "./resolve";
 import type { Provisioner, ToolName } from "./provision";
 import { startStream, type StreamHandle } from "./stream";
 import { videoStatus, type FindHelperDeps } from "./tools";
+import { searchYoutube, titleOfYoutube, youtubeId } from "./youtube";
+import { vetVideoUrl } from "./url";
 import type { HelperStatus, VideoStatus } from "./types";
 
 /** The window on the PC (mpv). It is its own piece so the hub can be tested without a real player. */
@@ -37,6 +39,8 @@ export interface VideoHubDeps {
   provisioner?: Pick<Provisioner, "ensure" | "state"> & Partial<Pick<Provisioner, "update">>;
   /** How long a request waits for a download before it says it is still going (default 25 seconds). */
   waitMs?: number;
+  /** For YouTube's title service (tests). */
+  fetch?: typeof fetch;
   /** The address a browser on this PC can use to watch a video (Friend's own, with a ticket). */
   windowUrl?: (id: string, ticket: string) => string;
   /** Opens an address in the PC's browser. */
@@ -48,6 +52,8 @@ export interface PlayArgs {
   query?: string;
   output?: VideoOutput;
   start?: number;
+  /** How a YouTube video plays on the screen for this request (the owner's setting otherwise). */
+  mode?: VideoYoutube;
 }
 
 export interface ControlArgs {
@@ -59,7 +65,8 @@ export interface ControlArgs {
 /** What the screen should show for a video: a card whose source is a Friend address, never the remote site. */
 export interface ShowVideo {
   id: string;
-  props: { title: string; src: string };
+  /** Either src (a Friend address, for a video Friend makes) or embed (a YouTube video id, for YouTube's own player). */
+  props: { title: string; src?: string; embed?: string; start?: number };
 }
 
 export type VideoResult = { ok: true; text: string; show?: ShowVideo; hide?: string } | { ok: false; text: string };
@@ -88,7 +95,7 @@ export class VideoHub {
   private tokens = new Map<string, Token>();
   private streams: { id: string; handle: StreamHandle }[] = [];
   private cached: { status: VideoStatus; at: number } | null = null;
-  private now: { output: VideoOutput; title: string; uploader: string; info: VideoInfo; via?: "mpv" | "browser" } | null = null;
+  private now: { output: VideoOutput; title: string; uploader: string; info?: VideoInfo; embed?: string; via?: "mpv" | "browser" } | null = null;
   private tickets = new Map<string, { id: string; expires: number }>();
 
   constructor(private d: VideoHubDeps) {}
@@ -175,23 +182,61 @@ export class VideoHub {
     return { id: CARD, props: { title: info.title, src: `/api/video/${id}` } };
   }
 
+  /** Fetches what is missing (when the owner allows it), waiting a while, then says it is still going. */
+  private async ensureTools(need: ToolName[], cfg: Config["video"]): Promise<{ ok: true; status: VideoStatus } | { ok: false; text: string }> {
+    const status = await this.ensureStatus();
+    if (!need.length || !cfg.autoInstall || !this.d.provisioner) return { ok: true, status };
+    // the programs are fetched by Friend itself; a big download is carried on in the background if it takes long
+    const job = this.d.provisioner.ensure(need);
+    const first = await Promise.race([job.then((r) => ({ r })), new Promise<{ slow: true }>((res) => setTimeout(() => res({ slow: true }), this.d.waitMs ?? 25_000))]);
+    if ("slow" in first) {
+      void job.then(() => this.refresh()).catch(() => {});
+      return { ok: false, text: "Friend is downloading the video tools it needs (first time only, it can take a minute or two). Ask again in a minute." };
+    }
+    if (!first.r.ok) return { ok: false, text: first.r.error };
+    return { ok: true, status: await this.refresh() };
+  }
+
+  /** A YouTube video in YouTube's own player, inside the card. A link needs nothing; a search needs yt-dlp, for the list of results only. */
+  private async playEmbedded(args: PlayArgs, linkId: string | null, cfg: Config["video"]): Promise<VideoResult> {
+    const start = typeof args.start === "number" && args.start > 0 ? Math.floor(args.start) : 0;
+    let id: string;
+    let title: string;
+    let uploader: string;
+    if (linkId) {
+      const v = await vetVideoUrl(args.url!, { allowedSites: cfg.allowedSites, ...(this.d.resolve ? { resolve: this.d.resolve } : {}) });
+      if (!v.ok) return { ok: false, text: v.error };
+      id = linkId;
+      ({ title, uploader } = await titleOfYoutube(id, { fetch: this.d.fetch }));
+    } else {
+      const sites = cfg.allowedSites;
+      if (sites.length && !sites.some((s) => s === "youtube.com" || s.endsWith(".youtube.com"))) return { ok: false, text: `A search uses YouTube, which is not on your allowed list (${sites.join(", ")}).` };
+      const status0 = await this.ensureStatus();
+      const got = await this.ensureTools(this.missing(status0, ["yt-dlp"]), cfg);
+      if (!got.ok) return got;
+      if (!got.status.ytdlp.found) return { ok: false, text: got.status.ytdlp.install ?? "yt-dlp is not found on this PC." };
+      const found = await searchYoutube(args.query!, { ytdlp: got.status.ytdlp.path ?? "yt-dlp", run: this.d.run });
+      if (!found.ok) return { ok: false, text: found.error };
+      ({ id, title, uploader } = found);
+    }
+    await this.stopEverything();
+    this.now = { output: "screen", title, uploader, embed: id };
+    return { ok: true, text: `Playing "${title}"${uploader ? ` by ${uploader}` : ""} on your Friend screen.`, show: { id: CARD, props: { title, embed: id, ...(start > 0 ? { start } : {}) } } };
+  }
+
   async play(args: PlayArgs): Promise<VideoResult> {
     const cfg = this.d.config().video;
     if (!cfg.installed || !cfg.enabled) return { ok: false, text: "Web video is not switched on. The owner can install and turn it on in Plugins, Web video." };
     const output: VideoOutput = args.output ?? cfg.output;
-    let status = await this.ensureStatus();
-    const need = this.missing(status, this.wanted(output, status));
-    if (need.length && cfg.autoInstall && this.d.provisioner) {
-      // the programs are fetched by Friend itself; a big download is carried on in the background if it takes long
-      const job = this.d.provisioner.ensure(need);
-      const first = await Promise.race([job.then((r) => ({ r })), new Promise<{ slow: true }>((res) => setTimeout(() => res({ slow: true }), this.d.waitMs ?? 25_000))]);
-      if ("slow" in first) {
-        void job.then(() => this.refresh()).catch(() => {});
-        return { ok: false, text: "Friend is downloading the video tools it needs (first time only, it can take a minute or two). Ask again in a minute." };
-      }
-      if (!first.r.ok) return { ok: false, text: first.r.error };
-      status = await this.refresh();
+    // a YouTube video on the screen plays in YouTube's own player: no download, no ffmpeg (a link needs no program at all)
+    if (output === "screen" && (args.mode ?? cfg.youtube) === "embed") {
+      const ytId = args.url ? youtubeId(args.url) : null;
+      if (ytId || (!args.url && args.query && args.query.trim())) return this.playEmbedded(args, ytId, cfg);
     }
+    let status = await this.ensureStatus();
+    const got = await this.ensureTools(this.missing(status, this.wanted(output, status)), cfg);
+    if (!got.ok) return got;
+    status = got.status;
     if (!status.ytdlp.found) return { ok: false, text: status.ytdlp.install ?? "yt-dlp is not found on this PC." };
     const mpvWindow = output === "host" && status.mpv.found && !!this.d.host;
     const browserWindow = output === "host" && !mpvWindow && !!this.d.openBrowser && !!this.d.windowUrl;
@@ -213,7 +258,7 @@ export class VideoHub {
     }
     if (browserWindow) {
       const show = this.issue(info, start);
-      const id = /\/api\/video\/([0-9a-f]{32})$/.exec(show.props.src)![1]!;
+      const id = /\/api\/video\/([0-9a-f]{32})$/.exec(show.props.src!)![1]!;
       const ticket = randomBytes(16).toString("hex");
       this.tickets.set(ticket, { id, expires: this.clock() + TICKET_MS });
       const ok = await this.d.openBrowser!(this.d.windowUrl!(id, ticket)).catch(() => false);
@@ -278,8 +323,13 @@ export class VideoHub {
     }
     // on the screen the video has its own buttons; only a jump to a time needs Friend, because the stream is made as it is watched
     if (args.action === "seek") {
+      const at = Math.max(0, Math.floor(args.seconds ?? 0));
+      if (now.embed) {
+        // YouTube's own player starts again from that time
+        return { ok: true, text: `Jumped to ${Math.round(args.seconds ?? 0)} seconds.`, show: { id: CARD, props: { title: now.title, embed: now.embed, ...(at > 0 ? { start: at } : {}) } } };
+      }
       for (const s of this.streams.splice(0)) s.handle.stop();
-      const show = this.issue(now.info, Math.max(0, Math.floor(args.seconds ?? 0)));
+      const show = this.issue(now.info!, at);
       return { ok: true, text: `Jumped to ${Math.round(args.seconds ?? 0)} seconds.`, show };
     }
     return { ok: true, text: "On the Friend screen the video has its own buttons for pause, play and volume: use those." };

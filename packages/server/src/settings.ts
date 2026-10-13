@@ -1,7 +1,7 @@
 import { PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
-import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS } from "@friend/protocol";
+import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, VIDEO_YOUTUBE } from "@friend/protocol";
 import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, MUSIC_OUTPUTS, programProblem, LAUNCHER_ACTIONS, launcherProblem, MAX_LAUNCHER, MUSIC_LIMITS } from "@friend/protocol";
 import { statSync } from "node:fs";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
@@ -115,6 +115,7 @@ export const SettingsPatch = z
         maxMinutes: z.number().int().min(VIDEO_LIMITS.maxMinutes.min).max(VIDEO_LIMITS.maxMinutes.max),
         allowedSites: z.array(z.string().trim().max(200)).max(VIDEO_LIMITS.sites.max),
         autoInstall: z.boolean(),
+        youtube: z.enum(VIDEO_YOUTUBE),
         ytdlp: z.string().trim().max(260).refine((v) => programProblem(v) === null, { message: "That is not a program name or path. Use a name like yt-dlp, or a path with no spaces." }),
         ffmpeg: z.string().trim().max(260).refine((v) => programProblem(v) === null, { message: "That is not a program name or path. Use a name like ffmpeg, or a path with no spaces." }),
       })

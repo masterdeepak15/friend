@@ -13,10 +13,10 @@ const fresh = () => {
 
 describe("the video settings read back from the saved file", () => {
   it("start as the safe defaults: not installed, on the screen, 720 pixels, four hours, any public site, helpers found by themselves", () => {
-    expect(fresh().config.video).toEqual({ installed: false, enabled: false, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true });
+    expect(fresh().config.video).toEqual({ installed: false, enabled: false, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true, youtube: "embed" });
   });
   it("keep every value inside its range and ignore what is not understood", () => {
-    expect(sanitizeVideo({ installed: true, enabled: true, output: "host", maxHeight: 50, maxMinutes: 9999, allowedSites: ["YouTube.com", "bad name", "youtube.com"], ytdlp: "yt-dlp", ffmpeg: "C:/tools/ffmpeg.exe", autoInstall: false })).toEqual({
+    expect(sanitizeVideo({ installed: true, enabled: true, output: "host", maxHeight: 50, maxMinutes: 9999, allowedSites: ["YouTube.com", "bad name", "youtube.com"], ytdlp: "yt-dlp", ffmpeg: "C:/tools/ffmpeg.exe", autoInstall: false, youtube: "stream" })).toEqual({
       installed: true,
       enabled: true,
       output: "host",
@@ -26,8 +26,9 @@ describe("the video settings read back from the saved file", () => {
       ytdlp: "yt-dlp",
       ffmpeg: "C:/tools/ffmpeg.exe",
       autoInstall: false,
+      youtube: "stream",
     });
-    expect(sanitizeVideo({ output: "tv", maxHeight: "tall", maxMinutes: null, allowedSites: "all", ytdlp: 5, ffmpeg: "a b; rm -rf", autoInstall: "no" })).toEqual({ installed: false, enabled: false, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true });
+    expect(sanitizeVideo({ output: "tv", maxHeight: "tall", maxMinutes: null, allowedSites: "all", ytdlp: 5, ffmpeg: "a b; rm -rf", autoInstall: "no", youtube: "tv" })).toEqual({ installed: false, enabled: false, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true, youtube: "embed" });
     expect(sanitizeVideo(undefined).installed).toBe(false);
   });
   it("survive a save", () => {
@@ -41,9 +42,9 @@ describe("the video settings read back from the saved file", () => {
 describe("changing them", () => {
   it("is the owner's, from the settings screen: where it plays, how sharp, how long, which sites, which helper programs", () => {
     const { config } = fresh();
-    const applied = applySettings(config, { video: { output: "host", maxHeight: 480, maxMinutes: 90, allowedSites: ["YouTube.com", "https://vimeo.com/x"], ytdlp: "yt-dlp", ffmpeg: "ffmpeg", autoInstall: false } });
+    const applied = applySettings(config, { video: { output: "host", maxHeight: 480, maxMinutes: 90, allowedSites: ["YouTube.com", "https://vimeo.com/x"], ytdlp: "yt-dlp", ffmpeg: "ffmpeg", autoInstall: false, youtube: "stream" } });
     expect(applied.changed).toContain("video.output");
-    expect(config.video).toMatchObject({ output: "host", maxHeight: 480, maxMinutes: 90, allowedSites: ["youtube.com", "vimeo.com"], ytdlp: "yt-dlp", ffmpeg: "ffmpeg", autoInstall: false, installed: false, enabled: false });
+    expect(config.video).toMatchObject({ output: "host", maxHeight: 480, maxMinutes: 90, allowedSites: ["youtube.com", "vimeo.com"], ytdlp: "yt-dlp", ffmpeg: "ffmpeg", autoInstall: false, youtube: "stream", installed: false, enabled: false });
   });
   it("never switches the plugin on or off (that is the plugins list, with the PIN)", () => {
     const { config } = fresh();
@@ -53,7 +54,7 @@ describe("changing them", () => {
   });
   it("refuses a value out of range or a program name that is not one", () => {
     const { config } = fresh();
-    for (const bad of [{ maxHeight: 5000 }, { maxHeight: 100 }, { maxMinutes: 0 }, { output: "tv" }, { ytdlp: "a b; rm -rf /" }, { ffmpeg: "x\u0000y" }, { allowedSites: Array.from({ length: 60 }, (_, i) => `s${i}.com`) }]) {
+    for (const bad of [{ maxHeight: 5000 }, { maxHeight: 100 }, { maxMinutes: 0 }, { output: "tv" }, { youtube: "download" }, { ytdlp: "a b; rm -rf /" }, { ffmpeg: "x\u0000y" }, { allowedSites: Array.from({ length: 60 }, (_, i) => `s${i}.com`) }]) {
       expect(() => applySettings(config, { video: bad }), JSON.stringify(bad)).toThrow(SettingsError);
     }
     expect(config.video).toEqual(fresh().config.video);
@@ -63,7 +64,7 @@ describe("changing them", () => {
     expect(() => refuseForAgent({ voice: { rate: 1 } })).not.toThrow();
   });
   it("is shown on the settings screen", () => {
-    expect(settingsView(fresh().config).video).toEqual({ installed: false, enabled: false, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true });
+    expect(settingsView(fresh().config).video).toEqual({ installed: false, enabled: false, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true, youtube: "embed" });
   });
 });
 

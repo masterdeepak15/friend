@@ -2,6 +2,10 @@
 export const VIDEO_OUTPUTS = ["screen", "host"] as const;
 export type VideoOutput = (typeof VIDEO_OUTPUTS)[number];
 
+/** How a YouTube video is played on the Friend screen: in YouTube's own player (nothing to download), or made by Friend (yt-dlp and ffmpeg). */
+export const VIDEO_YOUTUBE = ["embed", "stream"] as const;
+export type VideoYoutube = (typeof VIDEO_YOUTUBE)[number];
+
 export const VIDEO_LIMITS = {
   /** The tallest picture asked for, in pixels (a lower one saves the connection and the PC). */
   maxHeight: { min: 240, max: 1080, def: 720 },

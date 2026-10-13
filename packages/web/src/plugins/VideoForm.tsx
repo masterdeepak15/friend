@@ -18,6 +18,8 @@ export interface VideoSettingsView {
   ffmpeg: string;
   /** Friend downloads yt-dlp and ffmpeg itself when they are missing. */
   autoInstall: boolean;
+  /** How a YouTube video plays on the screen. */
+  youtube: "embed" | "stream";
 }
 
 export interface VideoInfo {
@@ -52,7 +54,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-const EMPTY: VideoSettingsView = { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true };
+const EMPTY: VideoSettingsView = { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true, youtube: "embed" };
 
 export const httpVideoApi: VideoApi = {
   info: async () => {
@@ -154,6 +156,7 @@ export function VideoForm({ api = httpVideoApi, pollMs = 2000 }: { api?: VideoAp
     const list = parseSites(sites);
     if (JSON.stringify(list) !== JSON.stringify(saved.allowedSites)) c.allowedSites = list;
     if (draft.autoInstall !== saved.autoInstall) c.autoInstall = draft.autoInstall;
+    if (draft.youtube !== saved.youtube) c.youtube = draft.youtube;
     if (draft.ytdlp.trim() !== saved.ytdlp) c.ytdlp = draft.ytdlp.trim();
     if (draft.ffmpeg.trim() !== saved.ffmpeg) c.ffmpeg = draft.ffmpeg.trim();
     return c;
@@ -277,6 +280,13 @@ export function VideoForm({ api = httpVideoApi, pollMs = 2000 }: { api?: VideoAp
         <select value={draft.output} onChange={(e) => setDraft({ ...draft, output: e.target.value as "screen" | "host" })}>
           <option value="screen">On the Friend screen</option>
           <option value="host">In a window on this PC</option>
+        </select>
+      </label>
+      <label className="settings-field">
+        <span>YouTube plays with</span>
+        <select value={draft.youtube} onChange={(e) => setDraft({ ...draft, youtube: e.target.value as "embed" | "stream" })}>
+          <option value="embed">YouTube's own player (recommended: nothing to download)</option>
+          <option value="stream">Friend's player (made by Friend with ffmpeg)</option>
         </select>
       </label>
       <label className="settings-field">

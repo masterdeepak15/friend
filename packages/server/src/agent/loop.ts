@@ -627,7 +627,7 @@ export class Agent {
       d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "video.control" ? { action: args.action } : call.name === "video.play" ? { output: args.output } : {}, tier, ok: out.ok });
       if (!out.ok) return fail(out.text);
       // the picture goes on the screen as a video card whose source is a Friend address, never the site's own
-      const extra = out as { show?: { id: string; props: { title: string; src: string } }; hide?: string };
+      const extra = out as { show?: { id: string; props: { title: string; src?: string; embed?: string; start?: number } }; hide?: string };
       if (extra.show) {
         const shown = runStageTool("stage.show", { object: { id: extra.show.id, type: "video", props: extra.show.props, placement: "auto" } }, d.stage, ctx.emit);
         if (!shown.ok) return fail(shown.error);

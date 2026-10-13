@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { describeCall, TOOL_DEFS as TOOLS } from "./tools";
-import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS } from "./video";
+import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, VIDEO_YOUTUBE } from "./video";
 
 const tool = (name: string) => TOOLS.find((t) => t.name === name)!;
 
 describe("the video settings vocabulary", () => {
   it("has the same two outputs as the music player, and sensible limits", () => {
     expect([...VIDEO_OUTPUTS]).toEqual(["screen", "host"]);
+    expect([...VIDEO_YOUTUBE]).toEqual(["embed", "stream"]);
     expect(VIDEO_LIMITS.maxHeight).toEqual({ min: 240, max: 1080, def: 720 });
     expect(VIDEO_LIMITS.maxMinutes).toEqual({ min: 1, max: 600, def: 240 });
   });
@@ -25,6 +26,9 @@ describe("the video tools", () => {
     const play = tool("video.play").input;
     expect(play.safeParse({ url: "https://www.youtube.com/watch?v=abc" }).success).toBe(true);
     expect(play.safeParse({ query: "lofi hip hop", output: "host", start: 90 }).success).toBe(true);
+    expect(play.safeParse({ query: "x", mode: "stream" }).success).toBe(true);
+    expect(play.safeParse({ query: "x", mode: "embed" }).success).toBe(true);
+    expect(play.safeParse({ query: "x", mode: "download" }).success).toBe(false);
     expect(play.safeParse({ query: "x", output: "tv" }).success).toBe(false);
     expect(play.safeParse({ query: "x", start: -1 }).success).toBe(false);
     expect(play.safeParse({ url: "x".repeat(2100) }).success).toBe(false);

@@ -106,6 +106,12 @@ describe("what the stage accepts", () => {
     expect(show(stage, "gallery", { items: [{ src: `/api/video/${"c".repeat(32)}` }] })).toMatchObject({ ok: false });
     expect(show(stage, "video", { src: "/api/video/../../etc/passwd" })).toMatchObject({ ok: false });
     expect(show(stage, "video", { src: "https://www.youtube.com/watch?v=x" })).toMatchObject({ ok: false });
+    // YouTube's own player, by the video's id and nothing else
+    expect(show(stage, "video", { embed: "dQw4w9WgXcQ" })).toMatchObject({ ok: true });
+    expect(show(stage, "video", { embed: "dQw4w9WgXcQ", start: 90, title: "x" })).toMatchObject({ ok: true });
+    for (const bad of ["short", "dQw4w9WgXcQx", "../../etc/pa", "https://www.youtube.com/embed/dQw4w9WgXcQ", "dQw4w9WgXc\"", 5, null]) expect(show(stage, "video", { embed: bad }), String(bad)).toMatchObject({ ok: false });
+    expect(show(stage, "image", { embed: "dQw4w9WgXcQ" })).toMatchObject({ ok: false });
+    expect(show(stage, "video", { title: "no source at all" })).toMatchObject({ ok: false });
   });
 
   it("checks the parts of a group and of tabs", () => {

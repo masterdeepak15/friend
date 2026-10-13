@@ -13,7 +13,7 @@ const typePin = async (pin: string) => {
 };
 const found = (version: string) => ({ found: true, version });
 const info = (over: Partial<VideoInfo> = {}): VideoInfo => ({
-  settings: { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true },
+  settings: { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true, youtube: "embed" },
   status: { ytdlp: found("2026.10.01"), ffmpeg: found("7.1"), mpv: found("0.39") },
   ...over,
 });
@@ -80,6 +80,18 @@ describe("the Web video Configure page", () => {
     expect(await screen.findByText(/without it a browser window is used/i)).toBeTruthy();
   });
 
+  it("lets the owner choose how YouTube plays: in YouTube's own player, or through Friend", async () => {
+    const a = api();
+    render(<VideoForm api={a} />);
+    const pick = (await screen.findByLabelText(/youtube plays/i)) as HTMLSelectElement;
+    expect(pick.value).toBe("embed");
+    await userEvent.selectOptions(pick, "stream");
+    await userEvent.click(screen.getByRole("button", { name: /^save/i }));
+    await typePin("123456");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(a.save).toHaveBeenCalledWith({ youtube: "stream" }, "123456"));
+  });
+
   it("can turn the automatic download off, and on again, with the PIN like any setting", async () => {
     const a = api();
     render(<VideoForm api={a} />);
@@ -104,7 +116,7 @@ describe("the Web video Configure page", () => {
   });
 
   it("starts from what is saved, and cannot be saved until something changes", async () => {
-    render(<VideoForm api={api(info({ settings: { output: "host", maxHeight: 480, maxMinutes: 90, allowedSites: ["youtube.com", "vimeo.com"], ytdlp: "C:/t/yt-dlp.exe", ffmpeg: "", autoInstall: true } }))} />);
+    render(<VideoForm api={api(info({ settings: { output: "host", maxHeight: 480, maxMinutes: 90, allowedSites: ["youtube.com", "vimeo.com"], ytdlp: "C:/t/yt-dlp.exe", ffmpeg: "", autoInstall: true, youtube: "embed" } }))} />);
     expect((await screen.findByLabelText(/where videos play/i) as HTMLSelectElement).value).toBe("host");
     expect((screen.getByLabelText(/picture quality/i) as HTMLSelectElement).value).toBe("480");
     expect((screen.getByLabelText(/longest video/i) as HTMLInputElement).value).toBe("90");
@@ -125,7 +137,7 @@ describe("the Web video Configure page", () => {
   });
 
   it("sends the allowed sites as a list, however they were separated, and an empty box as an empty list", async () => {
-    const a = api(info({ settings: { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: ["youtube.com"], ytdlp: "", ffmpeg: "", autoInstall: true } }));
+    const a = api(info({ settings: { output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: ["youtube.com"], ytdlp: "", ffmpeg: "", autoInstall: true, youtube: "embed" } }));
     render(<VideoForm api={a} />);
     const box = await screen.findByLabelText(/allowed sites/i);
     await userEvent.clear(box);
@@ -169,6 +181,43 @@ describe("inside Configure", () => {
     render(<IntegrationConfig integration={entry} onBack={() => {}} settingsApi={{ get: async () => ({}) as never, save: vi.fn() as never }} videoApi={api()} />);
     expect(await screen.findByText(/yt-dlp 2026\.10\.01/)).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /^save/i })).toHaveLength(1); // the form's own
+  });
+});
+
+describe("YouTube's own player on the screen", () => {
+  const ID = "dQw4w9WgXcQ";
+  it("is a frame of YouTube's privacy-friendly player, by the video's id, that starts by itself and can go full screen", () => {
+    const { container } = render(<Video props={{ title: "Rick", embed: ID }} />);
+    const f = container.querySelector("iframe")!;
+    const u = new URL(f.getAttribute("src")!);
+    expect(u.origin + u.pathname).toBe(`https://www.youtube-nocookie.com/embed/${ID}`);
+    expect(u.searchParams.get("autoplay")).toBe("1");
+    expect(u.searchParams.get("rel")).toBe("0");
+    expect(u.searchParams.has("start")).toBe(false);
+    expect(f.getAttribute("allow")).toMatch(/autoplay/);
+    expect(f.getAttribute("allow")).toMatch(/fullscreen/);
+    expect(f.hasAttribute("allowfullscreen")).toBe(true);
+    expect(f.getAttribute("referrerpolicy")).toBe("strict-origin-when-cross-origin");
+    expect(f.getAttribute("title")).toBe("Rick");
+    expect(container.querySelector("video")).toBeNull();
+  });
+  it("begins at the time it was asked to", () => {
+    const { container } = render(<Video props={{ embed: ID, start: 95 }} />);
+    expect(new URL(container.querySelector("iframe")!.getAttribute("src")!).searchParams.get("start")).toBe("95");
+  });
+  it("says it is loading until the frame has loaded", () => {
+    const { container } = render(<Video props={{ embed: ID }} />);
+    expect(screen.getByText(/loading the player/i)).toBeTruthy();
+    fireEvent.load(container.querySelector("iframe")!);
+    expect(screen.queryByText(/loading the player/i)).toBeNull();
+  });
+  it("is never made from anything but an id: no address, no odd characters", () => {
+    for (const bad of ["https://www.youtube.com/embed/dQw4w9WgXcQ", "short", "dQw4w9WgXcQ\"><script>", "../../x"]) {
+      const { container, unmount } = render(<Video props={{ embed: bad }} />);
+      expect(container.querySelector("iframe"), bad).toBeNull();
+      expect(screen.getByText(/not available/i)).toBeTruthy();
+      unmount();
+    }
   });
 });
 

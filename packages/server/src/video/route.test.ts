@@ -71,7 +71,7 @@ afterEach(async () => {
 const idOf = async (): Promise<string> => {
   const r = await app.video.play({ url: "https://www.youtube.com/watch?v=abc" });
   if (!r.ok || !r.show) throw new Error(`play failed: ${JSON.stringify(r)}`);
-  return /\/api\/video\/([0-9a-f]{32})$/.exec(r.show.props.src)![1]!;
+  return /\/api\/video\/([0-9a-f]{32})$/.exec(r.show.props.src!)![1]!;
 };
 
 describe("the plugin page's questions", () => {

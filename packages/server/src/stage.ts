@@ -34,6 +34,8 @@ function sandboxError(type: string, props: Record<string, unknown>, requireHtml:
 export const MEDIA_SRC = /^\/api\/media\/[0-9a-f]{32}$/;
 /** A video from the internet is played through Friend: this address is made by Friend (web video), and only a video card may use it. */
 export const VIDEO_SRC = /^\/api\/video\/[0-9a-f]{32}$/;
+/** A YouTube video id, for YouTube's own player. */
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 const NOT_IN_COMPOSITE = new Set(["group", "tabs", "sandbox"]);
 const MAX_PARTS = 8;
 const MEDIA_TYPES = new Set(["image", "video", "pdf"]);
@@ -56,6 +58,12 @@ function partsError(parts: unknown, what: string): string | null {
 export function propsError(type: string, props: Record<string, unknown>, requireAll: boolean): string | null {
   const sandbox = sandboxError(type, props, requireAll);
   if (sandbox) return sandbox;
+  if (type === "video" && "embed" in props) {
+    // YouTube's own player: by the video's id and nothing else (never an address)
+    if (typeof props.embed !== "string" || !YOUTUBE_ID.test(props.embed)) return "A video's embed must be a YouTube video id.";
+    if ("start" in props && (typeof props.start !== "number" || !Number.isFinite(props.start) || props.start < 0 || props.start > 86400)) return "A video's start must be a number of seconds.";
+    return null;
+  }
   if (MEDIA_TYPES.has(type) && (requireAll || "src" in props)) {
     if (typeof props.src !== "string" || !(MEDIA_SRC.test(props.src) || (type === "video" && VIDEO_SRC.test(props.src)))) return `An ${type} object needs src from file.present (a file the owner approved), not a web address.`;
   }

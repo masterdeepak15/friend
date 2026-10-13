@@ -35,6 +35,10 @@ Where it plays (Configure, **Where videos play**; one request can say "on the PC
   Friend can pause, seek and set the volume of. Without mpv, Friend opens a **browser window** on this PC with the same video, and
   you use that player's own buttons. mpv is optional and Friend never installs it.
 
+## YouTube plays in YouTube's own player
+
+A YouTube link (or a search for YouTube) shown on the Friend screen plays in YouTube's own embedded player: Friend downloads nothing and ffmpeg is not used. Only a search needs yt-dlp, for the list of results. Some videos are blocked by their owners from playing elsewhere; then ask the assistant to play it again through Friend (it uses `mode: stream`), or set **YouTube plays with** to *Friend's player* in the plugin page to always use yt-dlp and ffmpeg. Other sites always use Friend's player.
+
 ## What it will and will not do
 
 - Only public `http` and `https` links. A link that points inside your own network (your router, a printer, `localhost`) is

@@ -95,7 +95,7 @@ function cleanHeaders(raw: unknown): Record<string, string> {
 }
 
 /** What went wrong, in one plain sentence. yt-dlp's own words can hold addresses and paths, so they are never passed on. */
-function sentenceFor(stderr: string): string {
+export function sentenceFor(stderr: string): string {
   const t = stderr.toLowerCase();
   if (/unsupported url/.test(t)) return "Friend cannot find a video on that page.";
   if (/\b429\b|too many requests/.test(t)) return "The site is asking Friend to slow down. Try again in a minute.";

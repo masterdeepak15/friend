@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { VideoHub, type VideoHostLike } from "./hub";
 import type { YtRun } from "./resolve";
 import { managedPath } from "./provision";
@@ -48,7 +48,8 @@ function fakeProvisioner(over: { onEnsure?: () => Promise<{ ok: true } | { ok: f
   };
 }
 
-function make(over: { video?: Record<string, unknown>; status?: VideoStatus; json?: unknown; host?: VideoHostLike; provisioner?: ReturnType<typeof fakeProvisioner>; statuses?: VideoStatus[]; browser?: boolean; browserWorks?: boolean } = {}) {
+let defaultMode = "stream";
+function make(over: { fetch?: typeof fetch; video?: Record<string, unknown>; status?: VideoStatus; json?: unknown; host?: VideoHostLike; provisioner?: ReturnType<typeof fakeProvisioner>; statuses?: VideoStatus[]; browser?: boolean; browserWorks?: boolean } = {}) {
   const opened: string[] = [];
   const ytCalls: string[][] = [];
   const run: YtRun = async (_cmd, args) => {
@@ -58,7 +59,7 @@ function make(over: { video?: Record<string, unknown>; status?: VideoStatus; jso
   const proc = fakeSpawn();
   let now = 1_000_000;
   let statusCalls = 0;
-  const cfg = { video: { installed: true, enabled: true, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true, ...over.video }, music: { hostPlayer: "" } };
+  const cfg = { video: { installed: true, enabled: true, output: "screen", maxHeight: 720, maxMinutes: 240, allowedSites: [], ytdlp: "", ffmpeg: "", autoInstall: true, youtube: defaultMode, ...over.video }, music: { hostPlayer: "" } };
   const hub = new VideoHub({
     config: () => cfg as never,
     run,
@@ -70,6 +71,7 @@ function make(over: { video?: Record<string, unknown>; status?: VideoStatus; jso
     },
     provisioner: over.provisioner as never,
     waitMs: 20,
+    fetch: over.fetch ?? (async () => new Response(JSON.stringify({ title: "Never Gonna Give You Up", author_name: "Rick Astley" }))) as unknown as typeof fetch,
     ...(over.browser
       ? {
           windowUrl: (id: string, nonce: string) => `http://127.0.0.1:8787/api/video/${id}?o=${nonce}`,
@@ -87,6 +89,88 @@ function make(over: { video?: Record<string, unknown>; status?: VideoStatus; jso
 const URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 const srcId = (src: string) => /^\/api\/video\/([0-9a-f]{32})$/.exec(src)![1]!;
 
+describe("a YouTube video on the Friend screen: YouTube's own player, nothing to download", () => {
+  beforeEach(() => { defaultMode = "embed"; });
+  afterEach(() => { defaultMode = "stream"; });
+  const YT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  const NOTHING: VideoStatus = { ytdlp: { found: false, install: "yt-dlp is not installed." }, ffmpeg: { found: false, install: "ffmpeg is not installed." }, mpv: { found: false } };
+
+  it("shows the player by the video's id, with the title YouTube gives, and uses no program at all for a link", async () => {
+    const prov = fakeProvisioner();
+    const t = make({ status: NOTHING, provisioner: prov });
+    const r = await t.hub.play({ url: YT_URL });
+    expect(r).toEqual({ ok: true, text: 'Playing "Never Gonna Give You Up" by Rick Astley on your Friend screen.', show: { id: "video-now", props: { title: "Never Gonna Give You Up", embed: "dQw4w9WgXcQ" } } });
+    expect(t.ytCalls).toEqual([]);
+    expect(t.proc.calls).toEqual([]);
+    expect(prov.calls).toEqual([]);
+  });
+
+  it("starts where the owner asked", async () => {
+    const r = await make().hub.play({ url: YT_URL, start: 95 });
+    expect(r).toMatchObject({ ok: true, show: { props: { embed: "dQw4w9WgXcQ", start: 95 } } });
+  });
+
+  it("searches with yt-dlp for words, but only for the list of results, and plays the first in the player", async () => {
+    const t = make({ json: { entries: [{ id: "dQw4w9WgXcQ", title: "Never Gonna Give You Up", uploader: "Rick Astley" }] } });
+    const r = await t.hub.play({ query: "never gonna give you up" });
+    expect(r).toMatchObject({ ok: true, show: { props: { embed: "dQw4w9WgXcQ", title: "Never Gonna Give You Up" } } });
+    expect(t.ytCalls[0]).toContain("--flat-playlist");
+    expect(t.proc.calls).toEqual([]);
+  });
+
+  it("downloads only yt-dlp for a search, and nothing for a link", async () => {
+    const prov = fakeProvisioner();
+    const t = make({ statuses: [NOTHING, { ...OK, ffmpeg: { found: false } }], provisioner: prov, json: { entries: [{ id: "dQw4w9WgXcQ", title: "T" }] } });
+    await t.hub.play({ query: "x" });
+    expect(prov.calls).toEqual([["yt-dlp"]]);
+  });
+
+  it("uses the stream through Friend (ffmpeg) when asked for it, by the request or by the owner's setting", async () => {
+    const a = make();
+    const r = await a.hub.play({ url: YT_URL, mode: "stream" });
+    expect(r).toMatchObject({ ok: true, show: { props: { src: expect.stringMatching(/^\/api\/video\/[0-9a-f]{32}$/) } } });
+    expect(a.ytCalls).toHaveLength(1);
+    const b = make({ video: { youtube: "stream" } });
+    expect(await b.hub.play({ url: YT_URL })).toMatchObject({ ok: true, show: { props: { src: expect.stringMatching(/^\/api\/video\/[0-9a-f]{32}$/) } } });
+    const c = make({ video: { youtube: "stream" } });
+    expect(await c.hub.play({ url: YT_URL, mode: "embed" })).toMatchObject({ ok: true, show: { props: { embed: "dQw4w9WgXcQ" } } });
+  });
+
+  it("leaves other sites and a window on the PC as they were", async () => {
+    const other = make();
+    expect(await other.hub.play({ url: "https://vimeo.com/12345" })).toMatchObject({ ok: true, show: { props: { src: expect.stringMatching(/\/api\/video\//) } } });
+    const host = fakeHost();
+    const t = make({ video: { output: "host" }, host });
+    await t.hub.play({ url: YT_URL });
+    expect(host.calls[0]![0]).toBe("open");
+  });
+
+  it("keeps the owner's list of sites and the address rule for a link", async () => {
+    const t = make({ video: { allowedSites: ["vimeo.com"] } });
+    expect(await t.hub.play({ url: YT_URL })).toEqual({ ok: false, text: expect.stringMatching(/allowed list/i) });
+    expect(await t.hub.play({ query: "x" })).toEqual({ ok: false, text: expect.stringMatching(/search uses YouTube/i) });
+  });
+
+  it("says a live stream is playing, the same way", async () => {
+    const t = make({ json: { entries: [{ id: "jfKfPfyJRdk", title: "lofi hip hop radio", uploader: "Lofi Girl", is_live: true }] } });
+    expect(await t.hub.play({ query: "lofi hip hop radio" })).toMatchObject({ ok: true, show: { props: { embed: "jfKfPfyJRdk" } } });
+  });
+
+  it("stop takes the card away; seek starts the player again from that time; pause and volume point to its own buttons", async () => {
+    const t = make();
+    await t.hub.play({ url: YT_URL });
+    expect(await t.hub.control({ action: "seek", seconds: 120 })).toMatchObject({ ok: true, show: { id: "video-now", props: { embed: "dQw4w9WgXcQ", start: 120 } } });
+    for (const action of ["pause", "resume", "volume"] as const) expect(await t.hub.control({ action }), action).toEqual({ ok: true, text: expect.stringMatching(/own buttons/i) });
+    expect(await t.hub.control({ action: "stop" })).toMatchObject({ ok: true, hide: "video-now" });
+  });
+
+  it("tells what is playing", async () => {
+    const t = make();
+    await t.hub.play({ url: YT_URL });
+    expect(t.hub.nowPlaying()).toMatch(/Never Gonna Give You Up.*Friend screen/);
+  });
+});
+
 describe("playing on the Friend screen", () => {
   it("finds the video, says what is playing, and gives the screen a Friend address for it (nothing is started yet)", async () => {
     const t = make();
@@ -100,7 +184,7 @@ describe("playing on the Friend screen", () => {
     const t = make({ video: { maxHeight: 480, maxMinutes: 60 } });
     const r = await t.hub.play({ url: URL });
     if (!r.ok || !r.show) throw new Error("not ok");
-    const h = await t.hub.streamOf(srcId(r.show.props.src));
+    const h = await t.hub.streamOf(srcId(r.show.props.src!));
     expect(h).not.toBeNull();
     expect(t.proc.calls).toHaveLength(1);
     expect(t.proc.calls[0]!.cmd).toBe("/bin/ffmpeg");
@@ -112,7 +196,7 @@ describe("playing on the Friend screen", () => {
     const t = make();
     const r = await t.hub.play({ url: URL, start: 95 });
     if (!r.ok || !r.show) throw new Error("not ok");
-    (await t.hub.streamOf(srcId(r.show.props.src)))!.stop();
+    (await t.hub.streamOf(srcId(r.show.props.src!)))!.stop();
     const a = t.proc.calls[0]!.args;
     expect(a[a.indexOf("-ss") + 1]).toBe("95");
   });
@@ -124,7 +208,7 @@ describe("playing on the Friend screen", () => {
     const r = await t.hub.play({ url: URL });
     if (!r.ok || !r.show) throw new Error("not ok");
     t.advance(7 * 3600 * 1000);
-    expect(await t.hub.streamOf(srcId(r.show.props.src))).toBeNull();
+    expect(await t.hub.streamOf(srcId(r.show.props.src!))).toBeNull();
   });
 
   it("runs two streams at most: a third ends the oldest", async () => {
@@ -133,7 +217,7 @@ describe("playing on the Friend screen", () => {
     for (let i = 0; i < 3; i++) {
       const r = await t.hub.play({ url: URL });
       if (!r.ok || !r.show) throw new Error("not ok");
-      ids.push(srcId(r.show.props.src));
+      ids.push(srcId(r.show.props.src!));
     }
     for (const id of ids) await t.hub.streamOf(id);
     expect(t.proc.children).toHaveLength(3);
@@ -193,7 +277,7 @@ describe("controlling a video on the screen", () => {
     const t = make();
     const r = await t.hub.play({ url: URL });
     if (!r.ok || !r.show) throw new Error("not ok");
-    await t.hub.streamOf(srcId(r.show.props.src));
+    await t.hub.streamOf(srcId(r.show.props.src!));
     const s = await t.hub.control({ action: "stop" });
     expect(s).toMatchObject({ ok: true, hide: "video-now" });
     expect(t.proc.children[0]!.killed).toBe(true);
@@ -206,7 +290,7 @@ describe("controlling a video on the screen", () => {
     const s = await t.hub.control({ action: "seek", seconds: 120 });
     if (!s.ok || !s.show) throw new Error("no new card");
     expect(s.show.props.src).not.toBe(r.show.props.src);
-    (await t.hub.streamOf(srcId(s.show.props.src)))!.stop();
+    (await t.hub.streamOf(srcId(s.show.props.src!)))!.stop();
     const a = t.proc.calls[0]!.args;
     expect(a[a.indexOf("-ss") + 1]).toBe("120");
     expect(t.ytCalls).toHaveLength(1); // no second search: it is the same video

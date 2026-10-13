@@ -1,4 +1,4 @@
-import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, type VideoOutput } from "@friend/protocol";
+import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, VIDEO_YOUTUBE, type VideoOutput, type VideoYoutube } from "@friend/protocol";
 import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, type DefaultSource, launcherProblem, MUSIC_OUTPUTS, type MusicOutput, programProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME, type AlexaLocale } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
@@ -68,6 +68,8 @@ export interface VideoConfig {
   ffmpeg: string;
   /** Friend downloads yt-dlp and ffmpeg itself when they are missing (from the projects' own release pages, checked), so nothing is installed by hand. */
   autoInstall: boolean;
+  /** How a YouTube video plays on the screen: in YouTube's own player (embed), or made by Friend (stream). */
+  youtube: VideoYoutube;
 }
 
 export interface ChromeConfig {
@@ -171,6 +173,7 @@ export function sanitizeVideo(raw: unknown): VideoConfig {
     ytdlp: program(r.ytdlp),
     ffmpeg: program(r.ffmpeg),
     autoInstall: r.autoInstall !== false,
+    youtube: (VIDEO_YOUTUBE as readonly unknown[]).includes(r.youtube) ? (r.youtube as VideoYoutube) : "embed",
   };
 }
 
