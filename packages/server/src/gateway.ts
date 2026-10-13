@@ -39,7 +39,8 @@ export interface GatewayDeps {
   /** Whether speech is currently available (the voice sidecar is up). */
   voiceAvailable?: () => boolean;
   /** Handles one recorded utterance; resolves with what was heard ("" when nothing intelligible). */
-  onVoiceUtterance?: (session: Session, audio: Buffer, mime: string, ip: string) => Promise<{ text: string }>;
+  /** `wake`: hands-free listening. Nothing runs unless the assistant's name begins what was said; the answer's `wake` says whether it did. */
+  onVoiceUtterance?: (session: Session, audio: Buffer, mime: string, ip: string, wake?: boolean) => Promise<{ text: string; wake?: boolean }>;
   /** Teaching Friend the owner's voice; the routes answer 503 without it. */
   voiceEnroll?: VoiceEnrollApi;
   /** Teaching Friend the voices of the household; the routes answer 503 without it. */
@@ -463,7 +464,8 @@ export function createGateway(deps: GatewayDeps) {
       const session = token ? auth.resolveSession(token) : null;
       if (!session) return reply.code(401).send({ error: "Unauthorized" });
       try {
-        return await deps.onVoiceUtterance!(session, body, String(req.headers["content-type"] ?? "audio/webm"), req.ip);
+        const wake = (req.query as { wake?: string }).wake === "1";
+        return await deps.onVoiceUtterance!(session, body, String(req.headers["content-type"] ?? "audio/webm"), req.ip, wake);
       } catch (e) {
         if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
         audit.log("owner", "voice.utterance_failed", { message: (e as Error).message }); // raw detail stays in the audit log

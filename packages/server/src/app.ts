@@ -73,6 +73,7 @@ import { HttpError } from "./http-error";
 import { Challenges } from "./voice/challenge";
 import { loadOrCreateKey } from "./voice/crypto";
 import { EnrollError, Enrollment } from "./voice/enrollment";
+import { matchWake } from "./voice/wake";
 import { VoiceError, type VoiceService } from "./voice/service";
 import { Speaker } from "./voice/speaker";
 import { Voiceprint } from "./voice/voiceprint";
@@ -907,7 +908,7 @@ export async function createApp(opts: AppOptions) {
     audit,
     webDir: opts.webDir,
     voiceAvailable,
-    onVoiceUtterance: async (session, audio, mime, ip) => {
+    onVoiceUtterance: async (session, audio, mime, ip, wake = false) => {
       if (!voice) throw new HttpError(503, "Voice is not available");
       if (agent.isBusy()) throw new HttpError(409, "Friend is busy with the last request. Try again in a moment.");
       const epoch = lockEpoch;
@@ -928,7 +929,14 @@ export async function createApp(opts: AppOptions) {
       // the session may have been locked or logged out while the recording was being transcribed
       if (epoch !== lockEpoch || !auth.sessionActive(session.id)) throw new HttpError(401, "Session ended");
       // nothing intelligible (silence, noise, punctuation only): no turn, nothing shown
-      if (!/[\p{L}\p{N}]/u.test(heard)) return { text: "" };
+      if (!/[\p{L}\p{N}]/u.test(heard)) return wake ? { text: "", wake: false } : { text: "" };
+      if (wake) {
+        // hands-free: only what begins with the assistant's name is for Friend; everything else is dropped unheard
+        const m = matchWake(heard, auth.assistantName());
+        if (!m.matched) return { text: "", wake: false };
+        heard = m.rest;
+        if (!/[\p{L}\p{N}]/u.test(heard)) return { text: "", wake: true }; // only the name: the page now waits for the request
+      }
       const crash = (e: unknown) => audit.log("system", "voice.turn_crash", { message: (e as Error).message });
       const who: WhoSpeaks | { trust: "unverified" } = enrolled ? judge(embedding) : { trust: "unverified" };
       const trust = who.trust;
@@ -951,7 +959,7 @@ export async function createApp(opts: AppOptions) {
         broadcast({ type: "voice.heard", text: heard, trust: trust === "owner" ? "owner" : "unverified" });
         void runVoiceTurn(heard, ip, epoch, "owner", undefined, spoken).catch(crash);
       }
-      return { text: heard };
+      return wake ? { text: heard, wake: true } : { text: heard };
     },
     voiceEnroll: enrollment && voice
       ? {
