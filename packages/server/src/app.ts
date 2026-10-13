@@ -569,6 +569,7 @@ export async function createApp(opts: AppOptions) {
     admin,
     provider,
     usage: (e) => usageLog.record({ ...e, ...modelInUse() }),
+    session: { auto: () => ({ on: config.session.autoCompact, limit: config.session.compactAtTokens }) },
     policy,
     approvals,
     devices,
@@ -999,6 +1000,20 @@ export async function createApp(opts: AppOptions) {
     chrome: chromeRemoteApi,
     system: systemApi,
     usage: usageLog,
+    session: {
+      info: () => ({ supported: !!provider.resetSession, contextTokens: agent.contextTokens(), autoCompact: config.session.autoCompact, compactAtTokens: config.session.compactAtTokens }),
+      compact: async () => {
+        const r = await agent.compact();
+        if (r.ok) audit.log("owner", "session.compacted", {});
+        return r;
+      },
+      clear: async (pin, ip) => {
+        await requirePin(pin, ip);
+        const r = await agent.clear();
+        if (r.ok) audit.log("owner", "session.cleared", { ip });
+        return r;
+      },
+    },
     video: {
       stream: (id) => videoHub.streamOf(id),
       status: async () => videoHub.status() ?? (await videoHub.refresh()),

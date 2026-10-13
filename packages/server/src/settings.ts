@@ -194,6 +194,7 @@ export const SettingsPatch = z
       .partial()
       .strict(),
     updates: z.object({ auto: z.boolean() }).partial().strict(),
+    session: z.object({ autoCompact: z.boolean(), compactAtTokens: z.number().int().min(50_000).max(800_000) }).partial().strict(),
   })
   .partial()
   .strict();
@@ -255,6 +256,8 @@ export interface SettingsView {
   voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "ttsVoice" | "sttModel" | "hindiVoice" | "marathiVoice" | "duck" | "duckPercent">;
   /** Whether Friend updates itself. */
   updates: Config["updates"];
+  /** Whether Friend tidies the model's own conversation by itself, and how big it may grow first. */
+  session: Config["session"];
 }
 
 export function settingsView(c: Config): SettingsView {
@@ -320,6 +323,7 @@ export function settingsView(c: Config): SettingsView {
       duckPercent: c.voice.duckPercent,
     },
     updates: { auto: c.updates.auto },
+    session: { autoCompact: c.session.autoCompact, compactAtTokens: c.session.compactAtTokens },
   };
 }
 
@@ -501,6 +505,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
   }
   if (p.claudeCode) Object.assign(config.claudeCode, p.claudeCode);
   if (p.updates) Object.assign(config.updates, p.updates);
+  if (p.session) Object.assign(config.session, p.session);
   if (p.voice) {
     const safe = next.voice;
     for (const k of Object.keys(p.voice) as (keyof Config["voice"])[]) (config.voice as unknown as Record<string, unknown>)[k] = safe[k];

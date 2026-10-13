@@ -107,6 +107,8 @@ export class ClaudeCodeProvider implements Provider {
   readonly id = "claude-code";
   readonly vision = true;
   private owner = newConv(false);
+  /** Set when the owner's conversation was reset and the new one has not begun yet: what it starts from (a summary, or nothing). */
+  private fresh: { seed: string | null } | null = null;
   private guests = new Set<ClaudeProc>();
   private bridge: ToolBridge;
   private bridgeReady: Promise<void> | null = null;
@@ -156,6 +158,27 @@ export class ClaudeCodeProvider implements Provider {
     } finally {
       if (!finished) this.abandonStep(conv, collected); // the consumer stopped early: do not leave Claude waiting
       if (guest) this.endGuest(conv);
+    }
+  }
+
+  /** Forgets the owner's conversation. The next message starts a new Claude with `seed` (if any) instead of the old story. */
+  async resetSession(seed?: string): Promise<void> {
+    const conv = this.owner;
+    const proc = conv.proc;
+    conv.proc = null; // anything the old process still says is ignored
+    proc?.kill();
+    await proc?.exited;
+    conv.inbox.clear();
+    conv.awaiting = [];
+    conv.hasContext = false;
+    conv.systemKey = "";
+    this.forgetSession(conv);
+    mkdirSync(this.home, { recursive: true });
+    this.fresh = { seed: seed?.trim() || null };
+    try {
+      writeFileSync(this.freshFile(), JSON.stringify(this.fresh));
+    } catch {
+      /* the next start is still fresh, it only forgets the summary if Friend restarts first */
     }
   }
 
@@ -234,7 +257,9 @@ export class ClaudeCodeProvider implements Provider {
     const text = String(ev.result ?? turnText);
     if (!ev.is_error) {
       const u = ev.usage ?? {};
-      yield { type: "usage", input: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), output: u.output_tokens ?? 0 };
+      const sum = (x: Record<string, any>) => (x.input_tokens ?? 0) + (x.cache_read_input_tokens ?? 0) + (x.cache_creation_input_tokens ?? 0);
+      const last = Array.isArray(u.iterations) ? u.iterations.at(-1) : undefined; // the last call to the model read the whole conversation once
+      yield { type: "usage", input: sum(u), output: u.output_tokens ?? 0, ...(last ? { context: sum(last) } : {}) };
       yield { type: "done" };
       return "ok";
     }
@@ -339,6 +364,7 @@ export class ClaudeCodeProvider implements Provider {
     mkdirSync(this.home, { recursive: true });
     if (!conv.guest) {
       conv.sessionId ??= this.readSession();
+      this.fresh = conv.sessionId ? null : this.readFresh();
       await this.startBridge();
       this.bridge.setTools(req.tools);
     }
@@ -409,10 +435,26 @@ export class ClaudeCodeProvider implements Provider {
   private rememberSession(conv: Conv, id: string): void {
     if (conv.guest || conv.sessionId === id) return;
     conv.sessionId = id;
+    this.fresh = null; // the new conversation has begun: it carries the summary from here on
+    try {
+      rmSync(this.freshFile(), { force: true });
+    } catch {
+      /* nothing to remove */
+    }
     try {
       writeFileSync(this.sessionFile(), id);
     } catch {
       /* losing it only costs a seeded restart later */
+    }
+  }
+  private freshFile = () => join(this.home, "fresh.json");
+  private readFresh(): { seed: string | null } | null {
+    try {
+      if (!existsSync(this.freshFile())) return null;
+      const r = JSON.parse(readFileSync(this.freshFile(), "utf8")) as { seed?: unknown };
+      return { seed: typeof r.seed === "string" && r.seed ? r.seed : null };
+    } catch {
+      return null;
     }
   }
   private forgetSession(conv: Conv): void {
@@ -437,7 +479,10 @@ export class ClaudeCodeProvider implements Provider {
       }
     }
     const blocks: unknown[] = [];
-    if (!conv.hasContext && last >= 0) blocks.push({ type: "text", text: transcript(msgs.slice(0, last + 1)) });
+    const fresh = conv.hasContext ? null : this.fresh;
+    if (fresh) {
+      if (fresh.seed) blocks.push({ type: "text", text: `Summary of our earlier conversation (for context only, it is already over):\n${fresh.seed}` });
+    } else if (!conv.hasContext && last >= 0) blocks.push({ type: "text", text: transcript(msgs.slice(0, last + 1)) });
 
     const ran = new Map<string, string>();
     for (const m of msgs.slice(last + 1)) {

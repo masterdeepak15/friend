@@ -28,6 +28,7 @@ import type { ContentBlock, Msg, Provider, ToolSpec } from "../provider/types";
 import { z } from "zod";
 import { runStageTool, type StageState } from "../stage";
 import { getToolDef, lexicalInsideRoots, pathArg, toolSpecs } from "../tools/registry";
+import { conversationText, summarize } from "./compact";
 import { loadHistory, repairDangling, saveMessage } from "./history";
 import { devanagariLanguage, languageNote, voiceGender } from "../voice/lang";
 import { promptParts } from "./prompt";
@@ -44,6 +45,8 @@ export interface AgentDeps {
   provider: Provider;
   /** Gets the tokens a turn used (counts only, never words). The provider and model are added by whoever supplies this. */
   usage?: (e: { source: string; input: number; output: number }) => void;
+  /** Whether to start the model's own conversation over by itself when it grows past `limit` tokens. Read each time, so a change applies at once. */
+  session?: { auto(): { on: boolean; limit: number } };
   policy: PolicyEngine;
   approvals: Approvals;
   devices: Pick<DeviceHub, "exec" | "hasOnline" | "targetName">;
@@ -135,6 +138,11 @@ export class Agent {
   private abort: AbortController | null = null;
   private idleJobs: (() => void)[] = [];
   private memberTalk = new Map<number, { at: number; lines: Msg[] }>();
+  /** How much the model read for its last call (the size of the conversation it keeps), when it said. */
+  private context = 0;
+  /** The notes the last tidy-up left in the model's conversation, so the next one does not lose what is in them. */
+  private lastSummary: string | null = null;
+  private tidyBlockedUntil = 0;
 
   /** Runs `job` as soon as no request is being answered (right away when idle). */
   whenIdle(job: () => void): void {
@@ -146,6 +154,71 @@ export class Agent {
 
   isBusy(): boolean {
     return this.busy;
+  }
+
+  /** Tokens the model's own conversation holds (0 when unknown, or right after a fresh start). */
+  contextTokens(): number {
+    return this.context;
+  }
+
+  /** Writes notes on the conversation and starts the model's own conversation over from them. */
+  async compact(): Promise<{ ok: boolean; message: string }> {
+    return this.whileIdle(() => this.compactNow(new AbortController().signal));
+  }
+
+  /** Starts the model's own conversation over from nothing. Friend's notes and memory are kept. */
+  async clear(): Promise<{ ok: boolean; message: string }> {
+    return this.whileIdle(async () => {
+      await this.deps.provider.resetSession!();
+      this.context = 0;
+      this.lastSummary = null;
+      return { ok: true, message: "Started fresh. Friend remembers its notes, but not the earlier conversation." };
+    });
+  }
+
+  private async whileIdle(job: () => Promise<{ ok: boolean; message: string }>): Promise<{ ok: boolean; message: string }> {
+    if (!this.deps.provider.resetSession) return { ok: false, message: "This model does not keep a conversation of its own, so there is nothing to tidy." };
+    if (this.busy) return { ok: false, message: "Friend is busy right now. Try again in a moment." };
+    this.busy = true;
+    try {
+      return await job();
+    } finally {
+      this.busy = false;
+      for (const j of this.idleJobs.splice(0)) {
+        try {
+          j();
+        } catch (e) {
+          this.deps.audit.log("system", "agent.idle_job_failed", { message: (e as Error).message });
+        }
+      }
+    }
+  }
+
+  private async compactNow(signal: AbortSignal): Promise<{ ok: boolean; message: string }> {
+    const d = this.deps;
+    const history = loadHistory(d.db);
+    if (!conversationText(history)) return { ok: false, message: "There is nothing to compact yet." };
+    const summary = await summarize(d.provider, history, this.lastSummary, signal);
+    if (!summary) return { ok: false, message: "Could not write the notes just now, so nothing was changed." };
+    await d.provider.resetSession!(summary);
+    this.lastSummary = summary;
+    this.context = 0;
+    return { ok: true, message: "Done. Friend wrote notes on the conversation and started a fresh one from them." };
+  }
+
+  /** Before an answer: if the model's own conversation has grown too big, tidy it first. A failure only means trying again later. */
+  private async tidyIfBig(emit: (m: ServerMsg) => void, signal: AbortSignal): Promise<void> {
+    const d = this.deps;
+    const s = d.session?.auto();
+    if (!s?.on || this.context <= s.limit || !d.provider.resetSession) return;
+    const now = d.tasks?.now() ?? Date.now();
+    if (now < this.tidyBlockedUntil) return;
+    emit({ type: "activity", text: "Tidying up my memory" });
+    const r = await this.compactNow(signal).catch(() => ({ ok: false, message: "The notes could not be written." }));
+    if (!r.ok) {
+      this.tidyBlockedUntil = now + 10 * 60_000;
+      d.audit.log("system", "session.tidy_failed", { message: r.message });
+    } else d.audit.log("system", "session.tidied", { auto: true });
   }
 
   /** Stop the running turn (used by emergency lock). */
@@ -162,6 +235,7 @@ export class Agent {
     }
     this.busy = true;
     const spent = { input: 0, output: 0 };
+    let reported = 0;
     this.scenesThisTurn = 0;
     const stage = (cmd: Parameters<StageState["apply"]>[0]) => {
       d.stage.apply(cmd);
@@ -184,6 +258,7 @@ export class Agent {
     let lastAnswer = ""; // a household member's last reply, for their short memory
     try {
       if (!isolated) repairDangling(d.db);
+      if (!isolated) await this.tidyIfBig(emit, abort.signal);
       const userMsg: Msg = { role: "user", content: [{ type: "text", text }] };
       keep(userMsg);
       const earlier = member ? earlierOf(this.memberTalk.get(ctx.person!.id), d.tasks?.now() ?? Date.now()) : [];
@@ -236,6 +311,7 @@ export class Agent {
           if (ev.type === "usage") {
             spent.input += ev.input;
             spent.output += ev.output;
+            if (ev.context) reported = ev.context;
           } else if (ev.type === "text_delta") {
             if (!assistantText) {
               stage({ cmd: "presence", state: "speaking" });
@@ -303,6 +379,7 @@ export class Agent {
       d.audit.log("system", "agent.error", { message: (e as Error).message });
       emit({ type: "caption.delta", text: "Sorry, something went wrong on my side." });
     } finally {
+      if (reported > 0 && !isolated) this.context = reported;
       if (d.usage && (spent.input > 0 || spent.output > 0)) d.usage({ source: ctx.source ?? "other", ...spent });
       if (member && lastAnswer) {
         // only the words, never tool results: a short, plain thread that the next question can lean on

@@ -101,7 +101,7 @@ describe("a plain answer", () => {
     const events = await run(p, req([text("how is the weather?")]));
     expect(textOf(events)).toBe("It is a fine day.");
     expect(events.filter((e) => e.type === "text_delta").length).toBeGreaterThan(2); // word by word
-    expect(events.find((e) => e.type === "usage")).toEqual({ type: "usage", input: 115, output: 7 });
+    expect(events.find((e) => e.type === "usage")).toEqual({ type: "usage", input: 115, output: 7, context: 65 });
     expect(events.at(-1)).toEqual({ type: "done" });
   });
 
@@ -414,5 +414,67 @@ describe("failures the owner can understand", () => {
     now += 6 * 3_600_000; // after the reset
     const later = await run(p, req([text("hi"), text("again")]));
     expect(textOf(later)).toBe("Back again.");
+  });
+});
+
+describe("starting a conversation over", () => {
+  it("says how big the conversation is now: what the last call to the model read", async () => {
+    const p = setup([[{ text: "ok" }]]);
+    const events = await run(p, req([text("hi")]));
+    expect(events.find((e) => e.type === "usage")).toMatchObject({ context: 65 }); // the last of the two calls, not their sum
+  });
+
+  it("forgets the old conversation: the next message starts a new Claude with nothing to resume and nothing written out", async () => {
+    const p = setup([[{ text: "One." }], [{ text: "Two." }]]);
+    await run(p, req([text("my secret is pineapple")]));
+    await p.resetSession();
+    expect(existsSync(join(dir, "claude", "session-id"))).toBe(false);
+    await run(p, req([text("my secret is pineapple"), said("One."), text("what is my secret?")]));
+    const ss = starts();
+    expect(ss).toHaveLength(2);
+    expect(ss[1]!.argv).not.toContain("--resume");
+    const sent = users().at(-1)!.user!.map((b) => b.text).join("\n");
+    expect(sent).not.toContain("pineapple");
+    expect(sent).toContain("what is my secret?");
+  });
+
+  it("stops the running Claude when the conversation is reset", async () => {
+    const p = setup([[{ text: "One." }]]);
+    await run(p, req([text("a")]));
+    await p.resetSession();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(starts()).toHaveLength(1);
+    expect(readLog().length).toBeGreaterThan(0);
+  });
+
+  it("hands the new conversation a summary, in its first message only", async () => {
+    const p = setup([[{ text: "One." }], [{ text: "Two." }], [{ text: "Three." }]]);
+    await run(p, req([text("a")]));
+    await p.resetSession("We were planning a trip to Goa.");
+    await run(p, req([text("a"), said("One."), text("where were we?")]));
+    const first = users().at(-1)!.user!.map((b) => b.text).join("\n");
+    expect(first).toContain("We were planning a trip to Goa.");
+    expect(first.lastIndexOf("where were we?")).toBeGreaterThan(first.indexOf("Goa"));
+    await run(p, req([text("a"), said("One."), text("where were we?"), said("Two."), text("and then?")]));
+    expect(users().at(-1)!.user!.map((b) => b.text).join("\n")).not.toContain("Goa");
+  });
+
+  it("keeps the summary across a Friend restart until the new conversation has begun", async () => {
+    const a = setup([[{ text: "One." }]]);
+    await run(a, req([text("a")]));
+    await a.resetSession("Planning a trip to Goa.");
+    await a.close();
+    const b = setup([[{ text: "Two." }]], {}, dir);
+    await run(b, req([text("a"), said("One."), text("where were we?")]));
+    expect(users().at(-1)!.user!.map((x) => x.text).join("\n")).toContain("Planning a trip to Goa.");
+  });
+
+  it("leaves a guest's conversation and the owner's next request alone when there was nothing to reset", async () => {
+    const p = setup([[{ text: "One." }], [{ text: "Two." }]]);
+    await p.resetSession();
+    await run(p, req([text("a")]));
+    await p.resetSession();
+    await run(p, req([text("a"), said("One."), text("b")]));
+    expect(starts()).toHaveLength(2);
   });
 });

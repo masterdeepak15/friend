@@ -11,6 +11,7 @@ import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
 import { TABS, type SettingsTab } from "./tabs";
 import { HoloPanel } from "../orb/HoloPanel";
+import { ConversationSection } from "./ConversationSection";
 import { StartupTab } from "./StartupTab";
 import { UsageTab } from "./UsageTab";
 
@@ -242,6 +243,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           <Field label="Claude Code command" hint="Leave as it is unless the program is somewhere else.">
             <input value={draft.claudeCode.command} onChange={(e) => set("claudeCode", "command", e.target.value)} />
           </Field>
+          <ConversationSection autoCompact={draft.session?.autoCompact ?? true} limit={draft.session?.compactAtTokens ?? 100_000} onChange={(p) => setDraft({ ...draft, session: { autoCompact: true, compactAtTokens: 100_000, ...draft.session, ...p } })} />
         </>
       )}
 

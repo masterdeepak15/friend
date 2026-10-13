@@ -19,7 +19,8 @@ export interface ToolSpec {
 export type ProviderEvent =
   | { type: "text_delta"; text: string }
   | { type: "tool_call"; id: string; name: string; args: unknown }
-  | { type: "usage"; input: number; output: number }
+  /** `context` is how much the model read for its last call: the size of the conversation it keeps (when the provider knows). */
+  | { type: "usage"; input: number; output: number; context?: number }
   | { type: "done" }
   | { type: "error"; message: string; userFacing?: boolean };
 
@@ -42,4 +43,6 @@ export interface Provider {
   stream(req: StreamRequest): AsyncIterable<ProviderEvent>;
   /** Releases anything the provider keeps running (a background process, a local server). */
   close?(): Promise<void>;
+  /** Forgets the owner's conversation that the provider keeps itself, and starts the next one from `seed` (a short summary) or from nothing. */
+  resetSession?(seed?: string): Promise<void>;
 }

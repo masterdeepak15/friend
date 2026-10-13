@@ -23,6 +23,10 @@ export class SwitchableProvider implements Provider {
     return old;
   }
 
+  async resetSession(seed?: string): Promise<void> {
+    await this.current.resetSession?.(seed);
+  }
+
   async close(): Promise<void> {
     await this.current.close?.();
   }

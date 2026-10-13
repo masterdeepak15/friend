@@ -42,6 +42,10 @@ export class FallbackProvider implements Provider {
     }
   }
 
+  async resetSession(seed?: string): Promise<void> {
+    await Promise.all([this.primary.resetSession?.(seed), this.other.resetSession?.(seed)]);
+  }
+
   async close(): Promise<void> {
     await Promise.all([this.primary.close?.(), this.other.close?.()]);
   }

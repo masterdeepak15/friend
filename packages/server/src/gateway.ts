@@ -53,6 +53,8 @@ export interface GatewayDeps {
   system?: SystemApi;
   /** Token counts for the Usage page and riend usage. */
   usage?: UsageApi;
+  /** The model's own conversation: how big it is, tidying it, starting it over. */
+  session?: SessionApi;
   /** Web video: the screen asks for a video at /api/video/<id>, an address Friend made. */
   video?: {
     stream(id: string): Promise<{ stream: import("node:stream").Readable; stop(): void } | null>;
@@ -205,6 +207,13 @@ export interface ChromeRemoteApi {
 }
 
 /** Starting Friend by itself when the computer starts, and updating it. The owner's own session; changes need the PIN. */
+export interface SessionApi {
+  info(): { supported: boolean; contextTokens: number; autoCompact: boolean; compactAtTokens: number };
+  compact(): Promise<{ ok: boolean; message: string }>;
+  /** Needs the PIN: it makes Friend forget the earlier conversation. */
+  clear(pin: string, ip: string): Promise<{ ok: boolean; message: string }>;
+}
+
 export interface SystemApi {
   info(): Promise<unknown>;
   check(): Promise<unknown>;
@@ -1018,6 +1027,25 @@ export function createGateway(deps: GatewayDeps) {
     const removed = deps.usage!.clear();
     audit.log("owner", "usage.cleared", { removed });
     return { removed };
+  });
+
+  // ---- the model's own conversation (owner session only) ----
+  const sessionGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    if (!(token && auth.resolveSession(token))) return reply.code(401).send({ error: "Unauthorized" });
+    if (!deps.session) return reply.code(503).send({ error: "Not available" });
+  };
+  app.get("/api/conversation", { onRequest: sessionGuard }, async () => deps.session!.info());
+  app.post("/api/conversation/compact", { onRequest: sessionGuard }, async () => deps.session!.compact());
+  app.post("/api/conversation/clear", { onRequest: sessionGuard }, async (req, reply) => {
+    const body = z.object({ pin: z.string().min(1).max(32) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN" });
+    try {
+      return await deps.session!.clear(body.data.pin, req.ip);
+    } catch (e) {
+      if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+      throw e;
+    }
   });
 
   // ---- Chrome control (owner session: the page's own routes; the key: the addresses other PCs use) ----

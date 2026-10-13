@@ -108,7 +108,7 @@ async function playTurn(steps, turn) {
     session_id: sessionId,
     duration_api_ms: 5,
     total_cost_usd: 0.001,
-    usage: { input_tokens: 10, cache_read_input_tokens: 100, cache_creation_input_tokens: 5, output_tokens: 7 },
+    usage: { input_tokens: 10, cache_read_input_tokens: 100, cache_creation_input_tokens: 5, output_tokens: 7, iterations: [{ input_tokens: 10, cache_read_input_tokens: 40, cache_creation_input_tokens: 5, output_tokens: 3 }, { input_tokens: 10, cache_read_input_tokens: 50, cache_creation_input_tokens: 5, output_tokens: 4 }] },
   });
 }
 
