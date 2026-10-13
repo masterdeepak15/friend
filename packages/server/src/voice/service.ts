@@ -24,6 +24,8 @@ export interface VoiceService {
   /** The voiceprint of a recording (used to enroll the owner). */
   embed(audio: Buffer, mime: string): Promise<Embedding>;
   synthesize(text: string, voice?: string): Promise<Buffer>;
+  /** Switch the running speech engine to another listening model (downloaded first if needed). The old one keeps listening if this fails. */
+  useListeningModel?(name: string): Promise<void>;
 }
 
 export interface HttpVoiceOptions {
@@ -93,7 +95,12 @@ export class HttpVoiceService implements VoiceService {
     return Buffer.from(await res.arrayBuffer());
   }
 
-  private async request(path: string, init: RequestInit): Promise<Response> {
+  /** Loading a model the first time downloads it (up to about 1.6 GB), so this waits far longer than a normal request. */
+  async useListeningModel(name: string): Promise<void> {
+    await this.request("/stt-model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: name }) }, 30 * 60_000);
+  }
+
+  private async request(path: string, init: RequestInit, timeoutMs?: number): Promise<Response> {
     const base = this.opts.baseUrl();
     if (!base) throw new VoiceError("the voice sidecar is not running");
     let res: Response;
@@ -101,7 +108,7 @@ export class HttpVoiceService implements VoiceService {
       res = await fetch(base + path, {
         ...init,
         headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${this.opts.token}` },
-        signal: AbortSignal.timeout(this.opts.timeoutMs ?? 60_000),
+        signal: AbortSignal.timeout(timeoutMs ?? this.opts.timeoutMs ?? 60_000),
       });
     } catch (e) {
       if ((e as Error).name === "TimeoutError") throw new VoiceError("the voice sidecar timed out");
@@ -160,6 +167,8 @@ export interface FakeVoiceOptions {
   failSynthesize?: boolean;
   /** Voices that cannot be loaded (for example not downloaded and no internet). */
   failVoices?: string[];
+  /** Listening models that cannot be loaded. */
+  failModels?: string[];
 }
 
 /** Scripted voice for tests: no models, no process. */
@@ -169,6 +178,8 @@ export class FakeVoice implements VoiceService {
   synthesized: string[] = [];
   /** The voice asked for with each synthesized text (undefined: the default). */
   voicesUsed: (string | undefined)[] = [];
+  /** The listening models switched to, in order. */
+  modelsUsed: string[] = [];
   private i = 0;
   private e = 0;
 
@@ -198,6 +209,11 @@ export class FakeVoice implements VoiceService {
     const idx = this.e++;
     const speaker = speakers[Math.min(idx, speakers.length - 1)]!;
     return { embedding: fakeEmbedding(speaker, `enroll-${idx}`), seconds: 3 };
+  }
+
+  async useListeningModel(name: string): Promise<void> {
+    if (this.opts.failModels?.includes(name)) throw new Error(`fake: the model ${name} cannot be loaded`);
+    this.modelsUsed.push(name);
   }
 
   async synthesize(text: string, voice?: string): Promise<Buffer> {

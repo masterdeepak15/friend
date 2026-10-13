@@ -1,6 +1,6 @@
 import { parseRef, type ClientMsg, type MusicState, type ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
-import { HINDI_VOICES, MARATHI_VOICES, clampToSafe, isCatalogVoice, voiceLabel } from "@friend/protocol";
+import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, clampToSafe, downloadSize, isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
 import { firstExistingDir } from "./assets";
 import { chatLines } from "./chatlog";
@@ -403,6 +403,7 @@ export async function createApp(opts: AppOptions) {
   function commitSettings(patch: unknown, how: { actor: "owner" | "agent"; ip?: string; deferSwap?: boolean }): Applied {
     let applied: Applied;
     let voiceBefore = config.voice.ttsVoice;
+    let sttBefore = config.voice.sttModel;
     try {
       // the same change on a fresh copy of what is saved, so only the owner's own edits reach the file
       const saved = loadConfig(opts.dataDir);
@@ -411,6 +412,7 @@ export async function createApp(opts: AppOptions) {
         throw new HttpError(409, "Friend is busy with a request. Change the model when it is done.");
       }
       voiceBefore = config.voice.ttsVoice;
+      sttBefore = config.voice.sttModel;
       applied = applySettings(config, patch);
       saveConfig(saved);
     } catch (e) {
@@ -434,6 +436,7 @@ export async function createApp(opts: AppOptions) {
       else swap();
     }
     if (applied.changed.includes("voice.ttsVoice")) void warmVoice(config.voice.ttsVoice, voiceBefore);
+    if (applied.changed.includes("voice.sttModel")) void warmListening(config.voice.sttModel, sttBefore);
     if (applied.changed.includes("voice.hindiVoice")) void warmLanguageVoice(config.voice.hindiVoice);
     if (applied.changed.includes("voice.marathiVoice")) void warmLanguageVoice(config.voice.marathiVoice);
     if (applied.changed.some((k) => k === "view" || k === "ownerName" || k.startsWith("look.") || k.startsWith("hud") || k.startsWith("music"))) {
@@ -462,6 +465,31 @@ export async function createApp(opts: AppOptions) {
         saveConfig(saved);
       }
       broadcast({ type: "alert", level: "warn", text: `Could not load the voice ${wanted} (it needs internet the first time). Using ${voiceLabel(previous)} again.` });
+    }
+  }
+
+  /**
+   * A new listening model is downloaded (the first time) and swapped into the running speech engine in the background, so no
+   * restart is needed. The old model keeps listening until the new one is ready; if the new one cannot be loaded, the old
+   * setting is put back.
+   */
+  async function warmListening(wanted: string, previous: string): Promise<void> {
+    if (!voice?.useListeningModel || !voiceAvailable()) return; // the speech engine is not running: it loads the model when it starts
+    const known = LISTENING_MODELS.find((m) => m.id === wanted);
+    const download = known ? ` (${downloadSize(known.mb)} the first time it is downloaded)` : ". The first time it downloads";
+    broadcast({ type: "alert", level: "info", text: `Getting the listening model ${wanted}${download}. Friend keeps listening with the old one meanwhile.` });
+    try {
+      await voice.useListeningModel(wanted);
+      broadcast({ type: "alert", level: "info", text: `The listening model ${wanted} is ready.` });
+    } catch (e) {
+      audit.log("system", "voice.model_failed", { model: wanted, message: (e as Error).message });
+      if (config.voice.sttModel === wanted) {
+        config.voice.sttModel = previous;
+        const saved = loadConfig(opts.dataDir);
+        saved.voice.sttModel = previous;
+        saveConfig(saved);
+      }
+      broadcast({ type: "alert", level: "warn", text: `Could not load the listening model ${wanted} (it needs internet the first time). Using ${previous} again.` });
     }
   }
 

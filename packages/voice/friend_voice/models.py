@@ -46,6 +46,12 @@ def ensure_speaker_model(directory: Path, url: str = SPEAKER_URL, sha256: str = 
     return target
 
 
+def load_stt(data_dir: Optional[str], name: str) -> WhisperSTT:
+    """One listening model, downloaded into the models folder when it is not there yet."""
+    root = Path(data_dir) if data_dir else Path.home() / ".friend" / "voice" / "models"
+    return WhisperSTT(name, str(root / "whisper"))
+
+
 def load_engines(data_dir: Optional[str], stt_model: str = "small", tts_voice: str = "en_US-lessac-medium") -> Engines:
     root = Path(data_dir) if data_dir else Path.home() / ".friend" / "voice" / "models"
     root.mkdir(parents=True, exist_ok=True)

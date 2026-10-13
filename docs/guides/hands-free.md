@@ -10,7 +10,7 @@ Instead of holding the key, say your assistant's name: **"Hey Maya, what's the w
 
 ## When it mishears
 
-- Far from the microphone, use the **small** listening model or bigger (`friend config set voice.sttModel small`, then `friend voice setup`; `large-v3-turbo` is better still for Marathi). New installs already use small.
+- Far from the microphone, or in Hindi and Marathi, pick a bigger **Listening model** in Settings → Voice (Small is the default; Large (turbo) is best for Marathi but slow on a PC without a graphics card). Friend downloads it in the background, keeps listening with the old one meanwhile, and tells you when it is ready. No restart and no commands.
 - The name should be easy to say. A name Whisper often writes differently (for example in Devanagari) may not be recognised yet: the name is matched in Latin letters, allowing one wrong letter in names of four or more letters.
 - Needs the voice add-on (`friend voice setup`) and a secure page (localhost or HTTPS) for the microphone.
 

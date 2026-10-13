@@ -149,15 +149,14 @@ describe("the model tab", () => {
 describe("the voice tab", () => {
   const voiceTab = () => openTab(/^Voice\s*Speaking/);
 
-  it("tells which changes need a restart (the listening model does, the speaking voice does not)", async () => {
-    setup({ save: vi.fn(async () => ({ settings: view, changed: true, restart: ["voice.sttModel"] })) });
+  it("tells which changes need a restart (turning speech on or off does; the voice and the listening model load live)", async () => {
+    setup({ save: vi.fn(async () => ({ settings: view, changed: true, restart: ["voice.enabled"] })) });
     await voiceTab();
-    await userEvent.clear(screen.getByLabelText(/listening model/i));
-    await userEvent.type(screen.getByLabelText(/listening model/i), "small");
+    await userEvent.selectOptions(screen.getByLabelText(/listening model/i), "small");
     await userEvent.click(screen.getByRole("button", { name: /save/i }));
     await typePin("123456");
     await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    expect((await screen.findByText(/restart friend/i)).textContent).toMatch(/listening model/i);
+    expect((await screen.findByText(/restart friend/i)).textContent).toMatch(/speech on\/off/i);
   });
 
   it("offers female and male voices in groups, with the current one selected", async () => {

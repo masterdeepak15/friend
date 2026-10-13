@@ -5,7 +5,7 @@ import { LookPreview } from "./LookPreview";
 import { SecurityTab } from "./SecurityTab";
 import { TradingTab } from "./TradingTab";
 import { WidgetsTab } from "./WidgetsTab";
-import { HINDI_VOICES, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, isCatalogVoice } from "@friend/protocol";
+import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, downloadSize, isCatalogVoice } from "@friend/protocol";
 import { DEFAULT_LOOK, diffSettings, type ApprovalMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
@@ -34,7 +34,7 @@ const PROVIDERS: { id: ProviderName; label: string; note: string }[] = [
   { id: "openai", label: "OpenAI-compatible server (OmniRoute, LM Studio…)", note: "Any server that speaks the OpenAI chat API. OmniRoute is one address that routes to many models, many of them free." },
 ];
 
-const RESTART_LABEL: Record<string, string> = { "voice.enabled": "Speech on/off", "voice.ttsVoice": "Voice", "voice.sttModel": "Listening model" };
+const RESTART_LABEL: Record<string, string> = { "voice.enabled": "Speech on/off" };
 
 function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
@@ -137,12 +137,15 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       setOpenaiKey("");
       setAsking(false);
       const newVoice = patch.voice && (patch.voice as Record<string, unknown>).ttsVoice !== undefined;
+      const newModel = patch.voice && (patch.voice as Record<string, unknown>).sttModel !== undefined;
       setNote(
         r.restart.length
           ? `Saved. Restart Friend for: ${r.restart.map((k) => RESTART_LABEL[k] ?? k).join(", ")}.`
-          : newVoice
-            ? "Saved. The new voice is loading; you will get a message when it is ready (the first time it downloads about 60 MB)."
-            : needsPin(patch)
+          : newModel
+            ? "Saved. The listening model is being downloaded in the background (the first time only); Friend keeps listening with the old one and tells you when the new one is ready."
+            : newVoice
+              ? "Saved. The new voice is loading; you will get a message when it is ready (the first time it downloads about 60 MB)."
+              : needsPin(patch)
               ? "Saved. It is in use now."
               : "Saved. Every open screen has changed.",
       );
@@ -357,8 +360,15 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           </small>
         )}
       </div>
-      <Field label="Listening model" hint="tiny, base, small … Bigger is more accurate but slower. For Hindi and Marathi use small or larger (base mishears them). Needs a restart.">
-        <input value={draft.voice.sttModel} onChange={(e) => set("voice", "sttModel", e.target.value)} />
+      <Field label="Listening model" hint="Bigger hears more accurately, from further away and in Hindi and Marathi, but is slower. It downloads once, in the background, and Friend keeps listening meanwhile. No restart.">
+        <select value={draft.voice.sttModel} onChange={(e) => set("voice", "sttModel", e.target.value)}>
+          {!LISTENING_MODELS.some((m) => m.id === draft.voice.sttModel) && <option value={draft.voice.sttModel}>{draft.voice.sttModel}</option>}
+          {LISTENING_MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name} · {downloadSize(m.mb).replace("about ", "")} · {m.note}
+            </option>
+          ))}
+        </select>
       </Field>
       <h4 className="plugins-heading">Who is speaking</h4>
       <Field label={`"It is me" match level: ${draft.voice.accept.toFixed(2)}`} hint="Higher is stricter. Only matters after you enrolled your voice.">

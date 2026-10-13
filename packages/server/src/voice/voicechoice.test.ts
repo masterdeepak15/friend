@@ -118,10 +118,10 @@ describe("choosing the speaking voice in the settings", () => {
     expect(loadConfig(dir).voice.ttsVoice).toBe("en_US-ryan-medium");
   });
 
-  it("still asks for a restart when the listening model is changed", async () => {
+  it("no longer asks for a restart when the listening model is changed (it is swapped in while running)", async () => {
     const cookie = await boot(new FakeVoice());
     const res = await put(cookie, { voice: { sttModel: "base", ttsVoice: "en_US-amy-medium" } });
-    expect(((await res.json()) as { restart: string[] }).restart).toEqual(["voice.sttModel"]);
+    expect(((await res.json()) as { restart: string[] }).restart).toEqual([]);
   });
 
   it("refuses a name that could be a path", async () => {

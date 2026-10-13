@@ -82,3 +82,23 @@ export function resolveVoice(input: string): { id: string; label: string; listed
   if (PLAIN.test(t) && PIPER_NAME.test(t)) return { id: t, label: t, listed: false };
   return null;
 }
+
+/** A listening model (Whisper, run on this PC). Each downloads once, then is kept. */
+export interface ListeningModel {
+  id: string;
+  name: string;
+  /** About how much it downloads, in megabytes. */
+  mb: number;
+  note: string;
+}
+
+export const LISTENING_MODELS: ListeningModel[] = [
+  { id: "tiny", name: "Tiny", mb: 75, note: "fastest, mishears a lot" },
+  { id: "base", name: "Base", mb: 145, note: "fast, struggles with Hindi, Marathi and distance" },
+  { id: "small", name: "Small", mb: 480, note: "recommended: much better, still quick" },
+  { id: "medium", name: "Medium", mb: 1500, note: "better again, slow on a PC without a graphics card" },
+  { id: "large-v3-turbo", name: "Large (turbo)", mb: 1600, note: "most accurate for Marathi; needs a fast PC" },
+];
+
+/** "about 480 MB" or "about 1.6 GB". */
+export const downloadSize = (mb: number): string => `about ${mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${mb} MB`}`;

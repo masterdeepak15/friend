@@ -32,7 +32,13 @@ def main() -> int:
 
         engines = load_engines(args.data_dir, args.stt_model, args.tts_voice)
 
-    server, port = make_server(engines, token, port=args.port)
+    if args.fake:
+        loader = lambda name: FakeEngines().stt  # noqa: E731
+    else:
+        from .models import load_stt
+
+        loader = lambda name: load_stt(args.data_dir, name)  # noqa: E731
+    server, port = make_server(engines, token, port=args.port, load_stt=loader)
     print(json.dumps({"ready": True, "port": port}), flush=True)
 
     # When the parent process goes away its end of our stdin closes: shut down instead of lingering.

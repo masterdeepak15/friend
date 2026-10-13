@@ -4,20 +4,33 @@ from __future__ import annotations
 
 import hmac
 import json
+import re
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Tuple
+from typing import Callable, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from .engines import Engines
 from .tts import check_voice_name
 
 MAX_TTS_CHARS = 2000
+#: What a listening model is called: tiny, base, small, large-v3-turbo, or a Hugging Face folder such as Systran/faster-whisper-small.
+MODEL_NAME = re.compile(r"^[A-Za-z0-9_./-]{1,80}$")
 
 
 def make_server(
-    engines: Engines, token: str, port: int = 0, max_body: int = 4_000_000, io_timeout: float = 30
+    engines: Engines,
+    token: str,
+    port: int = 0,
+    max_body: int = 4_000_000,
+    io_timeout: float = 30,
+    load_stt: Optional[Callable[[str], object]] = None,
 ) -> Tuple[ThreadingHTTPServer, int]:
-    """Create (but do not start) a server bound to 127.0.0.1. Returns (server, actual_port)."""
+    """Create (but do not start) a server bound to 127.0.0.1. Returns (server, actual_port).
+
+    `load_stt(name)` builds (and, the first time, downloads) a listening model; POST /stt-model swaps it in while running.
+    """
+    swapping = threading.Lock()  # one model change at a time
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -85,6 +98,8 @@ def make_server(
                 return self._tts()
             if url.path == "/embed":
                 return self._embed()
+            if url.path == "/stt-model":
+                return self._stt_model()
             self._drain(64 * 1024)
             self._json(404, {"error": "not found"}, close=True)
 
@@ -117,6 +132,26 @@ def make_server(
                 self._json(400, {"error": str(e)})
             except Exception as e:  # engine failures are reported, never crash the server
                 self._json(500, {"error": str(e)})
+
+        def _stt_model(self) -> None:
+            raw = self._read_body()
+            if raw is None:
+                return
+            if load_stt is None:
+                return self._json(501, {"error": "this speech engine cannot change its listening model"})
+            try:
+                name = json.loads(raw)["model"]
+            except (ValueError, KeyError, TypeError):
+                return self._json(400, {"error": "expected JSON with a model field"})
+            if not isinstance(name, str) or not MODEL_NAME.match(name) or ".." in name:
+                return self._json(400, {"error": "that is not a listening model name"})
+            with swapping:
+                try:
+                    fresh = load_stt(name)  # may take minutes the first time (download); the old model keeps listening meanwhile
+                except Exception as e:
+                    return self._json(500, {"error": str(e) or "the listening model could not be loaded"})
+                engines.stt = fresh
+            self._json(200, {"ok": True, "model": name})
 
         def _embed(self) -> None:
             audio = self._read_body()
