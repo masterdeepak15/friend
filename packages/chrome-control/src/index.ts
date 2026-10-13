@@ -38,6 +38,9 @@ Usage: chrome-control-mcp <command>
   token        Print the secret token
   extension    Print the folder to load in chrome://extensions
   chrome       Start Chrome with the debugger banner hidden (--silent-debugger-extension-api)
+  flag         Add that flag to your Chrome, Edge and Brave shortcuts (prints one line of JSON)
+  flag-status  Say whether the running Chrome has the flag, and how many shortcuts do (JSON)
+  chrome-restart  Close Chrome politely and start it again with the flag and your tabs (JSON)
   uninstall    Remove the native host and the extension copy
   version      Print the version
   help         Show this help
@@ -63,6 +66,21 @@ if (cmd === "extension") {
 if (cmd === "url") {
   console.log(`http://127.0.0.1:${process.env.CHROME_BRIDGE_HTTP_PORT ?? 8766}/mcp?token=${loadToken()}`);
   process.exit(0);
+}
+if (cmd === "flag" || cmd === "flag-status" || cmd === "chrome-restart") {
+  // one line of JSON, for Friend (and anyone scripting it)
+  try {
+    const b = await import("./browser.js");
+    if (cmd === "flag-status") console.log(JSON.stringify(b.flagStatus()));
+    else if (cmd === "flag") {
+      const c = (await import("./setup.js")).hideBanner(() => {});
+      console.log(JSON.stringify({ ok: c !== null && (c.patched > 0 || c.already > 0), counts: c }));
+    } else console.log(JSON.stringify(await b.restartChrome()));
+    process.exit(0);
+  } catch (e) {
+    console.log(JSON.stringify({ ok: false, message: (e as Error).message }));
+    process.exit(1);
+  }
 }
 if (cmd === "chrome") {
   try {

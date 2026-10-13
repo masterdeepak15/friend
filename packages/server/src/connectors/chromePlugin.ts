@@ -35,6 +35,26 @@ export interface ChromeStatus {
   bundled: boolean;
 }
 
+/** Whether Chrome's "started debugging this browser" banner is hidden: in the Chrome that is open, and on its shortcuts. */
+export interface BannerStatus {
+  /** This Friend has its own Chrome control, which knows how to hide the banner. */
+  supported: boolean;
+  platform?: string;
+  running?: boolean;
+  /** The open Chrome was started with the flag that hides the banner. Null when Chrome is not open. */
+  hidden?: boolean | null;
+  shortcuts?: { withFlag: number; total: number } | null;
+  /** One plain sentence when the state could not be read. */
+  error?: string;
+}
+
+export interface BannerResult {
+  ok: boolean;
+  message: string;
+  patched?: number;
+  failed?: number;
+}
+
 export interface ChromePluginDeps {
   hub: McpHub;
   run: QuickRunner;
@@ -133,6 +153,57 @@ export class ChromePlugin {
         this.serving = null;
       });
     return this.serving;
+  }
+
+  /** Runs one of Chrome control's own commands that answer with a line of JSON. */
+  private async ask(command: string): Promise<Record<string, unknown> | null> {
+    const entry = this.deps.bundled;
+    if (!entry) return null;
+    const r = await this.deps.run(process.execPath, [entry, command]);
+    const line = r.stdout.split(/\r?\n/).reverse().find((l) => l.trim().startsWith("{"));
+    if (!line) return null;
+    try {
+      return JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Whether the open Chrome has the flag that hides the banner, and how many shortcuts do. Changes nothing. */
+  async bannerStatus(): Promise<BannerStatus> {
+    if (!this.deps.bundled) return { supported: false };
+    const s = await this.ask("flag-status").catch(() => null);
+    if (!s || typeof s.running !== "boolean") return { supported: true, error: "Could not read Chrome's state." };
+    const sc = s.shortcuts as { withFlag?: number; total?: number } | null | undefined;
+    return {
+      supported: true,
+      platform: String(s.platform ?? ""),
+      running: s.running,
+      hidden: typeof s.hidden === "boolean" ? s.hidden : null,
+      shortcuts: sc && typeof sc.total === "number" ? { withFlag: sc.withFlag ?? 0, total: sc.total } : null,
+    };
+  }
+
+  /** Adds the flag to the Chrome shortcuts. It takes effect the next time Chrome starts. */
+  async hideBanner(): Promise<BannerResult> {
+    if (!this.deps.bundled) return { ok: false, message: "This Friend has no copy of Chrome control to do that." };
+    const r = await this.ask("flag").catch(() => null);
+    const c = r?.counts as { patched?: number; already?: number; failed?: number } | null | undefined;
+    if (!r || !c) return { ok: false, message: "Could not change the shortcuts." };
+    const patched = c.patched ?? 0;
+    const failed = c.failed ?? 0;
+    const already = c.already ?? 0;
+    if (r.ok !== true) return { ok: false, patched, failed, message: failed ? "Windows would not let Friend change those shortcuts (shared ones may need an administrator)." : "No Chrome shortcut was found to change." };
+    const bits = [patched ? `Added the flag to ${patched} shortcut${patched === 1 ? "" : "s"}.` : "", already ? `${already} already had it.` : "", failed ? `${failed} could not be changed (shared ones may need an administrator).` : ""].filter(Boolean);
+    return { ok: true, patched, failed, message: `${bits.join(" ")} It counts when Chrome starts: if Chrome is open now, restart it.` };
+  }
+
+  /** Closes Chrome politely and starts it again with the flag and the tabs back. */
+  async restartChrome(): Promise<BannerResult> {
+    if (!this.deps.bundled) return { ok: false, message: "This Friend has no copy of Chrome control to do that." };
+    const r = await this.ask("chrome-restart").catch(() => null);
+    if (!r || typeof r.ok !== "boolean") return { ok: false, message: "Could not restart Chrome." };
+    return { ok: r.ok, message: String(r.message ?? (r.ok ? "Chrome was restarted." : "Chrome was not restarted.")) };
   }
 
   /** Switches the connector off but keeps it listed. */

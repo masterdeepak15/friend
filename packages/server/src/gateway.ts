@@ -194,6 +194,10 @@ export interface ChromeRemoteApi {
   access(origin: string): ChromeAccess;
   setRemote(enabled: boolean, pin: string | undefined, ip: string): Promise<void>;
   revealToken(pin: string, ip: string): Promise<string>;
+  /** Whether Chrome's debugging banner is hidden in the open Chrome and on its shortcuts. */
+  banner(): Promise<unknown>;
+  /** Adds the flag that hides the banner to the Chrome shortcuts, or restarts Chrome with it. Both need the PIN. */
+  bannerAct(what: "hide" | "restart", pin: string, ip: string): Promise<unknown>;
 }
 
 export interface PluginsApi {
@@ -1000,6 +1004,18 @@ export function createGateway(deps: GatewayDeps) {
         return { ok: true };
       } catch (e) {
         return pluginError(reply, e, "chrome.remote");
+      }
+    });
+    app.get("/api/plugins/chrome/banner", { onRequest: pluginGuard }, async () => chrome.banner());
+    app.post("/api/plugins/chrome/banner/:what", { onRequest: pluginGuard }, async (req, reply) => {
+      const what = z.enum(["hide", "restart"]).safeParse((req.params as { what?: string }).what);
+      const body = z.object({ pin: z.string().min(1).max(32) }).safeParse(req.body);
+      if (!what.success) return reply.code(404).send({ error: "Not found" });
+      if (!body.success) return reply.code(400).send({ error: "Enter your PIN" });
+      try {
+        return await chrome.bannerAct(what.data, body.data.pin, req.ip);
+      } catch (e) {
+        return pluginError(reply, e, `chrome.banner_${what.data}`);
       }
     });
     app.post("/api/plugins/chrome/token", { onRequest: pluginGuard }, async (req, reply) => {

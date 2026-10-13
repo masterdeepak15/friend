@@ -22,6 +22,18 @@ export interface ChromeAccessInfo {
   extensionZip: string | null;
 }
 
+/** Whether Chrome's "started debugging this browser" banner is hidden: in the Chrome that is open, and on its shortcuts. */
+export interface BannerInfo {
+  /** This Friend can manage it. When false the page says nothing about the banner. */
+  supported: boolean;
+  platform?: string;
+  running?: boolean;
+  /** The open Chrome was started with the flag that hides the banner. Null when Chrome is not open. */
+  hidden?: boolean | null;
+  shortcuts?: { withFlag: number; total: number } | null;
+  error?: string;
+}
+
 export interface ChromeApi {
   info(): Promise<ChromeInfo>;
   access(): Promise<ChromeAccessInfo>;
@@ -31,6 +43,12 @@ export interface ChromeApi {
   revealKey(pin: string): Promise<string>;
   /** Sets Chrome control up (its helper and the extension folder) from the copy that comes with Friend. */
   setUp(pin: string): Promise<{ ok: boolean; message: string }>;
+  /** Is the debugging banner hidden? Changes nothing. */
+  banner(): Promise<BannerInfo>;
+  /** Adds the flag that hides the banner to the Chrome shortcuts. Needs the PIN. */
+  hideBanner(pin: string): Promise<{ ok: boolean; message: string }>;
+  /** Closes Chrome politely and starts it again with the flag and the tabs back (or just starts it). Needs the PIN. */
+  restartChrome(pin: string): Promise<{ ok: boolean; message: string }>;
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -59,6 +77,9 @@ export const httpChromeApi: ChromeApi = {
   },
   setUp: (pin) => call("/api/connectors/quick/chrome/install", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin }) }),
   access: () => call<ChromeAccessInfo>("/api/plugins/chrome/access"),
+  banner: () => call<BannerInfo>("/api/plugins/chrome/banner"),
+  hideBanner: (pin) => call("/api/plugins/chrome/banner/hide", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin }) }),
+  restartChrome: (pin) => call("/api/plugins/chrome/banner/restart", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin }) }),
   setRemote: async (enabled, pin) => {
     await call("/api/plugins/chrome/remote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled, ...(pin ? { pin } : {}) }) });
   },
@@ -86,7 +107,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-type Ask = "setup" | "allow" | "key";
+type Ask = "setup" | "allow" | "key" | "hide" | "restart";
 
 /**
  * The Configure page of Chrome control, which comes with Friend: where the extension is (to load in Chrome, the one step nobody
@@ -95,6 +116,7 @@ type Ask = "setup" | "allow" | "key";
 export function ChromeForm({ api = httpChromeApi, pollMs = 3000 }: { api?: ChromeApi; pollMs?: number }) {
   const [info, setInfo] = useState<ChromeInfo | null>(null);
   const [access, setAccess] = useState<ChromeAccessInfo | null>(null);
+  const [banner, setBanner] = useState<BannerInfo | null>(null);
   const [key, setKey] = useState<string | null>(null);
   const [asking, setAsking] = useState<Ask | null>(null);
   const [pin, setPin] = useState("");
@@ -106,10 +128,11 @@ export function ChromeForm({ api = httpChromeApi, pollMs = 3000 }: { api?: Chrom
 
   const refresh = useCallback(async () => {
     try {
-      const [i, a] = await Promise.all([api.info(), api.access()]);
+      const [i, a, b] = await Promise.all([api.info(), api.access(), api.banner().catch(() => null)]);
       if (!alive.current) return;
       setInfo(i);
       setAccess(a);
+      setBanner(b);
     } catch {
       /* the next look will try again */
     }
@@ -139,6 +162,10 @@ export function ChromeForm({ api = httpChromeApi, pollMs = 3000 }: { api?: Chrom
         const k = await api.revealKey(pin);
         if (!alive.current) return;
         setKey(k);
+      } else if (asking === "hide" || asking === "restart") {
+        const r = await (asking === "hide" ? api.hideBanner(pin) : api.restartChrome(pin));
+        if (!alive.current) return;
+        setNote(r.message);
       }
       if (!alive.current) return;
       setAsking(null);
@@ -156,7 +183,18 @@ export function ChromeForm({ api = httpChromeApi, pollMs = 3000 }: { api?: Chrom
   if (asking) {
     return (
       <>
-        <p className="auth-note">{asking === "setup" ? "Enter your PIN to set up Chrome control." : asking === "allow" ? "Enter your PIN to allow other PCs to use Chrome control through Friend." : "Enter your PIN to show the key."}</p>
+        {asking === "restart" && <p className="auth-note connector-warning">This closes Chrome and opens it again with your tabs. Anything typed in a page that was not saved can be lost.</p>}
+        <p className="auth-note">
+          {asking === "setup"
+            ? "Enter your PIN to set up Chrome control."
+            : asking === "allow"
+              ? "Enter your PIN to allow other PCs to use Chrome control through Friend."
+              : asking === "hide"
+                ? "Enter your PIN to add the flag to your Chrome shortcuts."
+                : asking === "restart"
+                  ? "Enter your PIN to restart Chrome."
+                  : "Enter your PIN to show the key."}
+        </p>
         <PinPad pin={pin} onChange={setPin} onSubmit={() => !busy && pin.length >= 6 && void run()} />
         {error && (
           <p role="alert" className="auth-error">
@@ -212,6 +250,44 @@ export function ChromeForm({ api = httpChromeApi, pollMs = 3000 }: { api?: Chrom
         </button>
       </div>
       {note && <p className="auth-note">{note}</p>}
+      {banner?.supported && info?.extensionFolder && (
+        <>
+          <h4 className="plugins-heading">Chrome's debugging banner</h4>
+          <p className="auth-note">While Friend uses your Chrome, Chrome shows "started debugging this browser" with a Cancel button. It can be hidden, but only in a Chrome that was started with a special flag: a shortcut with the flag does nothing while Chrome is already open.</p>
+          {banner.error ? (
+            <p className="auth-error">{banner.error}</p>
+          ) : banner.running === false ? (
+            <p className="auth-note">Chrome is closed. Start it from here and the banner stays hidden.</p>
+          ) : banner.hidden ? (
+            <p className="auth-note">The banner is hidden in the Chrome that is open now.</p>
+          ) : (
+            <p className="auth-note connector-warning">The Chrome that is open now was started without it, so the banner shows. Restarting Chrome from here fixes that.</p>
+          )}
+          {banner.shortcuts && banner.shortcuts.total > 0 && (
+            <p className="auth-note">
+              {banner.shortcuts.withFlag} of {banner.shortcuts.total} shortcuts start Chrome with the banner hidden.
+            </p>
+          )}
+          <div className="approval-actions">
+            {banner.running === false ? (
+              <button type="button" style={touch} className="primary" onClick={() => setAsking("restart")}>
+                Start Chrome with the banner hidden
+              </button>
+            ) : (
+              banner.hidden === false && (
+                <button type="button" style={touch} className="primary" onClick={() => setAsking("restart")}>
+                  Restart Chrome with the banner hidden
+                </button>
+              )
+            )}
+            {banner.shortcuts && banner.shortcuts.withFlag < banner.shortcuts.total && (
+              <button type="button" style={touch} onClick={() => setAsking("hide")}>
+                Add the flag to my Chrome shortcuts
+              </button>
+            )}
+          </div>
+        </>
+      )}
       {access && info?.extensionFolder && (
         <>
           <h4 className="plugins-heading">From another PC</h4>

@@ -41,6 +41,22 @@ logs; and every refused try is recorded. Use `https` (Friend's public address) w
 Friend's cookie login is not involved: the key is the only way in, so keep it private. Switching **Stop allowing other PCs** off
 removes both addresses at once.
 
+## The "started debugging this browser" banner
+
+While Friend uses your Chrome, Chrome shows a bar that says the extension "started debugging this browser", with a Cancel button
+(Cancel switches the control off). Chrome can hide it, but only when it is **started** with the flag
+`--silent-debugger-extension-api`. A shortcut that has the flag does nothing while Chrome is already open: it just opens another
+window in the Chrome that is running, which keeps the flags it started with.
+
+Open **Configure** on the Chrome control plugin. Under *Chrome's debugging banner* it shows whether the open Chrome has the flag
+and how many of your Chrome shortcuts do, and has two buttons (both ask for your PIN):
+
+- **Add the flag to my Chrome shortcuts** edits your Chrome, Edge and Brave shortcuts (desktop, Start menu, taskbar). Shortcuts in
+  shared folders (for example the Start menu for all users) may need an administrator and are left as they are.
+- **Restart Chrome with the banner hidden** closes Chrome politely (every window is asked to close, so Chrome can ask about
+  anything unsaved), then opens it again with the flag and your tabs. It never force-closes a Chrome that still has a window open.
+  When Chrome is closed the same button starts it.
+
 ## Good to know
 
 - **Removing the plugin** removes Friend's connection only. The helper and the extension stay in `~/.chrome-control-mcp`, because

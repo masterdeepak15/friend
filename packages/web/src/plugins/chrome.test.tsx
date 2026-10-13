@@ -25,6 +25,9 @@ const api = (i: ChromeInfo = info(), a: ChromeAccessInfo = access()): ChromeApi 
   access: vi.fn(async () => a),
   setRemote: vi.fn(async () => {}),
   revealKey: vi.fn(async () => "the-secret-key-123"),
+  banner: vi.fn(async () => ({ supported: false })),
+  hideBanner: vi.fn(async () => ({ ok: true, message: "" })),
+  restartChrome: vi.fn(async () => ({ ok: true, message: "" })),
 });
 
 describe("the Chrome control Configure page", () => {

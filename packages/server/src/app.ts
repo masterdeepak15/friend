@@ -901,6 +901,12 @@ export async function createApp(opts: AppOptions) {
       audit.log("owner", enabled ? "chrome.remote_on" : "chrome.remote_off", { ip });
       if (enabled) void chromeRemoteApi.ensureServer().catch(() => {});
     },
+    banner: () => chromePlugin.bannerStatus(),
+    bannerAct: async (what, pin, ip) => {
+      await requirePin(pin, ip);
+      audit.log("owner", what === "hide" ? "chrome.banner_hide" : "chrome.banner_restart", { ip });
+      return what === "hide" ? chromePlugin.hideBanner() : chromePlugin.restartChrome();
+    },
     revealToken: async (pin, ip) => {
       await requirePin(pin, ip);
       const key = chromeToken(opts.quick?.home);
