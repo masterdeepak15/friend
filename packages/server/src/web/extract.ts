@@ -14,7 +14,7 @@ const NAMED: Record<string, string> = {
   copy: "©", reg: "®", euro: "€", pound: "£", yen: "¥", times: "×", deg: "°", middot: "·", bull: "•", laquo: "«", raquo: "»",
 };
 
-function decode(s: string): string {
+export function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z]{2,8});/gi, (all, body: string) => {
     if (body[0] === "#") {
       const code = body[1] === "x" || body[1] === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
@@ -25,7 +25,7 @@ function decode(s: string): string {
   });
 }
 
-const oneLine = (s: string) => decode(s).replace(/\s+/g, " ").trim();
+const oneLine = (s: string) => decodeEntities(s).replace(/\s+/g, " ").trim();
 
 /** Pairs like `<script ...> ... </script>` removed whole; one that is never closed is removed to the end of the page. */
 function dropBlocks(html: string, tags: string): string {
@@ -68,7 +68,7 @@ export function extractText(input: string, maxChars = 12_000): Extracted {
       .replace(/<[^>]*>/g, " ")
       .replace(/<[^>]*$/, " ");
 
-    text = decode(html)
+    text = decodeEntities(html)
       .replace(/\s+/g, " ") // the page's own white space becomes a space; the layout breaks (not white space) survive
       .split(BREAK)
       .map((line) =>
