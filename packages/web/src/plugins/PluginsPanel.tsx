@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { HoloCardList, paginate, pagingFor } from "../orb/HoloCards";
 import { HoloPanel } from "../orb/HoloPanel";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
@@ -27,9 +28,6 @@ const BADGE: Record<IntegrationEntry["state"], "on" | "off" | "warn" | "error"> 
   online: "on",
   error: "error",
 };
-
-/** Cards on one page of the glass panel: two columns of three. */
-const PAGE_SIZE = 6;
 
 /** What the install card offers for an integration: it looks like any other catalog plugin. */
 const asOffer = (i: IntegrationEntry): CatalogPlugin => ({ id: i.id, name: i.name, version: "", description: i.description, tools: 0, skills: 0, error: null, installed: false });
@@ -233,25 +231,7 @@ export function PluginsPanel({ api = httpPluginsApi, onClose, initialConfigure, 
 
   if (variant === "holo") {
     const entries = section === "installed" ? installed : available;
-    const pages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
-    const at = Math.min(pageIdx, pages - 1); // removing the last card of a page goes back one
-    const here = entries.slice(at * PAGE_SIZE, at * PAGE_SIZE + PAGE_SIZE);
-    const empty = section === "installed" ? "Nothing installed yet." : "Everything in the catalog is installed.";
-    const tab = (id: Section, label: string, count: number) => (
-      <button
-        key={id}
-        type="button"
-        role="tab"
-        aria-selected={section === id}
-        className={`holo-tab${section === id ? " on" : ""}`}
-        onClick={() => {
-          setSection(id);
-          setPageIdx(0);
-        }}
-      >
-        {label} <small>{count}</small>
-      </button>
-    );
+    const { here, at, pages } = paginate(entries, pageIdx);
     const inList = !pending && !shown;
     const body: ReactNode = pending ? (
       pinStep
@@ -260,38 +240,27 @@ export function PluginsPanel({ api = httpPluginsApi, onClose, initialConfigure, 
     ) : (
       <>
         {errorLine}
-        <div className="holo-tabs" role="tablist" aria-label="Plugins">
-          {tab("installed", "Installed", installed.length)}
-          {tab("available", "Available", available.length)}
-        </div>
-        {list && entries.length === 0 && <p className="auth-note">{empty}</p>}
-        <ul className="holo-cards">
-          {here.map((e) => (
-            <li key={e.key} className="holo-card" {...(e.integrationId ? { "data-integration": e.integrationId } : {})}>
-              <div className="holo-card-head">
-                <strong>{e.name}</strong>
-                {e.badge && <span className={`holo-badge ${e.badge}`}>{e.badgeText}</span>}
-                {!e.badge && e.small && <small>{e.small}</small>}
-              </div>
-              {e.badge && !e.integrationId && e.small && <small className="holo-version">version {e.small}</small>}
-              <div className={`holo-card-note ${e.noteClass}`}>{e.note}</div>
-              <div className="holo-card-actions">
-                {e.actions.map((a) => (
-                  <button key={a.label} type="button" className={`holo-btn sm${a.kind === "primary" ? " go" : a.kind === "danger" ? " warn" : ""}`} disabled={a.disabled} onClick={a.onClick}>
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <HoloCardList
+          tabs={[
+            { id: "installed" as Section, label: "Installed", count: installed.length },
+            { id: "available" as Section, label: "Available", count: available.length },
+          ]}
+          active={section}
+          onTab={(id) => {
+            setSection(id);
+            setPageIdx(0);
+          }}
+          cards={here.map((e) => ({ ...e, meta: e.badge ? (e.integrationId || !e.small ? undefined : `version ${e.small}`) : e.small || undefined }))}
+          empty={section === "installed" ? "Nothing installed yet." : "Everything in the catalog is installed."}
+          ready={!!list}
+        />
       </>
     );
     return (
       <HoloPanel
         label="Plugins"
         title={pending ? "Confirm with PIN" : shown ? shown.name : "Plugins"}
-        {...(inList && pages > 1 ? { page: { index: at, total: pages, onPrev: () => setPageIdx((at + pages - 1) % pages), onNext: () => setPageIdx((at + 1) % pages) } } : {})}
+        {...(inList && pages > 1 ? { page: pagingFor(at, pages, setPageIdx)! } : {})}
         help={inList ? <>Turn plugins on or off, set them up, or install more. Installing and switching on need your <b>PIN</b>.</> : undefined}
         extra={
           inList ? (

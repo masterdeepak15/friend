@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { HoloCardList, paginate, pagingFor, type HoloCard } from "../orb/HoloCards";
+import { HoloPanel } from "../orb/HoloPanel";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { httpConnectorsApi, parseEnv, parseHeaders, parseLines, type ConnectorList, type ConnectorView, type ConnectorsApi, type NewConnector, type Preset, type QuickCheck } from "./connectorsApi";
@@ -26,13 +28,15 @@ const slug = (s: string) =>
  * Owner-opened panel: the outside programs and services Friend may use (Gmail, Chrome control, …). Adding or switching
  * one on needs the PIN, because it starts a program or reaches a service. The PIN pad is drawn by the client.
  */
-export function ConnectorsPanel({ api = httpConnectorsApi, onClose }: { api?: ConnectorsApi; onClose: () => void }) {
+export function ConnectorsPanel({ api = httpConnectorsApi, onClose, variant = "classic" }: { api?: ConnectorsApi; onClose: () => void; variant?: "classic" | "holo" }) {
   const [list, setList] = useState<ConnectorList | null>(null);
   const [page, setPage] = useState<Page>({ name: "list" });
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [section, setSection] = useState<"connected" | "add">("connected");
+  const [pageIdx, setPageIdx] = useState(0);
   const alive = useRef(true);
 
   // the form
@@ -170,14 +174,19 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose }: { api?: Co
     });
   };
 
-  const frame = (children: React.ReactNode) => (
-    <div className="approval connectors glass" role="dialog" aria-label="Connectors" style={{ pointerEvents: "auto" }}>
-      <div className="approval-head">
-        <span className="approval-title">Connectors</span>
+  const frame = (children: React.ReactNode, glass: { title?: string; page?: ReturnType<typeof pagingFor>; help?: React.ReactNode } = {}) =>
+    variant === "holo" ? (
+      <HoloPanel label="Connectors" title={glass.title ?? "Connectors"} page={glass.page} help={glass.help} onDone={onClose}>
+        {children}
+      </HoloPanel>
+    ) : (
+      <div className="approval connectors glass" role="dialog" aria-label="Connectors" style={{ pointerEvents: "auto" }}>
+        <div className="approval-head">
+          <span className="approval-title">Connectors</span>
+        </div>
+        {children}
       </div>
-      {children}
-    </div>
-  );
+    );
   const errorLine = error && (
     <p role="alert" className="auth-error">
       {error}
@@ -370,6 +379,59 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose }: { api?: Co
           </button>
         </div>
       </div>,
+    );
+  }
+
+  if (variant === "holo") {
+    const connected = list?.connectors ?? [];
+    const presets = list?.presets ?? [];
+    const BADGE: Record<ConnectorView["status"], "on" | "off" | "warn" | "error"> = { off: "off", connecting: "warn", ready: "on", error: "error" };
+    const connectedCards: HoloCard[] = connected.map((c) => ({
+      key: c.id,
+      name: c.name,
+      badge: BADGE[c.status],
+      badgeText: STATUS_TEXT[c.status],
+      ...(c.status === "ready" ? { meta: `${c.tools} tools` } : {}),
+      note: `${c.error ? c.error : c.target}${c.secret ? " · secret saved" : ""}`,
+      noteClass: c.error ? "auth-error" : "auth-note",
+      actions: [
+        { label: c.enabled ? "Turn off" : "Turn on", disabled: busy, onClick: () => (c.enabled ? void run(async () => { await api.setEnabled(c.id, false); }) : setPage({ name: "switch-on", id: c.id, label: c.name })) },
+        ...(c.enabled ? [{ label: "Reload", disabled: busy, onClick: () => void run(async () => { await api.reload(c.id); }) }] : []),
+        { label: "Remove", kind: "danger" as const, disabled: busy, onClick: () => void run(async () => { await api.remove(c.id); }) },
+      ],
+    }));
+    const addCards: HoloCard[] = [
+      ...presets.map((p): HoloCard => ({
+        key: p.id,
+        name: p.name,
+        note: p.description,
+        noteClass: "auth-note",
+        actions: [{ label: p.quick ? "Connect" : "Add", kind: "primary", disabled: connected.some((c) => c.id === p.connector.id), onClick: () => (p.quick ? void startQuick(p) : openForm(p)) }],
+      })),
+      { key: "something-else", name: "Something else", note: "Any MCP program or server.", noteClass: "auth-note", actions: [{ label: "Add", onClick: () => openForm(null) }] },
+    ];
+    const cards = section === "connected" ? connectedCards : addCards;
+    const { here, at, pages } = paginate(cards, pageIdx);
+    return frame(
+      <>
+        {errorLine}
+        {notice && <p className="auth-note">{notice}</p>}
+        <HoloCardList
+          tabs={[
+            { id: "connected" as const, label: "Connected", count: connectedCards.length },
+            { id: "add" as const, label: "Add", count: addCards.length },
+          ]}
+          active={section}
+          onTab={(id) => {
+            setSection(id);
+            setPageIdx(0);
+          }}
+          cards={here}
+          empty="Nothing connected yet. Add one on the Add tab."
+          ready={!!list}
+        />
+      </>,
+      { page: pagingFor(at, pages, setPageIdx), help: <>Outside programs and services Friend may use. Adding or switching one on needs your <b>PIN</b>.</> },
     );
   }
 

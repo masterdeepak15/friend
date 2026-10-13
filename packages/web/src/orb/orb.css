@@ -509,6 +509,59 @@
   color: var(--orb-cyan);
 }
 
+/* buttons in the steps inside a glass panel (PIN, forms, results) look like the panel's own */
+.holo-body .approval-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.holo-body .approval-actions button {
+  min-width: 112px;
+  padding: 9px 18px;
+  font: 600 12px var(--orb-font);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--orb-ink);
+  background: rgba(53, 240, 255, 0.1);
+  border: 1px solid var(--orb-teal-edge);
+  border-radius: 0;
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  cursor: pointer;
+}
+.holo-body .approval-actions button.primary {
+  background: rgba(53, 240, 255, 0.28);
+}
+.holo-body .approval-actions button.danger {
+  color: var(--orb-orange);
+  border-color: var(--orb-orange);
+  background: transparent;
+}
+.holo-body .approval-actions button:hover:not(:disabled),
+.holo-body .approval-actions button:focus-visible {
+  background: rgba(53, 240, 255, 0.36);
+  box-shadow: 0 0 12px var(--orb-cyan);
+  outline: none;
+}
+.holo-body .approval-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.holo-body .auth-note,
+.holo-body .connector-steps {
+  color: var(--orb-text);
+}
+.holo-body .auth-error {
+  color: var(--orb-danger);
+}
+.holo-body .connector-warning {
+  color: var(--orb-orange);
+}
+.holo-body .connector-form {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
 @keyframes holo-in {
   from {
     opacity: 0;

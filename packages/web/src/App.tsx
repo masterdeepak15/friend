@@ -234,7 +234,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
           />
         )}
         {settingsOpen && <SettingsPanel initialTab={settingsOpen} variant={menuStyle === "orb" ? "holo" : "classic"} onClose={() => setSettingsOpen(null)} />}
-        {connectorsOpen && <ConnectorsPanel onClose={() => setConnectorsOpen(false)} />}
+        {connectorsOpen && <ConnectorsPanel variant={menuStyle === "orb" ? "holo" : "classic"} onClose={() => setConnectorsOpen(false)} />}
         {help && <HelpPanel commands={help} onClose={() => setHelp(null)} />}
       </Overlay>
       <MenuTag
