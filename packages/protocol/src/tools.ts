@@ -657,7 +657,7 @@ export function describeCall(name: string, args: unknown, device?: string): stri
     case "web.search":
       return `Search the web for ${visible(clip(String(a.query ?? ""), 200))}`;
     case "web.read":
-      return `Read the web page ${visible(clip(String(a.url ?? ""), 200))}`;
+      return `Read the web page ${visible(clip(String(a.url ?? ""), 600))}`;
     case "skill.use":
       return `Load skill ${visible(String(a.plugin ?? ""))}/${visible(String(a.name ?? ""))}`;
     case "code.run":

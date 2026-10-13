@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeFetch } from "./fetch";
+import { guardedLookup, safeFetch } from "./fetch";
 
 const PUBLIC = "93.184.216.34";
 type Handler = (url: string, init: RequestInit) => Response | Promise<Response>;
@@ -146,5 +146,39 @@ describe("fetching a page safely", () => {
     const bytes = new TextEncoder().encode("नमस्ते ₹100");
     const w = web(() => new Response(bytes, { headers: { "content-type": "text/html; charset=utf-8" } }));
     expect(await safeFetch("https://example.com/", w.opts)).toMatchObject({ body: "नमस्ते ₹100" });
+  });
+});
+
+describe("the address that is really connected to", () => {
+  const ask = (lookup: ReturnType<typeof guardedLookup>, host: string, opts: object = {}) =>
+    new Promise<{ err: Error | null; address: unknown; family?: number }>((resolve) => lookup(host, opts, (err: Error | null, address: unknown, family?: number) => resolve({ err, address, family })));
+
+  it("hands over a public address", async () => {
+    const r = await ask(guardedLookup(async () => [{ address: "93.184.216.34", family: 4 }]), "example.com");
+    expect(r).toEqual({ err: null, address: "93.184.216.34", family: 4 });
+  });
+
+  it("hands over every public address when asked for all of them", async () => {
+    const r = await ask(guardedLookup(async () => [{ address: "93.184.216.34", family: 4 }, { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 }]), "example.com", { all: true });
+    expect(r.err).toBeNull();
+    expect(r.address).toEqual([{ address: "93.184.216.34", family: 4 }, { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 }]);
+  });
+
+  it("refuses a name that now points inside, even if it did not a moment ago", async () => {
+    for (const a of ["127.0.0.1", "10.1.2.3", "192.168.0.1", "169.254.169.254", "::1"]) {
+      const r = await ask(guardedLookup(async () => [{ address: a, family: a.includes(":") ? 6 : 4 }]), "rebind.example.com");
+      expect(r.err, a).toBeInstanceOf(Error);
+      expect(String(r.err?.message), a).not.toContain(a);
+    }
+  });
+
+  it("refuses when any one of the addresses is inside", async () => {
+    const r = await ask(guardedLookup(async () => [{ address: "93.184.216.34", family: 4 }, { address: "10.0.0.5", family: 4 }]), "mixed.example.com", { all: true });
+    expect(r.err).toBeInstanceOf(Error);
+  });
+
+  it("fails clearly when the name cannot be found", async () => {
+    const r = await ask(guardedLookup(async () => { throw new Error("ENOTFOUND"); }), "nope.example.com");
+    expect(r.err).toBeInstanceOf(Error);
   });
 });

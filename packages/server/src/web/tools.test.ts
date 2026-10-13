@@ -122,3 +122,11 @@ describe("choosing where to search", () => {
     expect(typeof c.search).toBe("function");
   });
 });
+
+describe("a page cannot make the answer huge", () => {
+  it("keeps the result under the limit even when the title is enormous", async () => {
+    const { d } = deps({ fetch: async () => ({ ok: true, finalUrl: "https://big.example.com/", contentType: "text/html", body: "<title>" + "word ".repeat(300_000) + "</title><p>" + "text ".repeat(20_000) + "</p>" }) as Fetched });
+    const r = await runWebTool("web.read", { url: "https://big.example.com/" }, d);
+    expect(r.text.length).toBeLessThan(13_000);
+  });
+});

@@ -70,3 +70,31 @@ describe("reading a page", () => {
     expect(Date.now() - t).toBeLessThan(2000);
   });
 });
+
+describe("a hostile page cannot hold Friend up", () => {
+  const quick = (name: string, html: string) =>
+    it(`reads ${name} in well under a second`, () => {
+      const t = Date.now();
+      const r = extractText(html);
+      expect(Date.now() - t, name).toBeLessThan(500);
+      expect(typeof r.text).toBe("string");
+    });
+  const MB2 = 2_000_000;
+  quick("2 MB of unclosed comments", "<p>x</p>" + "<!--".repeat(MB2 / 4));
+  quick("2 MB of unclosed scripts", "<p>x</p>" + "<script>".repeat(MB2 / 8));
+  quick("2 MB of hidden divs that never close", "<p>x</p>" + "<div hidden>".repeat(MB2 / 12));
+  quick("2 MB of display:none attributes in one tag", "<div " + "display:none ".repeat(MB2 / 13));
+  quick("2 MB of < with no >", "<".repeat(MB2));
+  quick("2 MB of open tags with no end", "<a ".repeat(MB2 / 3));
+  quick("2 MB of unclosed main and article", "<main>".repeat(MB2 / 12) + "<article>".repeat(MB2 / 18));
+  quick("2 MB of nested forms", "<form>".repeat(MB2 / 6));
+
+  it("still keeps the good part of a page that is followed by rubbish", () => {
+    expect(extractText("<article><p>The story.</p></article>" + "<!--".repeat(100_000)).text).toBe("The story.");
+  });
+
+  it("caps the title", () => {
+    const r = extractText("<title>" + "word ".repeat(300_000) + "</title><p>x</p>");
+    expect(r.title.length).toBeLessThanOrEqual(200);
+  });
+});

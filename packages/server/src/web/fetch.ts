@@ -1,3 +1,6 @@
+import { lookup as dnsLookup } from "node:dns/promises";
+import { Agent, fetch as undiciFetch } from "undici";
+import { isPrivateAddress } from "../music/audius";
 import { vetPublicUrl } from "../video/url";
 
 export interface FetchOptions {
@@ -12,6 +15,34 @@ export interface FetchOptions {
   signal?: AbortSignal;
 }
 
+type Address = { address: string; family: number };
+const INSIDE = "That address is on this PC or your network, so Friend will not open it.";
+
+/**
+ * The name lookup used for the real connection. The check before a request looks a name up once; a hostile name server could answer
+ * with a public address then and an inside one a moment later, when the connection is made. So the connection itself asks here, and
+ * only an address that is public is ever connected to.
+ */
+export function guardedLookup(resolveAll: (host: string) => Promise<Address[]> = (h) => dnsLookup(h, { all: true })) {
+  return (hostname: string, options: unknown, cb: (err: Error | null, address?: unknown, family?: number) => void): void => {
+    const all = typeof options === "object" && options !== null && (options as { all?: boolean }).all === true;
+    resolveAll(hostname).then(
+      (list) => {
+        if (list.length === 0 || list.some((a) => isPrivateAddress(a.address))) return cb(new Error(INSIDE));
+        if (all) cb(null, list);
+        else cb(null, list[0]!.address, list[0]!.family);
+      },
+      () => cb(new Error("Friend could not find that site.")),
+    );
+  };
+}
+
+let pinned: Agent | null = null;
+/** The real request: the same as `fetch`, but connecting only to public addresses. */
+const guardedFetch = ((url: string | URL | Request, init?: RequestInit) => {
+  pinned ??= new Agent({ connect: { lookup: guardedLookup() as never } });
+  return undiciFetch(url as never, { ...(init as object), dispatcher: pinned } as never);
+}) as unknown as typeof fetch;
 export type Fetched = { ok: true; finalUrl: string; contentType: string; body: string } | { ok: false; error: string };
 
 const TEXT_TYPES = new Set(["text/html", "application/xhtml+xml", "text/plain"]);
@@ -24,7 +55,7 @@ const NOTHING_DOWNLOADED = "Friend could not read that page.";
  * failure is one plain sentence that never repeats an address.
  */
 export async function safeFetch(url: string, o: FetchOptions = {}): Promise<Fetched> {
-  const doFetch = o.fetchImpl ?? fetch;
+  const doFetch = o.fetchImpl ?? guardedFetch;
   const maxBytes = o.maxBytes ?? 2_000_000;
   const maxRedirects = o.maxRedirects ?? 4;
   const control = new AbortController();

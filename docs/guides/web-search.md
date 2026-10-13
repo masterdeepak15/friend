@@ -25,6 +25,8 @@ Keys are write-only: they are never shown again and only the owner can change th
 - Everything that comes back from the internet is marked as untrusted data. A page that says "ignore your instructions" is just text.
 - `web.read` only opens public web pages: no addresses on this PC or your network, no logins in the link, no odd ports. The check
   runs again on every redirect (at most 4), so a page cannot send Friend inwards.
-- 10 seconds at most, 2 MB at most, text pages only. Nothing is run or saved, and no cookies or logins are sent.
+- web.read asks for your yes (a card showing the whole address) when the address is one nobody gave it: not typed or said by you, and not returned by a search in the same request. This stops a page from talking Friend into sending private data out inside an address.
+- The connection itself is checked too: Friend only connects to public addresses, even if a name starts pointing inside after the check.
+- 10 seconds at most, 2 MB at most (and only the first part of a page is read), text pages only. Nothing is run or saved, and no cookies or logins are sent.
 - The owner gets both tools. A recognized household member gets `web.search` only. Guests and Alexa get neither.
 - The audit log records each search (the words searched, the source, how many results) and each page read (the site only).

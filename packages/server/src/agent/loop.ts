@@ -131,6 +131,20 @@ interface ToolCall {
   args: unknown;
 }
 
+/** Web addresses written in some text, in one plain form, so two spellings of the same address match. */
+const normalUrl = (u: string): string => {
+  try {
+    return new URL(u.trim()).toString();
+  } catch {
+    return u.trim();
+  }
+};
+function urlsIn(text: string): Set<string> {
+  const found = new Set<string>();
+  for (const m of text.matchAll(/https?:\/\/[^\s<>"')\]]+/gi)) found.add(normalUrl(m[0].replace(/[.,;:!?]+$/, "")));
+  return found;
+}
+
 const clipArgs = (args: unknown): unknown =>
   JSON.parse(JSON.stringify(args ?? {}, (_k, v) => (typeof v === "string" && v.length > 200 ? v.slice(0, 200) + "…" : v)));
 
@@ -145,6 +159,8 @@ export class Agent {
   /** The notes the last tidy-up left in the model's conversation, so the next one does not lose what is in them. */
   private lastSummary: string | null = null;
   private tidyBlockedUntil = 0;
+  /** Web addresses the owner said or a search returned in this turn: the only ones web.read may open without asking. */
+  private seenUrls = new Set<string>();
 
   /** Runs `job` as soon as no request is being answered (right away when idle). */
   whenIdle(job: () => void): void {
@@ -238,6 +254,7 @@ export class Agent {
     this.busy = true;
     const spent = { input: 0, output: 0 };
     let reported = 0;
+    this.seenUrls = ctx.trust === "owner" ? urlsIn(text) : new Set();
     this.scenesThisTurn = 0;
     const stage = (cmd: Parameters<StageState["apply"]>[0]) => {
       d.stage.apply(cmd);
@@ -553,14 +570,17 @@ export class Agent {
     let tier: Tier = def.baseTier;
     if (call.name === "shell.run") tier = classifyShell(String(args.command), d.config.destructivePatterns);
     const p = pathArg(call.name, args);
-    const insideRoots = p === undefined ? true : lexicalInsideRoots(p, d.config.roots);
+    // a page the model chose by itself (an address nobody said and no search returned) could be a way to send private data out in the
+    // address, so it is asked about like anything else outside what the owner has allowed
+    const unpointed = call.name === "web.read" && typeof args.url === "string" && !this.seenUrls.has(normalUrl(args.url));
+    const insideRoots = (p === undefined ? true : lexicalInsideRoots(p, d.config.roots)) && !unpointed;
 
     const protectedPath = p !== undefined && lexicalInsideRoots(p, [d.config.dataDir]);
     const decision = d.policy.decide({ tool: call.name, baseTier: tier, args, trust: ctx.trust, insideRoots, protectedPath });
     let approvedOutside = false;
     const device = def.target === "device" ? d.devices.targetName() : null;
     if (decision === "deny") {
-      d.audit.log("agent", "tool.denied", { tool: call.name, args: clipArgs(args), trust: ctx.trust });
+      d.audit.log("agent", "tool.denied", { tool: call.name, args: call.name.startsWith("web.") ? {} : clipArgs(args), trust: ctx.trust }); // a web address or a search can be private: only the web tools' own entries say anything about them
       return fail("This action is not allowed.");
     }
     if ((call.name === "code.run" || plugin) && !d.code) return fail("Running code is not available.");
@@ -596,7 +616,7 @@ export class Agent {
         ctx.emit,
       );
       if (!outcome.approved) {
-        d.audit.log("agent", "tool.not_approved", { tool: call.name, args: clipArgs(args), reason: outcome.reason });
+        d.audit.log("agent", "tool.not_approved", { tool: call.name, args: call.name.startsWith("web.") ? {} : clipArgs(args), reason: outcome.reason });
         return fail(`The owner did not approve this action (${outcome.reason ?? "denied"}).`);
       }
       approvedOutside = !insideRoots;
@@ -653,6 +673,7 @@ export class Agent {
     if (call.name === "web.search" || call.name === "web.read") {
       if (!d.web?.enabled()) return fail("Web search is switched off.");
       const r = await d.web.run(call.name, args, this.abort?.signal);
+      if (r.ok && call.name === "web.search") for (const u of urlsIn(r.text)) this.seenUrls.add(u);
       return r.ok ? { text: r.text, isError: false } : fail(r.text);
     }
 
