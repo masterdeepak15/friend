@@ -12,6 +12,7 @@ import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 import { TABS, type SettingsTab } from "./tabs";
 import { HoloPanel } from "../orb/HoloPanel";
 import { ConversationSection } from "./ConversationSection";
+import { WebSection } from "./WebSection";
 import { StartupTab } from "./StartupTab";
 import { UsageTab } from "./UsageTab";
 
@@ -52,6 +53,8 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [apiKey, setApiKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [braveKey, setBraveKey] = useState("");
+  const [tavilyKey, setTavilyKey] = useState("");
   const [asking, setAsking] = useState(false);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -119,7 +122,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
     );
   }
 
-  const patch = diffSettings(saved, draft, apiKey, openaiKey);
+  const patch = diffSettings(saved, draft, apiKey, openaiKey, { brave: braveKey, tavily: tavilyKey });
   const dirty = Object.keys(patch).length > 0;
   const set = <G extends "ollama" | "claudeCode" | "voice" | "look">(group: G, field: keyof SettingsView[G], value: unknown) =>
     setDraft({ ...draft, [group]: { ...draft[group], [field]: value } });
@@ -145,6 +148,8 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       setDraft(structuredClone(r.settings));
       setApiKey("");
       setOpenaiKey("");
+      setBraveKey("");
+      setTavilyKey("");
       setAsking(false);
       const newVoice = patch.voice && (patch.voice as Record<string, unknown>).ttsVoice !== undefined;
       const newModel = patch.voice && (patch.voice as Record<string, unknown>).sttModel !== undefined;
@@ -296,6 +301,8 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           </label>
         </>
       )}
+
+      {draft.web && saved.web && <WebSection web={draft.web} saved={saved.web} braveKey={braveKey} tavilyKey={tavilyKey} onChange={(p) => setDraft({ ...draft, web: { ...draft.web!, ...p } })} onBraveKey={setBraveKey} onTavilyKey={setTavilyKey} />}
     </>
   );
 
@@ -534,6 +541,8 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
     setDraft(structuredClone(saved));
     setApiKey("");
     setOpenaiKey("");
+    setBraveKey("");
+    setTavilyKey("");
   };
   const messages = (
     <>

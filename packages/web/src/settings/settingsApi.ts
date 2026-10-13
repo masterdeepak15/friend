@@ -92,6 +92,8 @@ export interface SettingsView {
   claudeCode: { model: string; command: string; fallback: "ollama" | "none"; webSearch?: boolean };
   updates?: { auto: boolean };
   session?: { autoCompact: boolean; compactAtTokens: number };
+  /** Searching the web. The keys are never sent here, only whether they are set. */
+  web?: { enabled: boolean; provider: "duckduckgo" | "brave" | "tavily" | "searxng"; searxngUrl: string; braveKeySet: boolean; tavilyKeySet: boolean };
   voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; ttsVoice: string; sttModel: string; hindiVoice?: string; marathiVoice?: string; duck?: boolean; duckPercent?: number };
 }
 
@@ -186,7 +188,7 @@ export async function playVoicePreview(voice: string): Promise<void> {
 }
 
 /** Only what the owner actually changed, in the shape the server accepts. `apiKey` is sent only when something was typed. */
-export function diffSettings(before: SettingsView, after: SettingsView, apiKey: string, openaiKey = ""): Record<string, unknown> {
+export function diffSettings(before: SettingsView, after: SettingsView, apiKey: string, openaiKey = "", webKeys: { brave: string; tavily: string } = { brave: "", tavily: "" }): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   if (after.provider !== before.provider) patch.provider = after.provider;
   if (after.model !== before.model) patch.model = after.model;
@@ -217,6 +219,13 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     if (Object.keys(clock).length) changed.clock = clock;
     if (JSON.stringify(after.hud.launcher) !== JSON.stringify(before.hud.launcher)) changed.launcher = after.hud.launcher;
     if (Object.keys(changed).length) patch.hud = changed;
+  }
+  if (before.web && after.web) {
+    const changed: Record<string, unknown> = {};
+    for (const k of ["enabled", "provider", "searxngUrl"] as const) if (after.web[k] !== before.web[k]) changed[k] = after.web[k];
+    if (webKeys.brave.trim()) changed.braveKey = webKeys.brave.trim();
+    if (webKeys.tavily.trim()) changed.tavilyKey = webKeys.tavily.trim();
+    if (Object.keys(changed).length) patch.web = changed;
   }
   if (before.openai && after.openai) {
     const changed: Record<string, unknown> = {};

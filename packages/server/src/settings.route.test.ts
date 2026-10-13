@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
 import { FakeProvider } from "./provider/fake";
-import { applySettings } from "./settings";
+import { applySettings, refuseForAgent } from "./settings";
 
 const owner = { password: "correct horse battery", pin: "123456", assistantName: "Jarvis" };
 type App = Awaited<ReturnType<typeof createApp>>;
@@ -137,5 +137,36 @@ describe("applySettings", () => {
     const c = loadConfig(mkdtempSync(join(tmpdir(), "friend-apply-")));
     expect(() => applySettings(c, { claudeCode: { model: "haiku" }, voice: { accept: 3 } })).toThrow();
     expect(c.claudeCode.model).toBe("sonnet");
+  });
+});
+
+describe("web search settings", () => {
+  it("show the choices but never a key", async () => {
+    const cookie = await boot({ config: { web: { enabled: true, provider: "brave", searxngUrl: "", braveKey: "BRAVE-SECRET-1", tavilyKey: "TAVILY-SECRET-2" } } });
+    const text = await (await get(cookie)).text();
+    expect(text).not.toContain("BRAVE-SECRET-1");
+    expect(text).not.toContain("TAVILY-SECRET-2");
+    expect(JSON.parse(text).web).toEqual({ enabled: true, provider: "brave", searxngUrl: "", braveKeySet: true, tavilyKeySet: true });
+  });
+
+  it("change the source and the keys with the PIN, and keep a key when the box is left empty", async () => {
+    const cookie = await boot();
+    expect((await put(cookie, { web: { provider: "tavily", tavilyKey: "TVLY-1" } })).status).toBe(200);
+    expect(loadConfig(dir).web).toMatchObject({ provider: "tavily", tavilyKey: "TVLY-1" });
+    expect((await put(cookie, { web: { enabled: false, tavilyKey: "" } })).status).toBe(200);
+    expect(loadConfig(dir).web).toMatchObject({ enabled: false, tavilyKey: "TVLY-1" });
+  });
+
+  it("refuse a source that does not exist and an address that is not a web address", async () => {
+    const cookie = await boot();
+    for (const bad of [{ web: { provider: "google" } }, { web: { searxngUrl: "ftp://x" } }, { web: { searxngUrl: "javascript:alert(1)" } }, { web: { braveKey: "x".repeat(300) } }, { web: { surprise: true } }]) {
+      expect((await put(cookie, bad)).status, JSON.stringify(bad)).toBe(400);
+    }
+  });
+
+  it("are not for the assistant to change: they hold keys and an address on the owner's network", () => {
+    expect(() => refuseForAgent({ web: { braveKey: "x" } })).toThrow(/web search/i);
+    expect(() => refuseForAgent({ web: { searxngUrl: "http://10.0.0.5" } })).toThrow(/web search/i);
+    expect(() => refuseForAgent({ voice: { speakTyped: true } })).not.toThrow();
   });
 });

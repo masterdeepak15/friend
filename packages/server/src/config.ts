@@ -31,6 +31,7 @@ export interface Config {
   /** Updating Friend: by itself, or only when the owner says so. */
   updates: UpdatesConfig;
   session: SessionConfig;
+  web: WebConfig;
   /** What the screen shows besides the AI's pictures: minimal, companion (status line and clock) or workspace (also chat and schedule). */
   view: ViewPreset;
   look: LookConfig;
@@ -533,6 +534,41 @@ export interface UpdatesConfig {
   auto: boolean;
 }
 
+/** Searching the web: `web.search` and `web.read`, for every model. */
+export type WebProvider = "duckduckgo" | "brave" | "tavily" | "searxng";
+export interface WebConfig {
+  enabled: boolean;
+  /** Where searches are sent. DuckDuckGo needs no key; the others need the owner's key or address. */
+  provider: WebProvider;
+  /** The owner's own SearXNG server (http or https), when that is the source. */
+  searxngUrl: string;
+  braveKey: string | null;
+  tavilyKey: string | null;
+}
+export const WEB_PROVIDERS: readonly WebProvider[] = ["duckduckgo", "brave", "tavily", "searxng"];
+export const DEFAULT_WEB: WebConfig = { enabled: true, provider: "duckduckgo", searxngUrl: "", braveKey: null, tavilyKey: null };
+
+/** A web address with no login in it, or nothing. */
+export function plainWebAddress(v: unknown): string {
+  if (typeof v !== "string" || !v.trim() || v.length > 300) return "";
+  try {
+    const u = new URL(v.trim());
+    return (u.protocol === "http:" || u.protocol === "https:") && !u.username && !u.password ? v.trim() : "";
+  } catch {
+    return "";
+  }
+}
+const key = (v: unknown): string | null => (typeof v === "string" && v.trim() && v.trim().length <= 200 ? v.trim() : null);
+export function sanitizeWeb(raw: unknown): WebConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    enabled: typeof r.enabled === "boolean" ? r.enabled : true,
+    provider: WEB_PROVIDERS.includes(r.provider as WebProvider) ? (r.provider as WebProvider) : "duckduckgo",
+    searxngUrl: plainWebAddress(r.searxngUrl),
+    braveKey: key(r.braveKey),
+    tavilyKey: key(r.tavilyKey),
+  };
+}
 /** How Friend keeps the model's own conversation from growing without end. */
 export interface SessionConfig {
   /** Write notes and start a fresh conversation by itself when it passes `compactAtTokens`. */
@@ -621,6 +657,7 @@ const defaults = (dataDir: string): Config => ({
   voice: { ...DEFAULT_VOICE },
   updates: sanitizeUpdates(undefined),
   session: sanitizeSession(undefined),
+  web: sanitizeWeb(undefined),
   view: "companion",
   look: { ...DEFAULT_LOOK },
   ownerName: "",
@@ -674,6 +711,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
     updates: sanitizeUpdates(stored.updates),
   session: sanitizeSession(stored.session),
+  web: sanitizeWeb(stored.web),
     view: stored.view === "minimal" || stored.view === "workspace" ? stored.view : "companion",
     look: sanitizeLook(stored.look),
     ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",

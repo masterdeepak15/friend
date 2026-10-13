@@ -6,7 +6,7 @@ import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, MUSIC_OUTPUTS, programProblem, LAUNC
 import { statSync } from "node:fs";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
-import { isValidTimeZone, sanitizeHud, validDateLocale, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
+import { isValidTimeZone, plainWebAddress, sanitizeHud, validDateLocale, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
 const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
@@ -195,6 +195,16 @@ export const SettingsPatch = z
       .partial()
       .strict(),
     updates: z.object({ auto: z.boolean() }).partial().strict(),
+    web: z
+      .object({
+        enabled: z.boolean(),
+        provider: z.enum(["duckduckgo", "brave", "tavily", "searxng"]),
+        searxngUrl: z.string().trim().max(300).refine((v) => v === "" || plainWebAddress(v) !== "", "Enter a web address starting with http:// or https://"),
+        braveKey: z.string().trim().max(200),
+        tavilyKey: z.string().trim().max(200),
+      })
+      .partial()
+      .strict(),
     session: z.object({ autoCompact: z.boolean(), compactAtTokens: z.number().int().min(50_000).max(800_000) }).partial().strict(),
   })
   .partial()
@@ -259,6 +269,8 @@ export interface SettingsView {
   updates: Config["updates"];
   /** Whether Friend tidies the model's own conversation by itself, and how big it may grow first. */
   session: Config["session"];
+  /** Searching the web. The keys are never sent to the screen, only whether they are set. */
+  web: { enabled: boolean; provider: Config["web"]["provider"]; searxngUrl: string; braveKeySet: boolean; tavilyKeySet: boolean };
 }
 
 export function settingsView(c: Config): SettingsView {
@@ -325,6 +337,7 @@ export function settingsView(c: Config): SettingsView {
     },
     updates: { auto: c.updates.auto },
     session: { autoCompact: c.session.autoCompact, compactAtTokens: c.session.compactAtTokens },
+    web: { enabled: c.web.enabled, provider: c.web.provider, searxngUrl: c.web.searxngUrl, braveKeySet: !!c.web.braveKey, tavilyKeySet: !!c.web.tavilyKey },
   };
 }
 
@@ -342,6 +355,7 @@ export function refuseForAgent(raw: unknown): void {
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
   if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
+  if ("web" in r) throw new SettingsError("Web search settings (the source, its keys and addresses) can only be changed by the owner on the settings screen.");
   if ("apiKey" in r || "apiKey" in oa) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
   if ("command" in cc) throw new SettingsError("The Claude Code command can only be changed by the owner on the settings screen.");
 }
@@ -507,6 +521,12 @@ export function applySettings(config: Config, raw: unknown): Applied {
   if (p.claudeCode) Object.assign(config.claudeCode, p.claudeCode);
   if (p.updates) Object.assign(config.updates, p.updates);
   if (p.session) Object.assign(config.session, p.session);
+  if (p.web) {
+    const { braveKey, tavilyKey, ...rest } = p.web;
+    Object.assign(config.web, rest);
+    if (braveKey) config.web.braveKey = braveKey;
+    if (tavilyKey) config.web.tavilyKey = tavilyKey;
+  }
   if (p.voice) {
     const safe = next.voice;
     for (const k of Object.keys(p.voice) as (keyof Config["voice"])[]) (config.voice as unknown as Record<string, unknown>)[k] = safe[k];
