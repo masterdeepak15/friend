@@ -66,6 +66,7 @@ export function buildCategories(p: OwnerMenuProps, h: OrbHelpers): OrbCategory[]
   if (p.voiceAvailable && p.onToggleHandsFree) voice.push({ id: "voice.handsfree", label: "Hands-free", icon: "hands", kind: "toggle", on: !!p.handsFreeOn, run: p.onToggleHandsFree });
   if (p.voiceAvailable && p.onEnroll) voice.push({ id: "voice.enroll", label: p.voiceEnrolled ? "Voice settings" : "Enroll my voice", icon: "voiceprint", kind: "open", run: p.onEnroll });
   if (p.voiceAvailable && p.voiceEnrolled && p.onHousehold) voice.push({ id: "voice.family", label: "Family voices", icon: "family", kind: "open", run: p.onHousehold });
+  if (p.onToggleQuiet) voice.push({ id: "voice.speak", label: "Speak aloud", icon: "speaker", kind: "toggle", on: !p.quiet, run: p.onToggleQuiet });
   voice.push({ id: "voice.mute", label: "Mute stage", icon: "mute", kind: "toggle", on: p.muted, run: p.onToggleMute });
   add({ id: "voice", label: "Voice", icon: "mic", items: voice });
 

@@ -254,3 +254,24 @@ describe("VoiceController playback", () => {
     expect(player.stopped).toBeGreaterThan(0);
   });
 });
+
+describe("keeping quiet", () => {
+  const clip = { type: "audio.chunk" as const, id: "1-0", seq: 0, last: true, mime: "audio/wav", data: "AA==" };
+
+  it("silences a reply that is being spoken and plays nothing more while quiet", () => {
+    ctl.handleServer(clip);
+    expect(player.chunks).toHaveLength(1);
+    const stopped = player.stopped;
+    ctl.setQuiet(true);
+    expect(player.stopped).toBeGreaterThan(stopped);
+    ctl.handleServer({ ...clip, id: "2-0" });
+    expect(player.chunks).toHaveLength(1);
+  });
+
+  it("speaks again once the voice is back on", () => {
+    ctl.setQuiet(true);
+    ctl.setQuiet(false);
+    ctl.handleServer(clip);
+    expect(player.chunks).toHaveLength(1);
+  });
+});

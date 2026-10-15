@@ -10,10 +10,12 @@ afterEach(() => {
 });
 
 function setup(over: Partial<OrbMenuProps> = {}) {
-  const calls = { mute: vi.fn(), hands: vi.fn(), settings: vi.fn(), plugins: vi.fn(), signedOut: vi.fn(), classic: vi.fn(), camera: vi.fn() };
+  const calls = { mute: vi.fn(), hands: vi.fn(), settings: vi.fn(), plugins: vi.fn(), signedOut: vi.fn(), classic: vi.fn(), camera: vi.fn(), quiet: vi.fn() };
   const props: OrbMenuProps = {
     muted: false,
     onToggleMute: calls.mute,
+    quiet: false,
+    onToggleQuiet: calls.quiet,
     onSignedOut: calls.signedOut,
     voiceAvailable: true,
     voiceEnrolled: false,
@@ -191,5 +193,22 @@ describe("the orb menu", () => {
     await userEvent.keyboard(" ");
     window.removeEventListener("keydown", seen);
     expect(seen).not.toHaveBeenCalled();
+  });
+});
+
+describe("the voice switch in the orb menu", () => {
+  it("shows Speak aloud as on, and a press asks to turn it off", async () => {
+    const calls = setup();
+    await esc();
+    await userEvent.click(arc("Voice"));
+    await userEvent.click(arc("Speak aloud"));
+    expect(calls.quiet).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows Speak aloud as off while the voice is kept off", async () => {
+    setup({ quiet: true });
+    await esc();
+    await userEvent.click(arc("Voice"));
+    expect(arc("Speak aloud").getAttribute("aria-pressed")).toBe("false");
   });
 });

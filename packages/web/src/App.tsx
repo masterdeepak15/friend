@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { LoginScreen } from "./auth/LoginScreen";
 import { SetupScreen } from "./auth/SetupScreen";
 import { ConnectorsPanel } from "./connectors/ConnectorsPanel";
@@ -10,7 +10,7 @@ import { ChatPanel } from "./layout/ChatPanel";
 import { resetPositions, usePanels } from "./layout/prefs";
 import { TasksPanel } from "./layout/TasksPanel";
 import { OwnerMenu } from "./overlay/OwnerMenu";
-import { readMenuStyle, saveMenuStyle, type MenuStyle } from "./overlay/menuShared";
+import { readMenuStyle, readMuted, readQuiet, saveMenuStyle, saveMuted, saveQuiet, type MenuStyle } from "./overlay/menuShared";
 import { OrbMenu, type OrbMenuProps } from "./orb/OrbMenu";
 import type { SettingsTab } from "./settings/tabs";
 import { Overlay } from "./overlay/Overlay";
@@ -39,7 +39,17 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   useVoiceKeys(voice);
   useAudioUnlock(voice);
   useScreenReport(send, state.connection);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMutedState] = useState(readMuted);
+  const setMuted = useCallback((on: boolean) => {
+    saveMuted(on);
+    setMutedState(on);
+  }, []);
+  const [quiet, setQuietState] = useState(readQuiet);
+  const setQuiet = useCallback((on: boolean) => {
+    saveQuiet(on);
+    setQuietState(on);
+  }, []);
+  useEffect(() => voice.setQuiet(quiet), [voice, quiet]); // the voice stays off after a reload, until it is turned back on
   const [enrolling, setEnrolling] = useState(false);
   const [household, setHousehold] = useState(false);
   const [managingPlugins, setManagingPlugins] = useState(false);
@@ -170,6 +180,8 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         openVoice: state.voice.available ? () => setEnrolling(true) : null,
         muted,
         setMuted,
+        quiet,
+        setQuiet,
         cameraOn: state.camera.enabled,
         setCamera: (value) => dispatch({ type: "camera.enable", value }),
         clearScreen: () => {
@@ -243,7 +255,9 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         onClassic={() => switchMenu("classic")}
         onOrb={() => switchMenu("orb")}
         muted={muted}
-        onToggleMute={() => setMuted((m) => !m)}
+        onToggleMute={() => setMuted(!muted)}
+        quiet={quiet}
+        onToggleQuiet={() => setQuiet(!quiet)}
         onSignedOut={onSignedOut}
         voiceAvailable={state.voice.available}
         voiceEnrolled={state.voice.enrolled}

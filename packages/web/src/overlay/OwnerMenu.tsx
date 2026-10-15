@@ -6,6 +6,9 @@ import type { SettingsTab } from "../settings/tabs";
 export interface OwnerMenuProps {
   muted: boolean;
   onToggleMute: () => void;
+  /** The voice switch: when the voice is kept off, Friend only writes its answers. This device only. */
+  quiet?: boolean;
+  onToggleQuiet?: () => void;
   onSignedOut: () => void;
   /** Speech is available, so the owner can teach Friend their voice. */
   voiceAvailable?: boolean;
@@ -46,7 +49,7 @@ export interface OwnerMenuProps {
 }
 
 /** Manual escape hatch: Esc or a long press on the top-left corner. Works even if the agent misbehaves. */
-export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, onHousehold, handsFreeOn, onToggleHandsFree, assistantName, onOrb, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, musicOn, onToggleMusic, launcherOn, onToggleLauncher, view, onView, openRequest }: OwnerMenuProps) {
+export function OwnerMenu({ muted, onToggleMute, quiet, onToggleQuiet, onSignedOut, voiceAvailable, voiceEnrolled, onEnroll, onHousehold, handsFreeOn, onToggleHandsFree, assistantName, onOrb, cameraOn, onToggleCamera, onPlugins, onSettings, onConnectors, chatOn, onToggleChat, tasksOn, onToggleTasks, musicOn, onToggleMusic, launcherOn, onToggleLauncher, view, onView, openRequest }: OwnerMenuProps) {
   const [open, setOpen] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -95,6 +98,11 @@ export function OwnerMenu({ muted, onToggleMute, onSignedOut, voiceAvailable, vo
           <button type="button" style={touch} onClick={onToggleMute}>
             {muted ? "Unmute stage" : "Mute stage"}
           </button>
+          {onToggleQuiet && (
+            <button type="button" style={touch} aria-pressed={!quiet} onClick={onToggleQuiet} title="Turn the spoken answers off to read the captions and the chat instead">
+              {quiet ? "Voice: off" : "Voice: on"}
+            </button>
+          )}
           {voiceAvailable && onToggleHandsFree && (
             <button type="button" style={touch} aria-pressed={!!handsFreeOn} onClick={onToggleHandsFree} title={assistantName ? `Say "Hey ${assistantName}" and then your request` : undefined}>
               {handsFreeOn ? "Hands-free: on" : "Hands-free: off"}

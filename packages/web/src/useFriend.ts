@@ -18,6 +18,8 @@ export interface VoiceControls {
   blur(): void;
   /** Any click or key press: lets the browser play sound. */
   unlock(): void;
+  /** The voice is kept off: nothing is spoken until it is back on. Captions and chat still show. */
+  setQuiet(on: boolean): void;
 }
 
 export function useFriend(onUnauthorized: () => void): {
@@ -32,6 +34,7 @@ export function useFriend(onUnauthorized: () => void): {
   const [state, dispatch] = useReducer(reduce as (s: StageViewState, a: unknown) => StageViewState, initialState);
   const socket = useRef<FriendSocket | null>(null);
   const controller = useRef<VoiceController | null>(null);
+  const quietRef = useRef(false); // kept here too, so a controller made later (after a reconnect) starts quiet
   const camera = useRef<CameraController | null>(null);
   const hands = useRef<HandsFree | null>(null);
   const [handsOn, setHandsOn] = useState(false);
@@ -50,6 +53,7 @@ export function useFriend(onUnauthorized: () => void): {
       available: () => latest.current.voice.available,
     });
     controller.current = ctl;
+    ctl.setQuiet(quietRef.current);
     const hf = new HandsFree({
       makeListener: (o) => new Listener(o),
       wake: postWake,
@@ -167,6 +171,10 @@ export function useFriend(onUnauthorized: () => void): {
       pressEnd: () => void controller.current?.pressEnd(),
       blur: () => controller.current?.blur(),
       unlock: () => controller.current?.unlock(),
+      setQuiet: (on: boolean) => {
+        quietRef.current = on;
+        controller.current?.setQuiet(on);
+      },
     }),
     [],
   );

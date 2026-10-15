@@ -18,6 +18,8 @@ function deps(over: Partial<CommandDeps> = {}): CommandDeps {
     openVoice: vi.fn(),
     muted: false,
     setMuted: vi.fn(),
+    quiet: false,
+    setQuiet: vi.fn(),
     cameraOn: false,
     setCamera: vi.fn(),
     clearScreen: vi.fn(),
@@ -88,6 +90,14 @@ describe("the commands", () => {
     expect(d.clearScreen).toHaveBeenCalled();
     expect(d.notify).toHaveBeenCalledWith("Ready");
     expect((d.endSession as ReturnType<typeof vi.fn>).mock.calls).toEqual([["logout"], ["lock"]]);
+  });
+  it("/quiet turns the voice off and /speak turns it back on, and neither touches the stage", () => {
+    const d = deps();
+    const cmds = buildCommands(d);
+    runSlash(cmds, "/quiet", d.notify);
+    runSlash(cmds, "/speak", d.notify);
+    expect((d.setQuiet as ReturnType<typeof vi.fn>).mock.calls).toEqual([[true], [false]]);
+    expect(d.setMuted).not.toHaveBeenCalled();
   });
   it("/help opens the list of every command, and an unknown command says so", () => {
     const d = deps();

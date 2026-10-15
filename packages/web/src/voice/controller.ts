@@ -36,6 +36,7 @@ export class VoiceController {
   private disposed = false;
   private uploads = 0;
   private toldAboutSound = false;
+  private quiet = false;
   private abort: AbortController | null = null;
   private poll: ReturnType<typeof setInterval> | null = null;
   private unsubscribe: () => void;
@@ -120,8 +121,15 @@ export class VoiceController {
     this.setMode("idle");
   }
 
+  /** Keeping quiet: what is being spoken stops, and nothing more plays until the voice is back on. The captions and the chat are not touched. */
+  setQuiet(on: boolean): void {
+    this.quiet = on;
+    if (on) this.player.stop();
+  }
+
   handleServer(msg: ServerAudioMsg): void {
     if (msg.type !== "audio.chunk") return this.player.stop();
+    if (this.quiet) return;
     this.player.enqueue(msg); // it plays as soon as the browser allows sound
     if (!this.toldAboutSound && this.player.locked?.()) {
       this.toldAboutSound = true;

@@ -192,7 +192,8 @@ Type `/` in the message bar for a list that narrows as you type; they run on the
 | `/plugins` | Opens the plugins. |
 | `/voice` | Opens voice enrolment. |
 | `/camera on`, `/camera off` | Switches the camera. It only takes a picture when you approve. |
-| `/mute`, `/unmute` | Hides or shows everything on the stage. |
+| `/mute`, `/unmute` | Hides or shows everything on the stage. Remembered on this device. |
+| `/quiet`, `/speak` | Stops Friend speaking aloud (it still writes its answers, so you read the captions and the chat), or lets it speak again. Instant, no restart, remembered on this device. |
 | `/clear` | Takes everything off the screen. |
 | `/status` | Says what Friend is doing right now. |
 | `/logout` | Signs out on this screen. |
@@ -210,7 +211,7 @@ pnpm friend start          # gateway + local device node, http://127.0.0.1:8787
 
 Sign-in is guarded against guessing: after **three wrong passwords** (or PINs) from one address, that address is locked for a minute, and every wrong try after that doubles the wait (up to an hour). The sign-in screen shows the tries left and a countdown, and even the right password waits out a lock. Many addresses together are limited too. A refresh never shows any part of the home screen before sign-in: the page asks the server first and draws only the sign-in screen until you are in.
 
-Open the address in a browser, sign in, and press any key to talk. Press `Esc` (or long-press the top-left corner) for the owner menu: mute stage, log out, emergency lock.
+Open the address in a browser, sign in, and press any key to talk. Press `Esc` (or long-press the top-left corner) for the owner menu: voice on/off, mute stage, log out, emergency lock.
 
 Preview the whole look with no API key and no network: `pnpm build && pnpm demo`, then open the printed address. Each message you send shows the next scene (gauges and charts, a timeline, a graph, the orb and ring voice styles, a warm mood).
 
@@ -263,7 +264,7 @@ When it notices something you repeat, the AI may suggest a **skill** (instructio
 - **Status line (bottom-left):** always shows what Friend is doing in plain words: Ready, Listening, Understanding what you said, Thinking, Getting the weather for Pune, Creating a view, Running a command, Answering, Waiting for your approval, Reconnecting. It never shows command text or arguments.
 - **Clock (bottom-right):** a small date and time, so the screen is never empty.
 - **Settings (Esc, then Settings):** change the model provider (Claude subscription through Claude Code, Claude API key, or local Ollama), the model names, the fallback, the Ollama address, and the voice options without the terminal. A change is used straight away (no restart) except the speaking voice and listening model. Saving needs your PIN. The API key is write-only: it is never sent back to the screen. Network address, folders and safety rules are deliberately not in this screen; use `friend config set` for those.
-- **Slash commands:** type `/` in the message bar for a list that narrows as you type (arrows or Tab to pick, Enter to run): /settings, /plugins, /voice, /camera on|off, /mute, /unmute, /clear, /status, /logout, /lock, /help. They run on the screen and never go to the AI, so they work instantly and even when the model is down. Start a line with // to send a message that begins with a slash.
+- **Slash commands:** type `/` in the message bar for a list that narrows as you type (arrows or Tab to pick, Enter to run): /settings, /plugins, /voice, /camera on|off, /mute, /unmute, /quiet, /speak, /clear, /status, /logout, /lock, /help. They run on the screen and never go to the AI, so they work instantly and even when the model is down. Start a line with // to send a message that begins with a slash.
 - **PIN with the keyboard:** wherever a PIN is asked for, type the digits, Backspace to correct, Enter to confirm (Enter never deletes your voice; that needs a click). The on-screen keys still work for touch.
 - **The AI knows the screen:** its instructions include a layout guide (what is always on screen, the five regions, how to compose one answer, how long things should stay), and every request tells it what is on screen, where, for how long, and which regions are free. If it puts something on top of another object or over the captions, status line or clock, Friend moves it to a free spot (or the tidy auto grid) and tells it why, so it learns within the conversation. Nothing is refused.
 - **Voice presence look (Settings, tab "Voice presence", or `/look`):** the settings dialog is wide and has tabs: *Model*, *Voice* and *Voice presence*. On the last one you choose a **theme** (Aurora, Ocean, Ember, Violet storm, Matrix, Rose, Ghost) with one click, or set everything yourself: the **shape** (sphere, orb, ring), the **colour** (swatches or any colour), **brightness**, **size**, how strongly it **reacts to the voice**, the soft **glow** behind everything, whether the live **captions** show and how big they are, and the **view**. A live preview shows the result before you save. Saving a change of look needs **no PIN**, and every open screen changes at once. *Let the AI change the shape, colour and brightness to suit a topic* can be switched off to keep exactly the look you chose (you can still ask it "make it purple" yourself). Pressing the colour box also works; the colour must be a plain #rrggbb.

@@ -6,7 +6,7 @@ import { useFriend } from "./useFriend";
 
 vi.mock("./useFriend", () => ({ useFriend: vi.fn() }));
 
-const voice = { pressStart() {}, pressEnd() {}, blur() {}, unlock() {} };
+const voice = { pressStart() {}, pressEnd() {}, blur() {}, unlock() {}, setQuiet() {} };
 
 function show(over: Partial<StageViewState>) {
   const dispatch = vi.fn();
@@ -94,5 +94,34 @@ describe("the workspace view", () => {
     expect(screen.getByLabelText(/Chat panel/)).toBeTruthy();
     expect(screen.getByLabelText(/Schedule panel/)).toBeTruthy();
     expect(badge()).toBeTruthy();
+  });
+});
+
+describe("the voice after a reload", () => {
+  const withQuiet = () => {
+    const setQuiet = vi.fn();
+    show({ viewKnown: true, view: "companion" });
+    (useFriend as Mock).mockReturnValue({ ...(useFriend as Mock)(), voice: { ...voice, setQuiet } });
+    return setQuiet;
+  };
+
+  it("starts silent when the owner had turned the voice off", () => {
+    localStorage.setItem("friend.voiceOff", "1");
+    const setQuiet = withQuiet();
+    render(<StageApp onSignedOut={() => {}} />);
+    expect(setQuiet).toHaveBeenLastCalledWith(true);
+  });
+
+  it("speaks when it was not turned off", () => {
+    const setQuiet = withQuiet();
+    render(<StageApp onSignedOut={() => {}} />);
+    expect(setQuiet).toHaveBeenLastCalledWith(false);
+  });
+
+  it("is not silenced by a muted stage: the stage is the screen, the voice is its own switch", () => {
+    localStorage.setItem("friend.stageMuted", "1");
+    const setQuiet = withQuiet();
+    render(<StageApp onSignedOut={() => {}} />);
+    expect(setQuiet).toHaveBeenLastCalledWith(false);
   });
 });

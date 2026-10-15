@@ -13,6 +13,9 @@ export interface CommandDeps {
   openVoice: (() => void) | null;
   muted: boolean;
   setMuted: (muted: boolean) => void;
+  /** The voice is kept off: Friend still writes its answers but does not speak them. */
+  quiet: boolean;
+  setQuiet: (quiet: boolean) => void;
   cameraOn: boolean;
   setCamera: (on: boolean) => void;
   /** Takes every object off the screen. */
@@ -61,6 +64,22 @@ export function buildCommands(d: CommandDeps): SlashCommand[] {
       run: () => d.setMuted(true),
     },
     { name: "unmute", description: "Show the stage again", run: () => d.setMuted(false) },
+    {
+      name: "quiet",
+      description: "Stop Friend speaking aloud: read the captions and the chat instead (/speak turns the voice back on)",
+      run: () => {
+        d.setQuiet(true);
+        d.notify("Voice off. I will write my answers only.");
+      },
+    },
+    {
+      name: "speak",
+      description: "Let Friend speak aloud again",
+      run: () => {
+        d.setQuiet(false);
+        d.notify("Voice on.");
+      },
+    },
     ...(["chat", "tasks", "music", "launcher"] as const).map((id): SlashCommand => ({
       name: id,
       usage: "on|off",
