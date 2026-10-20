@@ -1,0 +1,107 @@
+import type { HudView } from "@friend/protocol";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { initialState, type StageViewState } from "../../store";
+import { OrbitalHud } from "./OrbitalHud";
+
+afterEach(cleanup);
+
+const launcher: HudView["launcher"] = [
+  { id: "chat", label: "Chat", icon: "C", action: { type: "panel", value: "chat" } },
+  { id: "tasks", label: "Tasks", icon: "T", action: { type: "panel", value: "tasks" } },
+  { id: "music", label: "Music", icon: "M", action: { type: "panel", value: "music" } },
+];
+const hudOf = (over: Partial<HudView> = {}): HudView => ({ terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "standard", widgets: {}, ...over });
+
+function mount(over: Partial<HudView> = {}, state: Partial<StageViewState> = {}, size: [number, number] = [1920, 1080], handlers: { onLaunch?: (i: HudView["launcher"][number]) => void; onExpand?: (e: unknown) => void } = {}) {
+  const hud = hudOf(over);
+  return render(<OrbitalHud hud={hud} state={{ ...initialState, connection: "open", hud, ...state }} viewport={{ w: size[0], h: size[1] }} usage={42} onLaunch={handlers.onLaunch ?? (() => {})} onExpand={(handlers.onExpand ?? (() => {})) as never} />);
+}
+const widgetIds = (c: HTMLElement): string[] => [...c.querySelectorAll("[data-widget]")].map((e) => e.getAttribute("data-widget")!).sort();
+
+describe("the orbit", () => {
+  it("has a node for each quick-launch button", () => {
+    const { container } = mount();
+    expect(container.querySelectorAll(".ob-node")).toHaveLength(3);
+  });
+
+  it("has no nodes, and no crash, for an empty launcher", () => {
+    const { container } = mount({ launcher: [] });
+    expect(container.querySelectorAll(".ob-node")).toHaveLength(0);
+    expect(container.querySelector(".orbital")).toBeTruthy();
+  });
+
+  it("launches a button when its node is clicked", () => {
+    const onLaunch = vi.fn();
+    const { getByRole } = mount({}, {}, [1920, 1080], { onLaunch });
+    fireEvent.click(getByRole("button", { name: "Tasks" }));
+    expect(onLaunch).toHaveBeenCalledWith(launcher[1]);
+  });
+});
+
+describe("the instruments at each density", () => {
+  it("calm shows only the usage ring", () => {
+    const { container } = mount({ density: "calm" });
+    expect(widgetIds(container)).toEqual(["usage"]);
+    expect(container.querySelectorAll("[data-seg]")).toHaveLength(60);
+  });
+
+  it("calm still shows an approval that is waiting", () => {
+    const { container } = mount({ density: "calm" }, { approval: { id: "a1", tool: "shell.run", summary: "npm install", tier: "T2" } as never });
+    expect(widgetIds(container)).toEqual(["approval", "usage"]);
+  });
+
+  it("standard shows system, voice, activity, approvals and usage", () => {
+    const { container } = mount({ density: "standard" });
+    expect(widgetIds(container)).toEqual(["approval", "feed", "system", "usage", "voice"]);
+  });
+
+  it("full shows all nine, and a switched-off one stays away", () => {
+    const { container } = mount({ density: "full", widgets: { radar: false } });
+    expect(widgetIds(container)).toHaveLength(8);
+    expect(widgetIds(container)).not.toContain("radar");
+  });
+
+  it("tells the app which instrument was clicked", () => {
+    const onExpand = vi.fn();
+    const { container } = mount({}, {}, [1920, 1080], { onExpand });
+    fireEvent.click(container.querySelector('[data-widget="system"]')!);
+    expect(onExpand).toHaveBeenCalledWith({ kind: "widget", id: "system" });
+  });
+});
+
+describe("the window", () => {
+  it("is an orbit on a wide window and a chip row on a phone", () => {
+    const wide = mount();
+    expect(wide.container.querySelector(".orbital")!.getAttribute("data-mode")).toBe("orbit");
+    cleanup();
+    const phone = mount({}, {}, [360, 800]);
+    expect(phone.container.querySelector(".orbital")!.getAttribute("data-mode")).toBe("compact");
+    expect(phone.container.querySelectorAll(".ob-node")).toHaveLength(0);
+    expect(phone.container.querySelectorAll(".ob-chip")).toHaveLength(3);
+  });
+
+  it("keeps the approval on a phone too", () => {
+    const { container } = mount({ density: "calm" }, { approval: { id: "a1", tool: "x", summary: "y", tier: "T2" } as never }, [360, 800]);
+    expect(widgetIds(container)).toContain("approval");
+  });
+});
+
+describe("motion", () => {
+  it("carries the owner's animation setting for the stylesheet", () => {
+    const { container } = mount({ animations: "reduced" });
+    expect(container.querySelector(".orbital")!.getAttribute("data-hud-anim")).toBe("reduced");
+  });
+
+  it("pauses while the tab is hidden and resumes when it is shown", () => {
+    const { container } = mount();
+    const root = container.querySelector(".orbital")!;
+    expect(root.hasAttribute("data-paused")).toBe(false);
+    Object.defineProperty(document, "hidden", { value: true, configurable: true });
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
+    expect(root.hasAttribute("data-paused")).toBe(true);
+    Object.defineProperty(document, "hidden", { value: false, configurable: true });
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
+    expect(root.hasAttribute("data-paused")).toBe(false);
+  });
+});

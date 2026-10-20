@@ -15,8 +15,8 @@ describe("Frame", () => {
         <p>npm install</p>
       </Frame>,
     );
-    const frame = screen.getByText("npm install").closest(".hud-frame")!;
-    expect(frame.className).toContain("hud-v-octagon");
+    const frame = screen.getByText("npm install").closest(".ob-frame")!;
+    expect(frame.className).toContain("ob-v-octagon");
     expect(frame.getAttribute("data-tone")).toBe("orange");
     expect(frame.hasAttribute("data-running")).toBe(true);
     expect(screen.getByText("Approval")).toBeTruthy();
@@ -24,8 +24,8 @@ describe("Frame", () => {
 
   it("defaults to a cyan chamfered frame with no running light", () => {
     render(<Frame>x</Frame>);
-    const frame = screen.getByText("x").closest(".hud-frame")!;
-    expect(frame.className).toContain("hud-v-chamfer");
+    const frame = screen.getByText("x").closest(".ob-frame")!;
+    expect(frame.className).toContain("ob-v-chamfer");
     expect(frame.getAttribute("data-tone")).toBe("cyan");
     expect(frame.hasAttribute("data-running")).toBe(false);
   });
@@ -51,10 +51,10 @@ describe("ArcGauge", () => {
 describe("Spectrum", () => {
   it("draws one bar per level, and nothing for no levels", () => {
     const { container, rerender } = render(<Spectrum levels={[0.2, 1, 0.5]} />);
-    expect(container.querySelectorAll("rect.hud-eq")).toHaveLength(3);
+    expect(container.querySelectorAll("rect.ob-eq")).toHaveLength(3);
     expect(container.querySelector("svg")!.getAttribute("aria-hidden")).toBe("true");
     rerender(<Spectrum levels={[]} />);
-    expect(container.querySelectorAll("rect.hud-eq")).toHaveLength(0);
+    expect(container.querySelectorAll("rect.ob-eq")).toHaveLength(0);
   });
 });
 
@@ -114,6 +114,8 @@ describe("HexNode", () => {
     expect(onClick).toHaveBeenCalledOnce();
     rerender(<HexNode label="REV" status="waiting" />);
     expect(screen.getByRole("button", { name: "REV" }).getAttribute("data-tone")).toBe("orange");
+    rerender(<HexNode label="Chat" glyph="C" />);
+    expect(screen.getByRole("button", { name: "Chat" }).textContent).toBe("C");
     rerender(<HexNode label="ARCH" status="idle" />);
     expect(screen.getByRole("button", { name: "ARCH" }).getAttribute("data-tone")).toBe("cyan");
   });
@@ -126,7 +128,7 @@ describe("the decorative pieces", () => {
         <LinkLine x1={0} y1={0} x2={10} y2={10} />
       </svg>,
     );
-    expect(container.querySelector("line")!.getAttribute("class")).toContain("hud-link");
+    expect(container.querySelector("line")!.getAttribute("class")).toContain("ob-link");
     const pulse = render(<PulseLine />);
     expect(pulse.container.querySelector("svg")!.getAttribute("aria-hidden")).toBe("true");
     const defs = render(<HudDefs />);
@@ -136,7 +138,7 @@ describe("the decorative pieces", () => {
 
 describe("the motion rules in the stylesheet", () => {
   it("defines every loop", () => {
-    for (const name of ["spin", "flow", "run", "pulse", "eq", "ecg", "ping", "breathe", "blink"]) expect(css, name).toMatch(new RegExp(`@keyframes hud-${name}\\b`));
+    for (const name of ["spin", "flow", "run", "pulse", "eq", "ecg", "ping", "breathe", "blink"]) expect(css, name).toMatch(new RegExp(`@keyframes ob-${name}\\b`));
   });
 
   it("stops every loop when animations are off, keeps only the gentle ones when reduced, and obeys the system setting", () => {

@@ -1,12 +1,12 @@
 /* The orbital HUD: colours, frame shapes and every loop of motion. Everything lives under .orbital so the classic screen is untouched. */
 
 .orbital {
-  --hud-cyan: var(--accent, #22d3ee);
-  --hud-green: #34d399;
-  --hud-orange: #fb923c;
-  --hud-dark: #031018;
-  --hud-line: color-mix(in srgb, var(--hud-cyan) 55%, transparent);
-  --hud-dim: color-mix(in srgb, var(--hud-cyan) 28%, transparent);
+  --ob-cyan: var(--accent, #22d3ee);
+  --ob-green: #34d399;
+  --ob-orange: #fb923c;
+  --ob-dark: #031018;
+  --ob-line: color-mix(in srgb, var(--ob-cyan) 55%, transparent);
+  --ob-dim: color-mix(in srgb, var(--ob-cyan) 28%, transparent);
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -14,113 +14,113 @@
   font-family: Consolas, "Courier New", monospace;
   color: #a5f3fc;
 }
-.orbital [data-tone="cyan"] { --hud-tone: var(--hud-cyan); }
-.orbital [data-tone="green"] { --hud-tone: var(--hud-green); }
-.orbital [data-tone="orange"] { --hud-tone: var(--hud-orange); }
-.orbital .hud-hit { pointer-events: auto; }
+.orbital [data-tone="cyan"] { --ob-tone: var(--ob-cyan); }
+.orbital [data-tone="green"] { --ob-tone: var(--ob-green); }
+.orbital [data-tone="orange"] { --ob-tone: var(--ob-orange); }
+.orbital .ob-hit { pointer-events: auto; }
 
 /* ---- frames: a coloured outer shape, a dark inner one one pixel in, and an optional running light between them ---- */
-.hud-frame {
+.ob-frame {
   --cut: 10px;
   position: relative;
-  background: color-mix(in srgb, var(--hud-tone, var(--hud-cyan)) 60%, transparent);
+  background: color-mix(in srgb, var(--ob-tone, var(--ob-cyan)) 60%, transparent);
   clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
   min-height: 0;
 }
-.hud-frame::before { /* the inner, dark shape */
+.ob-frame::before { /* the inner, dark shape */
   content: "";
   position: absolute;
   inset: 1px;
-  background: linear-gradient(color-mix(in srgb, var(--hud-dark) 94%, transparent), color-mix(in srgb, var(--hud-dark) 90%, transparent));
+  background: linear-gradient(color-mix(in srgb, var(--ob-dark) 94%, transparent), color-mix(in srgb, var(--ob-dark) 90%, transparent));
   clip-path: inherit;
 }
-.hud-frame > * { position: relative; }
-.hud-frame[data-running]::after { /* a light that runs round the border */
+.ob-frame > * { position: relative; }
+.ob-frame[data-running]::after { /* a light that runs round the border */
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, transparent 0 40%, var(--hud-tone, var(--hud-cyan)) 50%, transparent 60% 100%) 0 0 / 300% 100%;
+  background: linear-gradient(100deg, transparent 0 40%, var(--ob-tone, var(--ob-cyan)) 50%, transparent 60% 100%) 0 0 / 300% 100%;
   clip-path: inherit;
   mix-blend-mode: screen;
   opacity: 0.9;
-  animation: hud-run 5s linear infinite;
+  animation: ob-run 5s linear infinite;
 }
-.hud-frame[data-running]::before { z-index: 1; }
-.hud-frame-body { padding: 6px 9px; position: relative; z-index: 2; }
-.hud-frame-title {
+.ob-frame[data-running]::before { z-index: 1; }
+.ob-frame-body { padding: 6px 9px; position: relative; z-index: 2; }
+.ob-frame-title {
   position: relative;
   z-index: 2;
   display: flex;
   justify-content: space-between;
   padding: 5px 9px 0;
-  color: var(--hud-tone, var(--hud-cyan));
+  color: var(--ob-tone, var(--ob-cyan));
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
-.hud-v-octagon { --cut: 22px; clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)); }
-.hud-v-slant { --cut: 14px; clip-path: polygon(var(--cut) 0, 100% 0, calc(100% - var(--cut)) 100%, 0 100%); }
-.hud-v-bracket { background: none; clip-path: none; }
-.hud-v-bracket::before { background: none; clip-path: none; inset: 0;
-  border: 0 solid var(--hud-tone, var(--hud-cyan));
+.ob-v-octagon { --cut: 22px; clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)); }
+.ob-v-slant { --cut: 14px; clip-path: polygon(var(--cut) 0, 100% 0, calc(100% - var(--cut)) 100%, 0 100%); }
+.ob-v-bracket { background: none; clip-path: none; }
+.ob-v-bracket::before { background: none; clip-path: none; inset: 0;
+  border: 0 solid var(--ob-tone, var(--ob-cyan));
   background:
-    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) top left / 18px 2px no-repeat,
-    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) top left / 2px 18px no-repeat,
-    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) top right / 18px 2px no-repeat,
-    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) top right / 2px 18px no-repeat,
-    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) bottom left / 18px 2px no-repeat,
-    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) bottom left / 2px 18px no-repeat,
-    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) bottom right / 18px 2px no-repeat,
-    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) bottom right / 2px 18px no-repeat;
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) top left / 18px 2px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) top left / 2px 18px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) top right / 18px 2px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) top right / 2px 18px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) bottom left / 18px 2px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) bottom left / 2px 18px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) bottom right / 18px 2px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) bottom right / 2px 18px no-repeat;
 }
-.hud-frame[data-tone="orange"] { animation: hud-pulse 1.8s ease-in-out infinite; }
+.ob-frame[data-tone="orange"] { animation: ob-pulse 1.8s ease-in-out infinite; }
 
 /* ---- instruments ---- */
-.hud-svg { display: block; width: 100%; height: auto; overflow: visible; }
-.hud-track { fill: none; stroke: var(--hud-dim); }
-.hud-fill { fill: none; stroke: var(--hud-tone, var(--hud-cyan)); filter: url(#hud-glow); transition: stroke-dasharray 0.6s ease; }
-.hud-eq { fill: var(--hud-tone, var(--hud-cyan)); transform-box: fill-box; transform-origin: bottom; animation: hud-eq 0.9s ease-in-out infinite alternate; }
-.hud-ecg-base { fill: none; stroke: var(--hud-dim); stroke-width: 1.5; }
-.hud-ecg { fill: none; stroke: #67e8f9; stroke-width: 2.5; stroke-dasharray: 140 400; animation: hud-ecg 2.4s linear infinite; filter: url(#hud-glow); }
-.hud-link { stroke: var(--hud-tone, var(--hud-cyan)); stroke-width: 1.5; fill: none; filter: url(#hud-glow); }
-.hud-flow { stroke-dasharray: 5 11; animation: hud-flow 1s linear infinite; }
-.hud-seg { stroke: var(--hud-dim); stroke-width: 6; }
-.hud-seg[data-on="true"] { stroke: var(--hud-cyan); filter: url(#hud-glow); }
-.hud-sweep { transform-box: view-box; transform-origin: 0 0; animation: hud-spin 4s linear infinite; }
-.hud-blip { fill: var(--hud-green); animation: hud-pulse 1.8s ease-in-out infinite; filter: url(#hud-glow); }
-[data-dim] .hud-blip { fill: var(--hud-dim); animation: none; filter: none; }
-.hud-spin { transform-box: fill-box; transform-origin: center; animation: hud-spin 40s linear infinite; }
-.hud-breathe { transform-box: fill-box; transform-origin: center; animation: hud-breathe 4s ease-in-out infinite; }
-.hud-ping { transform-box: fill-box; transform-origin: center; animation: hud-ping 3s ease-out infinite; }
-.hud-blink { animation: hud-blink 1s steps(2) infinite; }
+.ob-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.ob-track { fill: none; stroke: var(--ob-dim); }
+.ob-fill { fill: none; stroke: var(--ob-tone, var(--ob-cyan)); filter: url(#ob-glow); transition: stroke-dasharray 0.6s ease; }
+.ob-eq { fill: var(--ob-tone, var(--ob-cyan)); transform-box: fill-box; transform-origin: bottom; animation: ob-eq 0.9s ease-in-out infinite alternate; }
+.ob-ecg-base { fill: none; stroke: var(--ob-dim); stroke-width: 1.5; }
+.ob-ecg { fill: none; stroke: #67e8f9; stroke-width: 2.5; stroke-dasharray: 140 400; animation: ob-ecg 2.4s linear infinite; filter: url(#ob-glow); }
+.ob-link { stroke: var(--ob-tone, var(--ob-cyan)); stroke-width: 1.5; fill: none; filter: url(#ob-glow); }
+.ob-flow { stroke-dasharray: 5 11; animation: ob-flow 1s linear infinite; }
+.ob-seg { stroke: var(--ob-dim); stroke-width: 6; }
+.ob-seg[data-on="true"] { stroke: var(--ob-cyan); filter: url(#ob-glow); }
+.ob-sweep { transform-box: view-box; transform-origin: 0 0; animation: ob-spin 4s linear infinite; }
+.ob-blip { fill: var(--ob-green); animation: ob-pulse 1.8s ease-in-out infinite; filter: url(#ob-glow); }
+[data-dim] .ob-blip { fill: var(--ob-dim); animation: none; filter: none; }
+.ob-spin { transform-box: fill-box; transform-origin: center; animation: ob-spin 40s linear infinite; }
+.ob-breathe { transform-box: fill-box; transform-origin: center; animation: ob-breathe 4s ease-in-out infinite; }
+.ob-ping { transform-box: fill-box; transform-origin: center; animation: ob-ping 3s ease-out infinite; }
+.ob-blink { animation: ob-blink 1s steps(2) infinite; }
 
 /* ---- nodes of the orbit ---- */
-.hud-node { position: absolute; transform: translate(-50%, -50%); background: none; border: 0; padding: 0; cursor: pointer; color: #e0fbff; pointer-events: auto; }
-.hud-node svg { width: 68px; height: 60px; display: block; filter: url(#hud-glow); }
-.hud-node polygon { fill: var(--hud-dark); stroke: var(--hud-tone, var(--hud-cyan)); stroke-width: 1.6; }
-.hud-node:hover polygon, .hud-node:focus-visible polygon { fill: color-mix(in srgb, var(--hud-tone, var(--hud-cyan)) 22%, var(--hud-dark)); }
-.hud-node:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
-.hud-node[data-status="waiting"] svg { animation: hud-pulse 0.9s ease-in-out infinite; }
-.hud-node[data-status="idle"] svg, .hud-node[data-status="add"] svg { opacity: 0.6; }
-.hud-node-label { font-size: 11px; letter-spacing: 0.1em; fill: #e0fbff; text-anchor: middle; dominant-baseline: central; }
+.ob-node { position: absolute; transform: translate(-50%, -50%); background: none; border: 0; padding: 0; cursor: pointer; color: #e0fbff; pointer-events: auto; }
+.ob-node svg { width: 68px; height: 60px; display: block; filter: url(#ob-glow); }
+.ob-node polygon { fill: var(--ob-dark); stroke: var(--ob-tone, var(--ob-cyan)); stroke-width: 1.6; }
+.ob-node:hover polygon, .ob-node:focus-visible polygon { fill: color-mix(in srgb, var(--ob-tone, var(--ob-cyan)) 22%, var(--ob-dark)); }
+.ob-node:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+.ob-node[data-status="waiting"] svg { animation: ob-pulse 0.9s ease-in-out infinite; }
+.ob-node[data-status="idle"] svg, .ob-node[data-status="add"] svg { opacity: 0.6; }
+.ob-node-label { font-size: 11px; letter-spacing: 0.1em; fill: #e0fbff; text-anchor: middle; dominant-baseline: central; }
 
 /* ---- the loops ---- */
-@keyframes hud-spin { to { transform: rotate(360deg); } }
-@keyframes hud-flow { to { stroke-dashoffset: -32; } }
-@keyframes hud-run { from { background-position: 100% 0; } to { background-position: -200% 0; } }
-@keyframes hud-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
-@keyframes hud-eq { from { transform: scaleY(calc(var(--lv, 1) * 0.25)); } to { transform: scaleY(var(--lv, 1)); } }
-@keyframes hud-ecg { to { stroke-dashoffset: -540; } }
-@keyframes hud-ping { from { transform: scale(0.6); opacity: 0.8; } to { transform: scale(2.4); opacity: 0; } }
-@keyframes hud-breathe { 0%, 100% { transform: scale(0.96); } 50% { transform: scale(1.06); } }
-@keyframes hud-blink { 50% { opacity: 0; } }
+@keyframes ob-spin { to { transform: rotate(360deg); } }
+@keyframes ob-flow { to { stroke-dashoffset: -32; } }
+@keyframes ob-run { from { background-position: 100% 0; } to { background-position: -200% 0; } }
+@keyframes ob-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+@keyframes ob-eq { from { transform: scaleY(calc(var(--lv, 1) * 0.25)); } to { transform: scaleY(var(--lv, 1)); } }
+@keyframes ob-ecg { to { stroke-dashoffset: -540; } }
+@keyframes ob-ping { from { transform: scale(0.6); opacity: 0.8; } to { transform: scale(2.4); opacity: 0; } }
+@keyframes ob-breathe { 0%, 100% { transform: scale(0.96); } 50% { transform: scale(1.06); } }
+@keyframes ob-blink { 50% { opacity: 0; } }
 
 /* ---- motion rules: off stops everything, reduced keeps only the gentle loops, the system's setting always wins ---- */
 .orbital[data-hud-anim="off"],
 .orbital[data-hud-anim="off"] *,
 .orbital[data-hud-anim="off"] *::before,
 .orbital[data-hud-anim="off"] *::after { animation: none !important; transition: none !important; }
-.orbital[data-hud-anim="reduced"] *:not(.hud-pulse):not(.hud-breathe),
+.orbital[data-hud-anim="reduced"] *:not(.ob-pulse):not(.ob-breathe),
 .orbital[data-hud-anim="reduced"] *::before,
 .orbital[data-hud-anim="reduced"] *::after { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
@@ -131,3 +131,27 @@
 .orbital[data-paused] *,
 .orbital[data-paused] *::before,
 .orbital[data-paused] *::after { animation-play-state: paused !important; }
+
+/* ---- the scene: rings, orbit, zones, top bar, chips ---- */
+.ob-scene { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ob-ring-dash { fill: none; stroke: var(--ob-cyan); stroke-width: 10; stroke-dasharray: 2 8; opacity: 0.7; }
+.ob-ring-long { fill: none; stroke: #67e8f9; stroke-width: 1.5; stroke-dasharray: 60 20 8 20; }
+.ob-ring-thin { fill: none; stroke: var(--ob-dim); stroke-width: 1; stroke-dasharray: 2 6; }
+.ob-orbit { fill: none; stroke: var(--ob-line); stroke-opacity: 0.5; stroke-dasharray: 3 9; }
+.ob-fast { animation-duration: 14s; }
+.ob-reverse { animation-direction: reverse; }
+.ob-usage-ring { position: absolute; pointer-events: none; }
+.ob-usage-label { position: absolute; background: none; border: 0; color: #9be9f7; font: inherit; font-size: 11px; letter-spacing: 0.14em; cursor: pointer; padding: 4px 8px; }
+.ob-usage-label:hover, .ob-usage-label:focus-visible { color: #fff; }
+.ob-zone { cursor: pointer; color: #bdeef7; overflow: hidden; }
+.ob-zone:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.ob-zone:hover { filter: brightness(1.25); }
+.ob-topbar { cursor: default; }
+.ob-topbar-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; height: 100%; font-size: 12px; letter-spacing: 0.14em; color: #e0fbff; white-space: nowrap; overflow: hidden; }
+.ob-status { color: var(--ob-cyan); overflow: hidden; text-overflow: ellipsis; }
+.ob-hint { position: absolute; margin: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; letter-spacing: 0.16em; color: color-mix(in srgb, var(--ob-cyan) 70%, transparent); pointer-events: none; }
+.orbital[data-mode="compact"] .ob-chips { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 6px; overflow-x: auto; pointer-events: auto; }
+.ob-chip { flex: none; background: color-mix(in srgb, var(--ob-dark) 90%, transparent); border: 1px solid var(--ob-line); color: #e0fbff; font: inherit; font-size: 12px; padding: 6px 10px; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); cursor: pointer; }
+.orbital[data-mode="compact"] .ob-strip { position: absolute; left: 8px; right: 8px; bottom: 110px; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; pointer-events: auto; }
+.orbital[data-mode="compact"] .ob-strip .ob-zone { position: relative; }
+.orbital[data-mode="compact"] .ob-usage-label { position: relative; flex: none; align-self: center; }

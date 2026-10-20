@@ -27,6 +27,7 @@ import { ElsewhereCard } from "./overlay/ElsewhereCard";
 import { useScreenReport } from "./layout/screen";
 import { HouseholdPanel } from "./voice/HouseholdPanel";
 import { QuickLaunch, type LauncherItem } from "./hud/QuickLaunch";
+import { OrbitalHud } from "./hud/orbital/OrbitalHud";
 import { MusicPlayerView } from "./music/MusicPlayer";
 import { commandToAction, useMusicPlayer } from "./music/useMusicPlayer";
 import { useRemoteMusic } from "./music/useRemoteMusic";
@@ -94,6 +95,8 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     else if (value === "chat" || value === "tasks") panels.toggle(value, true);
 
   };
+  // The orbital screen replaces the classic corner widgets and the launcher panel (its nodes are the quick-launch buttons).
+  const orbital = state.viewKnown && state.hud?.layout === "orbital";
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
 
   // Once per visit, when speech works but nobody's voice is enrolled yet, say how to turn recognition on.
@@ -211,6 +214,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   return (
     <>
       <Stage state={shown} send={send} dispatch={dispatch} voice={voice} slash={slash} onMenu={() => setMenuRequest((n) => n + 1)} />
+      {orbital && state.hud && <OrbitalHud hud={state.hud} state={state} onLaunch={launch} onExpand={() => {}} />}
       <Overlay
         approval={state.approval}
         challenge={state.challenge}
@@ -221,9 +225,9 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         voiceMode={state.voice.mode}
         busy={state.busy}
         activity={state.activity}
-        showStatus={state.viewKnown && panels.show.status}
-        showClock={state.viewKnown && panels.show.clock}
-        profile={state.viewKnown && panels.show.profile ? { ownerName: state.ownerName, speaker: state.speaker } : null}
+        showStatus={state.viewKnown && panels.show.status && !orbital}
+        showClock={state.viewKnown && panels.show.clock && !orbital}
+        profile={state.viewKnown && panels.show.profile && !orbital ? { ownerName: state.ownerName, speaker: state.speaker } : null}
         assistantName={state.assistantName}
         hud={state.hud}
         send={send}
@@ -231,7 +235,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
       >
         {state.viewKnown && panels.show.chat && <ChatPanel lines={state.chat} live={state.chatLive} onSend={(text) => send({ type: "chat.send", text })} onClose={() => panels.toggle("chat", false)} />}
         {state.viewKnown && panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
-        {state.viewKnown && panels.show.launcher && state.hud && <QuickLaunch items={state.hud.launcher} animations={animations} onAction={launch} />}
+        {state.viewKnown && panels.show.launcher && state.hud && !orbital && <QuickLaunch items={state.hud.launcher} animations={animations} onAction={launch} />}
         {state.viewKnown && panels.show.music && <MusicPlayerView player={player} music={state.music} animations={animations} />}
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
         {household && <HouseholdPanel onClose={() => setHousehold(false)} />}
