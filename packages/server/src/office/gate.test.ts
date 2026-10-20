@@ -53,6 +53,13 @@ describe("the project fence", () => {
 });
 
 describe("shell commands", () => {
+  it("a command from any shell tool is read the same way (PowerShell on Windows)", () => {
+    const c = ctx({ policy: policy({ allowTools: ["PowerShell"], denyCommands: ["rm\\s+-rf", "git\\s+push"] }) });
+    expect(verdict("PowerShell", { command: "git push origin main" }, c)).toMatchObject({ verdict: "deny" });
+    expect(verdict("PowerShell", { command: "Get-ChildItem" }, c)).toEqual({ verdict: "allow" });
+    expect(verdict("PowerShell", { command: "del x.txt" }, ctx({ shellPatterns: ["\\bdel\\b"] }))).toEqual({ verdict: "ask", danger: true });
+  });
+
   it("ask by default, because Bash is not on the allow-list", () => {
     expect(verdict("Bash", { command: "npm install" })).toEqual({ verdict: "ask", danger: false });
   });

@@ -13,7 +13,7 @@ const PATH_FIELDS = ["file_path", "path", "notebook_path", "cwd"] as const;
  *  2. a shell command that matches a deny pattern is refused;
  *  3. a tool the owner put on the allow-list goes ahead;
  *  4. anything else is put to the owner (with the PIN when the command looks dangerous).
- * Bash cannot be fully policed (a command can name any path), so it asks unless the owner allowed it, and a deny pattern still wins.
+ * A shell cannot be fully policed (a command can name any path), so it asks unless the owner allowed it, and a deny pattern still wins.
  */
 export function decideAction(call: { tool: string; input: Record<string, unknown> }, ctx: { folders: string[]; policy: OfficePolicy; shellPatterns: string[] }): GateVerdict {
   const input = call.input && typeof call.input === "object" ? call.input : {};
@@ -25,7 +25,8 @@ export function decideAction(call: { tool: string; input: Record<string, unknown
     if (!lexicalInsideRoots(value, ctx.folders)) return { verdict: "deny", reason: "Outside the project folder." };
   }
 
-  const command = call.tool === "Bash" && typeof input.command === "string" ? input.command : null;
+  // any tool that carries a command is a shell: Bash, and PowerShell on Windows, where Claude Code uses it instead
+  const command = typeof input.command === "string" ? input.command : null;
   if (command !== null) {
     for (const pattern of ctx.policy.denyCommands) {
       try {

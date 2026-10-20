@@ -349,6 +349,18 @@ describe("what a worker may do", () => {
     expect(t.approvals.request).not.toHaveBeenCalled();
   });
 
+  it("treats a PowerShell command like a Bash one: refused by a deny pattern, and shown in full on the card", async () => {
+    const { t, bridge } = await running();
+    const v = await bridge.ask("PowerShell", { command: "git push origin main" });
+    expect(v.behavior).toBe("deny");
+    expect(t.approvals.request).not.toHaveBeenCalled();
+    const pending = bridge.ask("PowerShell", { command: "Remove-Item -Recurse C:\\somewhere" });
+    await settle();
+    expect(t.resolvers[0]!.req.args.summary).toMatch(/Remove-Item -Recurse C:\\somewhere/);
+    t.resolvers[0]!.resolve({ approved: false, reason: "no" });
+    await pending;
+  });
+
   it("asks the owner about anything else, shows the worker as waiting, and goes on with the owner's answer", async () => {
     const { t, w, bridge } = await running();
     const pending = bridge.ask("Bash", { command: "npm install left-pad" });

@@ -22,7 +22,7 @@ export function summarizeToolCall(name: string, input: unknown): string {
   const i = obj(input);
   let s = name;
   if (FILE_TOOLS.has(name) && typeof i.file_path === "string") s = `${name} ${i.file_path.split(/[\\/]/).filter(Boolean).at(-1) ?? ""}`.trim();
-  else if (name === "Bash" && typeof i.command === "string") s = `Bash: ${i.command.replace(/\s+/g, " ").trim()}`;
+  else if (typeof i.command === "string") s = `${name}: ${i.command.replace(/\s+/g, " ").trim()}`;
   return clip(s, SUMMARY_CHARS);
 }
 

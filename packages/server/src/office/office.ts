@@ -78,7 +78,7 @@ const clip = (s: string, n: number): string => (s.length > n ? s.slice(0, n) : s
 
 /** What the owner is shown to approve: a shell command in full, a file action by its path. */
 function describeAction(tool: string, input: Record<string, unknown>): string {
-  if (tool === "Bash" && typeof input.command === "string") return `run the shell command: ${input.command}`;
+  if (typeof input.command === "string") return `run the shell command: ${input.command}`;
   const file = typeof input.file_path === "string" ? input.file_path : typeof input.path === "string" ? input.path : "";
   return file ? `${tool} ${file}` : `use ${tool}`;
 }

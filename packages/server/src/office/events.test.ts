@@ -90,6 +90,7 @@ describe("summarizeToolCall", () => {
 
   it("shows the start of a shell command on one line", () => {
     expect(summarizeToolCall("Bash", { command: "npm test\nnpm run lint" })).toBe("Bash: npm test npm run lint");
+    expect(summarizeToolCall("PowerShell", { command: "Get-Date" })).toBe("PowerShell: Get-Date");
     expect(summarizeToolCall("Bash", { command: "x".repeat(300) }).length).toBeLessThanOrEqual(80);
   });
 
