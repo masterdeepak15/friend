@@ -200,9 +200,9 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
       case "voice":
         return <VoiceWidget level={view.voice.level} mode={view.voice.mode} />;
       case "feed":
-        return <FeedWidget lines={preview ? SAMPLE_FEED : view.chat} activity={view.activity} busy={preview ? false : view.busy} />;
+        return <FeedWidget lines={preview ? SAMPLE_FEED : view.chat} activity={view.activity} busy={preview ? false : view.busy} marquee={preview} />;
       case "tickets":
-        return <TicketsWidget {...(preview ? { cells: SAMPLE_TICKETS } : {})} />;
+        return <TicketsWidget {...(preview ? { cells: SAMPLE_TICKETS, project: "landing-page" } : {})} />;
       case "budget":
         return <BudgetWidget {...(preview ? { rings: SAMPLE_BUDGET } : {})} />;
       default:
@@ -362,7 +362,6 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
             );
           })}
           <div className="ob-cmd" aria-hidden="true">
-            <span>▸ ask {name.toLowerCase()} anything…<i className="ob-cursor" /></span>
             <small>[ HOLD TO TALK ]</small>
           </div>
         </>,

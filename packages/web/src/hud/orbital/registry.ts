@@ -17,11 +17,11 @@ export interface WidgetDef {
 export const WIDGETS: readonly WidgetDef[] = [
   { id: "system", title: "System", anchor: "left", box: { x: 40, y: 70, w: 300, h: 220 }, tone: "cyan", minDensity: "standard" },
   { id: "voice", title: "Voice", anchor: "left", box: { x: 40, y: 310, w: 300, h: 150 }, tone: "cyan", minDensity: "standard" },
-  { id: "network", title: "Network", anchor: "left", box: { x: 40, y: 480, w: 300, h: 110 }, tone: "cyan", minDensity: "full" },
+  { id: "network", title: "Network", anchor: "left", box: { x: 40, y: 480, w: 300, h: 110 }, tone: "cyan", minDensity: "standard" },
   { id: "feed", title: "Activity", anchor: "left", box: { x: 40, y: 650, w: 430, h: 210 }, tone: "green", minDensity: "standard" },
-  { id: "radar", title: "Devices", anchor: "right", box: { x: 1310, y: 60, w: 250, h: 270 }, tone: "cyan", minDensity: "full" },
-  { id: "tickets", title: "Tickets", anchor: "right", box: { x: 1300, y: 320, w: 270, h: 160 }, tone: "green", minDensity: "full" },
-  { id: "budget", title: "Budget", anchor: "right", box: { x: 1300, y: 480, w: 270, h: 110 }, tone: "cyan", minDensity: "full" },
+  { id: "radar", title: "Devices", anchor: "right", box: { x: 1310, y: 60, w: 250, h: 270 }, tone: "cyan", minDensity: "standard" },
+  { id: "tickets", title: "Tickets", anchor: "right", box: { x: 1300, y: 320, w: 270, h: 160 }, tone: "green", minDensity: "standard" },
+  { id: "budget", title: "Budget", anchor: "right", box: { x: 1300, y: 480, w: 270, h: 110 }, tone: "cyan", minDensity: "standard" },
   { id: "approval", title: "Approvals", anchor: "right", box: { x: 1180, y: 650, w: 380, h: 210 }, tone: "orange", minDensity: "standard" },
   { id: "usage", title: "Usage", anchor: "centre", box: { x: 700, y: 215, w: 200, h: 30 }, tone: "cyan", minDensity: "calm" },
 ] satisfies readonly WidgetDef[];

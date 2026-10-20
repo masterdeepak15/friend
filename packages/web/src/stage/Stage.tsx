@@ -1,6 +1,7 @@
 import type { ClientMsg } from "@friend/protocol";
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { CommandBar } from "../input/CommandBar";
+import { designScale, layoutMode, screenOf } from "../hud/orbital/geometry";
 import type { Slash } from "../input/commands";
 import { TouchControls } from "../input/TouchControls";
 import { useCoarsePointer } from "../input/useCoarsePointer";
@@ -61,6 +62,12 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
   const coarse = useCoarsePointer();
   const narrow = viewport.w < 600;
   const corner = state.scene === "focus" || state.scene === "multi";
+  // On the orbital screen the message bar is the strip of the approved design (on the canvas at 552,828, 378 x 36 units), always there.
+  const hudBar = hudLayer && layoutMode(viewport.w, viewport.h) === "orbit" ? (() => {
+    const s = designScale(viewport.w, viewport.h);
+    const at = screenOf("centre", 552, 828, viewport.w, viewport.h);
+    return { name: state.assistantName || "friend", style: { left: at.x, top: at.y, width: 378 * s, height: 36 * s, ["--ob-s" as string]: s } as React.CSSProperties };
+  })() : undefined;
   const style = { "--accent": state.mood.accent, "--intensity": state.mood.intensity } as React.CSSProperties;
   const mode = state.voice.mode;
   const presenceState = mode === "listening" ? "listening" : mode === "speaking" ? "speaking" : mode === "transcribing" ? "thinking" : state.presence.state;
@@ -202,7 +209,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
         state={presenceState}
         amplitude={presenceAmplitude}
         pulse={state.presence.pulse}
-        mode={corner ? "corner" : "full"}
+        mode={corner && !hudLayer ? "corner" : "full"}
         accent={state.mood.accent}
         style={state.presence.style}
         intensity={state.mood.intensity}
@@ -233,7 +240,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
         </p>
       )}
       {coarse && voice && !barOpen && <TouchControls voice={voice} mode={mode} onType={() => setOpenRequest((n) => n + 1)} onMenu={() => onMenu?.()} />}
-      <CommandBar requestOpen={openRequest} slash={slash} onOpenChange={setBarOpen} onSend={(text) => send({ type: "chat.send", text })} />
+      <CommandBar requestOpen={openRequest} slash={slash} onOpenChange={setBarOpen} onSend={(text) => send({ type: "chat.send", text })} {...(hudBar ? { hud: hudBar } : {})} />
     </div>
   );
 }

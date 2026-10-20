@@ -1,6 +1,7 @@
 import type { HudView } from "@friend/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { HUD_WIDGET_IDS } from "@friend/protocol";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState, type StageViewState } from "../../store";
@@ -55,7 +56,7 @@ describe("the instruments at each density", () => {
 
   it("standard shows system, voice, activity, approvals and usage", () => {
     const { container } = mount({ density: "standard" });
-    expect(widgetIds(container)).toEqual(["approval", "feed", "system", "usage", "voice"]);
+    expect(widgetIds(container)).toEqual([...HUD_WIDGET_IDS].sort());
   });
 
   it("full shows all nine, and a switched-off one stays away", () => {

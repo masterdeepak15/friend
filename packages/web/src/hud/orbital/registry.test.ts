@@ -29,8 +29,8 @@ describe("which widgets show at each density", () => {
     expect(ids("calm", {}, "orbit", false)).toEqual(["usage"]);
   });
 
-  it("standard shows system, voice, feed, approval and usage", () => {
-    expect(ids("standard", {}, "orbit", false)).toEqual(["system", "voice", "feed", "approval", "usage"]);
+  it("standard shows every instrument of the approved look, so nothing of it is missing by default", () => {
+    expect(ids("standard", {}, "orbit", false)).toEqual([...HUD_WIDGET_IDS]);
   });
 
   it("full shows everything", () => {

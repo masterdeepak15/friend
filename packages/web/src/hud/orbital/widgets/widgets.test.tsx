@@ -1,5 +1,7 @@
 import type { PendingApproval } from "@friend/protocol";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApprovalWidget } from "./ApprovalWidget";
 import { BudgetWidget } from "./BudgetWidget";
@@ -92,6 +94,47 @@ describe("ApprovalWidget", () => {
   });
 });
 
+describe("TicketsWidget", () => {
+  it("always shows the title with its project and the legend, with zeros until there are workers", () => {
+    const { container } = render(<TicketsWidget />);
+    expect(container.textContent).toMatch(/TICKETS · no workers yet/i);
+    expect(container.textContent).toMatch(/DONE 0.*DOING 0.*REVIEW 0.*TODO 0/);
+  });
+
+  it("names the project when it has one, and counts each status", () => {
+    const cells = [{ status: "done" as const }, { status: "done" as const }, { status: "doing" as const }];
+    const { container } = render(<TicketsWidget project="landing-page" cells={cells} />);
+    expect(container.textContent).toMatch(/TICKETS · landing-page/);
+    expect(container.textContent).toMatch(/DONE 2.*DOING 1.*REVIEW 0.*TODO 0/);
+  });
+});
+
+describe("FeedWidget scrolling", () => {
+  const lines = Array.from({ length: 5 }, (_, i) => ({ text: `step ${i}`, tone: "plain" as const }));
+
+  it("loops a sample feed upward, each line twice so the loop has no gap", () => {
+    const { container } = render(<FeedWidget lines={lines} activity={null} busy={false} marquee />);
+    const g = container.querySelector(".ob-feed-scroll")!;
+    expect(g).toBeTruthy();
+    expect(g.querySelectorAll("text")).toHaveLength(10);
+    expect((g as unknown as HTMLElement).style.getPropertyValue("--n")).toBe("100");
+    expect(container.querySelector("rect.ob-feed-fade")).toBeTruthy();
+  });
+
+  it("slides a real feed up by one line when a new line arrives", () => {
+    const { container, rerender } = render(<FeedWidget lines={lines.slice(0, 2)} activity={null} busy={false} />);
+    const before = container.querySelector(".ob-feed-in")!;
+    expect(before).toBeTruthy();
+    rerender(<FeedWidget lines={lines.slice(0, 3)} activity={null} busy={false} />);
+    expect(container.querySelector(".ob-feed-in")).not.toBe(before); // a new group, so its slide runs again
+  });
+
+  it("has the keyframes for both", () => {
+    const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
+    expect(css).toMatch(/@keyframes ob-feed-scroll/);
+    expect(css).toMatch(/@keyframes ob-feed-in/);
+  });
+});
 describe("TicketsWidget and BudgetWidget", () => {
   it("say honestly that there are no workers yet", () => {
     render(

@@ -93,4 +93,44 @@ describe("the orbital layout in the app", () => {
       Object.defineProperty(window, "innerWidth", { value: old, configurable: true, writable: true });
     }
   });
+
+  it("puts the message bar in the HUD's strip, always there, and keeps the hidden bar for the classic screen", () => {
+    show({ hud: hud("orbital"), assistantName: "maya" });
+    const { container } = render(<StageApp onSignedOut={() => {}} />);
+    const form = container.querySelector<HTMLElement>('[data-testid="stage"] .command-bar-hud')!;
+    expect(form).toBeTruthy();
+    expect(form.querySelector("input")!.placeholder).toBe("▸ ask maya anything…");
+    expect(parseFloat(form.style.width)).toBeCloseTo(378 * 0.64, 1); // the strip is 378 canvas units wide; the window scales the canvas by 0.64
+    cleanup();
+    show({ hud: hud("classic") });
+    const classic = render(<StageApp onSignedOut={() => {}} />);
+    expect(classic.container.querySelector(".command-bar")).toBeNull();
+  });
+
+  it("uses the ordinary hidden bar on a phone, where there is no strip", () => {
+    const old = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: 360, configurable: true, writable: true });
+    try {
+      show({ hud: hud("orbital") });
+      const { container } = render(<StageApp onSignedOut={() => {}} />);
+      expect(container.querySelector(".command-bar-hud")).toBeNull();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: old, configurable: true, writable: true });
+    }
+  });
+
+  it("keeps the orb in the middle when pictures appear, instead of sending it to the corner over the feed", () => {
+    show({ hud: hud("orbital"), scene: "multi" });
+    const { container } = render(<StageApp onSignedOut={() => {}} />);
+    expect(container.querySelector("[data-presence]")!.className).toContain("presence-full");
+    cleanup();
+    show({ hud: hud("classic"), scene: "multi" });
+    const classic = render(<StageApp onSignedOut={() => {}} />);
+    expect(classic.container.querySelector("[data-presence]")!.className).toContain("presence-corner");
+  });
+
+  it("lifts the spoken caption above the message strip", () => {
+    const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
+    expect(css).toMatch(/\.stage:has\(\.orbital\[data-mode="orbit"\]\) \.captions \{[^}]*bottom: 1[5-9]%/);
+  });
 });

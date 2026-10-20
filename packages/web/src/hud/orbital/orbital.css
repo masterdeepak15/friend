@@ -294,3 +294,20 @@
 .ob-approval-frame .ob-actions { flex-wrap: nowrap; gap: 8px; }
 .ob-approval-frame .ob-btn { padding: 9px 14px; font-size: 11px; letter-spacing: 0.06em; white-space: nowrap; }
 .ob-frame[data-tone="orange"].ob-approval-frame { animation: none; }
+
+/* ---- the feed moves up: a sample loops, a real feed slides up by a line when something new arrives ---- */
+.ob-feed-scroll { animation: ob-feed-scroll 14s linear infinite; }
+@keyframes ob-feed-scroll { from { transform: translateY(0); } to { transform: translateY(calc(var(--n) * -1px)); } }
+.ob-feed-in { animation: ob-feed-in 0.35s ease-out; }
+@keyframes ob-feed-in { from { transform: translateY(20px); opacity: 0.4; } to { transform: translateY(0); opacity: 1; } }
+
+/* ---- the real message bar, drawn inside the strip of the approved design ---- */
+.ob-cmd { justify-content: flex-end; }
+.command-bar.command-bar-hud { position: absolute; transform: none; bottom: auto; padding: 0; gap: 0; display: block; background: none; border: 0; -webkit-backdrop-filter: none; backdrop-filter: none; font-size: calc(12px * var(--ob-s, 1)); font-family: Consolas, "Courier New", monospace; }
+.command-bar-hud input { width: 100%; height: 100%; min-height: 0; padding: 0; font: inherit; color: #bdeef7; letter-spacing: 0.04em; }
+.command-bar-hud input::placeholder { color: #bdeef7; opacity: 0.9; }
+.command-bar-hud button[type="submit"] { position: absolute; width: 1px; height: 1px; min-width: 0; min-height: 0; padding: 0; border: 0; opacity: 0; overflow: hidden; }
+.command-bar-hud .slash-list { bottom: 100%; margin-bottom: 8px; }
+
+/* the spoken caption sits above the message strip, not on it */
+.stage:has(.orbital[data-mode="orbit"]) .captions { bottom: 17%; }

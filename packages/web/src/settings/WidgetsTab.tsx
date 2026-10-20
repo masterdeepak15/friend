@@ -171,8 +171,8 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
         <span>Density</span>
         <select value={hud.density} disabled={hud.layout !== "orbital"} onChange={(e) => onHud({ density: e.target.value as HudSettings["density"] })}>
           <option value="calm">Calm (the orb, the orbit and the message bar)</option>
-          <option value="standard">Standard</option>
-          <option value="full">Full (every instrument)</option>
+          <option value="standard">Standard (the approved look: every instrument)</option>
+          <option value="full">Full (the same, plus anything added later)</option>
         </select>
       </label>
       <fieldset className="settings-field" disabled={hud.layout !== "orbital"}>

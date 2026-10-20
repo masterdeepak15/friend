@@ -115,8 +115,8 @@ describe("the approved mockup, in the parts that do not need workers", () => {
     const { container } = mount();
     for (const c of [".ob-orb-ring", ".ob-ping", ".ob-ring-dash", ".ob-ring-long", ".ob-ring-thin", ".ob-orbit", ".ob-ring-outer"]) expect(container.querySelector(c), c).toBeTruthy();
     expect(container.querySelector(".ob-topbar-base")!.getAttribute("d")).toBe("M330 44H560L590 20H1010L1040 44H1270");
-    expect(container.querySelector(".ob-cmd")!.textContent).toMatch(/ask maya anything/i);
     expect(container.querySelector(".ob-cmd")!.textContent).toMatch(/HOLD TO TALK/);
+    expect(container.querySelector(".ob-cmd")!.textContent).not.toMatch(/ask maya/i); // the words are the real bar's placeholder
   });
 
   it("draws the orb's glowing disc and the radial background under the stage's orb, so the orb shows through", () => {
