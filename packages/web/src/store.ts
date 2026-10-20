@@ -11,6 +11,9 @@ import {
   type MusicCommand,
   type MusicState,
   type MusicView,
+  type OfficeQuota,
+  type OfficeTicketView,
+  type OfficeWorkerView,
 } from "@friend/protocol";
 
 /** "elsewhere": Friend is open in another window; this one waits for "Use here". */
@@ -90,8 +93,26 @@ export interface StageViewState {
   uiOpen: { n: number; integration?: string } | null;
   /** The newest reading of how busy this PC is (orbital screen); `at` is when it arrived, to tell a stale one. */
   stats: HudStats | null;
+  /** The hired workers, their tickets and the subscription window, with the newest lines of what each worker is doing. */
+  office: OfficeState;
 }
 
+export interface OfficeFeedLine {
+  at: number;
+  kind: string;
+  text: string;
+}
+
+export interface OfficeState {
+  enabled: boolean;
+  workers: OfficeWorkerView[];
+  tickets: OfficeTicketView[];
+  quota: OfficeQuota;
+  feed: Record<string, OfficeFeedLine[]>;
+}
+
+/** How many lines of one worker's feed the screen keeps. */
+export const OFFICE_FEED_LINES = 60;
 export interface HudStats {
   cpu: number;
   ramUsed: number;
@@ -133,6 +154,7 @@ export const initialState: StageViewState = {
   musicCmd: null,
   uiOpen: null,
   stats: null,
+  office: { enabled: false, workers: [], tickets: [], quota: { fiveHour: null, sevenDay: null }, feed: {} },
 };
 
 export interface ChatLine {
@@ -279,9 +301,17 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: m.level, text: m.text }] };
     case "activity":
       return { ...state, activity: m.text };
-    case "office.state":
-    case "office.feed":
-      return state; // Task 9 of the Office plan fills these in
+    case "office.state": {
+      const feed: Record<string, OfficeFeedLine[]> = {};
+      for (const w of m.workers) if (state.office.feed[w.id]) feed[w.id] = state.office.feed[w.id]!; // a worker that is gone takes its lines with it
+      return { ...state, office: { enabled: m.enabled, workers: m.workers, tickets: m.tickets, quota: m.quota, feed } };
+    }
+    case "office.feed": {
+      if (!state.office.workers.some((w) => w.id === m.workerId)) return state;
+      const line = { at: m.at, kind: m.kind, text: m.text };
+      const lines = [...(state.office.feed[m.workerId] ?? []), line].slice(-OFFICE_FEED_LINES);
+      return { ...state, office: { ...state.office, feed: { ...state.office.feed, [m.workerId]: lines } } };
+    }
     case "hud.stats":
       return { ...state, stats: { cpu: m.cpu, ramUsed: m.ramUsed, ramTotal: m.ramTotal, netDown: m.netDown, netUp: m.netUp, at: Date.now() } };
     case "status":
