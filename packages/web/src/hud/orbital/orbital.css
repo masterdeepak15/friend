@@ -7,9 +7,9 @@
   --ob-dark: #031018;
   --ob-line: color-mix(in srgb, var(--ob-cyan) 55%, transparent);
   --ob-dim: color-mix(in srgb, var(--ob-cyan) 28%, transparent);
-  position: fixed;
+  position: absolute; /* inside the stage: above the orb, below the pictures the assistant puts up, the message bar and the touch controls */
   inset: 0;
-  z-index: 20;
+  z-index: 5;
   pointer-events: none; /* only the instruments and nodes take the pointer, so a long press on the stage still talks */
   font-family: Consolas, "Courier New", monospace;
   color: #a5f3fc;
@@ -150,9 +150,9 @@
 .ob-topbar-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; height: 100%; font-size: 12px; letter-spacing: 0.14em; color: #e0fbff; white-space: nowrap; overflow: hidden; }
 .ob-status { color: var(--ob-cyan); overflow: hidden; text-overflow: ellipsis; }
 .ob-hint { position: absolute; margin: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; letter-spacing: 0.16em; color: color-mix(in srgb, var(--ob-cyan) 70%, transparent); pointer-events: none; }
-.orbital[data-mode="compact"] .ob-chips { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 6px; overflow-x: auto; pointer-events: auto; }
+.orbital[data-mode="compact"] .ob-chips { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 6px; overflow-x: auto; pointer-events: none; }
 .ob-chip { flex: none; background: color-mix(in srgb, var(--ob-dark) 90%, transparent); border: 1px solid var(--ob-line); color: #e0fbff; font: inherit; font-size: 12px; padding: 6px 10px; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); cursor: pointer; }
-.orbital[data-mode="compact"] .ob-strip { position: absolute; left: 8px; right: 8px; bottom: 110px; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; pointer-events: auto; }
+.orbital[data-mode="compact"] .ob-strip { position: absolute; left: 8px; right: 8px; bottom: 110px; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; pointer-events: none; }
 .orbital[data-mode="compact"] .ob-strip .ob-zone { position: relative; }
 .orbital[data-mode="compact"] .ob-usage-label { position: relative; flex: none; align-self: center; }
 
@@ -190,3 +190,11 @@
 .ob-topbar .ob-frame-body { height: 100%; display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
 .ob-topbar-row { width: 100%; }
 .ob-glyph { font-size: 17px; letter-spacing: 0; }
+
+/* ---- review fixes: only the pieces take the pointer on a phone, a status line, the approval as a dialog ---- */
+.ob-strip > * { pointer-events: auto; }
+.ob-chips > * { pointer-events: auto; }
+.ob-compact-status { position: absolute; top: 48px; left: 12px; right: 12px; margin: 0; font-size: 11px; letter-spacing: 0.12em; color: var(--ob-cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.ob-modal-backdrop { z-index: 6; pointer-events: auto; }
+.ob-modal { z-index: 7; }
+.ob-tier-row { display: flex; gap: 8px; align-items: center; }

@@ -35,6 +35,13 @@ describe("the screen layout section of the widgets settings", () => {
     expect(onHud).toHaveBeenCalledWith({ widgets: { radar: true } });
   });
 
+  it("keeps the earlier switches when another box is toggled (the screen merges one level only)", () => {
+    const onHud = vi.fn();
+    render(<WidgetsTab music={music} hud={{ ...orbital, widgets: { radar: false } }} onMusic={() => {}} onHud={onHud} />);
+    fireEvent.click(screen.getByTestId("hud-widget-feed"));
+    expect(onHud).toHaveBeenCalledWith({ widgets: { radar: false, feed: false } });
+  });
+
   it("leaves the widget boxes disabled while the layout is classic", () => {
     render(<WidgetsTab music={music} hud={classic} onMusic={() => {}} onHud={() => {}} />);
     expect((screen.getByTestId("hud-widget-radar") as HTMLInputElement).disabled).toBe(true);

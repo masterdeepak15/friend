@@ -7,6 +7,8 @@ import { ExpandedView } from "./ExpandedView";
 import { ZONE_GAP, centreClear, layoutMode, orbitNodes, orbitRadius, zoneRect, type Rect, type ZoneId } from "./geometry";
 import { Frame, HexNode, HudDefs, LinkLine, SegmentedRing, type Tone } from "./kit";
 import { visibleWidgets, type WidgetDef } from "./registry";
+import { Safe } from "./Safe";
+import { useWindowSize } from "./useWindowSize";
 import { ApprovalWidget } from "./widgets/ApprovalWidget";
 import { BudgetWidget } from "./widgets/BudgetWidget";
 import { FeedWidget } from "./widgets/FeedWidget";
@@ -37,18 +39,6 @@ export interface OrbitalHudProps {
 }
 
 const FRAME: Record<HudWidgetId, "chamfer" | "bracket" | "octagon"> = { system: "chamfer", voice: "bracket", network: "bracket", feed: "chamfer", radar: "chamfer", tickets: "bracket", budget: "bracket", approval: "octagon", usage: "chamfer" };
-
-function useWindowSize(override?: { w: number; h: number }): { w: number; h: number } {
-  const read = () => ({ w: window.innerWidth, h: window.innerHeight });
-  const [size, setSize] = useState(read);
-  useEffect(() => {
-    if (override) return;
-    const on = () => setSize(read());
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
-  }, [override]);
-  return override ?? size;
-}
 
 /** True while the tab is hidden, so every loop can stop. */
 function useHidden(): boolean {
@@ -91,12 +81,14 @@ function placeWidgets(list: WidgetDef[], w: number, h: number): Map<HudWidgetId,
   return out;
 }
 
+const statusText = (state: StageViewState): string => describeStatus({ connection: state.connection, deviceOnline: state.deviceOnline, approval: state.approval, voiceMode: state.voice.mode, busy: state.busy, activity: state.activity }).text;
+
 function TopBar({ hud, state, rect }: { hud: HudView; state: StageViewState; rect: Rect }) {
   const now = useNow(hud.clock.seconds ? 1000 : 15_000);
   const locale = hud.clock.locale || undefined;
   const time = now.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", ...(hud.clock.seconds ? { second: "2-digit" } : {}), hour12: hud.clock.hour12 });
   const date = now.toLocaleDateString(locale, { weekday: "short", day: "2-digit", month: "short" });
-  const status = describeStatus({ connection: state.connection, deviceOnline: state.deviceOnline, approval: state.approval, voiceMode: state.voice.mode, busy: state.busy, activity: state.activity });
+  const status = { text: statusText(state) };
   return (
     <Frame variant="chamfer" running className="ob-topbar" style={px(rect)} data-testid="orbital-topbar">
       <div className="ob-topbar-row">
@@ -143,7 +135,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
     onExpand({ kind: "widget", id });
   };
   useEffect(() => {
-    if (expanded === null) return;
+    if (expanded === null || pending) return;
     const on = (e: globalThis.KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -152,15 +144,23 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
     };
     window.addEventListener("keydown", on, true);
     return () => window.removeEventListener("keydown", on, true);
-  }, [expanded, close]);
+  }, [expanded, pending, close]);
   const openW = mode === "compact" ? w - 16 : Math.max(280, Math.min(760, w * 0.62));
   const expandedRect: Rect = { x: (w - openW) / 2, y: h * 0.14, width: openW, height: Math.max(220, Math.min(560, h * 0.7)) };
-  const expandedEl = expanded && (
+  // a waiting approval comes first: any open instrument closes, and the approval is drawn as a dialog in the middle (big enough for the PIN pad, full width on a phone)
+  const shownExpanded = pending ? null : expanded;
+  const expandedEl = shownExpanded && (
     <>
       <div className="ob-backdrop ob-hit" onPointerDown={(e) => { e.stopPropagation(); close(); }} />
-      <ExpandedView id={expanded} state={state} rect={expandedRect} {...(usageApi ? { usageApi } : {})} onClose={close} />
+      <Safe>
+        <ExpandedView id={shownExpanded} state={state} rect={expandedRect} {...(usageApi ? { usageApi } : {})} onClose={close} />
+      </Safe>
     </>
   );
+  const modalW = mode === "compact" ? w - 16 : Math.max(340, Math.min(480, w * 0.34));
+  const modalH = Math.min(h - 16, Math.max(300, Math.min(520, h * 0.7)));
+  const modalRect: Rect = { x: (w - modalW) / 2, y: (h - modalH) / 2, width: modalW, height: modalH };
+  const edge = (d: WidgetDef) => d.zone !== "centre" && !(d.id === "approval" && pending);
   const content = (id: HudWidgetId) => {
     switch (id) {
       case "system":
@@ -181,10 +181,10 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
         return null;
     }
   };
-  const frame = (def: WidgetDef, style?: CSSProperties) =>
+  const frameInner = (def: WidgetDef, style?: CSSProperties, extra = "") =>
     def.id === "approval" ? (
       // an approval is answered right here, so it is not a click-to-expand button
-      <Frame key={def.id} data-widget="approval" variant="octagon" tone={toneOf(def)} title={def.title} running={pending} className="ob-zone ob-hit ob-static" style={style}>
+      <Frame key={def.id} data-widget="approval" variant="octagon" tone={toneOf(def)} title={def.title} running={pending} className={`ob-zone ob-hit ob-static ${extra}`.trim()} style={style}>
         <ApprovalWidget approval={state.approval} send={send} />
       </Frame>
     ) : (
@@ -192,6 +192,14 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
         {content(def.id)}
       </Frame>
     );
+  const frame = (def: WidgetDef, style?: CSSProperties, extra = "") => <Safe key={def.id}>{frameInner(def, style, extra)}</Safe>;
+  const approvalDef = widgets.find((d) => d.id === "approval");
+  const modalEl = pending && approvalDef && (
+    <>
+      <div className="ob-backdrop ob-modal-backdrop" />
+      {frame(approvalDef, px(modalRect), "ob-modal")}
+    </>
+  );
   const root = { className: "orbital", "data-testid": "orbital", "data-mode": mode, "data-hud-anim": hud.animations, ...(hidden ? { "data-paused": "" } : {}) };
   const hasUsage = widgets.some((d) => d.id === "usage");
 
@@ -206,11 +214,13 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
             </button>
           ))}
         </div>
-        <div className="ob-strip ob-hit">
-          {widgets.filter((d) => d.zone !== "centre").map((d) => frame(d, { minWidth: 170, height: 100, flex: "none" }))}
+        <p className="ob-compact-status">{statusText(state)}</p>
+        <div className="ob-strip">
+          {widgets.filter(edge).map((d) => frame(d, { minWidth: 170, height: 100, flex: "none" }))}
           {hasUsage && <UsageLabel usage={usage} onClick={open("usage")} />}
         </div>
         {expandedEl}
+        {modalEl}
       </div>
     );
   }
@@ -219,7 +229,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
   const c = centreClear(w, h);
   const nodes = orbitNodes(hud.launcher.length, w, h);
   const usageR = 0.68 * R;
-  const placed = placeWidgets(widgets, w, h);
+  const placed = placeWidgets(widgets.filter(edge), w, h);
   return (
     <div {...root}>
       <HudDefs />
@@ -243,12 +253,19 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
       )}
       {nodes.map((n, i) => {
         const item = hud.launcher[i]!;
-        return <HexNode key={item.id} x={n.x} y={n.y} label={item.label} glyph={item.icon} onClick={() => onLaunch(item)} />;
+        return (
+          <Safe key={item.id}>
+            <HexNode x={n.x} y={n.y} label={item.label} glyph={item.icon} onClick={() => onLaunch(item)} />
+          </Safe>
+        );
       })}
-      <TopBar hud={hud} state={state} rect={zoneRect("top", w, h)} />
-      {widgets.filter((d) => d.zone !== "centre").map((d) => frame(d, px(placed.get(d.id)!)))}
+      <Safe>
+        <TopBar hud={hud} state={state} rect={zoneRect("top", w, h)} />
+      </Safe>
+      {widgets.filter(edge).map((d) => frame(d, px(placed.get(d.id)!)))}
       <p className="ob-hint" style={{ left: ZONE_GAP, top: zoneRect("bottom", w, h).y, width: w - 2 * ZONE_GAP, height: zoneRect("bottom", w, h).height }}>▸ press and hold to talk · tap to type</p>
       {expandedEl}
+      {modalEl}
     </div>
   );
 }

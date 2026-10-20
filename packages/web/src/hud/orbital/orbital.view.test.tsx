@@ -1,4 +1,6 @@
 import type { HudView } from "@friend/protocol";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState, type StageViewState } from "../../store";
@@ -136,5 +138,64 @@ describe("what the instruments show", () => {
     const { container } = mount({ density: "full" }, { stats, deviceOnline: false });
     expect(container.querySelector('[data-widget="system"]')!.textContent).toMatch(/CPU 38%/);
     expect(container.querySelector('[data-widget="radar"] [data-blip][data-dim]')!.textContent).toBe("PC");
+  });
+});
+
+describe("when one piece of the screen throws", () => {
+  it("drops only that piece and keeps the rest", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const bad = { id: "bad", icon: undefined, label: undefined, action: { type: "panel", value: "chat" } } as never;
+    const { container } = mount({ launcher: [bad, ...launcher], clock: { hour12: true, seconds: false, locale: "!!" } });
+    expect(container.querySelectorAll(".ob-node")).toHaveLength(3);
+    expect(container.querySelector('[data-widget="system"]')).toBeTruthy();
+    expect(container.querySelector(".orbital")).toBeTruthy();
+    err.mockRestore();
+  });
+});
+
+describe("a waiting approval", () => {
+  const waiting = { id: "a1", tool: "shell.run", summary: "Run: npm install", tier: "T3", needsPin: true } as never;
+  const element = (state: Partial<StageViewState>, size: [number, number]) => {
+    const hud = hudOf({ density: "full" });
+    return <OrbitalHud hud={hud} state={{ ...initialState, connection: "open", hud, ...state }} viewport={{ w: size[0], h: size[1] }} usage={42} onLaunch={() => {}} onExpand={() => {}} />;
+  };
+
+  it("is drawn as a dialog in the middle of the screen, large enough for the PIN pad", () => {
+    const { container } = render(element({ approval: waiting }, [1366, 768]));
+    const f = container.querySelector<HTMLElement>('[data-widget="approval"]')!;
+    expect(f.className).toContain("ob-modal");
+    expect(parseFloat(f.style.width)).toBeGreaterThanOrEqual(340);
+    expect(parseFloat(f.style.height)).toBeGreaterThanOrEqual(300);
+  });
+
+  it("fills the width of a phone", () => {
+    const { container } = render(element({ approval: waiting }, [360, 800]));
+    const f = container.querySelector<HTMLElement>('[data-widget="approval"]')!;
+    expect(f.className).toContain("ob-modal");
+    expect(parseFloat(f.style.width)).toBe(344);
+  });
+
+  it("closes an instrument that is open, so nothing covers it", () => {
+    const { container, rerender } = render(element({}, [1920, 1080]));
+    fireEvent.click(container.querySelector('[data-widget="system"]')!);
+    expect(container.querySelector(".ob-expanded")).toBeTruthy();
+    rerender(element({ approval: waiting }, [1920, 1080]));
+    expect(container.querySelector(".ob-expanded")).toBeNull();
+    expect(container.querySelector('[data-widget="approval"]')!.className).toContain("ob-modal");
+  });
+});
+
+describe("the phone layout", () => {
+  it("tells the owner the status, since the corner badge is not drawn", () => {
+    const { container } = mount({}, {}, [360, 800]);
+    expect(container.querySelector(".ob-compact-status")!.textContent).toMatch(/ready|offline|listening|working/i);
+  });
+
+  it("lets a press through the empty parts of the strip, so the orb can still be pressed", () => {
+    const { container } = mount({}, {}, [360, 800]);
+    expect(container.querySelector(".ob-strip")!.classList.contains("ob-hit")).toBe(false);
+    const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
+    expect(css).toMatch(/\[data-mode="compact"\] \.ob-strip \{[^}]*pointer-events: none/);
+    expect(css).toMatch(/\.ob-strip > \* \{[^}]*pointer-events: auto/);
   });
 });

@@ -179,7 +179,7 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
         <legend>Instruments</legend>
         {HUD_WIDGET_IDS.map((id) => (
           <label key={id} className="settings-check">
-            <input type="checkbox" data-testid={`hud-widget-${id}`} disabled={hud.layout !== "orbital"} checked={hud.widgets[id] !== false} onChange={(e) => onHud({ widgets: { [id]: e.target.checked } })} />
+            <input type="checkbox" data-testid={`hud-widget-${id}`} disabled={hud.layout !== "orbital"} checked={hud.widgets[id] !== false} onChange={(e) => onHud({ widgets: { ...hud.widgets, [id]: e.target.checked } })} />
             <span>{WIDGET_NAMES[id]}</span>
           </label>
         ))}

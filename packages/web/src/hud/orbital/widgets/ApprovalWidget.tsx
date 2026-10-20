@@ -12,7 +12,7 @@ function Waiting({ approval, send }: { approval: PendingApproval; send: (m: Clie
   const { pin, setPin, respond, canApprove } = useApprovalDecision(approval, send);
   return (
     <div className="ob-approval" role="alertdialog" aria-label="Approval needed">
-      <span className="ob-warn" aria-hidden="true">⚠</span>
+      <span className="ob-tier-row"><span className={`tier tier-${approval.tier}`}>{approval.tier}</span> <span className="ob-warn" aria-hidden="true">⚠</span></span>
       <pre className="ob-summary" data-testid="approval-summary">{approval.summary}</pre>
       {approval.needsPin && <PinPad pin={pin} onChange={setPin} onSubmit={() => canApprove && respond("approve")} />}
       <div className="ob-actions">

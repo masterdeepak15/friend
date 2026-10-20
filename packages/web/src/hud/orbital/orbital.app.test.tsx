@@ -1,4 +1,6 @@
 import type { HudView } from "@friend/protocol";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { StageApp } from "../../App";
@@ -68,5 +70,27 @@ describe("the orbital layout in the app", () => {
     show({ hud: hud("classic") });
     const classic = render(<StageApp onSignedOut={() => {}} />);
     expect(classic.container.querySelector<HTMLElement>("[data-presence]")!.style.transform).toBe("");
+  });
+
+  it("is drawn inside the stage, between the orb and the pictures the assistant puts up, so those are never hidden behind it", () => {
+    show({ hud: hud("orbital") });
+    const { container } = render(<StageApp onSignedOut={() => {}} />);
+    const stage = container.querySelector('[data-testid="stage"]')!;
+    expect(stage.querySelector(".orbital")).toBeTruthy();
+    const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
+    expect(css).toMatch(/\.orbital \{[^}]*position: absolute/);
+    expect(css).toMatch(/\.orbital \{[^}]*z-index: 5;/);
+  });
+
+  it("keeps the orb at full size on a phone, where there is no orbit to fit it inside", () => {
+    const old = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: 360, configurable: true, writable: true });
+    try {
+      show({ hud: hud("orbital") });
+      const { container } = render(<StageApp onSignedOut={() => {}} />);
+      expect(container.querySelector<HTMLElement>("[data-presence]")!.style.transform).toBe("");
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: old, configurable: true, writable: true });
+    }
   });
 });

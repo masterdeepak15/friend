@@ -67,6 +67,11 @@ describe("ApprovalWidget", () => {
     expect(send).toHaveBeenCalledWith({ type: "approval.respond", id: "a1", decision: "deny" });
   });
 
+  it("shows the tier of what is being asked, like the old card", () => {
+    render(<ApprovalWidget approval={approval({ tier: "T3", needsPin: true })} send={() => {}} />);
+    expect(screen.getByText("T3")).toBeTruthy();
+  });
+
   it("offers 'always allow' only for a T2 that needs no PIN", () => {
     const { rerender } = render(<ApprovalWidget approval={approval()} send={() => {}} />);
     expect(screen.getByRole("button", { name: /always allow/i })).toBeTruthy();
