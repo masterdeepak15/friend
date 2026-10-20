@@ -130,4 +130,11 @@ describe("what the instruments show", () => {
     expect(container.querySelector('[data-widget="tickets"]')!.textContent).toMatch(/no workers yet/i);
     expect(container.querySelector('[data-widget="budget"]')!.textContent).toMatch(/no workers yet/i);
   });
+
+  it("shows the PC's reading in the system instrument and the real sources on the radar", () => {
+    const stats = { cpu: 38, ramUsed: 8e9, ramTotal: 16e9, netDown: 0, netUp: 0, at: Date.now() };
+    const { container } = mount({ density: "full" }, { stats, deviceOnline: false });
+    expect(container.querySelector('[data-widget="system"]')!.textContent).toMatch(/CPU 38%/);
+    expect(container.querySelector('[data-widget="radar"] [data-blip][data-dim]')!.textContent).toBe("PC");
+  });
 });

@@ -8,6 +8,9 @@ import { visibleWidgets, type WidgetDef } from "./registry";
 import { ApprovalWidget } from "./widgets/ApprovalWidget";
 import { BudgetWidget } from "./widgets/BudgetWidget";
 import { FeedWidget } from "./widgets/FeedWidget";
+import { NetworkWidget } from "./widgets/NetworkWidget";
+import { RadarWidget } from "./widgets/RadarWidget";
+import { SystemWidget } from "./widgets/SystemWidget";
 import { TicketsWidget } from "./widgets/TicketsWidget";
 import { VoiceWidget } from "./widgets/VoiceWidget";
 import "./orbital.css";
@@ -125,6 +128,12 @@ export function OrbitalHud({ hud, state, usage = null, viewport, send = () => {}
   const open = (id: HudWidgetId) => () => onExpand({ kind: "widget", id });
   const content = (id: HudWidgetId) => {
     switch (id) {
+      case "system":
+        return <SystemWidget stats={state.stats} />;
+      case "network":
+        return <NetworkWidget stats={state.stats} />;
+      case "radar":
+        return <RadarWidget deviceOnline={state.deviceOnline} voiceAvailable={state.voice.available} />;
       case "voice":
         return <VoiceWidget level={state.voice.level} mode={state.voice.mode} />;
       case "feed":
