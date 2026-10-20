@@ -1,6 +1,6 @@
 # Friend: Orbital HUD and the Office (design)
 
-Date: 2026-10-20. Status: draft for the owner's review.
+Date: 2026-10-20. Status: the Orbital HUD and the Office are built on local branches (feat/orbital-hud, feat/office) and checked with a real worker; not merged or released, waiting for the owner's test.
 
 ## 1. Purpose
 
