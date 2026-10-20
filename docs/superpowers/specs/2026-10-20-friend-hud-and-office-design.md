@@ -40,7 +40,7 @@ Out of scope for now: multiple companies, cron routines, other agent programs (C
 ### 3.1 Layout
 A full-screen scene. The centre is always clear for the orb and its captions.
 
-- **Centre:** the existing orb (`Presence`), unchanged, with HUD rings drawn around it: a rotating tick ring, a counter-rotating dashed ring and a **segmented usage ring** (60 segments, filled to today's usage relative to the owner's busiest day of the last 30; the Claude subscription exposes no usage-window percentage, so this is the honest measure).
+- **Centre:** the existing orb (`Presence`), unchanged, with HUD rings drawn around it: a rotating tick ring, a counter-rotating dashed ring and a **segmented usage ring** (60 segments, filled to today's usage relative to the owner's busiest day of the last 30; in the HUD shell this is today's usage against the busiest day; §8 found that headless Claude Code does report the real five-hour window, which a later change feeds into the ring).
 - **Orbit:** a ring of hexagon "nodes" around the orb at radius ≈ 0.33 × the smaller screen side. In sub-project 1 the nodes are the owner's **quick-launch items** (today's launcher), so the orbit is useful before the Office exists; in sub-project 2 they become the workers. Links from the orb to each node are dashed lines with data flowing along them.
 - **Zones** around the edge hold the widgets: top bar, left rail (top, middle, bottom), right rail (top, middle, bottom), bottom command bar. Each zone is an anchor with a size range, not a fixed pixel box, so it follows the window.
 - Layout maths (orbit radius, node angles, zone anchors) lives in one pure module with unit tests; no layout numbers are scattered through components.
@@ -155,3 +155,27 @@ Later: several projects at once, per-worker budgets and schedules, routines, an 
 - Calm, standard and full density work; reduced motion stops every loop.
 - Classic layout is unchanged and its tests pass.
 - (Office) The owner says "build me a landing page"; Friend creates tickets and hires workers; the HUD shows them working live; an approval appears as the orange widget; the owner can stop any worker.
+
+## 8. Spike findings (2026-10-20, verified on Claude Code 2.1.304)
+
+A throwaway spike ran real headless workers (`claude -p --input-format stream-json --output-format stream-json --verbose`) in scratch folders, with a stand-in approval server. What is now known, not assumed:
+
+- **Streaming works.** Events: `system/init` (session id, model, working folder, tool count, MCP status), `stream_event` partials (live text), `assistant` (tool calls), `user` (tool results), `rate_limit_event`, and a final `result` (turns, duration, token usage, notional cost, `permission_denials`, session id). A cold start takes about 7 to 8 seconds before the first event, so the HUD shows "starting" for a worker.
+- **Asking Friend first works** (`--permission-prompt-tool`). Claude Code calls an MCP tool before any action it would otherwise ask about; the answer `{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":…}` is honoured, and a denial's message reaches the worker, which reports it honestly and does not try to get round it. The "risky action" risk of §6 is closed.
+- **The fence is a gate, not a given.** The worker's working folder is not a sandbox: a read of `C:\Windows\win.ini` is asked about and was denied by the gate. So the fence is enforced by Friend's approval step, and tools on the allow-list skip the gate, so the allow-list is a security setting.
+- **Sessions resume** (`--session-id`, `--resume`): a resumed worker remembered its earlier work. This is how "say something to a worker" and a worker keeping context across tickets are done.
+- **Workers run in parallel.** Two at once took 19.5 s wall clock for two tasks that take about 14 s alone.
+- **Cost is tiny per small task** (about 0.0015 to 0.0045 notional dollars on the smallest model), but the subscription window is the real limit.
+- **The subscription window is visible** in `rate_limit_event`: five-hour and seven-day `utilization` (0 to 1) and `resetsAt`. At the time of the spike the owner's five-hour window was at 96% (resetting 22:40) and the seven-day at 65%. This replaces §3.5's claim that no window figure exists: the HUD's usage ring can show the real window and its reset time, and the Office can pause workers at a configurable utilisation.
+
+## 9. Not hardcoded: everything is a setting of the product
+
+The spike's constants (the model, the command, the folder, the rules in the stand-in server, two workers, the "no installs" rule) are throwaway. In Friend they are all settings, owner-only and PIN-protected like the others, with sensible defaults and no names, paths or roles baked into code:
+
+- `office.enabled`; the program to run (reuses `claudeCode.command`) and the default model (reuses `claudeCode.model`, overridable per role).
+- **Roles** are data: id, title, instructions, model, tool allow-list, permission level, working rules. A few starter roles ship as defaults the owner can edit, remove or add to; nothing in the code refers to "coder" or "tester".
+- **Projects** are data: name, folder, goal, extra folders a worker may see. The fence is the project folder plus those folders.
+- **Approval policy** is data: which tools run without asking (the allow-list), which command patterns are always refused, which always ask, and the PIN tier for each. Approvals go through Friend's own approval engine and tiers, and reach the screen as the HUD's approval instrument, by a new tool on Friend's existing Claude Code bridge, not a separate server.
+- **Limits** are data: how many workers run at once (default 2), a per-worker and a total budget, a start-up timeout, and "pause workers when the five-hour window passes N%" (default 90).
+- **Strings and colours** come from the theme and the owner's assistant name; no worker or ticket text is fixed in the screen code.
+- Every start, stop, approval and denial is audited, and one switch stops everything.
