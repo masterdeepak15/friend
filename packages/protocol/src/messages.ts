@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, type HudWidgetId } from "./hud";
+import { MAX_FEED_CHARS, OFFICE_FEED_KINDS, OfficeQuota, OfficeTicketView, OfficeWorkerView } from "./office";
 import { parseRef } from "./musicRef";
 import { StageCommand, StageSnapshot } from "./stage";
 import { Tier } from "./tiers";
@@ -162,6 +163,10 @@ export const ServerMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("screen.cancel"), id: z.string() }),
   z.object({ type: z.literal("snapshot"), stage: StageSnapshot, pendingApproval: PendingApproval.nullable().optional() }),
   z.object({ type: z.literal("error"), message: z.string() }),
+  /** The Office as screens draw it (sent on connect and whenever a worker, a ticket or the quota changes). */
+  z.object({ type: z.literal("office.state"), enabled: z.boolean(), workers: z.array(OfficeWorkerView).max(100), tickets: z.array(OfficeTicketView).max(500), quota: OfficeQuota }),
+  /** One line of what a worker is doing. */
+  z.object({ type: z.literal("office.feed"), workerId: z.string().max(64), at: z.number(), kind: z.enum(OFFICE_FEED_KINDS), text: z.string().max(MAX_FEED_CHARS) }),
 ]);
 export type ServerMsg = z.infer<typeof ServerMsg>;
 
@@ -196,6 +201,10 @@ export const ClientMsg = z.discriminatedUnion("type", [
   /** A screen's button press for the PC's player (only used while the output is the PC). */
   z.object({ type: z.literal("music.remote"), command: MusicCommand }),
   z.object({ type: z.literal("ping") }),
+  /** The owner stops one worker, or every worker when no id is given. */
+  z.object({ type: z.literal("office.stop"), workerId: z.string().max(64).optional() }),
+  /** The owner says something to a worker. */
+  z.object({ type: z.literal("office.say"), workerId: z.string().max(64), text: z.string().min(1).max(2000) }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;
 

@@ -279,6 +279,9 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: m.level, text: m.text }] };
     case "activity":
       return { ...state, activity: m.text };
+    case "office.state":
+    case "office.feed":
+      return state; // Task 9 of the Office plan fills these in
     case "hud.stats":
       return { ...state, stats: { cpu: m.cpu, ramUsed: m.ramUsed, ramTotal: m.ramTotal, netDown: m.netDown, netUp: m.netUp, at: Date.now() } };
     case "status":
