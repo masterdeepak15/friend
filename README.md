@@ -376,6 +376,15 @@ Friend's screen has a media player and four widgets drawn in a HUD style (angled
 - **Date and time, profile.** 12 or 24 hour, with or without seconds, in any date language; the profile tag shows the assistant's name, a label you choose, and who Friend is talking to.
 - **Animations.** Tabs slide and light up on hover, ripple and flicker "ENGAGED" when pressed; while music plays the dial's needle sweeps, the bars follow the sound and the cover turns. Settings → Animations can reduce them or turn them off, and the device's own "reduce motion" is always respected. Esc → Music and Quick launch hide or show them; `/music` and `/launcher` do the same.
 
+## The orbital screen (a heads-up display)
+
+Settings -> Widgets -> **Screen layout** switches between **Classic** (the orb with floating cards, the default) and **Orbital**: a clear centre with the orb and a ring of 60 segments that fills with today's usage compared with your busiest day of the last 30, an **orbit** of hexagon nodes (your quick-launch buttons) with data flowing along the links, and live instruments around the edge, each with its own shape and motion.
+
+- **Instruments.** System (processor and memory on an arc gauge), Voice (sound bars), Network (speed on a pulse line, or "n/a" on a PC that reports none), Activity (the conversation and what Friend is doing, like a terminal), Devices (a radar of this screen, the PC's agent and the voice; an offline one is dim), Tickets and Budget (empty until hired workers exist) and Approvals (an orange octagon with the PIN pad when one is needed; the old approval card is not drawn as well). The usage ring is the centre; the top bar carries the name, status and time.
+- **Click or tap** any instrument to open it large in the middle; Esc, a click outside or the x closes it. Tab and Enter work too. A click on an orbit node runs that quick-launch button.
+- **Density.** *Calm* (orb, orbit, usage ring and message bar), *Standard*, or *Full*; each instrument also has its own switch. An approval that is waiting is always shown.
+- **Motion.** Settings -> Animations (Full, Reduced, Off) and the device's own "reduce motion" stop every loop; the loops also pause while the tab is hidden. On a phone the orbit becomes a row of chips and the instruments scroll in a strip.
+- The assistant cannot change these settings, even with your PIN (they are on the owner's settings screen only).
 ## Pictures first: weather, stats and graphics
 
 Friend is meant to show answers, not only say them. It controls the whole screen and picks the object that fits (gauge, chart, table, timeline, graph, or its own animated page).

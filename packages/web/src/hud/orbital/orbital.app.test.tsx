@@ -2,6 +2,7 @@ import type { HudView } from "@friend/protocol";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { StageApp } from "../../App";
+import { ORBITAL_ORB_SCALE } from "./geometry";
 import { initialState, type StageViewState } from "../../store";
 import { useFriend } from "../../useFriend";
 
@@ -56,5 +57,16 @@ describe("the orbital layout in the app", () => {
     show({ hud: hud("classic"), approval });
     render(<StageApp onSignedOut={() => {}} />);
     expect(screen.getAllByRole("alertdialog")).toHaveLength(1);
+  });
+
+  it("shrinks the orb to sit inside the inner ring, and leaves it alone in the classic layout", () => {
+    show({ hud: hud("orbital") });
+    const { container } = render(<StageApp onSignedOut={() => {}} />);
+    const orb = container.querySelector<HTMLElement>("[data-presence]")!;
+    expect(orb.style.transform).toBe(`scale(${ORBITAL_ORB_SCALE})`);
+    cleanup();
+    show({ hud: hud("classic") });
+    const classic = render(<StageApp onSignedOut={() => {}} />);
+    expect(classic.container.querySelector<HTMLElement>("[data-presence]")!.style.transform).toBe("");
   });
 });

@@ -71,7 +71,8 @@ export function ArcGauge({ value, inner, label = "Gauge", tone = "cyan" }: { val
 export function Spectrum({ levels, tone = "cyan" }: { levels: number[]; tone?: Tone }) {
   const w = Math.max(1, levels.length) * 12;
   return (
-    <svg className="ob-svg" viewBox={`0 0 ${w} 100`} aria-hidden="true" data-tone={tone}>
+    <svg className="ob-svg" viewBox={`0 0 ${w} 100`} preserveAspectRatio="none" aria-hidden="true" data-tone={tone}>
+      <line className="ob-ecg-base" x1={0} x2={w} y1={99} y2={99} />
       {levels.map((l, i) => (
         <rect key={i} className="ob-eq" x={i * 12} y={0} width={8} height={100} style={{ ["--lv" as string]: Math.max(0.05, clamp(l, 0, 1)), animationDelay: `${-((i * 0.37) % 0.9)}s`, transform: `scaleY(${Math.max(0.05, clamp(l, 0, 1))})` }} />
       ))}
@@ -206,7 +207,7 @@ export function HexNode({ label, glyph, detail, status = "idle", onClick, x, y }
     <button type="button" className="ob-node" data-tone={NODE_TONE[status]} data-status={status} aria-label={detail ? `${label}, ${detail}` : label} title={label} style={placed} onClick={onClick}>
       <svg viewBox="-34 -30 68 60" aria-hidden="true">
         <polygon points="-34,0 -17,-29.4 17,-29.4 34,0 17,29.4 -17,29.4" />
-        <text className="ob-node-label">{glyph ?? (label.length > 6 ? `${label.slice(0, 5)}…` : label)}</text>
+        <text className={`ob-node-label${glyph ? " ob-glyph" : ""}`}>{glyph ?? (label.length > 6 ? `${label.slice(0, 5)}…` : label)}</text>
       </svg>
     </button>
   );

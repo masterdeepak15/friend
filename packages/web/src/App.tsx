@@ -27,6 +27,7 @@ import { ElsewhereCard } from "./overlay/ElsewhereCard";
 import { useScreenReport } from "./layout/screen";
 import { HouseholdPanel } from "./voice/HouseholdPanel";
 import { QuickLaunch, type LauncherItem } from "./hud/QuickLaunch";
+import { ORBITAL_ORB_SCALE } from "./hud/orbital/geometry";
 import { OrbitalHud } from "./hud/orbital/OrbitalHud";
 import { useUsage } from "./hud/orbital/widgets/useUsage";
 import { MusicPlayerView } from "./music/MusicPlayer";
@@ -99,7 +100,11 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   // The orbital screen replaces the classic corner widgets and the launcher panel (its nodes are the quick-launch buttons).
   const orbital = state.viewKnown && state.hud?.layout === "orbital";
   const usage = useUsage(undefined, orbital);
-  const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
+  const shown = useMemo(() => {
+    const base = muted ? { ...state, objects: [], captions: "" } : state;
+    // the orbit and its rings are drawn around the orb, so the orb is drawn smaller than on the classic screen
+    return orbital ? { ...base, look: { ...base.look, size: base.look.size * ORBITAL_ORB_SCALE } } : base;
+  }, [muted, state, orbital]);
 
   // Once per visit, when speech works but nobody's voice is enrolled yet, say how to turn recognition on.
   const reminded = useRef(false);

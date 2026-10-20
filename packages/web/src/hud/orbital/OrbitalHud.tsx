@@ -207,7 +207,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
           ))}
         </div>
         <div className="ob-strip ob-hit">
-          {widgets.filter((d) => d.zone !== "centre").map((d) => frame(d, { minWidth: 150, height: 64, flex: "none" }))}
+          {widgets.filter((d) => d.zone !== "centre").map((d) => frame(d, { minWidth: 170, height: 100, flex: "none" }))}
           {hasUsage && <UsageLabel usage={usage} onClick={open("usage")} />}
         </div>
         {expandedEl}

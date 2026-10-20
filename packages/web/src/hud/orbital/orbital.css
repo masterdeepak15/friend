@@ -162,7 +162,7 @@
 .ob-live { color: var(--ob-green); border-color: var(--ob-green); }
 .ob-sub { color: color-mix(in srgb, var(--ob-cyan) 60%, transparent); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
 .ob-voice, .ob-tickets, .ob-budget { display: flex; flex-direction: column; gap: 2px; }
-.ob-static { cursor: default; overflow: visible; }
+.ob-static { cursor: default; }
 .ob-approval { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #fed7aa; max-height: 100%; overflow: auto; }
 .ob-summary { margin: 0; white-space: pre-wrap; color: #fff; font: inherit; font-size: 13px; }
 .ob-warn { color: var(--ob-orange); animation: ob-pulse 0.9s ease-in-out infinite; }
@@ -180,3 +180,13 @@
 .ob-explain { margin: 0; color: color-mix(in srgb, var(--ob-cyan) 75%, transparent); font-size: 12px; line-height: 1.4; }
 .ob-close { position: absolute; top: 4px; right: 12px; z-index: 3; background: none; border: 0; color: #e0fbff; font: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
 .ob-close:hover, .ob-close:focus-visible { color: #fff; outline: 1px solid var(--ob-cyan); }
+
+/* ---- instruments fit their frame: the drawing takes what is left under the title, the text lines sit below it ---- */
+.ob-zone .ob-frame-body, .ob-expanded-body { display: flex; flex-direction: column; min-height: 0; }
+.ob-zone .ob-frame-body { height: calc(100% - 22px); }
+.ob-zone .ob-frame-body > div, .ob-expanded-body > div { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
+.ob-zone .ob-frame-body > .ob-svg, .ob-zone .ob-frame-body > div > .ob-svg, .ob-expanded-body > .ob-svg, .ob-expanded-body > div > .ob-svg { flex: 1 1 0; min-height: 0; height: 0; width: 100%; }
+.ob-feed { justify-content: flex-end; overflow: hidden; }
+.ob-topbar .ob-frame-body { height: 100%; display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
+.ob-topbar-row { width: 100%; }
+.ob-glyph { font-size: 17px; letter-spacing: 0; }

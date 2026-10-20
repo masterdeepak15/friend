@@ -15,6 +15,8 @@ export const ZONE_GAP = 8;
 const CLEAR_GAP = 16;
 /** How far a node reaches beyond the orbit line (its radius and its glow). */
 export const NODE_MARGIN = 40;
+/** At size 1 the stage's orb is drawn about 1.1 times the orbit radius wide (the classic screen); this scale brings it inside the inner ring, which is 0.43 of the orbit radius, at every window size. */
+export const ORBITAL_ORB_SCALE = 0.36;
 const MIN_ORBIT = 120;
 const MAX_NODES = 12;
 
