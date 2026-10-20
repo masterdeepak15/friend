@@ -64,6 +64,7 @@ import { DeviceHub } from "./devices";
 import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi, type PluginsApi, type SystemApi } from "./gateway";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
+import { StatsSampler, startStatsFeed } from "./hudStats";
 import { ClaudeCodeProvider } from "./provider/claude-code/provider";
 import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
@@ -255,6 +256,7 @@ export async function createApp(opts: AppOptions) {
   const brokerHub = new BrokerHub({ config, dataDir: opts.dataDir, db, audit, channels: channelHub, fetch: opts.brokerFetch, publicBase: () => config.publicUrl ?? null });
   brokerHub.apply();
   let brokerTimer: ReturnType<typeof setInterval> | undefined;
+  let statsStop: (() => void) | undefined;
   // The owner's music: the folder is a setting; the player itself runs in the browser and the assistant controls it through the hub.
   const musicLibrary = new MusicLibrary({ folder: () => config.music.folder, extensions: () => config.music.extensions, maxTracks: () => config.music.maxTracks, scanDepth: () => config.music.scanDepth });
   const musicTokens = new MusicTokens(opts.dataDir);
@@ -1616,6 +1618,8 @@ export async function createApp(opts: AppOptions) {
         for (const id of gone) broadcast({ type: "stage", command: { cmd: "hide", id } });
         if (gone.length) for (const follow of stage.settleNow()) broadcast({ type: "stage", command: follow });
       }, opts.expireIntervalMs ?? 1000);
+      // How busy this PC is, for the orbital screen; sent only while that layout is chosen.
+      statsStop = startStatsFeed({ sampler: new StatsSampler(), wanted: () => config.hud.layout === "orbital", emit: (m) => broadcast(m) });
       if (opts.system?.checkForUpdates) updater.start();
       const listening = await gateway.listen();
       listenPort = listening.port; // a browser on this PC is pointed at the port Friend really got
@@ -1629,6 +1633,7 @@ export async function createApp(opts: AppOptions) {
       heartbeat.stop();
       channelHub.stop();
       if (brokerTimer) clearInterval(brokerTimer);
+      statsStop?.();
       if (languageWarm) clearTimeout(languageWarm);
       if (timer) clearInterval(timer);
       challenges.clear();
