@@ -155,3 +155,19 @@
 .orbital[data-mode="compact"] .ob-strip { position: absolute; left: 8px; right: 8px; bottom: 110px; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; pointer-events: auto; }
 .orbital[data-mode="compact"] .ob-strip .ob-zone { position: relative; }
 .orbital[data-mode="compact"] .ob-usage-label { position: relative; flex: none; align-self: center; }
+
+/* ---- instrument contents ---- */
+.ob-li { margin: 2px 0; padding-left: 6px; border-left: 2px solid var(--ob-dim); font-size: 12px; color: #bdeef7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-user { color: #e0fbff; border-color: var(--ob-cyan); }
+.ob-live { color: var(--ob-green); border-color: var(--ob-green); }
+.ob-sub { color: color-mix(in srgb, var(--ob-cyan) 60%, transparent); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
+.ob-voice, .ob-tickets, .ob-budget { display: flex; flex-direction: column; gap: 2px; }
+.ob-static { cursor: default; overflow: visible; }
+.ob-approval { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #fed7aa; max-height: 100%; overflow: auto; }
+.ob-summary { margin: 0; white-space: pre-wrap; color: #fff; font: inherit; font-size: 13px; }
+.ob-warn { color: var(--ob-orange); animation: ob-pulse 0.9s ease-in-out infinite; }
+.ob-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ob-btn { background: transparent; border: 1px solid var(--ob-orange); color: #fed7aa; font: inherit; font-size: 11px; letter-spacing: 0.1em; padding: 6px 10px; cursor: pointer; text-transform: uppercase; }
+.ob-btn:hover:not(:disabled), .ob-btn:focus-visible { background: color-mix(in srgb, var(--ob-orange) 25%, transparent); }
+.ob-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ob-yes { background: color-mix(in srgb, var(--ob-orange) 20%, transparent); }

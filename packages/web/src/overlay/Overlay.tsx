@@ -34,12 +34,14 @@ export interface OverlayProps {
   /** The assistant's name and the owner's widget settings (profile tag, date and time, animations). */
   assistantName?: string;
   hud?: HudView | null;
+  /** The orbital screen answers approvals in its own widget, so the card is not drawn as well. */
+  hudApproval?: boolean;
   send: (m: ClientMsg) => void;
   dispatch: (a: LocalAction) => void;
 }
 
 /** Layer 4: always above whatever the agent has put on the stage. */
-export function Overlay({ approval, challenge, cameraStream, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, showStatus = true, showClock = true, profile = null, assistantName = "", hud = null, send, dispatch }: OverlayProps) {
+export function Overlay({ approval, challenge, cameraStream, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, showStatus = true, showClock = true, profile = null, assistantName = "", hud = null, hudApproval = false, send, dispatch }: OverlayProps) {
   return (
     <div data-overlay data-hud-anim={hud?.animations ?? "full"} className="overlay" style={{ position: "fixed", inset: 0, zIndex: 1000, pointerEvents: "none" }}>
       {showStatus && <StatusBadge connection={connection} deviceOnline={deviceOnline} approval={approval} voiceMode={voiceMode} busy={busy} activity={activity} />}
@@ -49,7 +51,7 @@ export function Overlay({ approval, challenge, cameraStream, children, alerts, c
       {cameraStream && <CameraIndicator stream={cameraStream} />}
       <AlertToast alerts={alerts} dispatch={dispatch} />
       {challenge && !approval && <ChallengeCard key={challenge.id} challenge={challenge} send={send} dispatch={dispatch} />}
-      {approval && <ApprovalCard approval={approval} send={send} />}
+      {approval && !hudApproval && <ApprovalCard approval={approval} send={send} />}
       {children}
     </div>
   );

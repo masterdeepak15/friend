@@ -105,3 +105,29 @@ describe("motion", () => {
     expect(root.hasAttribute("data-paused")).toBe(false);
   });
 });
+
+describe("what the instruments show", () => {
+  const waiting = { id: "a1", tool: "shell.run", summary: "Run: npm install", tier: "T2", needsPin: false } as never;
+
+  it("puts the approval in an alert dialog, not behind a click-to-expand button", () => {
+    const { container, getByRole } = mount({ density: "calm" }, { approval: waiting });
+    expect(getByRole("alertdialog", { name: /approval needed/i })).toBeTruthy();
+    expect(container.querySelector('[data-widget="approval"]')!.getAttribute("role")).not.toBe("button");
+  });
+
+  it("shows the conversation in the activity instrument", () => {
+    const { container } = mount({ density: "standard" }, { chat: [{ role: "assistant", text: "the landing page is done" }] });
+    expect(container.querySelector('[data-widget="feed"]')!.textContent).toContain("the landing page is done");
+  });
+
+  it("explains the usage figure", () => {
+    const { container } = mount({ density: "calm" });
+    expect(container.querySelector('[data-widget="usage"]')!.getAttribute("title")).toMatch(/busiest day/i);
+  });
+
+  it("says there are no workers yet in the tickets and budget instruments", () => {
+    const { container } = mount({ density: "full" });
+    expect(container.querySelector('[data-widget="tickets"]')!.textContent).toMatch(/no workers yet/i);
+    expect(container.querySelector('[data-widget="budget"]')!.textContent).toMatch(/no workers yet/i);
+  });
+});

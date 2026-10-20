@@ -28,6 +28,7 @@ import { useScreenReport } from "./layout/screen";
 import { HouseholdPanel } from "./voice/HouseholdPanel";
 import { QuickLaunch, type LauncherItem } from "./hud/QuickLaunch";
 import { OrbitalHud } from "./hud/orbital/OrbitalHud";
+import { useUsage } from "./hud/orbital/widgets/useUsage";
 import { MusicPlayerView } from "./music/MusicPlayer";
 import { commandToAction, useMusicPlayer } from "./music/useMusicPlayer";
 import { useRemoteMusic } from "./music/useRemoteMusic";
@@ -97,6 +98,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   };
   // The orbital screen replaces the classic corner widgets and the launcher panel (its nodes are the quick-launch buttons).
   const orbital = state.viewKnown && state.hud?.layout === "orbital";
+  const usage = useUsage(undefined, orbital);
   const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
 
   // Once per visit, when speech works but nobody's voice is enrolled yet, say how to turn recognition on.
@@ -214,7 +216,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   return (
     <>
       <Stage state={shown} send={send} dispatch={dispatch} voice={voice} slash={slash} onMenu={() => setMenuRequest((n) => n + 1)} />
-      {orbital && state.hud && <OrbitalHud hud={state.hud} state={state} onLaunch={launch} onExpand={() => {}} />}
+      {orbital && state.hud && <OrbitalHud hud={state.hud} state={state} usage={usage.share === null ? null : usage.share * 100} send={send} onLaunch={launch} onExpand={() => {}} />}
       <Overlay
         approval={state.approval}
         challenge={state.challenge}
@@ -230,6 +232,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         profile={state.viewKnown && panels.show.profile && !orbital ? { ownerName: state.ownerName, speaker: state.speaker } : null}
         assistantName={state.assistantName}
         hud={state.hud}
+        hudApproval={orbital}
         send={send}
         dispatch={dispatch}
       >

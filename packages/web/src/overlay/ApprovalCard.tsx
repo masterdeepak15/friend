@@ -3,8 +3,8 @@ import { useState } from "react";
 import { PinPad } from "./PinPad";
 import { touch } from "./touch";
 
-/** Drawn by the client, never by the agent. The text comes from the server summary of the real call. */
-export function ApprovalCard({ approval, send }: { approval: PendingApproval; send: (m: ClientMsg) => void }) {
+/** The PIN and the three answers of an approval, shared by the card and the orbital screen's approval widget so both follow the same rules. */
+export function useApprovalDecision(approval: PendingApproval, send: (m: ClientMsg) => void) {
   const [pin, setPin] = useState("");
   const respond = (decision: "approve" | "approve_always" | "deny") => {
     if (decision !== "deny" && approval.needsPin) {
@@ -15,6 +15,12 @@ export function ApprovalCard({ approval, send }: { approval: PendingApproval; se
     send({ type: "approval.respond", id: approval.id, decision });
   };
   const canApprove = !approval.needsPin || pin.length >= 6;
+  return { pin, setPin, respond, canApprove };
+}
+
+/** Drawn by the client, never by the agent. The text comes from the server summary of the real call. */
+export function ApprovalCard({ approval, send }: { approval: PendingApproval; send: (m: ClientMsg) => void }) {
+  const { pin, setPin, respond, canApprove } = useApprovalDecision(approval, send);
 
   return (
     <div className="approval glass" role="alertdialog" aria-label="Approval needed" style={{ pointerEvents: "auto" }}>

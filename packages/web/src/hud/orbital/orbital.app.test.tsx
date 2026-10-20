@@ -45,4 +45,16 @@ describe("the orbital layout in the app", () => {
     const { container } = render(<StageApp onSignedOut={() => {}} />);
     expect(container.querySelector(".orbital")).toBeNull();
   });
+
+  it("asks for an approval once: in the HUD's own widget, not also in the old card", () => {
+    const approval = { id: "a1", tool: "shell.run", summary: "Run: npm install", tier: "T2", needsPin: false } as never;
+    show({ hud: hud("orbital"), approval });
+    const { container } = render(<StageApp onSignedOut={() => {}} />);
+    expect(screen.getAllByRole("alertdialog")).toHaveLength(1);
+    expect(container.querySelector(".orbital [role='alertdialog']")).toBeTruthy();
+    cleanup();
+    show({ hud: hud("classic"), approval });
+    render(<StageApp onSignedOut={() => {}} />);
+    expect(screen.getAllByRole("alertdialog")).toHaveLength(1);
+  });
 });

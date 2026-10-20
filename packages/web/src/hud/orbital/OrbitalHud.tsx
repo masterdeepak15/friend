@@ -1,10 +1,15 @@
-import type { HudView, HudWidgetId } from "@friend/protocol";
+import type { ClientMsg, HudView, HudWidgetId } from "@friend/protocol";
 import { useEffect, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { describeStatus } from "../../overlay/StatusBadge";
 import type { StageViewState } from "../../store";
 import { ZONE_GAP, centreClear, layoutMode, orbitNodes, orbitRadius, zoneRect, type Rect, type ZoneId } from "./geometry";
 import { Frame, HexNode, HudDefs, LinkLine, SegmentedRing, type Tone } from "./kit";
 import { visibleWidgets, type WidgetDef } from "./registry";
+import { ApprovalWidget } from "./widgets/ApprovalWidget";
+import { BudgetWidget } from "./widgets/BudgetWidget";
+import { FeedWidget } from "./widgets/FeedWidget";
+import { TicketsWidget } from "./widgets/TicketsWidget";
+import { VoiceWidget } from "./widgets/VoiceWidget";
 import "./orbital.css";
 
 /** What a click or Enter on the HUD asks to open. */
@@ -18,6 +23,8 @@ export interface OrbitalHudProps {
   usage?: number | null;
   /** The window size; read from the window when left out. */
   viewport?: { w: number; h: number };
+  /** Sends the owner's answer to an approval. */
+  send?: (m: ClientMsg) => void;
   onLaunch: (item: Launcher) => void;
   onExpand: (target: ExpandId) => void;
 }
@@ -97,7 +104,7 @@ function TopBar({ hud, state, rect }: { hud: HudView; state: StageViewState; rec
 function UsageLabel({ usage, style, onClick }: { usage: number | null | undefined; style?: CSSProperties; onClick: () => void }) {
   const known = typeof usage === "number" && Number.isFinite(usage);
   return (
-    <button type="button" className="ob-usage-label ob-hit" data-widget="usage" style={style} onClick={onClick} aria-label={known ? `Usage ${Math.round(usage)} percent of your busiest day` : "Usage, no data yet"}>
+    <button type="button" className="ob-usage-label ob-hit" data-widget="usage" title="Today's usage compared with your busiest day of the last 30" style={style} onClick={onClick} aria-label={known ? `Usage ${Math.round(usage)} percent of your busiest day` : "Usage, no data yet"}>
       USAGE {known ? `${Math.round(usage)}%` : "—"}
     </button>
   );
@@ -108,7 +115,7 @@ function UsageLabel({ usage, style, onClick }: { usage: number | null | undefine
  * layer adds the rings, the orbit of quick-launch nodes and the edge instruments. It only takes the pointer on the nodes and
  * instruments, so a press anywhere else still reaches the stage.
  */
-export function OrbitalHud({ hud, state, usage = null, viewport, onLaunch, onExpand }: OrbitalHudProps) {
+export function OrbitalHud({ hud, state, usage = null, viewport, send = () => {}, onLaunch, onExpand }: OrbitalHudProps) {
   const { w, h } = useWindowSize(viewport);
   const hidden = useHidden();
   const mode = layoutMode(w, h);
@@ -116,9 +123,31 @@ export function OrbitalHud({ hud, state, usage = null, viewport, onLaunch, onExp
   const pending = state.approval !== null;
   const toneOf = (def: WidgetDef): Tone => (def.id === "approval" ? (pending ? "orange" : "cyan") : def.tone);
   const open = (id: HudWidgetId) => () => onExpand({ kind: "widget", id });
-  const frame = (def: WidgetDef, style?: CSSProperties) => (
-    <Frame key={def.id} data-widget={def.id} variant={FRAME[def.id]} tone={toneOf(def)} title={def.title} running={def.id === "feed" || (def.id === "approval" && pending)} className="ob-zone ob-hit" style={style} role="button" tabIndex={0} aria-label={def.title} onClick={open(def.id)} onKeyDown={activate(open(def.id))} />
-  );
+  const content = (id: HudWidgetId) => {
+    switch (id) {
+      case "voice":
+        return <VoiceWidget level={state.voice.level} mode={state.voice.mode} />;
+      case "feed":
+        return <FeedWidget lines={state.chat} activity={state.activity} busy={state.busy} />;
+      case "tickets":
+        return <TicketsWidget />;
+      case "budget":
+        return <BudgetWidget />;
+      default:
+        return null;
+    }
+  };
+  const frame = (def: WidgetDef, style?: CSSProperties) =>
+    def.id === "approval" ? (
+      // an approval is answered right here, so it is not a click-to-expand button
+      <Frame key={def.id} data-widget="approval" variant="octagon" tone={toneOf(def)} title={def.title} running={pending} className="ob-zone ob-hit ob-static" style={style}>
+        <ApprovalWidget approval={state.approval} send={send} />
+      </Frame>
+    ) : (
+      <Frame key={def.id} data-widget={def.id} variant={FRAME[def.id]} tone={toneOf(def)} title={def.title} running={def.id === "feed"} className="ob-zone ob-hit" style={style} role="button" tabIndex={0} aria-label={def.title} onClick={open(def.id)} onKeyDown={activate(open(def.id))}>
+        {content(def.id)}
+      </Frame>
+    );
   const root = { className: "orbital", "data-testid": "orbital", "data-mode": mode, "data-hud-anim": hud.animations, ...(hidden ? { "data-paused": "" } : {}) };
   const hasUsage = widgets.some((d) => d.id === "usage");
 
