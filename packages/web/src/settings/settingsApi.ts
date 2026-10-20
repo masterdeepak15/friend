@@ -1,3 +1,5 @@
+import { HUD_WIDGET_IDS } from "@friend/protocol";
+
 export type ApprovalMode = "manual" | "edits" | "auto";
 
 /** Telegram, SMS and WhatsApp as the screen sees them: the tokens themselves are never sent here. */
@@ -64,6 +66,10 @@ export interface HudSettings {
   clock: { hour12: boolean; seconds: boolean; locale: string };
   launcher: { id?: string; label: string; icon: string; action: { type: "url" | "prompt" | "panel" | "music"; value: string } }[];
   animations: "full" | "reduced" | "off";
+  layout: "classic" | "orbital";
+  density: "calm" | "standard" | "full";
+  /** Instruments switched on or off by hand (a missing one follows the density). */
+  widgets: Partial<Record<(typeof HUD_WIDGET_IDS)[number], boolean>>;
 }
 
 export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
@@ -214,6 +220,11 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     const changed: Record<string, unknown> = {};
     if (after.hud.terminalLabel !== before.hud.terminalLabel) changed.terminalLabel = after.hud.terminalLabel;
     if (after.hud.animations !== before.hud.animations) changed.animations = after.hud.animations;
+    if (after.hud.layout !== before.hud.layout) changed.layout = after.hud.layout;
+    if (after.hud.density !== before.hud.density) changed.density = after.hud.density;
+    const widgets: Record<string, boolean> = {};
+    for (const id of HUD_WIDGET_IDS) if (after.hud.widgets[id] !== before.hud.widgets[id] && typeof after.hud.widgets[id] === "boolean") widgets[id] = after.hud.widgets[id] as boolean;
+    if (Object.keys(widgets).length) changed.widgets = widgets;
     const clock: Record<string, unknown> = {};
     for (const k of Object.keys(after.hud.clock) as (keyof HudSettings["clock"])[]) if (after.hud.clock[k] !== before.hud.clock[k]) clock[k] = after.hud.clock[k];
     if (Object.keys(clock).length) changed.clock = clock;

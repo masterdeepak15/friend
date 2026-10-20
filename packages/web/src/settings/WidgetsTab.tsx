@@ -1,4 +1,4 @@
-import { AUDIO_EXTENSIONS, LAUNCHER_MUSIC, LAUNCHER_PANELS, MAX_LAUNCHER, MUSIC_LIMITS, launcherProblem, programProblem } from "@friend/protocol";
+import { AUDIO_EXTENSIONS, HUD_WIDGET_IDS, LAUNCHER_MUSIC, LAUNCHER_PANELS, MAX_LAUNCHER, MUSIC_LIMITS, launcherProblem, programProblem } from "@friend/protocol";
 import { useState } from "react";
 import type { HudSettings, MusicSettings } from "./settingsApi";
 
@@ -8,6 +8,18 @@ export const httpHostCheck = async (): Promise<HostCheck> => {
   const res = await fetch("/api/music/host/check", { cache: "no-store" });
   if (!res.ok) throw new Error(res.status === 401 ? "Please sign in again." : `The request failed (${res.status}).`);
   return (await res.json()) as HostCheck;
+};
+
+const WIDGET_NAMES: Record<(typeof HUD_WIDGET_IDS)[number], string> = {
+  system: "System (processor and memory)",
+  voice: "Voice (sound bars)",
+  network: "Network",
+  feed: "Activity feed",
+  radar: "Devices (radar)",
+  tickets: "Tickets",
+  budget: "Budget",
+  approval: "Approvals",
+  usage: "Usage ring",
 };
 
 type Item = HudSettings["launcher"][number];
@@ -145,6 +157,34 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
         <span>How many folders deep to search</span>
         <input type="number" min={MUSIC_LIMITS.scanDepth.min} max={MUSIC_LIMITS.scanDepth.max} value={music.scanDepth} onChange={(e) => onMusic({ scanDepth: Number(e.target.value) })} />
       </label>
+
+      <h3>Screen layout</h3>
+      <label className="settings-field">
+        <span>Screen layout</span>
+        <select value={hud.layout} onChange={(e) => onHud({ layout: e.target.value as HudSettings["layout"] })}>
+          <option value="classic">Classic (the orb with floating cards)</option>
+          <option value="orbital">Orbital (a heads-up display around the orb)</option>
+        </select>
+        <small className="auth-note">Orbital draws rings, an orbit of your quick-launch buttons and live instruments around the orb. Classic is the screen you know.</small>
+      </label>
+      <label className="settings-field">
+        <span>Density</span>
+        <select value={hud.density} disabled={hud.layout !== "orbital"} onChange={(e) => onHud({ density: e.target.value as HudSettings["density"] })}>
+          <option value="calm">Calm (the orb, the orbit and the message bar)</option>
+          <option value="standard">Standard</option>
+          <option value="full">Full (every instrument)</option>
+        </select>
+      </label>
+      <fieldset className="settings-field" disabled={hud.layout !== "orbital"}>
+        <legend>Instruments</legend>
+        {HUD_WIDGET_IDS.map((id) => (
+          <label key={id} className="settings-check">
+            <input type="checkbox" data-testid={`hud-widget-${id}`} disabled={hud.layout !== "orbital"} checked={hud.widgets[id] !== false} onChange={(e) => onHud({ widgets: { [id]: e.target.checked } })} />
+            <span>{WIDGET_NAMES[id]}</span>
+          </label>
+        ))}
+        <small className="auth-note">A box you switch off stays off at every density. A waiting approval is always shown.</small>
+      </fieldset>
 
       <h3>Screen widgets</h3>
       <label className="settings-field">

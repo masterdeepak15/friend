@@ -1,0 +1,60 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { HUD_WIDGET_IDS } from "@friend/protocol";
+import { WidgetsTab } from "./WidgetsTab";
+import { diffSettings, type HudSettings, type MusicSettings, type SettingsView } from "./settingsApi";
+
+afterEach(cleanup);
+
+const music = { folder: "", extensions: ["mp3"], maxTracks: 5000, scanDepth: 6, volume: 70, shuffle: false, repeat: "all", visualizer: true, startView: "mini", defaultSource: "local", searchLimit: 10, output: "screen", hostPlayer: "", spotifyDevice: "", spotify: { installed: false, enabled: false, clientId: "" }, soundcloud: { installed: false, enabled: false, clientId: "" }, audius: { installed: false, enabled: false } } as MusicSettings;
+const classic: HudSettings = { terminalLabel: "TERMINAL", clock: { hour12: true, seconds: false, locale: "" }, launcher: [], animations: "full", layout: "classic", density: "standard", widgets: {} };
+const orbital: HudSettings = { ...classic, layout: "orbital" };
+
+describe("the screen layout section of the widgets settings", () => {
+  it("chooses the layout", () => {
+    const onHud = vi.fn();
+    render(<WidgetsTab music={music} hud={classic} onMusic={() => {}} onHud={onHud} />);
+    fireEvent.change(screen.getByLabelText(/screen layout/i), { target: { value: "orbital" } });
+    expect(onHud).toHaveBeenCalledWith({ layout: "orbital" });
+  });
+
+  it("chooses the density", () => {
+    const onHud = vi.fn();
+    render(<WidgetsTab music={music} hud={orbital} onMusic={() => {}} onHud={onHud} />);
+    fireEvent.change(screen.getByLabelText(/density/i), { target: { value: "calm" } });
+    expect(onHud).toHaveBeenCalledWith({ density: "calm" });
+  });
+
+  it("has one box per widget, checked unless switched off, and sends only the box that changed", () => {
+    const onHud = vi.fn();
+    render(<WidgetsTab music={music} hud={{ ...orbital, widgets: { radar: false } }} onMusic={() => {}} onHud={onHud} />);
+    for (const id of HUD_WIDGET_IDS) expect(screen.getByTestId(`hud-widget-${id}`)).toBeTruthy();
+    expect((screen.getByTestId("hud-widget-radar") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId("hud-widget-system") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByTestId("hud-widget-radar"));
+    expect(onHud).toHaveBeenCalledWith({ widgets: { radar: true } });
+  });
+
+  it("leaves the widget boxes disabled while the layout is classic", () => {
+    render(<WidgetsTab music={music} hud={classic} onMusic={() => {}} onHud={() => {}} />);
+    expect((screen.getByTestId("hud-widget-radar") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText(/density/i) as HTMLSelectElement).disabled).toBe(true);
+  });
+});
+
+describe("saving the new screen settings", () => {
+  const view = (hud: HudSettings) => ({ provider: "claude", model: "m", apiKeySet: false, view: "companion", music, hud, look: {}, ollama: {}, claudeCode: {}, voice: {} }) as unknown as SettingsView;
+
+  it("sends the layout, the density and only the widgets that changed", () => {
+    const before = view(orbital);
+    const after = structuredClone(before);
+    after.hud!.layout = "classic";
+    after.hud!.density = "full";
+    after.hud!.widgets = { radar: false };
+    expect(diffSettings(before, after, "")).toEqual({ hud: { layout: "classic", density: "full", widgets: { radar: false } } });
+  });
+
+  it("sends nothing when they did not change", () => {
+    expect(diffSettings(view(orbital), view(structuredClone(orbital)), "")).toEqual({});
+  });
+});
