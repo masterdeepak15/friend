@@ -9,8 +9,10 @@ export interface VoiceKeys {
 /** Elements where Space already means something; talking must not steal it. */
 const IGNORED_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A", "SUMMARY"]);
 const IGNORED_ROLES = new Set(["button", "checkbox", "switch", "tab", "menuitem", "link", "radio", "option", "textbox", "combobox", "slider"]);
+/** The orbital screen's message strip while it is empty: a space cannot start a message, so Space still means "talk" there. */
+const emptyTalkBox = (t: EventTarget | null) => t instanceof HTMLInputElement && t.hasAttribute("data-space-talks") && t.value === "";
 const ignored = (t: EventTarget | null) =>
-  t instanceof HTMLElement && (IGNORED_TAGS.has(t.tagName) || t.isContentEditable || IGNORED_ROLES.has(t.getAttribute("role") ?? ""));
+  !emptyTalkBox(t) && t instanceof HTMLElement && (IGNORED_TAGS.has(t.tagName) || t.isContentEditable || IGNORED_ROLES.has(t.getAttribute("role") ?? ""));
 const isSpace = (e: KeyboardEvent) => e.code === "Space" || e.key === " ";
 
 /** Hold Space to talk. Typing in a field, other keys and modifier combinations are left alone. */

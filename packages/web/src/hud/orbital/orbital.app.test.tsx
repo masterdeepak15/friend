@@ -1,7 +1,7 @@
 import type { HudView } from "@friend/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { StageApp } from "../../App";
 import { ORBITAL_ORB_SCALE } from "./geometry";
@@ -132,5 +132,30 @@ describe("the orbital layout in the app", () => {
   it("lifts the spoken caption above the message strip", () => {
     const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
     expect(css).toMatch(/\.stage:has\(\.orbital\[data-mode="orbit"\]\) \.captions \{[^}]*bottom: 1[5-9]%/);
+  });
+
+  it("holds Space to talk, not to type into the message strip", () => {
+    const talk = { pressStart: vi.fn(), pressEnd: vi.fn(), blur() {}, unlock() {}, setQuiet() {} };
+    (useFriend as Mock).mockReturnValue({ state: { ...initialState, connection: "open", deviceOnline: true, viewKnown: true, view: "companion", hud: hud("orbital") }, send: vi.fn(), dispatch: vi.fn(), voice: talk, handsFree: { on: false, supported: false, toggle() {} } });
+    const { container } = render(<StageApp onSignedOut={() => {}} />);
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    fireEvent.keyDown(window, { key: " ", code: "Space", repeat: true });
+    fireEvent.keyDown(window, { key: " ", code: "Space", repeat: true });
+    expect(talk.pressStart).toHaveBeenCalledTimes(1);
+    expect(container.querySelector<HTMLInputElement>(".command-bar-hud input")!.value).toBe("");
+    fireEvent.keyUp(window, { key: " ", code: "Space" });
+    expect(talk.pressEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("talks on Space even when the strip has the cursor, as long as it is empty", () => {
+    const talk = { pressStart: vi.fn(), pressEnd: vi.fn(), blur() {}, unlock() {}, setQuiet() {} };
+    (useFriend as Mock).mockReturnValue({ state: { ...initialState, connection: "open", deviceOnline: true, viewKnown: true, view: "companion", hud: hud("orbital") }, send: vi.fn(), dispatch: vi.fn(), voice: talk, handsFree: { on: false, supported: false, toggle() {} } });
+    const { container } = render(<StageApp onSignedOut={() => {}} />);
+    const box = container.querySelector<HTMLInputElement>(".command-bar-hud input")!;
+    box.focus();
+    fireEvent.keyDown(box, { key: " ", code: "Space" });
+    fireEvent.keyDown(box, { key: " ", code: "Space", repeat: true });
+    expect(talk.pressStart).toHaveBeenCalledTimes(1);
+    expect(box.value).toBe("");
   });
 });

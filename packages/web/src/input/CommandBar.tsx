@@ -34,6 +34,7 @@ export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((!always && open) || isTyping(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code === "Space" || e.key === " ") return; // Space is hold-to-talk: it never starts a line of text
       if (e.key.length === 1) {
         e.preventDefault(); // the key is kept in state; don't let the browser insert it a second time
         setText(e.key);
@@ -106,6 +107,7 @@ export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { 
       )}
       <input
         ref={input}
+        {...(always ? { "data-space-talks": "" } : {})}
         aria-label="Message"
         value={text}
         placeholder={hud ? `▸ ask ${hud.name} anything…` : "Talk to me… or type / for commands"}

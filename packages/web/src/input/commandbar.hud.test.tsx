@@ -64,4 +64,34 @@ describe("the message bar inside the orbital screen", () => {
     render(<CommandBar onSend={() => {}} requestOpen={0} />);
     expect(screen.queryByRole("textbox")).toBeNull();
   });
+
+  it("leaves Space for talking: it neither types into the box nor takes the focus, held or repeated", () => {
+    render(<CommandBar onSend={() => {}} requestOpen={0} hud={hud} />);
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    fireEvent.keyDown(window, { key: " ", code: "Space", repeat: true });
+    fireEvent.keyDown(window, { key: " ", code: "Space", repeat: true });
+    expect(box().value).toBe("");
+    expect(document.activeElement).not.toBe(box());
+  });
+
+  it("types a space only once the owner has put the cursor in the box", () => {
+    render(<CommandBar onSend={() => {}} requestOpen={0} hud={hud} />);
+    box().focus();
+    fireEvent.change(box(), { target: { value: "hello world" } });
+    expect(box().value).toBe("hello world");
+  });
+
+  it("stops holding the focus after sending, so Space talks again", () => {
+    render(<CommandBar onSend={() => {}} requestOpen={0} hud={hud} />);
+    box().focus();
+    fireEvent.change(box(), { target: { value: "hi" } });
+    fireEvent.submit(box().closest("form")!);
+    expect(document.activeElement).not.toBe(box());
+  });
+
+  it("also leaves Space alone in the ordinary hidden bar", () => {
+    render(<CommandBar onSend={() => {}} requestOpen={0} />);
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
 });
