@@ -4,7 +4,7 @@ import type { Db } from "../db";
 import { RuleStore, type Matcher, type Rule } from "./rules";
 
 /** Tools that touch the owner's privacy: no standing rule can ever skip the approval card. */
-export const ASK_EVERY_TIME = new Set(["camera.snap", "message.send_file", "office.action"]);
+export const ASK_EVERY_TIME = new Set(["camera.snap", "message.send_file", "office.action", "office.assign", "office.say"]);
 
 /**
  * What a recognized person of the household (not the owner) may use: the weather and the screen's pictures. Nothing

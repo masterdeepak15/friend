@@ -1,12 +1,19 @@
-import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WorkerEvent } from "./events";
-import { WorkerProc, buildWorkerArgs } from "./runner";
+import { WorkerProc, buildWorkerArgs, workerEnv } from "./runner";
 
 const FAKE = join(__dirname, "testing", "fake-claude.cjs");
 const base = { model: "haiku", instructions: "Do the ticket.", permission: "default" as const, mcpConfigPath: "C:\\data\\mcp.json", extraFolders: [] as string[] };
+
+describe("workerEnv", () => {
+  it("keeps the worker on the signed-in subscription: no API key or token from the environment reaches it", () => {
+    const env = workerEnv({ PATH: "p", ANTHROPIC_API_KEY: "sk-x", anthropic_auth_token: "t", HOME: "h" });
+    expect(env).toEqual({ PATH: "p", HOME: "h" });
+  });
+});
 
 describe("buildWorkerArgs", () => {
   it("builds exactly the flags a worker needs, with the owner's model and permission level", () => {
@@ -117,5 +124,29 @@ describe("WorkerProc", () => {
     const { proc, exit } = start({}, "friend-no-such-program-xyz");
     await proc.exited;
     expect(exit()).toMatchObject({ notInstalled: true });
+  });
+});
+describe.runIf(process.platform === "win32")("stopping a worker on Windows", () => {
+  it("stops the programs it started too, not only the worker itself", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "friend-kill-"));
+    const pidFile = join(dir, "child.pid");
+    const script = join(dir, "parent.cjs");
+    writeFileSync(script, `const c=require("child_process").spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"ignore"});require("fs").writeFileSync(${JSON.stringify(pidFile)},String(c.pid));setInterval(()=>{},1000);`);
+    const w = new WorkerProc({ command: process.execPath, args: [script], cwd: dir }, () => {}, () => {});
+    for (let i = 0; i < 100 && !existsSync(pidFile); i++) await new Promise((r) => setTimeout(r, 50));
+    const child = Number(readFileSync(pidFile, "utf8"));
+    const running = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    expect(running(child)).toBe(true);
+    w.kill();
+    await w.exited;
+    for (let i = 0; i < 40 && running(child); i++) await new Promise((r) => setTimeout(r, 50));
+    expect(running(child)).toBe(false);
   });
 });

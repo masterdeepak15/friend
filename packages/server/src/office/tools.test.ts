@@ -147,6 +147,9 @@ describe("who may use them", () => {
 
   it("a worker's question is asked every time, and 'always allow' makes no standing rule", () => {
     expect(ASK_EVERY_TIME.has("office.action")).toBe(true);
+    // work given to a worker is asked about every time, even when approvals are set to auto, so untrusted text cannot start work by itself
+    expect(ASK_EVERY_TIME.has("office.assign")).toBe(true);
+    expect(ASK_EVERY_TIME.has("office.say")).toBe(true);
   });
 });
 

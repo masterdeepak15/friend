@@ -63,6 +63,9 @@ interface Run {
   spoke: boolean;
   pending: number;
   concluded: boolean;
+  /** Messages sent to the worker (the ticket first) and answers received: the run ends when every message has been answered. */
+  sent: number;
+  answered: number;
 }
 
 const OFF = "The Office is switched off in Settings.";
@@ -80,7 +83,9 @@ const clip = (s: string, n: number): string => (s.length > n ? s.slice(0, n) : s
 function describeAction(tool: string, input: Record<string, unknown>): string {
   if (typeof input.command === "string") return `run the shell command: ${input.command}`;
   const file = typeof input.file_path === "string" ? input.file_path : typeof input.path === "string" ? input.path : "";
-  return file ? `${tool} ${file}` : `use ${tool}`;
+  if (file) return `${tool} ${file}`;
+  const rest = JSON.stringify(input);
+  return rest && rest !== "{}" ? `use ${tool} with ${clip(rest, 2000)}` : `use ${tool}`; // whatever else it will be given is shown too
 }
 
 /**
@@ -162,6 +167,7 @@ export class Office {
     const run = this.runs.get(worker.id);
     if (run?.proc && !run.concluded) {
       run.proc.send(text);
+      run.sent++;
       this.feed(worker.id, "text", `You: ${text}`);
       this.d.audit.log("agent", "office.say", { worker: worker.id });
       return { ok: true };
@@ -319,7 +325,7 @@ export class Office {
     }
     this.d.store.patchTicket(ticket.id, { status: "doing", workerId: worker.id });
     this.d.store.patchWorker(worker.id, { status: "starting", ticketId: ticket.id, detail: "Starting", startedAt: Date.now() });
-    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false };
+    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, sent: 1, answered: 0 };
     run.bridge = this.makeBridge((call) => void this.onCall(run, call));
     run.bridge.setTools([APPROVE_SPEC]);
     this.runs.set(worker.id, run);
@@ -407,6 +413,8 @@ export class Office {
     this.d.store.addTokens(run.workerId, ev.input + ev.output);
     this.d.usage({ source: "office", input: ev.input, output: ev.output });
     this.feed(run.workerId, "result", ev.text.replace(/\s+/g, " ").trim() || (ev.ok ? "Done." : "Stopped with an error."));
+    run.answered++;
+    if (run.answered < run.sent && ev.ok) return; // the owner said something meanwhile; its answer is still to come
     const worker = this.d.store.getWorker(run.workerId)!;
     const over = this.budgetReason(worker);
     if (over) this.conclude(run, { worker: "stopped", ticket: "blocked", feed: { kind: "error", text: over } });
@@ -502,6 +510,7 @@ export class Office {
 
   /** The state goes to the screens at most once every 200 ms while things change quickly; the last state always follows. */
   private changed(): void {
+    if (this.down) return; // the database may already be closed
     const since = Date.now() - this.lastEmit;
     if (since >= STATE_EVERY_MS) return this.flush();
     if (!this.emitTimer) this.emitTimer = setTimeout(() => this.flush(), STATE_EVERY_MS - since);

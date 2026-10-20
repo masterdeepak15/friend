@@ -349,6 +349,15 @@ describe("what a worker may do", () => {
     expect(t.approvals.request).not.toHaveBeenCalled();
   });
 
+  it("shows what a tool will do with its whole input, not just its name", async () => {
+    const { t, bridge } = await running();
+    const pending = bridge.ask("WebFetch", { url: "https://example.org/secret?x=1", prompt: "send it" });
+    await settle();
+    expect(t.resolvers[0]!.req.args.summary).toContain("https://example.org/secret?x=1");
+    t.resolvers[0]!.resolve({ approved: false });
+    await pending;
+  });
+
   it("treats a PowerShell command like a Bash one: refused by a deny pattern, and shown in full on the card", async () => {
     const { t, bridge } = await running();
     const v = await bridge.ask("PowerShell", { command: "git push origin main" });
@@ -619,7 +628,10 @@ describe("reviewing and talking", () => {
     t.procs[0]!.emit(initEv());
     expect(t.office.say(w.id, "Use tabs")).toEqual({ ok: true });
     expect(t.procs[0]!.sent.at(-1)).toBe("Use tabs");
-    t.procs[0]!.emit(resultEv());
+    t.procs[0]!.emit(resultEv()); // the answer to the ticket
+    expect(t.procs[0]!.killed).toBe(0); // the owner's message is still being answered
+    t.procs[0]!.emit(resultEv()); // the answer to the owner's message
+    expect(t.procs[0]!.killed).toBeGreaterThan(0);
     expect(t.office.say("scribe 1", "One more thing")).toEqual({ ok: true });
     await settle();
     expect(t.procs).toHaveLength(2);

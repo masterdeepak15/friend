@@ -60,6 +60,27 @@ describe("shell commands", () => {
     expect(verdict("PowerShell", { command: "del x.txt" }, ctx({ shellPatterns: ["\\bdel\\b"] }))).toEqual({ verdict: "ask", danger: true });
   });
 
+  it("refuses drive-relative, home, variable and stream paths that a plain join would call inside", () => {
+    for (const p of ["C:Users\\me\\.ssh\\id_rsa", "~\\.ssh\\id_rsa", "~/x", "%USERPROFILE%\\x", "$HOME/x", "C:\\proj\\a.txt:hidden"]) {
+      expect(verdict("Read", { file_path: p }), p).toMatchObject({ verdict: "deny" });
+    }
+  });
+
+  it("does not let a worker change what lets it through: no writes to .claude, .git, .mcp.json, .vscode or .husky", () => {
+    for (const p of ["C:\\proj\\.claude\\settings.local.json", "C:\\proj\\.CLAUDE\\x", "C:\\proj\\.git\\hooks\\pre-commit", "C:\\proj\\.mcp.json", "C:\\proj\\sub\\.vscode\\tasks.json", "C:\\proj\\.husky\\pre-push"]) {
+      expect(verdict("Write", { file_path: p }), p).toMatchObject({ verdict: "deny" });
+      expect(verdict("Edit", { file_path: p }), p).toMatchObject({ verdict: "deny" });
+    }
+    expect(verdict("Read", { file_path: "C:\\proj\\.git\\config" })).toEqual({ verdict: "allow" });
+    expect(verdict("Write", { file_path: "C:\\proj\\src\\a.ts" })).toEqual({ verdict: "allow" });
+  });
+
+  it("still asks for the PIN on a dangerous command when the shell is on the allow-list", () => {
+    const c = ctx({ policy: policy({ allowTools: ["Bash"] }), shellPatterns: ["\\bdel\\b"] });
+    expect(verdict("Bash", { command: "del x.txt" }, c)).toEqual({ verdict: "ask", danger: true });
+    expect(verdict("Bash", { command: "ls" }, c)).toEqual({ verdict: "allow" });
+  });
+
   it("ask by default, because Bash is not on the allow-list", () => {
     expect(verdict("Bash", { command: "npm install" })).toEqual({ verdict: "ask", danger: false });
   });
