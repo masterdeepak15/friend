@@ -40,7 +40,7 @@ Out of scope for now: multiple companies, cron routines, other agent programs (C
 ### 3.1 Layout
 A full-screen scene. The centre is always clear for the orb and its captions.
 
-- **Centre:** the existing orb (`Presence`), unchanged, with HUD rings drawn around it: a rotating tick ring, a counter-rotating dashed ring and a **segmented usage ring** (one segment per 1/60 of the Claude usage window, filled to the current percentage).
+- **Centre:** the existing orb (`Presence`), unchanged, with HUD rings drawn around it: a rotating tick ring, a counter-rotating dashed ring and a **segmented usage ring** (60 segments, filled to today's usage relative to the owner's busiest day of the last 30; the Claude subscription exposes no usage-window percentage, so this is the honest measure).
 - **Orbit:** a ring of hexagon "nodes" around the orb at radius ≈ 0.33 × the smaller screen side. In sub-project 1 the nodes are the owner's **quick-launch items** (today's launcher), so the orbit is useful before the Office exists; in sub-project 2 they become the workers. Links from the orb to each node are dashed lines with data flowing along them.
 - **Zones** around the edge hold the widgets: top bar, left rail (top, middle, bottom), right rail (top, middle, bottom), bottom command bar. Each zone is an anchor with a size range, not a fixed pixel box, so it follows the window.
 - Layout maths (orbit radius, node angles, zone anchors) lives in one pure module with unit tests; no layout numbers are scattered through components.

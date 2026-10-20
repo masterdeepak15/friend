@@ -108,8 +108,8 @@
 **Interfaces:**
 - Consumes: `ZoneId` (Task 3); `HudDensity`, `HudWidgetId` (Task 1).
 - Produces:
-  - `interface WidgetDef { id: HudWidgetId; title: string; zone: ZoneId; tone: "cyan"|"green"|"orange"; minDensity: HudDensity }`.
-  - `WIDGETS: readonly WidgetDef[]` — one entry per `HUD_WIDGET_IDS` (zones: system→left-top, voice→left-mid, network→left-bottom, feed→left-bottom? no: feed→bottom-left area `left-bottom`, network→`left-mid`, voice→`left-top`… see the approved mockup `orbital-v2.html`: system left-top, voice left-mid, network left-mid (below voice), feed left-bottom, radar right-top, tickets right-mid, budget right-mid (below tickets), approval right-bottom, usage = the centre ring).
+  - `interface WidgetDef { id: HudWidgetId; title: string; zone: ZoneId | "centre"; tone: "cyan"|"green"|"orange"; minDensity: HudDensity }`.
+  - `WIDGETS: readonly WidgetDef[]` — one entry per `HUD_WIDGET_IDS`, placed as in the approved mockup (`orbital-v2.html`): system -> `left-top`, voice -> `left-mid`, network -> `left-mid` (below voice), feed -> `left-bottom`, radar -> `right-top`, tickets -> `right-mid`, budget -> `right-mid` (below tickets), approval -> `right-bottom`, usage -> `"centre"` (the segmented ring around the orb).
   - `visibleWidgets(density: HudDensity, widgets: Partial<Record<HudWidgetId, boolean>>, mode: "orbit"|"compact", approvalPending: boolean): WidgetDef[]`.
 
 Rules: `calm` shows none of the edge widgets (orb, orbit, usage ring, command bar only) except `approval` when one is pending; `standard` shows `system, voice, feed, approval, usage`; `full` shows all. A widget set to `false` is hidden at every density; `true` forces it on at `calm`/`standard` too. `approval` is shown whenever `approvalPending`, whatever the switches say (an approval must never be hideable). In `compact` mode the result lists the same widgets (the compact view stacks them) but `usage` stays.
