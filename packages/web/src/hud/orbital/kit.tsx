@@ -136,11 +136,13 @@ export type TicketStatus = "done" | "doing" | "review" | "todo";
 const CELL_TONE: Record<TicketStatus, string> = { done: "var(--ob-green)", doing: "var(--ob-cyan)", review: "var(--ob-orange)", todo: "var(--ob-dim)" };
 
 /** Hexagon cells coloured by status, laid out like a honeycomb. */
-export function HexCells({ cells }: { cells: { status: TicketStatus }[] }) {
+export function HexCells({ cells, placeholder = false }: { cells: { status: TicketStatus }[]; placeholder?: boolean }) {
+  // a dim honeycomb that marks where tickets will appear until there are some
+  if (placeholder) cells = Array.from({ length: 10 }, () => ({ status: "todo" as const }));
   const cols = 5;
   const rows = Math.max(1, Math.ceil(cells.length / cols));
   return (
-    <svg className="ob-svg" viewBox={`0 0 ${cols * 40 + 20} ${rows * 35 + 10}`} aria-hidden="true">
+    <svg className="ob-svg" viewBox={`0 0 ${cols * 40 + 20} ${rows * 35 + 10}`} aria-hidden="true" {...(placeholder ? { "data-placeholder": "" } : {})}>
       {cells.map((c, i) => {
         const row = Math.floor(i / cols);
         const x = (i % cols) * 40 + 20 + (row % 2) * 20;
@@ -152,9 +154,11 @@ export function HexCells({ cells }: { cells: { status: TicketStatus }[] }) {
 }
 
 /** Concentric rings, the first outermost. */
-export function Rings({ rings }: { rings: { value: number; tone?: Tone; label?: string }[] }) {
+export function Rings({ rings, placeholder = false }: { rings: { value: number; tone?: Tone; label?: string }[]; placeholder?: boolean }) {
+  // three empty rings that mark where each worker's budget will appear
+  if (placeholder) rings = [{ value: 0 }, { value: 0 }, { value: 0 }];
   return (
-    <svg className="ob-svg" viewBox="-50 -50 100 100" role="img" aria-label={rings.map((r) => `${r.label ?? "ring"} ${Math.round(clamp(r.value))}%`).join(", ") || "no data"}>
+    <svg className="ob-svg" viewBox="-50 -50 100 100" {...(placeholder ? { "aria-hidden": "true", "data-placeholder": "" } : { role: "img", "aria-label": rings.map((r) => `${r.label ?? "ring"} ${Math.round(clamp(r.value))}%`).join(", ") || "no data" })}>
       {rings.map((r, i) => {
         const radius = 38 - i * 12;
         if (radius <= 2) return null;
@@ -192,6 +196,8 @@ export interface HexNodeProps {
   label: string;
   /** What is drawn inside the hexagon (a symbol); defaults to the start of the label. */
   glyph?: string;
+  /** A short name written under the hexagon. */
+  caption?: string;
   detail?: string;
   status?: NodeStatus;
   onClick?: () => void;
@@ -201,7 +207,7 @@ export interface HexNodeProps {
 }
 
 /** A node of the orbit: a hexagon you can click. */
-export function HexNode({ label, glyph, detail, status = "idle", onClick, x, y }: HexNodeProps) {
+export function HexNode({ label, glyph, caption, detail, status = "idle", onClick, x, y }: HexNodeProps) {
   const placed: CSSProperties | undefined = x !== undefined && y !== undefined ? { left: x, top: y } : undefined;
   return (
     <button type="button" className="ob-node" data-tone={NODE_TONE[status]} data-status={status} aria-label={detail ? `${label}, ${detail}` : label} title={label} style={placed} onClick={onClick}>
@@ -209,6 +215,7 @@ export function HexNode({ label, glyph, detail, status = "idle", onClick, x, y }
         <polygon points="-34,0 -17,-29.4 17,-29.4 34,0 17,29.4 -17,29.4" />
         <text className={`ob-node-label${glyph ? " ob-glyph" : ""}`}>{glyph ?? (label.length > 6 ? `${label.slice(0, 5)}…` : label)}</text>
       </svg>
+      {caption && <span className="ob-node-caption">{caption}</span>}
     </button>
   );
 }

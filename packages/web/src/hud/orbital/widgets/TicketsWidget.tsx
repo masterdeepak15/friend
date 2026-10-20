@@ -4,7 +4,7 @@ import { HexCells } from "../kit";
 export function TicketsWidget() {
   return (
     <div className="ob-tickets">
-      <HexCells cells={[]} />
+      <HexCells cells={[]} placeholder />
       <p className="ob-li ob-sub">No workers yet</p>
     </div>
   );

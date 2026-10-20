@@ -38,7 +38,7 @@ export interface OrbitalHudProps {
   onExpand: (target: ExpandId) => void;
 }
 
-const FRAME: Record<HudWidgetId, "chamfer" | "bracket" | "octagon"> = { system: "chamfer", voice: "bracket", network: "bracket", feed: "chamfer", radar: "chamfer", tickets: "bracket", budget: "bracket", approval: "octagon", usage: "chamfer" };
+const FRAME: Record<HudWidgetId, "chamfer" | "bracket" | "octagon"> = { system: "bracket", voice: "bracket", network: "bracket", feed: "chamfer", radar: "bracket", tickets: "bracket", budget: "bracket", approval: "octagon", usage: "chamfer" };
 
 /** True while the tab is hidden, so every loop can stop. */
 function useHidden(): boolean {
@@ -88,18 +88,25 @@ function TopBar({ hud, state, rect }: { hud: HudView; state: StageViewState; rec
   const locale = hud.clock.locale || undefined;
   const time = now.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", ...(hud.clock.seconds ? { second: "2-digit" } : {}), hour12: hud.clock.hour12 });
   const date = now.toLocaleDateString(locale, { weekday: "short", day: "2-digit", month: "short" });
-  const status = { text: statusText(state) };
+  // the line is a notched path with a light running along it, as in the approved mockup
+  const line = "M0 34 H330 L360 8 H640 L670 34 H1000";
   return (
-    <Frame variant="chamfer" running className="ob-topbar" style={px(rect)} data-testid="orbital-topbar">
+    <div className="ob-topbar" data-testid="orbital-topbar" style={px(rect)}>
+      <svg className="ob-topbar-line" viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true">
+        <path className="ob-topbar-base" d={line} />
+        <path className="ob-topbar-run" d={line} pathLength={100} />
+      </svg>
       <div className="ob-topbar-row">
-        <span className="ob-name">{(state.assistantName || "FRIEND").toUpperCase()} · {hud.terminalLabel}</span>
-        <span className="ob-status">{status.text}</span>
+        <span className="ob-topbar-left">
+          <b>{(state.assistantName || "FRIEND").toUpperCase()} · {hud.terminalLabel}</b>
+          <small>{statusText(state)}</small>
+        </span>
+        <span className="ob-title">F R I E N D</span>
         <time className="ob-time">{time} · {date}</time>
       </div>
-    </Frame>
+    </div>
   );
 }
-
 function UsageLabel({ usage, style, onClick }: { usage: number | null | undefined; style?: CSSProperties; onClick: () => void }) {
   const known = typeof usage === "number" && Number.isFinite(usage);
   return (
@@ -184,7 +191,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
   const frameInner = (def: WidgetDef, style?: CSSProperties, extra = "") =>
     def.id === "approval" ? (
       // an approval is answered right here, so it is not a click-to-expand button
-      <Frame key={def.id} data-widget="approval" variant="octagon" tone={toneOf(def)} title={def.title} running={pending} className={`ob-zone ob-hit ob-static ${extra}`.trim()} style={style}>
+      <Frame key={def.id} data-widget="approval" variant={pending ? "octagon" : "bracket"} tone={toneOf(def)} title={def.title} running={pending} className={`ob-zone ob-hit ob-static ${extra}`.trim()} style={style}>
         <ApprovalWidget approval={state.approval} send={send} />
       </Frame>
     ) : (
@@ -243,6 +250,10 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
           return <LinkLine key={hud.launcher[i]!.id} x1={c.cx + dir.x * 0.45 * R} y1={c.cy + dir.y * 0.45 * R} x2={c.cx + dir.x * (R - 36)} y2={c.cy + dir.y * (R - 36)} />;
         })}
       </svg>
+      <div className="ob-orb-label" style={{ left: c.cx, top: c.cy }} aria-hidden="true">
+        <b>{(state.assistantName || "FRIEND").toUpperCase()}</b>
+        <small>{state.voice.mode}</small>
+      </div>
       {hasUsage && (
         <>
           <div className="ob-usage-ring" style={{ left: c.cx - usageR - 14, top: c.cy - usageR - 14, width: 2 * usageR + 28, height: 2 * usageR + 28 }}>
@@ -255,7 +266,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
         const item = hud.launcher[i]!;
         return (
           <Safe key={item.id}>
-            <HexNode x={n.x} y={n.y} label={item.label} glyph={item.icon} onClick={() => onLaunch(item)} />
+            <HexNode x={n.x} y={n.y} label={item.label} glyph={item.icon} caption={item.label} onClick={() => onLaunch(item)} />
           </Safe>
         );
       })}

@@ -4,7 +4,7 @@ import { Rings } from "../kit";
 export function BudgetWidget() {
   return (
     <div className="ob-budget">
-      <Rings rings={[]} />
+      <Rings rings={[]} placeholder />
       <p className="ob-li ob-sub">No workers yet</p>
     </div>
   );

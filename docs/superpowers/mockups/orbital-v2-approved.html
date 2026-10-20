@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Friend Orbital HUD</title>
+<style>
+  :root { --bg:#010609; --ink:#a5f3fc; --muted:#6b8f99; }
+  html,body { margin:0; background:var(--bg); color:var(--ink); font-family:Segoe UI,system-ui,sans-serif; }
+  body { padding:16px; }
+  h2 { margin:0 0 4px; font-weight:600; letter-spacing:.04em; }
+  .subtitle { color:var(--muted); margin:0 0 14px; max-width:900px; line-height:1.5; }
+</style>
+</head>
+<body>
+<style>
+.hudv{background:#010609;border:1px solid #0e4a5c;line-height:0}
+.hudv svg{width:100%;height:auto;display:block;font-family:Consolas,"Courier New",monospace}
+.hudv text{fill:#a5f3fc;letter-spacing:.12em}
+.hudv .lab{font-size:11px;fill:#22d3ee}.hudv .big{font-size:26px;fill:#e0fbff;letter-spacing:.06em}.hudv .dim{fill:#5aa9bb;font-size:10px}.hudv .org{fill:#fb923c}
+.spin{transform-box:fill-box;transform-origin:center;animation:spin 40s linear infinite}.spin.f{animation-duration:14s}.spin.r{animation-direction:reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+.flow{stroke-dasharray:5 11;animation:flow 1s linear infinite}.flow.o{stroke:#fb923c}
+@keyframes flow{to{stroke-dashoffset:-32}}
+.run{stroke-dasharray:60 600;animation:run 5s linear infinite}
+@keyframes run{to{stroke-dashoffset:-660}}
+.pulse{animation:pulse 1.8s ease-in-out infinite}.pulse.fast{animation-duration:.9s}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+.eq{transform-box:fill-box;transform-origin:bottom;animation:eq .9s ease-in-out infinite alternate}
+@keyframes eq{from{transform:scaleY(.15)}to{transform:scaleY(1)}}
+.feed{animation:feed 14s linear infinite}
+@keyframes feed{from{transform:translateY(0)}to{transform:translateY(-196px)}}
+.ecg{stroke-dasharray:140 400;animation:ecg 2.4s linear infinite}
+@keyframes ecg{to{stroke-dashoffset:-540}}
+.blink{animation:blink 1s steps(2) infinite}@keyframes blink{50%{opacity:0}}
+.breathe{transform-box:fill-box;transform-origin:center;animation:breathe 4s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:scale(.96)}50%{transform:scale(1.06)}}
+.ping{transform-box:fill-box;transform-origin:center;animation:ping 3s ease-out infinite}
+@keyframes ping{from{transform:scale(.6);opacity:.8}to{transform:scale(2.4);opacity:0}}
+.sm{font-size:12px;fill:#bdeef7}.sm.g{fill:#6ee7b7}
+</style>
+
+<h2>B · Orbital, version 2</h2>
+<p class="subtitle">Same idea, but every widget now has its own shape and motion: arc gauge, spectrum, radar sweep, hex ticket cells, terminal feed, alert octagon, segmented usage ring, live pulse line, and data running along the lines from the orb to each worker. Everything on this screen is moving.</p>
+
+<div class="hudv">
+<svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+<defs>
+ <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <filter id="glow2" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <radialGradient id="bg" cx="50%" cy="50%" r="65%"><stop offset="0" stop-color="#06222e"/><stop offset="1" stop-color="#010609"/></radialGradient>
+ <radialGradient id="orbg" cx="50%" cy="45%" r="55%"><stop offset="0" stop-color="#cffafe"/><stop offset=".25" stop-color="#22d3ee"/><stop offset=".6" stop-color="#0e7490"/><stop offset="1" stop-color="#042f3c"/></radialGradient>
+ <linearGradient id="sweepg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#22d3ee" stop-opacity="0"/><stop offset="1" stop-color="#22d3ee" stop-opacity=".7"/></linearGradient>
+ <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#010609"/><stop offset=".15" stop-color="#010609" stop-opacity="0"/><stop offset=".85" stop-color="#010609" stop-opacity="0"/><stop offset="1" stop-color="#010609"/></linearGradient>
+ <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#22d3ee" stroke-opacity=".07"/></pattern>
+ <g id="hex"><polygon points="-34,0 -17,-29.4 17,-29.4 34,0 17,29.4 -17,29.4" fill="#031620" stroke="currentColor" stroke-width="1.6"/><polygon points="-26,0 -13,-22.5 13,-22.5 26,0 13,22.5 -13,22.5" fill="none" stroke="currentColor" stroke-opacity=".4"/></g>
+ <g id="hexs"><polygon points="-20,0 -10,-17.3 10,-17.3 20,0 10,17.3 -10,17.3" stroke="currentColor" stroke-width="1.4"/></g>
+ <clipPath id="feedclip"><rect x="62" y="672" width="400" height="168"/></clipPath>
+ <mask id="usemask"><circle cx="800" cy="450" r="205" fill="none" stroke="#fff" stroke-width="30" pathLength="100" stroke-dasharray="42 58" transform="rotate(-90 800 450)"/></mask>
+</defs>
+
+<rect width="1600" height="900" fill="url(#bg)"/><rect width="1600" height="900" fill="url(#grid)"/>
+<!-- slow scan line over everything -->
+<rect x="0" y="0" width="1600" height="3" fill="#22d3ee" opacity=".08"><animate attributeName="y" from="-10" to="900" dur="7s" repeatCount="indefinite"/></rect>
+
+<!-- ===== TOP BAR: thin line with notches and a running light ===== -->
+<path d="M330 44H560L590 20H1010L1040 44H1270" fill="none" stroke="#0e7490" stroke-width="1.5"/>
+<path class="run" d="M330 44H560L590 20H1010L1040 44H1270" fill="none" stroke="#67e8f9" stroke-width="2.5" filter="url(#glow)"/>
+<text x="800" y="40" text-anchor="middle" class="big" style="font-size:18px;letter-spacing:.5em" filter="url(#glow)">F R I E N D</text>
+<text x="40" y="38" class="lab">MAYA · ONLINE</text><circle cx="30" cy="34" r="4" fill="#34d399" class="pulse"/>
+<text x="1560" y="38" text-anchor="end" class="lab">14:32:08 · TUE 20 OCT</text>
+<text x="40" y="58" class="dim">VOICE · LISTENING   LINK · LAN 192.168.1.5</text>
+
+<!-- ===== CENTRE: orb with layered rings ===== -->
+<g filter="url(#glow2)">
+ <circle cx="800" cy="450" r="104" fill="url(#orbg)" class="breathe"/>
+</g>
+<circle cx="800" cy="450" r="104" fill="none" stroke="#67e8f9" stroke-width="1.5"/>
+<circle cx="800" cy="450" r="104" fill="none" stroke="#22d3ee" class="ping"/>
+<g class="spin f"><circle cx="800" cy="450" r="128" fill="none" stroke="#22d3ee" stroke-width="10" stroke-dasharray="2 8" opacity=".7"/></g>
+<g class="spin r"><circle cx="800" cy="450" r="150" fill="none" stroke="#67e8f9" stroke-width="1.5" stroke-dasharray="60 20 8 20"/></g>
+<g class="spin"><circle cx="800" cy="450" r="172" fill="none" stroke="#0e7490" stroke-width="1" stroke-dasharray="2 6"/></g>
+<!-- segmented usage ring -->
+<circle cx="800" cy="450" r="205" fill="none" stroke="#0e4a5c" stroke-width="12" pathLength="100" stroke-dasharray="1.15 .517"/>
+<circle cx="800" cy="450" r="205" fill="none" stroke="#22d3ee" stroke-width="12" pathLength="100" stroke-dasharray="1.15 .517" mask="url(#usemask)" filter="url(#glow)"/>
+<text x="800" y="438" text-anchor="middle" class="big" style="font-size:20px;fill:#082f3a;letter-spacing:.1em" font-weight="bold">MAYA</text>
+<text x="800" y="462" text-anchor="middle" style="font-size:11px;fill:#082f3a">LISTENING</text>
+<text x="800" y="692" text-anchor="middle" class="dim">USAGE 42% · RESET 2H 10M</text>
+<!-- orbit rings -->
+<circle cx="800" cy="450" r="300" fill="none" stroke="#22d3ee" stroke-opacity=".25" stroke-dasharray="3 9"/>
+<g class="spin r" style="animation-duration:90s"><circle cx="800" cy="450" r="330" fill="none" stroke="#22d3ee" stroke-opacity=".12" stroke-width="22" stroke-dasharray="1 28"/></g>
+
+<!-- links orb -> workers with flowing data -->
+<g fill="none" stroke="#22d3ee" stroke-width="1.5" filter="url(#glow)">
+ <line class="flow" x1="800" y1="346" x2="800" y2="184"/>
+ <line class="flow" x1="890" y1="395" x2="1032" y2="318"/>
+ <line class="flow o" x1="890" y1="505" x2="1032" y2="582"/>
+ <line class="flow" x1="710" y1="505" x2="568" y2="582" style="animation-direction:reverse"/>
+ <line x1="710" y1="395" x2="568" y2="318" stroke-opacity=".3" stroke-dasharray="3 6"/>
+</g>
+
+<!-- worker hexes -->
+<g style="color:#34d399" filter="url(#glow)"><use href="#hex" x="800" y="150"/><use href="#hex" x="1060" y="300"/></g>
+<g style="color:#fb923c" filter="url(#glow)"><use href="#hex" x="1060" y="600" class="pulse fast"/></g>
+<g style="color:#22d3ee"><use href="#hex" x="540" y="300"/></g>
+<g style="color:#22d3ee;opacity:.5"><use href="#hex" x="540" y="600"/></g>
+<g class="sm" text-anchor="middle">
+ <text x="800" y="155" fill="#6ee7b7" style="fill:#e0fbff;font-size:13px">CODE</text><text x="800" y="108" class="sm g">▶ Hero.tsx · 62%</text>
+ <text x="1060" y="305" style="fill:#e0fbff;font-size:13px">TEST</text><text x="1135" y="268" text-anchor="start" class="sm g">▶ 12/12 passing</text>
+ <text x="1060" y="605" style="fill:#e0fbff;font-size:13px">REV</text><text x="1135" y="632" text-anchor="start" class="sm org">⏸ needs approval</text>
+ <text x="540" y="305" style="fill:#e0fbff;font-size:13px">ARCH</text><text x="465" y="268" text-anchor="end" class="sm">idle</text>
+ <text x="540" y="605" style="fill:#e0fbff;font-size:22px">+</text><text x="465" y="632" text-anchor="end" class="sm">HIRE WORKER</text>
+</g>
+<!-- satellite dots running along the orbit -->
+<circle r="4" fill="#67e8f9" filter="url(#glow)"><animateMotion dur="14s" repeatCount="indefinite" path="M800 150 A300 300 0 1 1 799.9 150"/></circle>
+<circle r="3" fill="#34d399" filter="url(#glow)"><animateMotion dur="9s" repeatCount="indefinite" path="M800 150 A300 300 0 1 0 800.1 150"/></circle>
+
+<!-- ===== TOP-LEFT: semicircle arc gauge (SYSTEM) ===== -->
+<g transform="translate(40,90)">
+ <path d="M0 0H20M0 0V20M300 0H280M300 0V20" fill="none" stroke="#22d3ee" stroke-width="2"/>
+ <text x="12" y="-8" class="lab">SYSTEM · CPU / RAM</text>
+ <path d="M60 170A90 90 0 0 1 240 170" fill="none" stroke="#0e4a5c" stroke-width="14"/>
+ <path d="M60 170A90 90 0 0 1 240 170" fill="none" stroke="#22d3ee" stroke-width="14" pathLength="100" stroke-dasharray="38 100" filter="url(#glow)"><animate attributeName="stroke-dasharray" values="34 100;42 100;34 100" dur="5s" repeatCount="indefinite"/></path>
+ <path d="M76 170A74 74 0 0 1 224 170" fill="none" stroke="#0e4a5c" stroke-width="6"/>
+ <path d="M76 170A74 74 0 0 1 224 170" fill="none" stroke="#a78bfa" stroke-width="6" pathLength="100" stroke-dasharray="61 100"/>
+ <text x="150" y="150" text-anchor="middle" class="big">38%</text><text x="150" y="172" text-anchor="middle" class="dim">CPU · RAM 61%</text>
+</g>
+
+<!-- ===== LEFT: voice spectrum ===== -->
+<g transform="translate(40,330)">
+ <text x="0" y="-12" class="lab">VOICE · SPECTRUM</text>
+ <line x1="0" y1="110" x2="300" y2="110" stroke="#0e7490"/>
+ <g fill="#22d3ee" filter="url(#glow)">
+  <rect class="eq" x="0" y="20" width="8" height="90" style="animation-delay:-.1s"/><rect class="eq" x="12" y="20" width="8" height="90" style="animation-delay:-.7s"/><rect class="eq" x="24" y="20" width="8" height="90" style="animation-delay:-.3s"/><rect class="eq" x="36" y="20" width="8" height="90" style="animation-delay:-.5s"/><rect class="eq" x="48" y="20" width="8" height="90" style="animation-delay:-.2s"/><rect class="eq" x="60" y="20" width="8" height="90" style="animation-delay:-.8s"/><rect class="eq" x="72" y="20" width="8" height="90" style="animation-delay:-.4s"/><rect class="eq" x="84" y="20" width="8" height="90" style="animation-delay:-.6s"/><rect class="eq" x="96" y="20" width="8" height="90" style="animation-delay:-.15s"/><rect class="eq" x="108" y="20" width="8" height="90" style="animation-delay:-.9s"/><rect class="eq" x="120" y="20" width="8" height="90" style="animation-delay:-.35s"/><rect class="eq" x="132" y="20" width="8" height="90" style="animation-delay:-.55s"/><rect class="eq" x="144" y="20" width="8" height="90" style="animation-delay:-.25s"/><rect class="eq" x="156" y="20" width="8" height="90" style="animation-delay:-.75s"/><rect class="eq" x="168" y="20" width="8" height="90" style="animation-delay:-.45s"/><rect class="eq" x="180" y="20" width="8" height="90" style="animation-delay:-.05s"/><rect class="eq" x="192" y="20" width="8" height="90" style="animation-delay:-.65s"/><rect class="eq" x="204" y="20" width="8" height="90" style="animation-delay:-.3s"/><rect class="eq" x="216" y="20" width="8" height="90" style="animation-delay:-.85s"/><rect class="eq" x="228" y="20" width="8" height="90" style="animation-delay:-.2s"/>
+ </g>
+ <text x="0" y="130" class="dim">MIC ▮▮▮▮▯  ·  HANDS-FREE ON</text>
+</g>
+
+<!-- ===== LEFT: network pulse line (ECG style) ===== -->
+<g transform="translate(40,500)">
+ <text x="0" y="0" class="lab">NETWORK</text>
+ <path d="M0 40H40L52 20L66 62L80 8L96 52L108 40H190L202 28L214 48L226 40H300" fill="none" stroke="#0e4a5c" stroke-width="1.5"/>
+ <path class="ecg" d="M0 40H40L52 20L66 62L80 8L96 52L108 40H190L202 28L214 48L226 40H300" fill="none" stroke="#67e8f9" stroke-width="2.5" filter="url(#glow)"/>
+ <text x="0" y="82" class="dim">↓ 2.4 MB/S   ↑ 0.3 MB/S</text>
+</g>
+
+<!-- ===== BOTTOM-LEFT: terminal worker feed with scrolling text ===== -->
+<g transform="translate(0,0)">
+ <path d="M40 650H440L470 680V860H40Z" fill="#031018" fill-opacity=".85" stroke="#0e7490"/>
+ <path class="run" d="M40 650H440L470 680V860H40Z" fill="none" stroke="#67e8f9" stroke-width="2" filter="url(#glow)" style="animation-duration:7s"/>
+ <text x="56" y="668" class="lab">WORKER FEED · LIVE</text><circle cx="450" cy="664" r="4" fill="#34d399" class="pulse"/>
+ <g clip-path="url(#feedclip)"><g class="feed" font-size="12">
+  <text x="62" y="692" class="sm g">CODE   ▶ edit src/Hero.tsx</text><text x="62" y="712" class="sm">CODE   + 42 lines  - 6 lines</text><text x="62" y="732" class="sm g">TEST   ▶ pnpm test</text><text x="62" y="752" class="sm">TEST   12 passed · 0 failed</text><text x="62" y="772" class="sm org">REV    ⏸ wants: npm install</text><text x="62" y="792" class="sm g">CODE   ▶ edit src/Nav.tsx</text><text x="62" y="812" class="sm">CODE   + 18 lines</text><text x="62" y="832" class="sm g">TEST   ▶ pnpm lint</text>
+  <text x="62" y="888" class="sm g">CODE   ▶ edit src/Hero.tsx</text><text x="62" y="908" class="sm">CODE   + 42 lines  - 6 lines</text><text x="62" y="928" class="sm g">TEST   ▶ pnpm test</text><text x="62" y="948" class="sm">TEST   12 passed · 0 failed</text><text x="62" y="968" class="sm org">REV    ⏸ wants: npm install</text><text x="62" y="988" class="sm g">CODE   ▶ edit src/Nav.tsx</text><text x="62" y="1008" class="sm">CODE   + 18 lines</text><text x="62" y="1028" class="sm g">TEST   ▶ pnpm lint</text>
+ </g></g>
+ <rect x="42" y="652" width="426" height="206" fill="url(#fade)" pointer-events="none"/>
+</g>
+
+<!-- ===== TOP-RIGHT: radar with sweep ===== -->
+<g transform="translate(1440,205)">
+ <text x="-110" y="-124" class="lab">DEVICES · RADAR</text>
+ <g fill="none" stroke="#22d3ee" stroke-opacity=".55"><circle r="110"/><circle r="73"/><circle r="36"/><line x1="-110" y1="0" x2="110" y2="0"/><line x1="0" y1="-110" x2="0" y2="110"/></g>
+ <circle r="110" fill="none" stroke="#67e8f9" stroke-width="2" stroke-dasharray="1 9"/>
+ <g class="spin f" style="animation-duration:4s"><path d="M0 0L110 0A110 110 0 0 0 95 -55Z" fill="url(#sweepg)"/><line x1="0" y1="0" x2="110" y2="0" stroke="#67e8f9" stroke-width="2" filter="url(#glow)"/></g>
+ <circle cx="42" cy="-48" r="5" fill="#34d399" class="pulse" filter="url(#glow)"/><circle cx="-60" cy="30" r="5" fill="#34d399" class="pulse" style="animation-delay:-.7s" filter="url(#glow)"/><circle cx="20" cy="70" r="5" fill="#fb923c" class="pulse fast" filter="url(#glow)"/>
+ <text x="52" y="-44" class="dim">PC</text><text x="-50" y="34" class="dim">PHONE</text><text x="30" y="82" class="dim org">ALEXA?</text>
+</g>
+
+<!-- ===== RIGHT: hexagon ticket cells ===== -->
+<g transform="translate(1300,340)">
+ <text x="0" y="-14" class="lab">TICKETS · landing-page</text>
+ <g stroke-width="1.4" fill="#031620">
+  <g style="color:#34d399"><use href="#hexs" x="20" y="20"/><use href="#hexs" x="60" y="20"/><use href="#hexs" x="40" y="55"/></g>
+  <g style="color:#22d3ee" ><use href="#hexs" x="100" y="20"/><use href="#hexs" x="80" y="55"/><use href="#hexs" x="120" y="55"/></g>
+  <g style="color:#fb923c"><use href="#hexs" x="140" y="20" class="pulse fast"/></g>
+  <g style="color:#22d3ee;opacity:.4"><use href="#hexs" x="180" y="20"/><use href="#hexs" x="160" y="55"/><use href="#hexs" x="200" y="55"/><use href="#hexs" x="220" y="20"/></g>
+ </g>
+ <text x="0" y="110" class="dim">■ DONE 3   ■ DOING 3   ■ REVIEW 1   ■ TODO 4</text>
+</g>
+
+<!-- ===== RIGHT: triple concentric usage rings ===== -->
+<g transform="translate(1340,520)">
+ <g fill="none" stroke-width="8"><circle r="38" stroke="#0e4a5c"/><circle r="38" stroke="#22d3ee" pathLength="100" stroke-dasharray="42 100" transform="rotate(-90)"/>
+ <circle r="26" stroke="#0e4a5c"/><circle r="26" stroke="#a78bfa" pathLength="100" stroke-dasharray="70 100" transform="rotate(-90)"/>
+ <circle r="14" stroke="#0e4a5c"/><circle r="14" stroke="#34d399" pathLength="100" stroke-dasharray="25 100" transform="rotate(-90)"/></g>
+ <text x="64" y="-14" class="lab">BUDGET</text><text x="64" y="6" class="sm">CODE   42%</text><text x="64" y="24" class="sm">TEST   70%</text><text x="64" y="42" class="sm">REV    25%</text>
+</g>
+
+<!-- ===== BOTTOM-RIGHT: alert octagon, pulsing ===== -->
+<g transform="translate(1180,650)">
+ <polygon points="40,0 340,0 380,40 380,170 340,210 40,210 0,170 0,40" fill="#1c0e04" fill-opacity=".9" stroke="#fb923c" stroke-width="2" filter="url(#glow)" class="pulse"/>
+ <polygon points="40,0 340,0 380,40 380,170 340,210 40,210 0,170 0,40" fill="none" stroke="#fed7aa" stroke-width="1" stroke-dasharray="4 8" class="flow"/>
+ <path d="M52 62L80 14L108 62Z" fill="none" stroke="#fb923c" stroke-width="3" class="pulse fast"/><text x="80" y="52" text-anchor="middle" class="big" style="fill:#fb923c;font-size:20px">!</text>
+ <text x="130" y="36" class="lab org">APPROVAL NEEDED</text><text x="130" y="60" class="sm" style="fill:#fed7aa">Reviewer wants to run:</text><text x="130" y="82" class="big" style="font-size:16px;fill:#fff">npm install --save zod</text>
+ <path d="M30 120H180L196 140L180 160H30Z" fill="#fb923c33" stroke="#fb923c"/><text x="105" y="146" text-anchor="middle" class="sm" style="fill:#fed7aa">APPROVE</text>
+ <path d="M210 120H350V160H210L226 140Z" fill="none" stroke="#fb923c"/><text x="282" y="146" text-anchor="middle" class="sm org">DENY</text>
+ <text x="30" y="190" class="dim">auto-deny in 00:48</text>
+</g>
+
+<!-- ===== BOTTOM: command bar (parallelogram) ===== -->
+<g transform="translate(520,828)">
+ <path d="M24 0H536L560 36H0Z" fill="#031018" fill-opacity=".9" stroke="#22d3ee" stroke-width="1.5" filter="url(#glow)"/>
+ <text x="40" y="23" class="sm">▸ ask maya anything…</text><rect x="196" y="12" width="8" height="14" fill="#22d3ee" class="blink"/>
+ <text x="540" y="23" text-anchor="end" class="dim">[ HOLD TO TALK ]</text>
+</g>
+<!-- corner brackets for the whole screen -->
+<path d="M10 40V10H40M1560 10H1590V40M10 860V890H40M1560 890H1590V860" fill="none" stroke="#67e8f9" stroke-width="2"/>
+</svg>
+</div>
+<p class="subtitle" style="margin-top:12px">Things to check: do you like the different shapes (arc gauge, radar, hex cells, octagon alert, terminal)? Is it too busy or about right? What would you add or remove?</p>
+
+</body>
+</html>
