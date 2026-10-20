@@ -88,6 +88,17 @@ export interface StageViewState {
   musicCmd: { n: number; command: MusicCommand } | null;
   /** The assistant asked for the plugins screen to be opened (at one integration's Configure page). `n` changes with every request. */
   uiOpen: { n: number; integration?: string } | null;
+  /** The newest reading of how busy this PC is (orbital screen); `at` is when it arrived, to tell a stale one. */
+  stats: HudStats | null;
+}
+
+export interface HudStats {
+  cpu: number;
+  ramUsed: number;
+  ramTotal: number;
+  netDown: number;
+  netUp: number;
+  at: number;
 }
 
 export const DEFAULT_CLIENT_LOOK: ClientLook = { size: 1, reactivity: 0.7, ambient: true, captions: true, captionSize: "medium" };
@@ -121,6 +132,7 @@ export const initialState: StageViewState = {
   hostMusic: null,
   musicCmd: null,
   uiOpen: null,
+  stats: null,
 };
 
 export interface ChatLine {
@@ -267,6 +279,8 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: m.level, text: m.text }] };
     case "activity":
       return { ...state, activity: m.text };
+    case "hud.stats":
+      return { ...state, stats: { cpu: m.cpu, ramUsed: m.ramUsed, ramTotal: m.ramTotal, netDown: m.netDown, netUp: m.netUp, at: Date.now() } };
     case "status":
       return {
         ...state,

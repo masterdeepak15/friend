@@ -75,3 +75,13 @@ export function programProblem(value: string): string | null {
 
 export type RepeatMode = "off" | "all" | "one";
 export const REPEAT_MODES: readonly RepeatMode[] = ["off", "all", "one"];
+
+/** The two screens: the classic one (an orb with floating cards) and the orbital HUD (rings, an orbit of nodes, edge instruments). */
+export const HUD_LAYOUTS = ["classic", "orbital"] as const;
+export type HudLayout = (typeof HUD_LAYOUTS)[number];
+/** How much the orbital HUD shows: calm (orb, orbit, command bar), standard, or full. */
+export const HUD_DENSITIES = ["calm", "standard", "full"] as const;
+export type HudDensity = (typeof HUD_DENSITIES)[number];
+/** The instruments of the orbital HUD that can each be switched on or off. */
+export const HUD_WIDGET_IDS = ["system", "voice", "network", "feed", "radar", "tickets", "budget", "approval", "usage"] as const;
+export type HudWidgetId = (typeof HUD_WIDGET_IDS)[number];

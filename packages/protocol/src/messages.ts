@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, type HudWidgetId } from "./hud";
 import { parseRef } from "./musicRef";
 import { StageCommand, StageSnapshot } from "./stage";
 import { Tier } from "./tiers";
@@ -89,6 +90,9 @@ export const HudView = z.object({
     .array(z.object({ id: z.string().max(20), label: z.string().max(24), icon: z.string().max(16), action: z.object({ type: z.enum(["url", "prompt", "panel", "music"]), value: z.string().max(500) }) }))
     .max(12),
   animations: z.enum(["full", "reduced", "off"]),
+  layout: z.enum(HUD_LAYOUTS),
+  density: z.enum(HUD_DENSITIES),
+  widgets: z.object(Object.fromEntries(HUD_WIDGET_IDS.map((id) => [id, z.boolean().optional()])) as Record<HudWidgetId, z.ZodOptional<z.ZodBoolean>>),
 });
 export type HudView = z.infer<typeof HudView>;
 
@@ -112,6 +116,8 @@ export const ServerMsg = z.discriminatedUnion("type", [
   /** The owner's chosen view (sent on connect and whenever it changes). */
   z.object({ type: z.literal("ui"), view: ViewPreset, look: ClientLook.optional(), ownerName: z.string().max(40).optional(), assistantName: z.string().max(40).optional(), hud: HudView.optional(), music: MusicView.optional() }),
   z.object({ type: z.literal("activity"), text: z.string().max(80).nullable() }),
+  /** How busy this PC is, for the orbital screen (sent every couple of seconds while that screen is chosen). */
+  z.object({ type: z.literal("hud.stats"), cpu: z.number().min(0).max(100), ramUsed: z.number().min(0), ramTotal: z.number().min(0), netDown: z.number().min(0), netUp: z.number().min(0) }),
   z.object({
     type: z.literal("status"),
     busy: z.boolean(),

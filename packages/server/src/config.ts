@@ -1,5 +1,6 @@
 import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, VIDEO_YOUTUBE, type VideoOutput, type VideoYoutube } from "@friend/protocol";
 import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, type DefaultSource, launcherProblem, MUSIC_OUTPUTS, type MusicOutput, programProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
+import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, type HudDensity, type HudLayout, type HudWidgetId } from "@friend/protocol";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME, type AlexaLocale } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -120,6 +121,12 @@ export interface HudConfig {
   launcher: LauncherItem[];
   /** full: every animation; reduced: only the gentle ones; off: none. The system's "reduce motion" always wins. */
   animations: "full" | "reduced" | "off";
+  /** classic: the orb with floating cards. orbital: the HUD with rings, an orbit and edge instruments. */
+  layout: HudLayout;
+  /** How much the orbital screen shows. */
+  density: HudDensity;
+  /** Instruments switched on or off by hand; a missing one follows the density. */
+  widgets: Partial<Record<HudWidgetId, boolean>>;
 }
 
 export interface AlexaConfig {
@@ -234,6 +241,13 @@ export const validDateLocale = (l: unknown): l is string => {
   }
 };
 
+const sanitizeWidgets = (raw: unknown): Partial<Record<HudWidgetId, boolean>> => {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const out: Partial<Record<HudWidgetId, boolean>> = {};
+  for (const id of HUD_WIDGET_IDS) if (typeof r[id] === "boolean") out[id] = r[id] as boolean;
+  return out;
+};
+
 export function sanitizeHud(raw: unknown): HudConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const c = (r.clock && typeof r.clock === "object" ? r.clock : {}) as Record<string, unknown>;
@@ -252,6 +266,9 @@ export function sanitizeHud(raw: unknown): HudConfig {
     clock: { hour12: c.hour12 !== false, seconds: c.seconds === true, locale: validDateLocale(c.locale) ? c.locale : "" },
     launcher: launcher.slice(0, MAX_LAUNCHER),
     animations: r.animations === "reduced" || r.animations === "off" ? r.animations : "full",
+    layout: (HUD_LAYOUTS as readonly unknown[]).includes(r.layout) ? (r.layout as HudLayout) : "classic",
+    density: (HUD_DENSITIES as readonly unknown[]).includes(r.density) ? (r.density as HudDensity) : "standard",
+    widgets: sanitizeWidgets(r.widgets),
   };
 }
 

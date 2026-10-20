@@ -1,4 +1,4 @@
-import { PresenceStyle, ViewPreset } from "@friend/protocol";
+import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
 import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, VIDEO_YOUTUBE } from "@friend/protocol";
@@ -130,6 +130,9 @@ export const SettingsPatch = z
           .array(z.object({ id: z.string().max(20).optional(), label: z.string(), icon: z.string(), action: z.object({ type: z.enum(LAUNCHER_ACTIONS), value: z.string() }).strict() }).strict())
           .max(MAX_LAUNCHER),
         animations: z.enum(["full", "reduced", "off"]),
+        layout: z.enum(HUD_LAYOUTS),
+        density: z.enum(HUD_DENSITIES),
+        widgets: z.object(Object.fromEntries(HUD_WIDGET_IDS.map((id) => [id, z.boolean()]))).partial().strict(),
       })
       .partial()
       .strict(),
@@ -302,7 +305,7 @@ export function settingsView(c: Config): SettingsView {
     trading: { level: c.trading.level },
     music: { ...c.music, extensions: [...c.music.extensions], spotify: { ...c.music.spotify }, soundcloud: { ...c.music.soundcloud }, audius: { ...c.music.audius } },
     video: { ...c.video, allowedSites: [...c.video.allowedSites] },
-    hud: { ...c.hud, clock: { ...c.hud.clock }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
+    hud: { ...c.hud, clock: { ...c.hud.clock }, widgets: { ...c.hud.widgets }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
     alexa: {
       installed: c.alexa.installed,
       enabled: c.alexa.enabled,
@@ -484,8 +487,9 @@ export function applySettings(config: Config, raw: unknown): Applied {
     if (allowedSites) config.video.allowedSites = normalizeSites(allowedSites);
   }
   if (p.hud) {
-    const { clock, launcher, ...rest } = p.hud;
+    const { clock, launcher, widgets, ...rest } = p.hud;
     Object.assign(config.hud, rest);
+    if (widgets) Object.assign(config.hud.widgets, widgets);
     if (clock) Object.assign(config.hud.clock, clock);
     if (launcher) config.hud.launcher = sanitizeHud({ launcher }).launcher;
   }

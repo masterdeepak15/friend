@@ -685,7 +685,7 @@ export async function createApp(opts: AppOptions) {
     look: clientLook(config.look),
     ownerName: config.ownerName,
     assistantName: auth.assistantName(),
-    hud: { terminalLabel: config.hud.terminalLabel, clock: { ...config.hud.clock }, launcher: config.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })), animations: config.hud.animations },
+    hud: { terminalLabel: config.hud.terminalLabel, clock: { ...config.hud.clock }, launcher: config.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })), animations: config.hud.animations, layout: config.hud.layout, density: config.hud.density, widgets: { ...config.hud.widgets } },
     music: { folderSet: config.music.folder !== "", volume: config.music.volume, shuffle: config.music.shuffle, repeat: config.music.repeat, visualizer: config.music.visualizer, startView: config.music.startView, output: config.music.output },
   });
   const statusMsg = (): ServerMsg => ({
