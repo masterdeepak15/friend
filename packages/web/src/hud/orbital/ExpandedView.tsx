@@ -10,6 +10,7 @@ export interface Rect {
   height: number;
 }
 import { Frame } from "./kit";
+import { budgetRings, ticketCells, ticketProject } from "./office";
 import { WIDGETS } from "./registry";
 import { BudgetWidget } from "./widgets/BudgetWidget";
 import { FeedLog } from "./widgets/FeedWidget";
@@ -26,8 +27,8 @@ const EXPLAIN: Record<HudWidgetId, string> = {
   network: "How fast data moves in and out of this PC. Some PCs do not report it.",
   feed: "The conversation and what Friend is doing right now.",
   radar: "The things Friend can reach: this screen, the PC's agent and the voice. A dim one is offline.",
-  tickets: "The work given to hired workers, one cell each. Workers arrive with the Office.",
-  budget: "How much of each worker's limit is used. Workers arrive with the Office.",
+  tickets: "The work given to hired workers, one cell each. Switch the Office on in Settings to hire workers.",
+  budget: "How much of each worker's limit is used. Limits are set in Settings, Office.",
   approval: "Something is waiting for your answer.",
   usage: "Today's usage compared with your busiest day of the last 30.",
 };
@@ -85,9 +86,9 @@ export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, onClose
       case "feed":
         return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} />;
       case "tickets":
-        return <TicketsWidget />;
+        return <TicketsWidget cells={ticketCells(state.office.tickets)} {...(ticketProject(state.office.tickets) ? { project: ticketProject(state.office.tickets)! } : {})} />;
       case "budget":
-        return <BudgetWidget />;
+        return <BudgetWidget rings={budgetRings(state.office.workers)} />;
       case "usage":
         return <UsageDetail api={usageApi} />;
       default:

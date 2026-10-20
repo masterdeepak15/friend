@@ -178,6 +178,15 @@
 .ob-expanded { cursor: default; overflow: hidden; z-index: 5; }
 .ob-expanded .ob-frame-body { height: calc(100% - 22px); display: flex; flex-direction: column; gap: 10px; overflow: auto; }
 .ob-expanded-body { flex: 1; min-height: 0; overflow: auto; }
+.ob-worker { display: flex; flex-direction: column; gap: 4px; }
+.ob-worker-log { flex: 1; min-height: 0; overflow: auto; }
+.ob-worker-log .ob-li { white-space: normal; overflow: visible; word-break: break-word; }
+.ob-worker-say { display: flex; gap: 6px; margin-top: 8px; }
+.ob-worker-say input { flex: 1; min-width: 0; background: rgba(0, 20, 30, 0.6); border: 1px solid var(--ob-dim); color: #e0fbff; font: inherit; font-size: 13px; padding: 5px 8px; }
+.ob-worker-say input:focus-visible { outline: 1px solid var(--ob-cyan); }
+.ob-worker-say button { background: none; border: 1px solid var(--ob-cyan); color: #e0fbff; font: inherit; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 12px; cursor: pointer; }
+.ob-worker-say button:disabled { opacity: 0.4; cursor: default; }
+.ob-worker-say .ob-stop { border-color: var(--ob-orange); color: var(--ob-orange); }
 .ob-explain { margin: 0; color: color-mix(in srgb, var(--ob-cyan) 75%, transparent); font-size: 12px; line-height: 1.4; }
 .ob-close { position: absolute; top: 4px; right: 12px; z-index: 3; background: none; border: 0; color: #e0fbff; font: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
 .ob-close:hover, .ob-close:focus-visible { color: #fff; outline: 1px solid var(--ob-cyan); }

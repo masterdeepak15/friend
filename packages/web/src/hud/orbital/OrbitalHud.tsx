@@ -4,6 +4,8 @@ import { describeStatus } from "../../overlay/StatusBadge";
 import type { UsageApi } from "../../settings/UsageTab";
 import type { StageViewState } from "../../store";
 import { ExpandedView } from "./ExpandedView";
+import { budgetRings, feedLines, ticketCells, ticketProject, usageFromQuota, workerNodes } from "./office";
+import { WorkerView } from "./WorkerView";
 import { DESIGN_H, DESIGN_W, ORBIT_R, centreClear, designScale, layoutMode, orbitNodes, screenOf, type Anchor } from "./geometry";
 import { Frame, HexNode, HudDefs, LinkLine, SegmentedRing, type NodeStatus, type Tone } from "./kit";
 import { visibleWidgets, type WidgetDef } from "./registry";
@@ -35,6 +37,8 @@ export interface OrbitalHudProps {
   usageApi?: UsageApi;
   /** Sends the owner's answer to an approval. */
   send?: (m: ClientMsg) => void;
+  /** Opens the place where a worker is hired (Settings, Office); the "+" node on the orbit asks for it. */
+  onHire?: () => void;
   onLaunch: (item: Launcher) => void;
   onExpand: (target: ExpandId) => void;
 }
@@ -85,15 +89,15 @@ function summaryOf(id: HudWidgetId, state: StageViewState): string {
     case "approval":
       return "None waiting";
     default:
-      return "No workers yet";
+      return state.office.enabled && state.office.workers.length > 0 ? `${state.office.workers.length} worker${state.office.workers.length === 1 ? "" : "s"}` : "No workers yet";
   }
 }
 
-function UsageLabel({ usage, style, onClick }: { usage: number | null | undefined; style?: CSSProperties; onClick: () => void }) {
+function UsageLabel({ usage, reset = null, real = false, style, onClick }: { usage: number | null | undefined; reset?: string | null; real?: boolean; style?: CSSProperties; onClick: () => void }) {
   const known = typeof usage === "number" && Number.isFinite(usage);
   return (
-    <button type="button" className="ob-usage-label ob-hit" data-widget="usage" title="Today's usage compared with your busiest day of the last 30" style={style} onClick={onClick} aria-label={known ? `Usage ${Math.round(usage)} percent of your busiest day` : "Usage, no data yet"}>
-      USAGE {known ? `${Math.round(usage)}%` : "—"}
+    <button type="button" className="ob-usage-label ob-hit" data-widget="usage" title={real ? "How full your Claude subscription's five-hour window is" : "Today's usage compared with your busiest day of the last 30"} style={style} onClick={onClick} aria-label={known ? (real ? `Usage ${Math.round(usage)} percent of the five-hour window${reset ? `, resets in ${reset}` : ""}` : `Usage ${Math.round(usage)} percent of your busiest day`) : "Usage, no data yet"}>
+      USAGE {known ? `${Math.round(usage)}%` : "—"}{reset ? ` · RESET ${reset}` : ""}
     </button>
   );
 }
@@ -125,7 +129,7 @@ function TopBar({ hud, state, preview }: { hud: HudView; state: StageViewState; 
  * orb and below the pictures the assistant puts up. It only takes the pointer on the nodes and instruments, so a press anywhere
  * else still reaches the stage.
  */
-export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send = () => {}, onLaunch, onExpand }: OrbitalHudProps) {
+export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send = () => {}, onHire, onLaunch, onExpand }: OrbitalHudProps) {
   const { w, h } = useWindowSize(viewport);
   const hidden = useHidden();
   const mode = layoutMode(w, h);
@@ -138,19 +142,23 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
   const toneOf = (def: WidgetDef): Tone => (def.id === "approval" ? (pending ? "orange" : "cyan") : def.tone);
   // One instrument can be open, large, in the middle; Esc, a press outside or the close mark shuts it and the focus goes back to where it was.
   const [expanded, setExpanded] = useState<HudWidgetId | null>(null);
+  const [openWorker, setOpenWorker] = useState<string | null>(null);
+  const tick = useNow(30_000); // the time the usage window resets in is worked out from this
   const opener = useRef<HTMLElement | null>(null);
   const close = useCallback(() => {
     setExpanded(null);
+    setOpenWorker(null);
     opener.current?.focus();
     opener.current = null;
   }, []);
   const open = (id: HudWidgetId) => () => {
-    if (expanded === null) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (expanded === null && openWorker === null) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setOpenWorker(null);
     setExpanded(id);
     onExpand({ kind: "widget", id });
   };
   useEffect(() => {
-    if (expanded === null || pending) return;
+    if ((expanded === null && openWorker === null) || pending) return;
     const on = (e: globalThis.KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -159,7 +167,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
     };
     window.addEventListener("keydown", on, true);
     return () => window.removeEventListener("keydown", on, true);
-  }, [expanded, pending, close]);
+  }, [expanded, openWorker, pending, close]);
   const openW = mode === "compact" ? w - 16 : Math.max(280, Math.min(760, w * 0.62));
   const expandedRect = { x: (w - openW) / 2, y: h * 0.14, width: openW, height: Math.max(220, Math.min(560, h * 0.7)) };
   // a waiting approval comes first: any open instrument closes, and a PIN is asked in a dialog in the middle (big enough for the pad, full width on a phone)
@@ -169,6 +177,22 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
       <div className="ob-backdrop ob-hit" onPointerDown={(e) => { e.stopPropagation(); close(); }} />
       <Safe>
         <ExpandedView id={shownExpanded} state={state} rect={expandedRect} {...(usageApi ? { usageApi } : {})} onClose={close} />
+      </Safe>
+    </>
+  );
+  // a hired worker, large, in the middle: its feed, a Stop button and a box to say something to it
+  const officeOn = state.office.enabled && !preview;
+  const shownWorker = pending || !officeOn ? undefined : state.office.workers.find((x) => x.id === openWorker);
+  const showWorker = (id: string) => {
+    if (expanded === null && openWorker === null) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setExpanded(null);
+    setOpenWorker(id);
+  };
+  const workerEl = shownWorker && (
+    <>
+      <div className="ob-backdrop ob-hit" onPointerDown={(e) => { e.stopPropagation(); close(); }} />
+      <Safe>
+        <WorkerView worker={shownWorker} feed={state.office.feed[shownWorker.id] ?? []} rect={expandedRect} send={send} onClose={close} />
       </Safe>
     </>
   );
@@ -188,6 +212,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
   );
   const root = { className: "orbital", "data-testid": "orbital", "data-mode": mode, "data-hud-anim": hud.animations, ...(hidden ? { "data-paused": "" } : {}) };
   const hasUsage = widgets.some((d) => d.id === "usage");
+  const realUsage = preview ? { value: SAMPLE_USAGE, reset: null, real: false } : usageFromQuota(state.office.quota, usage, tick.getTime());
 
   const content = (id: HudWidgetId) => {
     switch (id) {
@@ -199,12 +224,15 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
         return <RadarWidget deviceOnline={view.deviceOnline} voiceAvailable={view.voice.available} {...(preview ? { blips: SAMPLE_BLIPS } : {})} />;
       case "voice":
         return <VoiceWidget level={view.voice.level} mode={view.voice.mode} />;
-      case "feed":
-        return <FeedWidget lines={preview ? SAMPLE_FEED : view.chat} activity={view.activity} busy={preview ? false : view.busy} marquee={preview} />;
+      case "feed": {
+        const workerLines = officeOn ? feedLines(state.office.feed, state.office.workers) : [];
+        return <FeedWidget lines={preview ? SAMPLE_FEED : workerLines.length > 0 ? workerLines : view.chat} activity={view.activity} busy={preview || workerLines.length > 0 ? false : view.busy} marquee={preview} />;
+      }
       case "tickets":
+        if (officeOn) return <TicketsWidget cells={ticketCells(state.office.tickets)} {...(ticketProject(state.office.tickets) ? { project: ticketProject(state.office.tickets)! } : {})} />;
         return <TicketsWidget {...(preview ? { cells: SAMPLE_TICKETS, project: "landing-page" } : {})} />;
       case "budget":
-        return <BudgetWidget {...(preview ? { rings: SAMPLE_BUDGET } : {})} />;
+        return <BudgetWidget {...(preview ? { rings: SAMPLE_BUDGET } : officeOn ? { rings: budgetRings(state.office.workers) } : {})} />;
       default:
         return null;
     }
@@ -221,6 +249,11 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
       <div {...root}>
         <HudDefs />
         <div className="ob-chips">
+          {officeOn && state.office.workers.map((x) => (
+            <button key={x.id} type="button" className="ob-chip ob-hit" onClick={() => showWorker(x.id)}>
+              {x.name}
+            </button>
+          ))}
           {hud.launcher.map((item) => (
             <button key={item.id} type="button" className="ob-chip ob-hit" onClick={() => onLaunch(item)}>
               <span aria-hidden="true">{item.icon}</span> {item.label}
@@ -230,9 +263,10 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
         <p className="ob-compact-status">{statusText(state)}</p>
         <div className="ob-strip">
           {widgets.filter((d) => d.anchor !== "centre" && !(d.id === "approval" && pending)).map(card)}
-          {hasUsage && <UsageLabel usage={usage} onClick={open("usage")} />}
+          {hasUsage && <UsageLabel usage={realUsage.value} reset={realUsage.reset} real={realUsage.real} onClick={open("usage")} />}
         </div>
         {expandedEl}
+        {workerEl}
         {modalEl}
       </div>
     );
@@ -251,11 +285,21 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
     at?: { x: number; y: number; anchor: "start" | "middle" | "end" };
     onClick: () => void;
   }
+  const launcherItems: OrbitItem[] = hud.launcher.map((item) => ({ id: item.id, label: item.label, glyph: item.icon, caption: item.label, status: "idle" as NodeStatus, onClick: () => onLaunch(item) }));
+  // With the Office on, the hired workers are the nodes (the slots are the same ones as the sample workers use, so their lines sit in the same places);
+  // until someone is hired the launcher stays, with a "+" beside it.
+  const workers = officeOn ? workerNodes(state.office.workers, true) : [];
+  const hireItem = (n: (typeof workers)[number]): OrbitItem => ({ id: n.id, label: n.label, glyph: n.glyph, caption: n.caption, status: n.status, onClick: () => onHire?.() });
+  const officeItems: OrbitItem[] = workers.map((n, i) => (n.kind === "hire" ? hireItem(n) : { id: n.id, label: n.label, glyph: n.glyph, caption: n.caption, status: n.status, detail: n.detail, ...(SAMPLE_NODES[i] ? { at: SAMPLE_NODES[i]!.at } : {}), onClick: () => showWorker(n.id) }));
   const items: OrbitItem[] = preview
     ? SAMPLE_NODES.map((n) => ({ id: n.id, label: n.label, glyph: n.label, status: n.status, detail: n.detail, at: n.at, onClick: () => {} }))
-    : hud.launcher.map((item) => ({ id: item.id, label: item.label, glyph: item.icon, caption: item.label, status: "idle" as NodeStatus, onClick: () => onLaunch(item) }));
+    : !officeOn
+      ? launcherItems
+      : state.office.workers.length > 0
+        ? officeItems
+        : [...launcherItems, ...officeItems];
   const nodes = orbitNodes(items.length, DESIGN_W, DESIGN_H);
-  const shownUsage = preview ? SAMPLE_USAGE : usage;
+  const shownUsage = realUsage.value;
   const canvas = (anchor: Anchor, name: string, children: ReactNode) => {
     const at = screenOf(anchor, 0, 0, w, h);
     return (
@@ -339,7 +383,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
               const dir = { x: Math.cos((n.angle * Math.PI) / 180), y: Math.sin((n.angle * Math.PI) / 180) };
               return <LinkLine key={items[i]!.id} tone={items[i]!.status === "waiting" ? "orange" : "cyan"} x1={c.cx + dir.x * 104} y1={c.cy + dir.y * 104} x2={c.cx + dir.x * (ORBIT_R - 34)} y2={c.cy + dir.y * (ORBIT_R - 34)} />;
             })}
-            {preview && items.map((it) => it.at && <text key={it.id} className={`ob-node-detail${it.status === "running" ? " ob-grn" : it.status === "waiting" ? " ob-org" : ""}`} x={it.at.x} y={it.at.y} textAnchor={it.at.anchor}>{it.detail}</text>)}
+            {items.map((it) => it.at && it.detail && <text key={it.id} className={`ob-node-detail${it.status === "running" ? " ob-grn" : it.status === "waiting" ? " ob-org" : ""}`} x={it.at.x} y={it.at.y} textAnchor={it.at.anchor}>{it.detail}</text>)}
           </svg>
           <div className="ob-orb-label" style={{ left: c.cx, top: c.cy }} aria-hidden="true">
             <b>{name}</b>
@@ -350,14 +394,14 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
               <div className="ob-usage-ring" style={{ left: c.cx - 230, top: c.cy - 230, width: 460, height: 460 }}>
                 <SegmentedRing value={shownUsage ?? 0} radius={205} size={460} />
               </div>
-              <UsageLabel usage={shownUsage} style={{ position: "absolute", left: 800, top: 692, transform: "translate(-50%, -50%)" }} onClick={open("usage")} />
+              <UsageLabel usage={shownUsage} reset={realUsage.reset} real={realUsage.real} style={{ position: "absolute", left: 800, top: 692, transform: "translate(-50%, -50%)" }} onClick={open("usage")} />
             </>
           )}
           {nodes.map((n, i) => {
             const it = items[i]!;
             return (
               <Safe key={it.id}>
-                <HexNode x={n.x} y={n.y} label={it.label} glyph={it.glyph} status={it.status} {...(it.caption ? { caption: it.caption } : {})} {...(preview && it.detail ? { detail: it.detail } : {})} onClick={it.onClick} />
+                <HexNode x={n.x} y={n.y} label={it.label} glyph={it.glyph} status={it.status} {...(it.caption ? { caption: it.caption } : {})} {...(it.detail ? { detail: it.detail } : {})} onClick={it.onClick} />
               </Safe>
             );
           })}
@@ -369,6 +413,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
       {canvas("left", "left", edge("left").map(zone))}
       {canvas("right", "right", edge("right").map(zone))}
       {expandedEl}
+      {workerEl}
       {modalEl}
     </div>
     </>
