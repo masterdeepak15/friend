@@ -1,4 +1,4 @@
-import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, PresenceStyle, ViewPreset } from "@friend/protocol";
+import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, OfficeProject, OfficeRole, PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
 import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, VIDEO_YOUTUBE } from "@friend/protocol";
@@ -6,7 +6,7 @@ import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, MUSIC_OUTPUTS, programProblem, LAUNC
 import { statSync } from "node:fs";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
-import { isValidTimeZone, plainWebAddress, sanitizeHud, validDateLocale, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
+import { isValidTimeZone, plainWebAddress, sanitizeHud, sanitizeOffice, validDateLocale, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
 const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
@@ -137,6 +137,20 @@ export const SettingsPatch = z
       })
       .partial()
       .strict(),
+    /** The Office: workers, projects and the rules they work under. Owner-only. */
+    office: z
+      .object({
+        enabled: z.boolean(),
+        maxConcurrent: z.number().int().min(1).max(8),
+        startTimeoutSec: z.number().int().min(10).max(600),
+        pauseAtWindow: z.number().min(0).max(1),
+        budget: z.object({ perWorkerTokens: z.number().int().min(0).max(1_000_000_000), totalTokens: z.number().int().min(0).max(1_000_000_000) }).partial().strict(),
+        roles: z.array(OfficeRole).max(20),
+        projects: z.array(OfficeProject).max(20),
+        policy: z.object({ allowTools: z.array(z.string().min(1).max(60)).max(40), denyCommands: z.array(z.string().min(1).max(200)).max(40) }).partial().strict(),
+      })
+      .partial()
+      .strict(),
     /** What the assistant may do with money. Only "read" exists in this version; any other level is refused. */
     trading: z.object({ level: z.enum(["read"]) }).partial().strict(),
     look: z
@@ -247,6 +261,7 @@ export interface SettingsView {
   music: Config["music"];
   video: Config["video"];
   hud: Config["hud"];
+  office: Config["office"];
   /** The ids of allowed Amazon accounts are shown shortened. */
   alexa: {
     installed: boolean;
@@ -307,6 +322,7 @@ export function settingsView(c: Config): SettingsView {
     music: { ...c.music, extensions: [...c.music.extensions], spotify: { ...c.music.spotify }, soundcloud: { ...c.music.soundcloud }, audius: { ...c.music.audius } },
     video: { ...c.video, allowedSites: [...c.video.allowedSites] },
     hud: { ...c.hud, clock: { ...c.hud.clock }, widgets: { ...c.hud.widgets }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
+    office: structuredClone(c.office),
     alexa: {
       installed: c.alexa.installed,
       enabled: c.alexa.enabled,
@@ -353,7 +369,7 @@ export function refuseForAgent(raw: unknown): void {
   const cc = (r.claudeCode && typeof r.claudeCode === "object" ? r.claudeCode : {}) as Record<string, unknown>;
   const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
   if ("brokers" in r || "trading" in r) throw new SettingsError("Broker accounts and the trading level can only be changed by the owner on the settings screen.");
-  if ("music" in r || "hud" in r) throw new SettingsError("The music folder and the screen widgets can only be changed by the owner on the settings screen.");
+  if ("music" in r || "hud" in r || "office" in r) throw new SettingsError("The music folder, the screen widgets and the Office can only be changed by the owner on the settings screen.");
   if ("video" in r) throw new SettingsError("Video settings (which programs run, where videos play, which sites) can only be changed by the owner on the settings screen.");
   if ("updates" in r) throw new SettingsError("Whether Friend updates itself can only be changed by the owner on the settings screen.");
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
@@ -397,6 +413,21 @@ export function applySettings(config: Config, raw: unknown): Applied {
       isDir = false;
     }
     if (!isDir) throw new SettingsError("music.folder: That folder was not found on this PC.");
+  }
+  if (p.office?.roles) {
+    const ids = p.office.roles.map((x) => x.id);
+    if (new Set(ids).size !== ids.length) throw new SettingsError("office.roles: two roles have the same id; each id can be used only once.");
+  }
+  if (p.office?.projects) {
+    const ids = p.office.projects.map((x) => x.id);
+    if (new Set(ids).size !== ids.length) throw new SettingsError("office.projects: two projects have the same id; each id can be used only once.");
+  }
+  for (const pattern of p.office?.policy?.denyCommands ?? []) {
+    try {
+      new RegExp(pattern, "i");
+    } catch {
+      throw new SettingsError(`office.policy.denyCommands: ${pattern} is not a valid pattern.`);
+    }
   }
   if (p.hud?.clock?.locale && !validDateLocale(p.hud.clock.locale)) throw new SettingsError("hud.clock.locale: That is not a date format this PC knows, try one like en-GB or en-US.");
   for (const item of p.hud?.launcher ?? []) {
@@ -486,6 +517,14 @@ export function applySettings(config: Config, raw: unknown): Applied {
     const { allowedSites, ...rest } = p.video;
     Object.assign(config.video, rest);
     if (allowedSites) config.video.allowedSites = normalizeSites(allowedSites);
+  }
+  if (p.office) {
+    const { budget, roles, projects, policy, ...rest } = p.office;
+    Object.assign(config.office, rest);
+    if (budget) Object.assign(config.office.budget, budget);
+    if (roles) config.office.roles = roles.map((x) => ({ ...x }));
+    if (projects) config.office.projects = sanitizeOffice({ projects }).projects;
+    if (policy) Object.assign(config.office.policy, policy);
   }
   if (p.hud) {
     const { clock, launcher, widgets, ...rest } = p.hud;

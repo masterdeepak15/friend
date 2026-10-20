@@ -1,4 +1,4 @@
-import { HUD_WIDGET_IDS } from "@friend/protocol";
+import { HUD_WIDGET_IDS, type OfficeProject, type OfficeRole } from "@friend/protocol";
 
 export type ApprovalMode = "manual" | "edits" | "auto";
 
@@ -74,7 +74,19 @@ export interface HudSettings {
   preview?: boolean;
 }
 
-export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
+/** The Office as the settings screen edits it (the same shape the server keeps). */
+export interface OfficeSettings {
+  enabled: boolean;
+  maxConcurrent: number;
+  startTimeoutSec: number;
+  pauseAtWindow: number;
+  budget: { perWorkerTokens: number; totalTokens: number };
+  roles: OfficeRole[];
+  projects: OfficeProject[];
+  policy: { allowTools: string[]; denyCommands: string[] };
+}
+
+export type ProviderName ="claude" | "claude-code" | "ollama" | "openai";
 
 export interface SettingsView {
   provider: ProviderName;
@@ -93,6 +105,7 @@ export interface SettingsView {
   alexa?: AlexaView;
   music?: MusicSettings;
   hud?: HudSettings;
+  office?: OfficeSettings;
   look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
@@ -233,6 +246,21 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     if (Object.keys(clock).length) changed.clock = clock;
     if (JSON.stringify(after.hud.launcher) !== JSON.stringify(before.hud.launcher)) changed.launcher = after.hud.launcher;
     if (Object.keys(changed).length) patch.hud = changed;
+  }
+  if (before.office && after.office) {
+    const changed: Record<string, unknown> = {};
+    const a = after.office;
+    const b = before.office;
+    for (const k of ["enabled", "maxConcurrent", "startTimeoutSec", "pauseAtWindow"] as const) if (a[k] !== b[k]) changed[k] = a[k];
+    const budget: Record<string, number> = {};
+    for (const k of ["perWorkerTokens", "totalTokens"] as const) if (a.budget[k] !== b.budget[k]) budget[k] = a.budget[k];
+    if (Object.keys(budget).length) changed.budget = budget;
+    if (JSON.stringify(a.roles) !== JSON.stringify(b.roles)) changed.roles = a.roles;
+    if (JSON.stringify(a.projects) !== JSON.stringify(b.projects)) changed.projects = a.projects;
+    const policy: Record<string, string[]> = {};
+    for (const k of ["allowTools", "denyCommands"] as const) if (JSON.stringify(a.policy[k]) !== JSON.stringify(b.policy[k])) policy[k] = a.policy[k];
+    if (Object.keys(policy).length) changed.policy = policy;
+    if (Object.keys(changed).length) patch.office = changed;
   }
   if (before.web && after.web) {
     const changed: Record<string, unknown> = {};
