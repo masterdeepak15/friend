@@ -224,7 +224,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
 
   return (
     <>
-      <Stage state={shown} send={send} dispatch={dispatch} voice={voice} slash={slash} onMenu={() => setMenuRequest((n) => n + 1)} hudLayer={orbital && state.hud ? <Safe><OrbitalHud hud={state.hud} state={state} usage={usage.share === null ? null : usage.share * 100} send={send} onLaunch={launch} onExpand={() => {}} /></Safe> : null} />
+      <Stage state={shown} send={send} dispatch={dispatch} voice={voice} slash={slash} onMenu={() => setMenuRequest((n) => n + 1)} hudLayer={orbital && state.hud ? <Safe><OrbitalHud hud={state.hud} state={state} usage={usage.share === null ? null : usage.share * 100} send={send} onHire={() => setSettingsOpen("office")} onLaunch={launch} onExpand={() => {}} /></Safe> : null} />
       <Overlay
         approval={state.approval}
         challenge={state.challenge}

@@ -55,7 +55,7 @@ export interface OrbHelpers {
   classic: () => void;
 }
 
-const TAB_ICON: Record<string, IconName> = { model: "brain", voice: "speaker", look: "sparkle", approvals: "shield", trading: "chart", widgets: "grid", system: "launch", usage: "chart", security: "lock" };
+const TAB_ICON: Record<string, IconName> = { model: "brain", voice: "speaker", look: "sparkle", approvals: "shield", trading: "chart", widgets: "grid", system: "launch", office: "grid", usage: "chart", security: "lock" };
 
 /** The rings of the menu, built only from what this Friend can really do right now. A ring with nothing in it is left out. */
 export function buildCategories(p: OwnerMenuProps, h: OrbHelpers): OrbCategory[] {

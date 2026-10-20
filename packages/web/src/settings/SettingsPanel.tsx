@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
+import { OfficeTab, officeProblems } from "./OfficeTab";
 import { SecurityTab } from "./SecurityTab";
 import { TradingTab } from "./TradingTab";
 import { WidgetsTab } from "./WidgetsTab";
@@ -124,6 +125,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
 
   const patch = diffSettings(saved, draft, apiKey, openaiKey, { brave: braveKey, tavily: tavilyKey });
   const dirty = Object.keys(patch).length > 0;
+  const officeBad = draft.office ? officeProblems(draft.office).length > 0 : false; // a bad id, an empty folder or a bad pattern: it would only be refused
   const set = <G extends "ollama" | "claudeCode" | "voice" | "look">(group: G, field: keyof SettingsView[G], value: unknown) =>
     setDraft({ ...draft, [group]: { ...draft[group], [field]: value } });
   const look = draft.look;
@@ -527,11 +529,13 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       {tab === "trading" && <TradingTab level={draft.trading?.level ?? "read"} />}
       {tab === "widgets" && draft.music && draft.hud && <WidgetsTab music={draft.music} hud={draft.hud} onMusic={(p) => setDraft({ ...draft, music: { ...draft.music!, ...p } })} onHud={(p) => setDraft({ ...draft, hud: { ...draft.hud!, ...p } })} />}
       {tab === "system" && <StartupTab auto={draft.updates?.auto ?? true} onAuto={(on) => setDraft({ ...draft, updates: { auto: on } })} />}
+      {tab === "office" && draft.office && <OfficeTab office={draft.office} onChange={(p) => setDraft({ ...draft, office: { ...draft.office!, ...p } })} />}
       {tab === "usage" && <UsageTab />}
           {tab === "security" && <SecurityTab />}
     </>
   );
   const saveClick = () => {
+    if (officeBad) return;
     setNote(null);
     setError(null);
     if (needsPin(patch)) setAsking(true);
@@ -611,7 +615,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           type="button"
           style={touch}
           className="primary"
-          disabled={!dirty || busy}
+          disabled={!dirty || busy || officeBad}
           onClick={saveClick}
         >
           {dirty && !needsPin(patch) ? "Save" : "Save…"}
