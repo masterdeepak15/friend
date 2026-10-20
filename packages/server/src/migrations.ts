@@ -194,4 +194,41 @@ create table usage (
 create index usage_day on usage (day);
 `,
   },
+  {
+    id: 12,
+    sql: `
+create table office_workers (
+  id text primary key,
+  name text not null,
+  role_id text not null,
+  project_id text not null,
+  status text not null default 'idle',
+  session_id text,
+  ticket_id integer,
+  detail text not null default '',
+  tokens integer not null default 0,
+  created_at integer not null,
+  started_at integer
+);
+create table office_tickets (
+  id integer primary key autoincrement,
+  project_id text not null,
+  title text not null,
+  description text not null default '',
+  status text not null default 'todo',
+  worker_id text,
+  created_at integer not null,
+  updated_at integer not null
+);
+create table office_events (
+  id integer primary key autoincrement,
+  worker_id text not null,
+  at integer not null,
+  kind text not null,
+  text text not null
+);
+create index office_events_worker on office_events (worker_id, id);
+create index office_tickets_project on office_tickets (project_id);
+`,
+  },
 ];
