@@ -42,10 +42,21 @@ describe("the screen layout section of the widgets settings", () => {
     expect(onHud).toHaveBeenCalledWith({ widgets: { radar: false, feed: false } });
   });
 
+  it("has a switch for sample data that previews the look, off unless set", () => {
+    const onHud = vi.fn();
+    render(<WidgetsTab music={music} hud={orbital} onMusic={() => {}} onHud={onHud} />);
+    const box = screen.getByTestId("hud-preview") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(screen.getByText(/sample data/i)).toBeTruthy();
+    fireEvent.click(box);
+    expect(onHud).toHaveBeenCalledWith({ preview: true });
+  });
+
   it("leaves the widget boxes disabled while the layout is classic", () => {
     render(<WidgetsTab music={music} hud={classic} onMusic={() => {}} onHud={() => {}} />);
     expect((screen.getByTestId("hud-widget-radar") as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByLabelText(/density/i) as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByTestId("hud-preview") as HTMLInputElement).disabled).toBe(true);
   });
 });
 
@@ -59,6 +70,13 @@ describe("saving the new screen settings", () => {
     after.hud!.density = "full";
     after.hud!.widgets = { radar: false };
     expect(diffSettings(before, after, "")).toEqual({ hud: { layout: "classic", density: "full", widgets: { radar: false } } });
+  });
+
+  it("sends the sample-data switch when it changed", () => {
+    const before = view(orbital);
+    const after = structuredClone(before);
+    after.hud!.preview = true;
+    expect(diffSettings(before, after, "")).toEqual({ hud: { preview: true } });
   });
 
   it("sends nothing when they did not change", () => {

@@ -12,12 +12,12 @@ afterEach(cleanup);
 const levels = (c: HTMLElement) => [...c.querySelectorAll("rect.ob-eq")].map((r) => Number((r as unknown as HTMLElement).style.getPropertyValue("--lv")));
 
 describe("VoiceWidget", () => {
-  it("draws 16 bars that stay small but alive when there is no sound", () => {
+  it("draws 20 bars that stay small but alive when there is no sound", () => {
     const { container } = render(<VoiceWidget level={0} mode="idle" />);
     const l = levels(container);
-    expect(l).toHaveLength(16);
-    expect(Math.max(...l)).toBeLessThanOrEqual(0.25);
-    expect(Math.min(...l)).toBeGreaterThanOrEqual(0.06);
+    expect(l).toHaveLength(20);
+    expect(Math.max(...l)).toBeLessThanOrEqual(0.5);
+    expect(Math.min(...l)).toBeGreaterThanOrEqual(0.15);
   });
 
   it("rises with the sound and names what the voice is doing", () => {

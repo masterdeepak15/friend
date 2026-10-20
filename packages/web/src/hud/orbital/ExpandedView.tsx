@@ -2,11 +2,17 @@ import type { HudWidgetId } from "@friend/protocol";
 import { useEffect, useRef, useState } from "react";
 import { httpUsageApi, short, type UsageApi, type UsageSummary } from "../../settings/UsageTab";
 import type { StageViewState } from "../../store";
-import type { Rect } from "./geometry";
+/** A rectangle on the screen, in pixels. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 import { Frame } from "./kit";
 import { WIDGETS } from "./registry";
 import { BudgetWidget } from "./widgets/BudgetWidget";
-import { FeedWidget } from "./widgets/FeedWidget";
+import { FeedLog } from "./widgets/FeedWidget";
 import { NetworkWidget } from "./widgets/NetworkWidget";
 import { RadarWidget } from "./widgets/RadarWidget";
 import { SystemWidget } from "./widgets/SystemWidget";
@@ -77,7 +83,7 @@ export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, onClose
       case "voice":
         return <VoiceWidget level={state.voice.level} mode={state.voice.mode} />;
       case "feed":
-        return <FeedWidget lines={state.chat} activity={state.activity} busy={state.busy} limit={200} />;
+        return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} />;
       case "tickets":
         return <TicketsWidget />;
       case "budget":

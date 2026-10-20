@@ -133,6 +133,7 @@ export const SettingsPatch = z
         layout: z.enum(HUD_LAYOUTS),
         density: z.enum(HUD_DENSITIES),
         widgets: z.object(Object.fromEntries(HUD_WIDGET_IDS.map((id) => [id, z.boolean()]))).partial().strict(),
+        preview: z.boolean(),
       })
       .partial()
       .strict(),

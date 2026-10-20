@@ -164,7 +164,7 @@
 .ob-sub { color: color-mix(in srgb, var(--ob-cyan) 60%, transparent); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
 .ob-voice, .ob-tickets, .ob-budget { display: flex; flex-direction: column; gap: 2px; }
 .ob-static { cursor: default; }
-.ob-approval { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #fed7aa; max-height: 100%; overflow: auto; }
+.ob-approval { display: grid; grid-template-columns: 64px 1fr; gap: 8px 12px; align-items: start; font-size: 12px; color: #fed7aa; max-height: 100%; overflow: auto; }
 .ob-summary { margin: 0; white-space: pre-wrap; color: #fff; font: inherit; font-size: 13px; }
 .ob-warn { color: var(--ob-orange); animation: ob-pulse 0.9s ease-in-out infinite; }
 .ob-actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -217,3 +217,80 @@
 .ob-node-caption { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font-size: 11px; letter-spacing: 0.12em; color: #bdeef7; white-space: nowrap; text-shadow: 0 0 6px #000; }
 [data-placeholder] { opacity: 0.35; }
 [data-placeholder] polygon { stroke: var(--ob-dim); }
+
+/* ---- the 1600 x 900 canvas of the approved mockup, scaled to the window ---- */
+.ob-bg { position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(#22d3ee12 1px, transparent 1px), linear-gradient(90deg, #22d3ee12 1px, transparent 1px);
+  background-size: calc(40px * var(--s, 1)) calc(40px * var(--s, 1)); background-position: center; overflow: hidden; }
+.ob-bg::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #22d3ee; opacity: 0.08; animation: ob-scan 7s linear infinite; }
+@keyframes ob-scan { from { transform: translateY(-10px); } to { transform: translateY(100vh); } }
+.ob-corner { position: absolute; width: 30px; height: 30px; border: 0 solid #67e8f9; pointer-events: none; }
+.ob-tl { left: 10px; top: 10px; border-left-width: 2px; border-top-width: 2px; }
+.ob-tr { right: 10px; top: 10px; border-right-width: 2px; border-top-width: 2px; }
+.ob-bl { left: 10px; bottom: 10px; border-left-width: 2px; border-bottom-width: 2px; }
+.ob-br { right: 10px; bottom: 10px; border-right-width: 2px; border-bottom-width: 2px; }
+.ob-canvas { position: absolute; transform-origin: 0 0; pointer-events: none; }
+.ob-canvas .ob-scene { position: absolute; left: 0; top: 0; width: 1600px; height: 900px; }
+.ob-w { position: absolute; cursor: pointer; color: #bdeef7; }
+.ob-w:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.ob-w:hover { filter: brightness(1.25); }
+.ob-w.ob-static { cursor: default; }
+.ob-w > .ob-frame { height: 100%; }
+.ob-wsvg { display: block; width: 100%; height: 100%; overflow: visible; }
+.ob-wsvg text, .ob-scene text { fill: #a5f3fc; letter-spacing: 0.12em; font-family: inherit; }
+.ob-wsvg .ob-lab, .ob-scene .ob-lab { font-size: 11px; fill: #22d3ee; text-transform: uppercase; }
+.ob-wsvg .ob-dim, .ob-scene .ob-dim { font-size: 10px; fill: #5aa9bb; text-transform: uppercase; }
+.ob-wsvg .ob-big { font-size: 26px; fill: #e0fbff; letter-spacing: 0.06em; }
+.ob-wsvg .ob-sm { font-size: 12px; fill: #bdeef7; }
+.ob-wsvg .ob-grn { fill: #6ee7b7; }
+.ob-wsvg .ob-org { fill: #fb923c; }
+.ob-bracket { fill: none; stroke: #22d3ee; stroke-width: 2; }
+.ob-feed-frame { fill: rgba(3, 16, 24, 0.85); stroke: #0e7490; }
+.ob-feed-run { fill: none; stroke: #67e8f9; stroke-width: 2; stroke-dasharray: 6 94; animation: ob-runline 7s linear infinite; filter: url(#ob-glow); vector-effect: non-scaling-stroke; }
+.ob-scene .ob-title { font-size: 18px; fill: #e0fbff; letter-spacing: 0.5em; filter: url(#ob-glow); }
+.ob-scene .ob-topbar-base { fill: none; stroke: #0e7490; stroke-width: 1.5; vector-effect: none; }
+.ob-scene .ob-topbar-run { fill: none; stroke: #67e8f9; stroke-width: 2.5; vector-effect: none; stroke-dasharray: 8 92; animation: ob-runline 5s linear infinite; filter: url(#ob-glow); }
+.ob-orb-ring { fill: none; stroke: #67e8f9; stroke-width: 1.5; }
+.ob-ping { fill: none; stroke: #22d3ee; transform-box: fill-box; transform-origin: center; animation: ob-ping 3s ease-out infinite; }
+.ob-ring-outer { fill: none; stroke: #22d3ee; stroke-opacity: 0.12; stroke-width: 22; stroke-dasharray: 1 28; }
+.ob-slow { animation-duration: 90s; }
+.ob-orb-label b { font-size: 20px; }
+.ob-cmd { position: absolute; left: 520px; top: 828px; width: 560px; height: 36px; background: #22d3ee; clip-path: polygon(24px 0, 536px 0, 560px 100%, 0 100%); pointer-events: none; font-size: 12px; color: #bdeef7; }
+.ob-cmd::before { content: ""; position: absolute; inset: 1px; background: #031018; clip-path: inherit; }
+.ob-cmd > * { position: relative; }
+.ob-cmd { display: flex; justify-content: space-between; align-items: center; padding: 0 40px 0 32px; }
+.ob-cmd > small { font-size: 10px; letter-spacing: 0.14em; color: #5aa9bb; }
+.ob-cursor { display: inline-block; width: 8px; height: 14px; background: #22d3ee; margin-left: 6px; vertical-align: middle; animation: ob-blink 1s steps(2) infinite; }
+.ob-approval-frame { --cut: 40px; height: 100%; }
+.ob-approval-frame .ob-frame-body { padding: 18px 28px; height: 100%; }
+.ob-btn.ob-yes { clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%); padding-right: 22px; }
+.ob-btn.ob-no { clip-path: polygon(14px 0, 100% 0, 100% 100%, 14px 100%, 0 50%); padding-left: 22px; }
+
+
+/* ---- under the stage's orb ---- */
+.ob-base { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 50%, #06222e 0%, #010609 70%); }
+.ob-disc-wrap { transform-box: fill-box; transform-origin: center; transition: transform 0.12s ease-out; }
+
+/* ---- sample data ---- */
+.ob-scene .ob-sample-tag { font-size: 10px; fill: #fb923c; letter-spacing: 0.2em; }
+.ob-scene .ob-node-detail { font-size: 12px; fill: #bdeef7; letter-spacing: 0.1em; }
+.ob-scene .ob-node-detail.ob-grn { fill: #6ee7b7; }
+.ob-scene .ob-node-detail.ob-org { fill: #fb923c; }
+.ob-blip-warn { fill: #fb923c; }
+
+/* ---- the approval, laid out like the mockup ---- */
+.ob-pulse { animation: ob-pulse 1.8s ease-in-out infinite; }
+.ob-tri { width: 56px; height: 52px; }
+.ob-tri path { fill: none; stroke: var(--ob-orange); stroke-width: 3; animation: ob-pulse 0.9s ease-in-out infinite; }
+.ob-tri text { fill: var(--ob-orange); font-size: 24px; }
+.ob-appr-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ob-appr-title { font-size: 11px; letter-spacing: 0.16em; color: var(--ob-orange); }
+.ob-appr-sub { font-size: 12px; color: #fed7aa; }
+.ob-approval .ob-summary { font-size: 16px; color: #fff; }
+.ob-approval .pinpad, .ob-approval .ob-actions { grid-column: 1 / -1; }
+.ob-actions { gap: 10px; }
+.ob-btn { padding: 10px 20px; font-size: 12px; }
+.ob-approval-frame .ob-actions { flex-wrap: nowrap; gap: 8px; }
+.ob-approval-frame .ob-btn { padding: 9px 14px; font-size: 11px; letter-spacing: 0.06em; white-space: nowrap; }
+.ob-frame[data-tone="orange"].ob-approval-frame { animation: none; }

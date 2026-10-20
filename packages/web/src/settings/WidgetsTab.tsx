@@ -185,6 +185,10 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
         ))}
         <small className="auth-note">A box you switch off stays off at every density. A waiting approval is always shown.</small>
       </fieldset>
+      <label className="settings-check">
+        <input type="checkbox" data-testid="hud-preview" disabled={hud.layout !== "orbital"} checked={hud.preview === true} onChange={(e) => onHud({ preview: e.target.checked })} />
+        <span>Show sample data (workers, tickets, budget and feed filled in, labelled SAMPLE, to preview the look)</span>
+      </label>
 
       <h3>Screen widgets</h3>
       <label className="settings-field">

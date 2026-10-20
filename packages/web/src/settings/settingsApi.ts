@@ -70,6 +70,8 @@ export interface HudSettings {
   density: "calm" | "standard" | "full";
   /** Instruments switched on or off by hand (a missing one follows the density). */
   widgets: Partial<Record<(typeof HUD_WIDGET_IDS)[number], boolean>>;
+  /** Fill the orbital screen with sample content (clearly labelled) to preview the look before workers exist. */
+  preview?: boolean;
 }
 
 export type ProviderName = "claude" | "claude-code" | "ollama" | "openai";
@@ -222,6 +224,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     if (after.hud.animations !== before.hud.animations) changed.animations = after.hud.animations;
     if (after.hud.layout !== before.hud.layout) changed.layout = after.hud.layout;
     if (after.hud.density !== before.hud.density) changed.density = after.hud.density;
+    if ((after.hud.preview === true) !== (before.hud.preview === true)) changed.preview = after.hud.preview === true;
     const widgets: Record<string, boolean> = {};
     for (const id of HUD_WIDGET_IDS) if (after.hud.widgets[id] !== before.hud.widgets[id] && typeof after.hud.widgets[id] === "boolean") widgets[id] = after.hud.widgets[id] as boolean;
     if (Object.keys(widgets).length) changed.widgets = widgets;

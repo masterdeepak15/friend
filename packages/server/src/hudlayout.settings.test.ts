@@ -13,6 +13,16 @@ describe("the orbital screen settings", () => {
     expect(h).toMatchObject({ layout: "classic", density: "standard", widgets: {} });
   });
 
+  it("keep the sample-data switch off unless it is exactly true, and save it", () => {
+    expect(sanitizeHud({}).preview).toBe(false);
+    expect(sanitizeHud({ preview: "yes" }).preview).toBe(false);
+    expect(sanitizeHud({ preview: true }).preview).toBe(true);
+    const config = fresh();
+    applySettings(config, { hud: { preview: true } });
+    expect(config.hud.preview).toBe(true);
+    expect(() => applySettings(config, { hud: { preview: "yes" } as never })).toThrow();
+  });
+
   it("keep only known values when read back from the saved file", () => {
     const h = sanitizeHud({ layout: "orbital", density: "full", widgets: { radar: false, bogus: true, feed: "yes", usage: true } });
     expect(h).toMatchObject({ layout: "orbital", density: "full", widgets: { radar: false, usage: true } });

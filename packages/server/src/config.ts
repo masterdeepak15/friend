@@ -127,6 +127,8 @@ export interface HudConfig {
   density: HudDensity;
   /** Instruments switched on or off by hand; a missing one follows the density. */
   widgets: Partial<Record<HudWidgetId, boolean>>;
+  /** Show sample content in the orbital screen (to preview the look before workers exist); it is labelled as sample. */
+  preview: boolean;
 }
 
 export interface AlexaConfig {
@@ -269,6 +271,7 @@ export function sanitizeHud(raw: unknown): HudConfig {
     layout: (HUD_LAYOUTS as readonly unknown[]).includes(r.layout) ? (r.layout as HudLayout) : "classic",
     density: (HUD_DENSITIES as readonly unknown[]).includes(r.density) ? (r.density as HudDensity) : "standard",
     widgets: sanitizeWidgets(r.widgets),
+    preview: r.preview === true,
   };
 }
 

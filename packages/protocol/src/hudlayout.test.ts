@@ -15,6 +15,12 @@ describe("the orbital screen settings in the protocol", () => {
     expect(v).toMatchObject({ layout: "orbital", density: "calm", widgets: { radar: false } });
   });
 
+  it("carries the sample-data switch, which is optional", () => {
+    expect(HudView.parse({ ...base, layout: "orbital", density: "full", widgets: {}, preview: true }).preview).toBe(true);
+    expect(HudView.parse({ ...base, layout: "orbital", density: "full", widgets: {} }).preview).toBeUndefined();
+    expect(HudView.safeParse({ ...base, layout: "orbital", density: "full", widgets: {}, preview: "yes" }).success).toBe(false);
+  });
+
   it("refuses a layout or a density it does not know", () => {
     expect(HudView.safeParse({ ...base, layout: "cube", density: "calm", widgets: {} }).success).toBe(false);
     expect(HudView.safeParse({ ...base, layout: "orbital", density: "packed", widgets: {} }).success).toBe(false);

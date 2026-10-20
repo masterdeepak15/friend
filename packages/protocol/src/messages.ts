@@ -93,6 +93,8 @@ export const HudView = z.object({
   layout: z.enum(HUD_LAYOUTS),
   density: z.enum(HUD_DENSITIES),
   widgets: z.object(Object.fromEntries(HUD_WIDGET_IDS.map((id) => [id, z.boolean().optional()])) as Record<HudWidgetId, z.ZodOptional<z.ZodBoolean>>),
+  /** The orbital screen shows the approved mockup's sample content (workers, tickets, budget, feed) instead of empty slots. */
+  preview: z.boolean().optional(),
 });
 export type HudView = z.infer<typeof HudView>;
 

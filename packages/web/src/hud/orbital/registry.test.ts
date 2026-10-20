@@ -9,12 +9,21 @@ describe("the widget registry", () => {
     expect(WIDGETS.map((w) => w.id)).toEqual([...HUD_WIDGET_IDS]);
   });
 
-  it("puts each widget where the approved mockup has it", () => {
-    const zone = Object.fromEntries(WIDGETS.map((w) => [w.id, w.zone]));
-    expect(zone).toMatchObject({ system: "left-top", voice: "left-mid", network: "left-mid", feed: "left-bottom", radar: "right-top", tickets: "right-mid", budget: "right-mid", approval: "right-bottom", usage: "centre" });
+  it("puts each widget where the approved mockup has it, on the canvas", () => {
+    const at = Object.fromEntries(WIDGETS.map((w) => [w.id, [w.anchor, w.box.x, w.box.y, w.box.w, w.box.h]]));
+    expect(at).toMatchObject({
+      system: ["left", 40, 70, 300, 220],
+      voice: ["left", 40, 310, 300, 150],
+      network: ["left", 40, 480, 300, 110],
+      feed: ["left", 40, 650, 430, 210],
+      radar: ["right", 1310, 60, 250, 270],
+      tickets: ["right", 1300, 320, 270, 160],
+      budget: ["right", 1300, 480, 270, 110],
+      approval: ["right", 1180, 650, 380, 210],
+      usage: ["centre", 700, 215, 200, 30],
+    });
   });
 });
-
 describe("which widgets show at each density", () => {
   it("calm shows only the usage ring", () => {
     expect(ids("calm", {}, "orbit", false)).toEqual(["usage"]);
