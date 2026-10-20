@@ -171,3 +171,12 @@
 .ob-btn:hover:not(:disabled), .ob-btn:focus-visible { background: color-mix(in srgb, var(--ob-orange) 25%, transparent); }
 .ob-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .ob-yes { background: color-mix(in srgb, var(--ob-orange) 20%, transparent); }
+
+/* ---- an opened instrument ---- */
+.ob-backdrop { position: absolute; inset: 0; background: rgba(1, 6, 9, 0.55); }
+.ob-expanded { cursor: default; overflow: hidden; z-index: 5; }
+.ob-expanded .ob-frame-body { height: calc(100% - 22px); display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.ob-expanded-body { flex: 1; min-height: 0; overflow: auto; }
+.ob-explain { margin: 0; color: color-mix(in srgb, var(--ob-cyan) 75%, transparent); font-size: 12px; line-height: 1.4; }
+.ob-close { position: absolute; top: 4px; right: 12px; z-index: 3; background: none; border: 0; color: #e0fbff; font: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
+.ob-close:hover, .ob-close:focus-visible { color: #fff; outline: 1px solid var(--ob-cyan); }

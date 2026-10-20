@@ -1,7 +1,9 @@
 import type { ClientMsg, HudView, HudWidgetId } from "@friend/protocol";
-import { useEffect, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { describeStatus } from "../../overlay/StatusBadge";
+import type { UsageApi } from "../../settings/UsageTab";
 import type { StageViewState } from "../../store";
+import { ExpandedView } from "./ExpandedView";
 import { ZONE_GAP, centreClear, layoutMode, orbitNodes, orbitRadius, zoneRect, type Rect, type ZoneId } from "./geometry";
 import { Frame, HexNode, HudDefs, LinkLine, SegmentedRing, type Tone } from "./kit";
 import { visibleWidgets, type WidgetDef } from "./registry";
@@ -26,6 +28,8 @@ export interface OrbitalHudProps {
   usage?: number | null;
   /** The window size; read from the window when left out. */
   viewport?: { w: number; h: number };
+  /** Where the usage detail comes from when the usage instrument is opened (the real one by default). */
+  usageApi?: UsageApi;
   /** Sends the owner's answer to an approval. */
   send?: (m: ClientMsg) => void;
   onLaunch: (item: Launcher) => void;
@@ -118,14 +122,45 @@ function UsageLabel({ usage, style, onClick }: { usage: number | null | undefine
  * layer adds the rings, the orbit of quick-launch nodes and the edge instruments. It only takes the pointer on the nodes and
  * instruments, so a press anywhere else still reaches the stage.
  */
-export function OrbitalHud({ hud, state, usage = null, viewport, send = () => {}, onLaunch, onExpand }: OrbitalHudProps) {
+export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send = () => {}, onLaunch, onExpand }: OrbitalHudProps) {
   const { w, h } = useWindowSize(viewport);
   const hidden = useHidden();
   const mode = layoutMode(w, h);
   const widgets = visibleWidgets(hud.density, hud.widgets, mode, state.approval !== null);
   const pending = state.approval !== null;
   const toneOf = (def: WidgetDef): Tone => (def.id === "approval" ? (pending ? "orange" : "cyan") : def.tone);
-  const open = (id: HudWidgetId) => () => onExpand({ kind: "widget", id });
+  // One instrument can be open, large, in the middle; Esc, a press outside or the close mark shuts it and the focus goes back to where it was.
+  const [expanded, setExpanded] = useState<HudWidgetId | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const close = useCallback(() => {
+    setExpanded(null);
+    opener.current?.focus();
+    opener.current = null;
+  }, []);
+  const open = (id: HudWidgetId) => () => {
+    if (expanded === null) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setExpanded(id);
+    onExpand({ kind: "widget", id });
+  };
+  useEffect(() => {
+    if (expanded === null) return;
+    const on = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation(); // the Esc that closes this must not also open the owner menu
+      close();
+    };
+    window.addEventListener("keydown", on, true);
+    return () => window.removeEventListener("keydown", on, true);
+  }, [expanded, close]);
+  const openW = mode === "compact" ? w - 16 : Math.max(280, Math.min(760, w * 0.62));
+  const expandedRect: Rect = { x: (w - openW) / 2, y: h * 0.14, width: openW, height: Math.max(220, Math.min(560, h * 0.7)) };
+  const expandedEl = expanded && (
+    <>
+      <div className="ob-backdrop ob-hit" onPointerDown={(e) => { e.stopPropagation(); close(); }} />
+      <ExpandedView id={expanded} state={state} rect={expandedRect} {...(usageApi ? { usageApi } : {})} onClose={close} />
+    </>
+  );
   const content = (id: HudWidgetId) => {
     switch (id) {
       case "system":
@@ -175,6 +210,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, send = () => {}
           {widgets.filter((d) => d.zone !== "centre").map((d) => frame(d, { minWidth: 150, height: 64, flex: "none" }))}
           {hasUsage && <UsageLabel usage={usage} onClick={open("usage")} />}
         </div>
+        {expandedEl}
       </div>
     );
   }
@@ -212,6 +248,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, send = () => {}
       <TopBar hud={hud} state={state} rect={zoneRect("top", w, h)} />
       {widgets.filter((d) => d.zone !== "centre").map((d) => frame(d, px(placed.get(d.id)!)))}
       <p className="ob-hint" style={{ left: ZONE_GAP, top: zoneRect("bottom", w, h).y, width: w - 2 * ZONE_GAP, height: zoneRect("bottom", w, h).height }}>▸ press and hold to talk · tap to type</p>
+      {expandedEl}
     </div>
   );
 }

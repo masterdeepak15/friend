@@ -3,8 +3,8 @@ import type { ChatLine } from "../../../store";
 const SHOWN = 8;
 
 /** The last few lines of the conversation and what Friend is doing now, like a terminal. */
-export function FeedWidget({ lines, activity, busy }: { lines: ChatLine[]; activity: string | null; busy: boolean }) {
-  const last = lines.slice(-SHOWN);
+export function FeedWidget({ lines, activity, busy, limit = SHOWN }: { lines: ChatLine[]; activity: string | null; busy: boolean; limit?: number }) {
+  const last = lines.slice(-limit);
   return (
     <div className="ob-feed" aria-live="polite">
       {last.length === 0 && !busy && <p className="ob-li ob-sub">Nothing yet</p>}
