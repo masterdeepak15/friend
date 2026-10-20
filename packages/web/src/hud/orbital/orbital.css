@@ -1,0 +1,133 @@
+/* The orbital HUD: colours, frame shapes and every loop of motion. Everything lives under .orbital so the classic screen is untouched. */
+
+.orbital {
+  --hud-cyan: var(--accent, #22d3ee);
+  --hud-green: #34d399;
+  --hud-orange: #fb923c;
+  --hud-dark: #031018;
+  --hud-line: color-mix(in srgb, var(--hud-cyan) 55%, transparent);
+  --hud-dim: color-mix(in srgb, var(--hud-cyan) 28%, transparent);
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none; /* only the instruments and nodes take the pointer, so a long press on the stage still talks */
+  font-family: Consolas, "Courier New", monospace;
+  color: #a5f3fc;
+}
+.orbital [data-tone="cyan"] { --hud-tone: var(--hud-cyan); }
+.orbital [data-tone="green"] { --hud-tone: var(--hud-green); }
+.orbital [data-tone="orange"] { --hud-tone: var(--hud-orange); }
+.orbital .hud-hit { pointer-events: auto; }
+
+/* ---- frames: a coloured outer shape, a dark inner one one pixel in, and an optional running light between them ---- */
+.hud-frame {
+  --cut: 10px;
+  position: relative;
+  background: color-mix(in srgb, var(--hud-tone, var(--hud-cyan)) 60%, transparent);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  min-height: 0;
+}
+.hud-frame::before { /* the inner, dark shape */
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: linear-gradient(color-mix(in srgb, var(--hud-dark) 94%, transparent), color-mix(in srgb, var(--hud-dark) 90%, transparent));
+  clip-path: inherit;
+}
+.hud-frame > * { position: relative; }
+.hud-frame[data-running]::after { /* a light that runs round the border */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 0 40%, var(--hud-tone, var(--hud-cyan)) 50%, transparent 60% 100%) 0 0 / 300% 100%;
+  clip-path: inherit;
+  mix-blend-mode: screen;
+  opacity: 0.9;
+  animation: hud-run 5s linear infinite;
+}
+.hud-frame[data-running]::before { z-index: 1; }
+.hud-frame-body { padding: 6px 9px; position: relative; z-index: 2; }
+.hud-frame-title {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 9px 0;
+  color: var(--hud-tone, var(--hud-cyan));
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.hud-v-octagon { --cut: 22px; clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)); }
+.hud-v-slant { --cut: 14px; clip-path: polygon(var(--cut) 0, 100% 0, calc(100% - var(--cut)) 100%, 0 100%); }
+.hud-v-bracket { background: none; clip-path: none; }
+.hud-v-bracket::before { background: none; clip-path: none; inset: 0;
+  border: 0 solid var(--hud-tone, var(--hud-cyan));
+  background:
+    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) top left / 18px 2px no-repeat,
+    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) top left / 2px 18px no-repeat,
+    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) top right / 18px 2px no-repeat,
+    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) top right / 2px 18px no-repeat,
+    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) bottom left / 18px 2px no-repeat,
+    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) bottom left / 2px 18px no-repeat,
+    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) bottom right / 18px 2px no-repeat,
+    linear-gradient(var(--hud-tone, var(--hud-cyan)), var(--hud-tone, var(--hud-cyan))) bottom right / 2px 18px no-repeat;
+}
+.hud-frame[data-tone="orange"] { animation: hud-pulse 1.8s ease-in-out infinite; }
+
+/* ---- instruments ---- */
+.hud-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.hud-track { fill: none; stroke: var(--hud-dim); }
+.hud-fill { fill: none; stroke: var(--hud-tone, var(--hud-cyan)); filter: url(#hud-glow); transition: stroke-dasharray 0.6s ease; }
+.hud-eq { fill: var(--hud-tone, var(--hud-cyan)); transform-box: fill-box; transform-origin: bottom; animation: hud-eq 0.9s ease-in-out infinite alternate; }
+.hud-ecg-base { fill: none; stroke: var(--hud-dim); stroke-width: 1.5; }
+.hud-ecg { fill: none; stroke: #67e8f9; stroke-width: 2.5; stroke-dasharray: 140 400; animation: hud-ecg 2.4s linear infinite; filter: url(#hud-glow); }
+.hud-link { stroke: var(--hud-tone, var(--hud-cyan)); stroke-width: 1.5; fill: none; filter: url(#hud-glow); }
+.hud-flow { stroke-dasharray: 5 11; animation: hud-flow 1s linear infinite; }
+.hud-seg { stroke: var(--hud-dim); stroke-width: 6; }
+.hud-seg[data-on="true"] { stroke: var(--hud-cyan); filter: url(#hud-glow); }
+.hud-sweep { transform-box: view-box; transform-origin: 0 0; animation: hud-spin 4s linear infinite; }
+.hud-blip { fill: var(--hud-green); animation: hud-pulse 1.8s ease-in-out infinite; filter: url(#hud-glow); }
+[data-dim] .hud-blip { fill: var(--hud-dim); animation: none; filter: none; }
+.hud-spin { transform-box: fill-box; transform-origin: center; animation: hud-spin 40s linear infinite; }
+.hud-breathe { transform-box: fill-box; transform-origin: center; animation: hud-breathe 4s ease-in-out infinite; }
+.hud-ping { transform-box: fill-box; transform-origin: center; animation: hud-ping 3s ease-out infinite; }
+.hud-blink { animation: hud-blink 1s steps(2) infinite; }
+
+/* ---- nodes of the orbit ---- */
+.hud-node { position: absolute; transform: translate(-50%, -50%); background: none; border: 0; padding: 0; cursor: pointer; color: #e0fbff; pointer-events: auto; }
+.hud-node svg { width: 68px; height: 60px; display: block; filter: url(#hud-glow); }
+.hud-node polygon { fill: var(--hud-dark); stroke: var(--hud-tone, var(--hud-cyan)); stroke-width: 1.6; }
+.hud-node:hover polygon, .hud-node:focus-visible polygon { fill: color-mix(in srgb, var(--hud-tone, var(--hud-cyan)) 22%, var(--hud-dark)); }
+.hud-node:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+.hud-node[data-status="waiting"] svg { animation: hud-pulse 0.9s ease-in-out infinite; }
+.hud-node[data-status="idle"] svg, .hud-node[data-status="add"] svg { opacity: 0.6; }
+.hud-node-label { font-size: 11px; letter-spacing: 0.1em; fill: #e0fbff; text-anchor: middle; dominant-baseline: central; }
+
+/* ---- the loops ---- */
+@keyframes hud-spin { to { transform: rotate(360deg); } }
+@keyframes hud-flow { to { stroke-dashoffset: -32; } }
+@keyframes hud-run { from { background-position: 100% 0; } to { background-position: -200% 0; } }
+@keyframes hud-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+@keyframes hud-eq { from { transform: scaleY(calc(var(--lv, 1) * 0.25)); } to { transform: scaleY(var(--lv, 1)); } }
+@keyframes hud-ecg { to { stroke-dashoffset: -540; } }
+@keyframes hud-ping { from { transform: scale(0.6); opacity: 0.8; } to { transform: scale(2.4); opacity: 0; } }
+@keyframes hud-breathe { 0%, 100% { transform: scale(0.96); } 50% { transform: scale(1.06); } }
+@keyframes hud-blink { 50% { opacity: 0; } }
+
+/* ---- motion rules: off stops everything, reduced keeps only the gentle loops, the system's setting always wins ---- */
+.orbital[data-hud-anim="off"],
+.orbital[data-hud-anim="off"] *,
+.orbital[data-hud-anim="off"] *::before,
+.orbital[data-hud-anim="off"] *::after { animation: none !important; transition: none !important; }
+.orbital[data-hud-anim="reduced"] *:not(.hud-pulse):not(.hud-breathe),
+.orbital[data-hud-anim="reduced"] *::before,
+.orbital[data-hud-anim="reduced"] *::after { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .orbital, .orbital *, .orbital *::before, .orbital *::after { animation: none !important; transition: none !important; }
+}
+/* a hidden tab keeps nothing running */
+.orbital[data-paused],
+.orbital[data-paused] *,
+.orbital[data-paused] *::before,
+.orbital[data-paused] *::after { animation-play-state: paused !important; }
