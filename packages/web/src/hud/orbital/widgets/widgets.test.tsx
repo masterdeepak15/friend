@@ -82,6 +82,11 @@ describe("ApprovalWidget", () => {
     expect(screen.queryByRole("button", { name: /always allow/i })).toBeNull();
   });
 
+  it("never offers 'always allow' for a worker's question", () => {
+    render(<ApprovalWidget approval={approval({ tool: "office.action" })} send={() => {}} />);
+    expect(screen.queryByRole("button", { name: /always allow/i })).toBeNull();
+  });
+
   it("will not approve before the PIN is long enough, and sends the PIN with it", () => {
     const send = vi.fn();
     render(<ApprovalWidget approval={approval({ tier: "T3", needsPin: true })} send={send} />);

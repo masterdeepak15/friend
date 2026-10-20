@@ -88,6 +88,9 @@ function describeAction(tool: string, input: Record<string, unknown>): string {
  * process asks before risky actions (the gate, then the owner), follows what it does, and keeps within the owner's limits. Everything
  * it does is read from settings at the moment it does it.
  */
+/** What Friend's own tools use of the Office. */
+export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "stop" | "status">;
+
 export class Office {
   private runs = new Map<string, Run>();
   private queue: QueueEntry[] = [];

@@ -81,4 +81,11 @@ describe("the six office tools", () => {
     expect(describeCall("office.stop", { worker: "Ada" })).toMatch(/Ada/);
     expect(describeCall("office.hire", { role: "scribe", project: "site" })).toMatch(/scribe/);
   });
+
+  it("describe a worker's own question in full, so the owner sees the whole command", () => {
+    const cmd = "npm test -- " + "x".repeat(400);
+    const text = describeCall("office.action", { worker: "Ada", workerId: "w1", summary: `Run: ${cmd}` });
+    expect(text).toMatch(/^Worker Ada wants to Run: npm test/);
+    expect(text).toContain(cmd);
+  });
 });

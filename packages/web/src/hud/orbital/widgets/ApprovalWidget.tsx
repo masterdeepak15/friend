@@ -28,7 +28,7 @@ function Waiting({ approval, send }: { approval: PendingApproval; send: (m: Clie
         <button type="button" className="ob-btn ob-yes" disabled={!canApprove} onClick={() => respond("approve")}>
           Approve
         </button>
-        {approval.tier === "T2" && !approval.needsPin && approval.tool !== "camera.snap" && (
+        {approval.tier === "T2" && !approval.needsPin && approval.tool !== "camera.snap" && !approval.tool.startsWith("office.") && (
           <button type="button" className="ob-btn" onClick={() => respond("approve_always")}>
             Always allow
           </button>

@@ -32,6 +32,9 @@ import { conversationText, summarize } from "./compact";
 import { loadHistory, repairDangling, saveMessage } from "./history";
 import { devanagariLanguage, languageNote, voiceGender } from "../voice/lang";
 import { promptParts } from "./prompt";
+import { officeBrief } from "../office/brief";
+import { officeTool } from "../office/tools";
+import type { OfficeApi } from "../office/office";
 
 export const MAX_STEPS = 20;
 /** Sent once, only when the model announced an action without calling a tool. Never stored in the conversation history. */
@@ -73,6 +76,8 @@ export interface AgentDeps {
   video?: Pick<VideoHub, "play" | "control" | "check" | "nowPlaying">;
   /** One line about which integrations (Telegram, WhatsApp/SMS) are installed and how far they are, for the model's context. */
   integrations?: { summary(): string };
+  /** The Office of hired workers. Without it, or when switched off, the office tools report they are unavailable. */
+  office?: OfficeApi;
   /** The owner's saved notes. Without it the memory tools report they are unavailable. */
   memory?: Memory;
   /** The owner's to-dos and reminders. Without it the task tools report they are unavailable. */
@@ -324,7 +329,7 @@ export class Agent {
           notes,
           localIso(new Date(d.tasks?.now() ?? Date.now())),
           isolated ? undefined : d.plugins?.skills(),
-          isolated ? undefined : [d.mcp?.summary(), d.integrations?.summary()].filter(Boolean).join("\n") || undefined,
+          isolated ? undefined : [d.mcp?.summary(), d.integrations?.summary(), officeBrief(d.config.office)].filter(Boolean).join("\n") || undefined,
           member ? ctx.person!.name : undefined,
           languageNote(text, ctx.spoken, voiceGender(devanagariLanguage(text) === "mr" || ctx.spoken?.toLowerCase().startsWith("mr") ? "mr" : "hi", { main: d.config.voice.ttsVoice, hindi: d.config.voice.hindiVoice || undefined, marathi: d.config.voice.marathiVoice || undefined })),
         );
@@ -591,6 +596,7 @@ export class Agent {
     if (call.name === "file.present" && !d.media) return fail("Showing files is not available.");
     if (call.name === "message.send_file" && d.channels && !d.media) return fail("Sending files is not available.");
     if (call.name.startsWith("message.") && !d.channels) return fail("Messaging is not available.");
+    if (call.name.startsWith("office.") && (!d.office || !d.config.office.enabled)) return fail("The Office is not available.");
     if (call.name.startsWith("music.") && !d.music) return fail("Music is not available.");
     if (call.name.startsWith("video.") && !d.video) return fail("Web video is not available.");
     if ((call.name.startsWith("portfolio.") || call.name.startsWith("reports.")) && !d.brokers) return fail("The portfolio is not available.");
@@ -675,6 +681,11 @@ export class Agent {
       const r = await d.web.run(call.name, args, this.abort?.signal);
       if (r.ok && call.name === "web.search") for (const u of urlsIn(r.text)) this.seenUrls.add(u);
       return r.ok ? { text: r.text, isError: false } : fail(r.text);
+    }
+
+    if (call.name.startsWith("office.")) {
+      d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: true });
+      return officeTool(d.office!, call.name, args);
     }
 
     if (call.name === "weather.get") {

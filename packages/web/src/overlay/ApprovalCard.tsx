@@ -36,7 +36,7 @@ export function ApprovalCard({ approval, send }: { approval: PendingApproval; se
         <button type="button" style={touch} className="primary" disabled={!canApprove} onClick={() => respond("approve")}>
           Approve
         </button>
-        {approval.tier === "T2" && !approval.needsPin && approval.tool !== "camera.snap" && (
+        {approval.tier === "T2" && !approval.needsPin && approval.tool !== "camera.snap" && !approval.tool.startsWith("office.") && (
           <button type="button" style={touch} onClick={() => respond("approve_always")}>
             Always allow
           </button>

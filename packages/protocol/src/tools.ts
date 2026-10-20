@@ -823,6 +823,8 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return `Say to ${visible(String(a.worker ?? ""))}: ${visible(clip(String(a.text ?? ""), 160))}`;
     case "office.review":
       return `${a.accept ? "Accept" : "Send back"} ticket #${visible(String(a.ticket ?? ""))}`;
+    case "office.action": // a worker's own question: what it wants to do is shown whole
+      return `Worker ${visible(String(a.worker ?? ""))} wants to ${visible(String(a.summary ?? ""))}`;
     case "office.stop":
       return a.worker ? `Stop the worker ${visible(String(a.worker))}` : "Stop all workers";
     default:

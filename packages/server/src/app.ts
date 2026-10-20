@@ -52,6 +52,8 @@ import { WeatherService, weatherSummary } from "./weather";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Tasks } from "./tasks";
+import { Office, type BridgeFactory, type WorkerFactory } from "./office/office";
+import { OfficeStore } from "./office/store";
 import { join } from "node:path";
 import { loadConfig, saveConfig, type Config } from "./config";
 import { openDb } from "./db";
@@ -159,6 +161,8 @@ export interface AppOptions {
   quick?: { run?: QuickRunner; home?: string; /** Chrome control's index.js that comes with Friend (tests); null: none, so the npm package is used. */ bundled?: string | null };
   /** Where weather comes from. Defaults to Open-Meteo. */
   weather?: Pick<WeatherService, "get">;
+  /** Test seams for the Office: how a worker process and its question bridge are made. */
+  office?: { spawn?: WorkerFactory; bridge?: BridgeFactory };
 }
 
 /** Used when no API key is configured: every turn ends with a setup notice on screen. */
@@ -485,6 +489,10 @@ export async function createApp(opts: AppOptions) {
       if (applied.changed.some((k) => k.startsWith("look."))) for (const command of stage.setLook(config.look)) broadcast({ type: "stage", command });
       broadcast(uiMsg());
     }
+    if (applied.changed.some((k) => k === "office" || k.startsWith("office."))) {
+      if (!config.office.enabled) office.stop(undefined, "owner"); // switched off: nobody keeps working
+      broadcast(office.snapshot());
+    }
     broadcast(statusMsg());
     return applied;
   }
@@ -574,6 +582,20 @@ export async function createApp(opts: AppOptions) {
     },
   };
 
+  // The Office of hired workers. Its settings are read each time; the broadcast is looked up late because the screens' list is made below.
+  const office = new Office({
+    config: () => config,
+    store: new OfficeStore(db),
+    approvals,
+    audit,
+    usage: (e) => usageLog.record({ ...e, provider: "claude-code", model: config.claudeCode.model }),
+    emit: (m) => broadcastLate(m),
+    dataDir: opts.dataDir,
+    ...(opts.office?.spawn ? { spawn: opts.office.spawn } : {}),
+    ...(opts.office?.bridge ? { bridge: opts.office.bridge } : {}),
+  });
+  let broadcastLate: (m: ServerMsg) => void = () => {};
+
   const weatherService = opts.weather ?? new WeatherService();
   const agent = new Agent({
     settings: agentSettings,
@@ -616,6 +638,7 @@ export async function createApp(opts: AppOptions) {
     brokers: brokerHub,
     music: musicHub,
     video: videoHub,
+    office,
     integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub)) },
   });
 
@@ -623,6 +646,7 @@ export async function createApp(opts: AppOptions) {
   const broadcast = (m: ServerMsg) => {
     for (const c of clients) c.send(m);
   };
+  broadcastLate = broadcast;
   hostEmit = (state) => broadcast({ type: "music.host", state });
   // Alexa: the owner's own skill talks to this endpoint; fixed questions are answered from the tools, the rest by the assistant.
   const alexaHub = new AlexaHub({
@@ -1446,6 +1470,7 @@ export async function createApp(opts: AppOptions) {
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
       conn.send(statusMsg());
       conn.send(uiMsg());
+      conn.send(office.snapshot());
       conn.send({ type: "music.host", state: hostPlayer.state() });
       if (ducker.level < 1) conn.send({ type: "audio.duck", level: ducker.level });
       const pending = challenges.current();
@@ -1500,6 +1525,14 @@ export async function createApp(opts: AppOptions) {
             broadcast({ type: "voice.challenge.end", id: msg.id });
           }
           break;
+        case "office.stop":
+          office.stop(msg.workerId, "owner");
+          break;
+        case "office.say": {
+          const r = office.say(msg.workerId, msg.text);
+          if (!r.ok) audit.log("owner", "office.say_failed", { error: r.error });
+          break;
+        }
         case "ui.panels":
           stage.setPanels(msg.open);
           break;
@@ -1567,6 +1600,8 @@ export async function createApp(opts: AppOptions) {
   return {
     /** The PC's own music player (also used by tests). */
     musicHost: hostPlayer,
+    /** The hired workers (also used by tests). */
+    office,
     config,
     db,
     audit,
@@ -1634,6 +1669,7 @@ export async function createApp(opts: AppOptions) {
       channelHub.stop();
       if (brokerTimer) clearInterval(brokerTimer);
       statsStop?.();
+      await office.shutdown();
       if (languageWarm) clearTimeout(languageWarm);
       if (timer) clearInterval(timer);
       challenges.clear();
