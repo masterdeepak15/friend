@@ -44,7 +44,14 @@ export type OfficePolicy = z.infer<typeof OfficePolicy>;
 export const OfficeWorkerView = z.object({
   id: z.string().min(1).max(64),
   name: z.string().min(1).max(40),
+  /** The starter role this worker was made from, if any (free-form hires have none). */
   roleId: z.string().max(24),
+  /** The job, in a few words: shown on the org chart. */
+  title: z.string().max(60),
+  /** What they are good at, one line. */
+  capabilities: z.string().max(200),
+  /** Who they report to: another worker's id, or null for Friend. */
+  managerId: z.string().max(64).nullable(),
   projectId: z.string().max(24),
   status: z.enum(WORKER_STATUSES),
   ticketId: z.number().int().nullable(),

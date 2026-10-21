@@ -637,8 +637,19 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "office.hire",
-    description: "Hire a worker for a role (one of the configured roles) on a project (one of the configured projects). A worker keeps its memory between tickets.",
-    input: z.object({ role: z.string().min(1).max(24), project: z.string().min(1).max(24), name: z.string().min(1).max(30).optional() }),
+    description:
+      "Hire a worker on a project (one of the configured projects). Give the job yourself: a title (e.g. Backend engineer), instructions (what they do and how, written like a brief to a new colleague), capabilities (one line) and who they report to (manager: the name of another worker, none means you). Or pass role to start from one of the starter roles. A worker keeps its memory between tickets.",
+    input: z
+      .object({
+        project: z.string().min(1).max(24),
+        title: z.string().min(1).max(40).optional(),
+        instructions: z.string().max(4000).optional(),
+        capabilities: z.string().max(200).optional(),
+        manager: z.string().min(1).max(64).optional(),
+        role: z.string().min(1).max(24).optional(),
+        name: z.string().min(1).max(30).optional(),
+      })
+      .refine((a) => !!a.title || !!a.role, { message: "Give the job a title, or a starter role." }),
     baseTier: "T1",
     target: "gateway",
   },
@@ -825,7 +836,7 @@ export function describeCall(name: string, args: unknown, device?: string): stri
     case "office.report":
       return `Read the report of ticket #${visible(String(a.ticket ?? ""))}`;
     case "office.hire":
-      return `Hire a ${visible(String(a.role ?? ""))} for the project ${visible(String(a.project ?? ""))}${a.name ? ` named ${visible(clip(String(a.name), 30))}` : ""}`;
+      return `Hire a ${visible(String(a.title ?? a.role ?? ""))} for the project ${visible(String(a.project ?? ""))}${a.name ? ` named ${visible(clip(String(a.name), 30))}` : ""}${a.manager ? `, reporting to ${visible(String(a.manager))}` : ""}`;
     case "office.assign":
       return `Give ${visible(String(a.worker ?? ""))} the ticket "${visible(clip(String(a.title ?? ""), 120))}" and start work`;
     case "office.say":

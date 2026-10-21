@@ -19,6 +19,14 @@ export interface WorkerRow {
   tokens: number;
   createdAt: number;
   startedAt: number | null;
+  /** The job and how the worker is briefed, kept with the worker (a starter role is only copied here at hire). */
+  title: string;
+  capabilities: string;
+  instructions: string;
+  model: string;
+  permission: "default" | "acceptEdits";
+  /** Another worker's id; null: the worker reports to Friend. */
+  managerId: string | null;
 }
 export interface TicketRow {
   id: number;
@@ -52,6 +60,12 @@ interface WRow {
   tokens: number;
   created_at: number;
   started_at: number | null;
+  title: string;
+  capabilities: string;
+  instructions: string;
+  model: string;
+  permission: "default" | "acceptEdits";
+  manager_id: string | null;
 }
 interface TRow {
   id: number;
@@ -64,7 +78,7 @@ interface TRow {
   created_at: number;
   updated_at: number;
 }
-const toWorker = (r: WRow): WorkerRow => ({ id: r.id, name: r.name, roleId: r.role_id, projectId: r.project_id, status: r.status, sessionId: r.session_id, ticketId: r.ticket_id, detail: r.detail, tokens: r.tokens, createdAt: r.created_at, startedAt: r.started_at });
+const toWorker = (r: WRow): WorkerRow => ({ id: r.id, name: r.name, roleId: r.role_id, projectId: r.project_id, status: r.status, sessionId: r.session_id, ticketId: r.ticket_id, detail: r.detail, tokens: r.tokens, createdAt: r.created_at, startedAt: r.started_at, title: r.title, capabilities: r.capabilities, instructions: r.instructions, model: r.model, permission: r.permission, managerId: r.manager_id });
 const toTicket = (r: TRow): TicketRow => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description, status: r.status, workerId: r.worker_id, report: r.report, createdAt: r.created_at, updatedAt: r.updated_at });
 
 const WORKER_COLUMNS: Record<string, string> = { status: "status", sessionId: "session_id", ticketId: "ticket_id", detail: "detail", startedAt: "started_at" };
@@ -76,9 +90,9 @@ export const MAX_REPORT_CHARS = 20_000;
 export class OfficeStore {
   constructor(private db: Db, private now: () => number = Date.now) {}
 
-  createWorker(w: { name: string; roleId: string; projectId: string }): WorkerRow {
+  createWorker(w: { name: string; roleId: string; projectId: string; title?: string; capabilities?: string; instructions?: string; model?: string; permission?: "default" | "acceptEdits"; managerId?: string | null }): WorkerRow {
     const id = randomBytes(4).toString("hex");
-    this.db.prepare("insert into office_workers (id, name, role_id, project_id, created_at) values (?, ?, ?, ?, ?)").run(id, w.name, w.roleId, w.projectId, this.now());
+    this.db.prepare("insert into office_workers (id, name, role_id, project_id, created_at, title, capabilities, instructions, model, permission, manager_id) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, w.name, w.roleId, w.projectId, this.now(), w.title ?? "", w.capabilities ?? "", w.instructions ?? "", w.model ?? "", w.permission ?? "default", w.managerId ?? null);
     return this.getWorker(id)!;
   }
 

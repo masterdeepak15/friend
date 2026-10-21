@@ -1,4 +1,4 @@
-import { OfficeProject, OfficeRole, SLUG } from "@friend/protocol";
+import { OfficeProject, SLUG } from "@friend/protocol";
 import { useEffect, useState, type ReactNode } from "react";
 import "./office.css";
 import type { OfficeSettings } from "./settingsApi";
@@ -27,16 +27,6 @@ const idProblem = (what: string, n: number, id: string, earlier: string[]): stri
   return null;
 };
 
-/** What is wrong with one role, in plain words (an empty list: nothing). */
-export function roleProblems(roles: OfficeRole[], i: number): string[] {
-  const r = roles[i]!;
-  const out = [idProblem("Role", i + 1, r.id, roles.slice(0, i).map((x) => x.id))];
-  if (!r.title.trim()) out.push(`Role ${i + 1} needs a title.`);
-  else if (r.title.length > 40) out.push(`Role ${i + 1}: the title is at most 40 characters.`);
-  if (r.instructions.length > 4000) out.push(`Role ${i + 1}: the instructions are at most 4000 characters.`);
-  return out.filter((p): p is string => !!p);
-}
-
 export function projectProblems(projects: OfficeProject[], i: number): string[] {
   const p = projects[i]!;
   const out = [idProblem("Project", i + 1, p.id, projects.slice(0, i).map((x) => x.id))];
@@ -54,7 +44,6 @@ export function patternProblems(patterns: string[]): string[] {
 /** Everything that stops the Office settings from being saved. */
 export function officeProblems(o: OfficeSettings): string[] {
   return [
-    ...o.roles.flatMap((_, i) => roleProblems(o.roles, i)),
     ...o.projects.flatMap((_, i) => projectProblems(o.projects, i)),
     ...patternProblems(o.policy.denyCommands),
     ...(o.policy.allowTools.length > MAX_LIST ? [`At most ${MAX_LIST} tools can be let through.`] : []),
@@ -123,7 +112,6 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * gate follows. Nothing here is preset in the component: it shows what the settings hold, and blank forms for what is added.
  */
 export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChange: (p: Partial<OfficeSettings>) => void }) {
-  const setRole = (i: number, p: Partial<OfficeRole>) => onChange({ roles: office.roles.map((r, j) => (j === i ? { ...r, ...p } : r)) });
   const setProject = (i: number, p: Partial<OfficeProject>) => onChange({ projects: office.projects.map((x, j) => (j === i ? { ...x, ...p } : x)) });
   const num = (v: string) => (v.trim() === "" || !Number.isFinite(Number(v)) ? 0 : Number(v));
   const patterns = office.policy.denyCommands;
@@ -133,7 +121,7 @@ export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChan
         <div>
           <div className="of-code">FRIEND · OFFICE</div>
           <h3>Hired workers</h3>
-          <p className="of-note">Friend can hire workers: separate Claude Code sessions that work in your project folders, one ticket at a time. Workers use the Claude Code program and model chosen under Model, and every risky step asks you first. Switched off, no worker runs. On the orbital screen, hired workers take the place of the quick-launch buttons.</p>
+          <p className="of-note">Friend can hire workers: separate Claude Code sessions that work in your project folders, one ticket at a time. Workers use the Claude Code program and model chosen under Model, and every risky step asks you first. Switched off, no worker runs. On the orbital screen, hired workers take the place of the quick-launch buttons. Friend hires and manages the team himself: he decides the jobs, the instructions and who reports to whom. To see who is hired, click the name in the middle of the orbital screen.</p>
         </div>
         <label className="of-switch">
           <input type="checkbox" checked={office.enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
@@ -170,44 +158,7 @@ export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChan
         </div>
       </Card>
 
-      <Card code="02" title="Roles" note="A role is what a worker is for: its name and the instructions it always starts with. The id is how Friend refers to it.">
-        {office.roles.map((r, i) => (
-          <fieldset key={i} className="of-item">
-            <legend>
-              <span className="of-code">ROLE {pad(i + 1)}</span> {r.title || r.id || "new"}
-            </legend>
-            <div className="of-grid">
-              <Field label="Id">
-                <input aria-label={`Role ${i + 1} id`} value={r.id} maxLength={24} onChange={(e) => setRole(i, { id: e.target.value })} />
-              </Field>
-              <Field label="Title">
-                <input aria-label={`Role ${i + 1} title`} value={r.title} maxLength={40} onChange={(e) => setRole(i, { title: e.target.value })} />
-              </Field>
-              <Field label="Model" hint="Empty: the model chosen under Model.">
-                <input aria-label={`Role ${i + 1} model`} value={r.model} onChange={(e) => setRole(i, { model: e.target.value })} />
-              </Field>
-              <Field label="Edits" hint="Ask: every step asks unless your rules let it through. Accept edits: edits inside the project folder go ahead.">
-                <select aria-label={`Role ${i + 1} permission`} value={r.permission} onChange={(e) => setRole(i, { permission: e.target.value as OfficeRole["permission"] })}>
-                  <option value="default">Ask</option>
-                  <option value="acceptEdits">Accept edits in the project folder</option>
-                </select>
-              </Field>
-            </div>
-            <Field label="Instructions" wide>
-              <textarea aria-label={`Role ${i + 1} instructions`} rows={3} maxLength={4000} value={r.instructions} onChange={(e) => setRole(i, { instructions: e.target.value })} />
-            </Field>
-            <Problems list={roleProblems(office.roles, i)} />
-            <button type="button" className="of-remove" aria-label={`Remove role ${i + 1}`} onClick={() => onChange({ roles: office.roles.filter((_, j) => j !== i) })}>
-              Remove
-            </button>
-          </fieldset>
-        ))}
-        <button type="button" className="of-add" onClick={() => onChange({ roles: [...office.roles, { id: "", title: "", instructions: "", model: "", permission: "default" }] })}>
-          + Add a role
-        </button>
-      </Card>
-
-      <Card code="03" title="Projects" note="A project is a folder workers may work in. A worker never goes outside it and its extra folders.">
+      <Card code="02" title="Projects" note="A project is a folder workers may work in. A worker never goes outside it and its extra folders.">
         {office.projects.map((p, i) => (
           <fieldset key={i} className="of-item">
             <legend>
@@ -241,7 +192,7 @@ export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChan
         </button>
       </Card>
 
-      <Card code="04" title="Rules" note="What the gate does with a worker's request, before it ever reaches you.">
+      <Card code="03" title="Rules" note="What the gate does with a worker's request, before it ever reaches you.">
         <Field label="Let through without asking (one tool name per line)" hint="Claude Code tools a worker may use inside its folders without asking you, such as Read. Anything else asks." wide>
           <LinesArea rows={4} value={office.policy.allowTools} onChange={(v) => onChange({ policy: { ...office.policy, allowTools: v } })} />
         </Field>

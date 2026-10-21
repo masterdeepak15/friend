@@ -37,7 +37,7 @@ describe("slugs, statuses and the settings shapes", () => {
 });
 
 describe("the messages", () => {
-  const worker = { id: "w1", name: "Ada", roleId: "scribe", projectId: "site", status: "running", ticketId: 1, detail: "Write a.txt", tokens: 10, budget: null, startedAt: 1 };
+  const worker = { id: "w1", name: "Ada", roleId: "scribe", title: "Scribe", capabilities: "", managerId: null, projectId: "site", status: "running", ticketId: 1, detail: "Write a.txt", tokens: 10, budget: null, startedAt: 1 };
   const quota = { fiveHour: { utilization: 0.42, resetsAt: 1792516200 }, sevenDay: null };
 
   it("carries the office state and a feed line", () => {
@@ -72,6 +72,22 @@ describe("the six office tools", () => {
     expect(d.input.safeParse({ ticket: 3 }).success).toBe(true);
     expect(d.input.safeParse({}).success).toBe(false);
     expect(describeCall("office.report", { ticket: 3 })).toMatch(/3/);
+  });
+
+  it("hire takes a free-form job (title, instructions, what they are good at, who they report to) or a starter role", () => {
+    const h = TOOL_DEFS.find((t) => t.name === "office.hire")!.input;
+    expect(h.safeParse({ title: "Backend engineer", instructions: "Build the API.", capabilities: "C#, ASP.NET", project: "weather", manager: "Ben" }).success).toBe(true);
+    expect(h.safeParse({ role: "scribe", project: "site" }).success).toBe(true);
+    expect(h.safeParse({ project: "site" }).success).toBe(false); // a job or a role is needed
+    expect(h.safeParse({ title: "x".repeat(41), project: "site" }).success).toBe(false);
+    expect(h.safeParse({ title: "Dev", instructions: "x".repeat(4001), project: "site" }).success).toBe(false);
+    expect(describeCall("office.hire", { title: "Backend engineer", project: "weather", manager: "Ben" })).toMatch(/Backend engineer.*weather.*Ben/);
+  });
+
+  it("a worker on the screen has a title and who it reports to", () => {
+    const w = { id: "w1", name: "Ada", roleId: "", title: "Backend engineer", capabilities: "C#", managerId: null, projectId: "site", status: "idle", ticketId: null, detail: "", tokens: 0, budget: null, startedAt: null };
+    expect(ServerMsg.safeParse({ type: "office.state", enabled: true, workers: [w, { ...w, id: "w2", managerId: "w1" }], tickets: [], quota: { fiveHour: null, sevenDay: null } }).success).toBe(true);
+    expect(ServerMsg.safeParse({ type: "office.state", enabled: true, workers: [{ ...w, title: undefined }], tickets: [], quota: { fiveHour: null, sevenDay: null } }).success).toBe(false);
   });
 
   it("check their arguments", () => {

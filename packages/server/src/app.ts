@@ -600,9 +600,9 @@ export async function createApp(opts: AppOptions) {
   // When a worker finishes or gets stuck, Friend is told in his own conversation (what it wrote is marked as data), so he reports it and can give the next ticket.
   const officeNotes: string[] = [];
   let officeNoteTimer: NodeJS.Timeout | null = null;
-  const officeNote = (e: { worker: string; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => {
+  const officeNote = (e: { worker: string; jobTitle?: string; manager?: string | null; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => {
     const safe = (s: string, n: number) => s.replace(/[<>]/g, "‹").replace(/\s+/g, " ").trim().slice(0, n);
-    officeNotes.push(`${safe(e.worker, 40)} ${e.status === "review" ? "finished" : "could not finish"} ticket #${e.ticketId} "${safe(e.title, 200)}" (now ${e.status}). The start of its report (read all of it with office.report, ticket ${e.ticketId}):\n<untrusted-worker-report>${safe(e.report, 600)}</untrusted-worker-report>`);
+    officeNotes.push(`${safe(e.worker, 40)}${e.jobTitle ? ` (${safe(e.jobTitle, 40)}${e.manager ? `, reports to ${safe(e.manager, 40)}` : ""})` : ""} ${e.status === "review" ? "finished" : "could not finish"} ticket #${e.ticketId} "${safe(e.title, 200)}" (now ${e.status}). The start of its report (read all of it with office.report, ticket ${e.ticketId}):\n<untrusted-worker-report>${safe(e.report, 600)}</untrusted-worker-report>`);
     if (officeNoteTimer) return;
     officeNoteTimer = setTimeout(() => {
       officeNoteTimer = null;

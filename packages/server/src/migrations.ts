@@ -235,4 +235,13 @@ create index office_tickets_project on office_tickets (project_id);
     id: 13,
     sql: `alter table office_tickets add column report text not null default '';`,
   },
+  {
+    id: 14,
+    sql: `alter table office_workers add column title text not null default '';
+alter table office_workers add column capabilities text not null default '';
+alter table office_workers add column instructions text not null default '';
+alter table office_workers add column model text not null default '';
+alter table office_workers add column permission text not null default 'default';
+alter table office_workers add column manager_id text;`,
+  },
 ];

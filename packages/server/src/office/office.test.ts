@@ -224,6 +224,59 @@ describe("a run", () => {
     expect(args[args.indexOf("--model") + 1]).toBe("fast");
   });
 
+  it("hires anyone for any job that Friend describes, with no starter role at all", async () => {
+    const t = make({ roles: [] });
+    const r = t.office.hire({ title: "Backend engineer", instructions: "Build the weather API in C#.", capabilities: "C#, ASP.NET", project: "site", name: "Ben" });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.worker).toMatchObject({ name: "Ben", title: "Backend engineer", capabilities: "C#, ASP.NET", managerId: null, roleId: "" });
+    t.office.assign({ worker: "Ben", title: "Start" });
+    await settle();
+    const args = t.procs[0]!.o.args;
+    const system = args[args.indexOf("--append-system-prompt") + 1]!;
+    expect(system).toContain("Ben");
+    expect(system).toContain("Backend engineer");
+    expect(system).toContain("Build the weather API in C#.");
+    expect(system).toMatch(/report to Friend/i);
+    expect(args.join(" ")).not.toContain("acceptEdits"); // a worker Friend invents always asks before editing
+  });
+
+  it("makes a worker report to another worker, and refuses a manager that does not exist", async () => {
+    const t = make();
+    const boss = t.office.hire({ title: "Tech lead", project: "site", name: "Lena" });
+    if (!boss.ok) throw new Error(boss.error);
+    const dev = t.office.hire({ title: "Developer", project: "site", name: "Ben", manager: "lena" });
+    expect(dev).toMatchObject({ ok: true, worker: { managerId: boss.worker.id } });
+    expect(t.office.hire({ title: "Developer", project: "site", manager: "nobody" })).toMatchObject({ ok: false, error: expect.stringMatching(/nobody/) });
+    t.office.assign({ worker: "Ben", title: "Go" });
+    await settle();
+    const args = t.procs[0]!.o.args;
+    expect(args[args.indexOf("--append-system-prompt") + 1]).toMatch(/report to Lena/);
+  });
+
+  it("needs a job title or a starter role, and a starter role is only a template copied at hire", async () => {
+    const t = make();
+    expect(t.office.hire({ project: "site" } as never)).toMatchObject({ ok: false });
+    const w = t.hire("coder", "Cy");
+    expect(t.office.status().workers.find((x) => x.id === w.id)).toMatchObject({ title: "Coder", roleId: "coder" });
+    t.config.office.roles = []; // the owner deletes the template later: the worker keeps what it was hired with
+    t.office.assign({ worker: "Cy", title: "Go" });
+    await settle();
+    expect(t.procs).toHaveLength(1);
+    expect(t.procs[0]!.o.args[t.procs[0]!.o.args.indexOf("--model") + 1]).toBe("fast");
+  });
+
+  it("tells Friend who a finished worker reports to", async () => {
+    const t = make();
+    const boss = t.office.hire({ title: "Tech lead", project: "site", name: "Lena" });
+    if (!boss.ok) throw new Error(boss.error);
+    t.office.hire({ title: "Developer", project: "site", name: "Ben", manager: "Lena" });
+    t.office.assign({ worker: "Ben", title: "Go" });
+    await settle();
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.emit(resultEv({ text: "Done." }));
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ worker: "Ben", jobTitle: "Developer", manager: "Lena" }));
+  });
+
   it("uses the model chosen under Model when the role names none", async () => {
     const t = make();
     t.config.claudeCode.model = "sonnet";

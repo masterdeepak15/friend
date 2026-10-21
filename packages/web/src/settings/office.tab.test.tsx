@@ -52,35 +52,13 @@ describe("the switches and numbers", () => {
 });
 
 describe("roles", () => {
-  it("adds a blank role with nothing preset, and removes the last one to leave none", () => {
-    const { onChange } = mount();
-    fireEvent.click(screen.getByRole("button", { name: /add a role/i }));
-    expect(onChange).toHaveBeenLastCalledWith({ roles: [role, { id: "", title: "", instructions: "", model: "", permission: "default" }] });
-    fireEvent.click(screen.getByRole("button", { name: /remove role 1/i }));
-    expect(onChange).toHaveBeenLastCalledWith({ roles: [] });
-  });
-
-  it("edits each field of a role", () => {
-    const { onChange } = mount();
-    typeInto(/role 1 id/i, "writer");
-    expect(onChange).toHaveBeenLastCalledWith({ roles: [{ ...role, id: "writer" }] });
-    typeInto(/role 1 title/i, "Writer");
-    expect(onChange).toHaveBeenLastCalledWith({ roles: [{ ...role, title: "Writer" }] });
-    typeInto(/role 1 model/i, "haiku");
-    expect(onChange).toHaveBeenLastCalledWith({ roles: [{ ...role, model: "haiku" }] });
-    typeInto(/role 1 permission/i, "acceptEdits");
-    expect(onChange).toHaveBeenLastCalledWith({ roles: [{ ...role, permission: "acceptEdits" }] });
-    typeInto(/role 1 instructions/i, "Be brief.");
-    expect(onChange).toHaveBeenLastCalledWith({ roles: [{ ...role, instructions: "Be brief." }] });
-  });
-
-  it("offers only the two permissions, never a bypass", () => {
+  it("are not edited here: Friend hires whoever the work needs, and the tab only says so", () => {
     mount();
-    const options = [...(screen.getByLabelText(/role 1 permission/i) as HTMLSelectElement).options].map((o) => o.value);
-    expect(options).toEqual(["default", "acceptEdits"]);
+    expect(screen.queryByRole("button", { name: /add a role/i })).toBeNull();
+    expect(screen.queryByLabelText(/role 1 id/i)).toBeNull();
+    expect(screen.getByText(/friend hires and manages the team/i)).toBeTruthy();
   });
 });
-
 describe("projects", () => {
   it("adds a blank project, edits its fields and its extra folders, and removes it", () => {
     const { onChange } = mount();
@@ -113,9 +91,6 @@ describe("the rules", () => {
 describe("problems that block saving", () => {
   it("flag a bad or repeated id, an empty folder and a bad pattern", () => {
     expect(officeProblems(base())).toEqual([]);
-    expect(officeProblems(base({ roles: [{ ...role, id: "Bad Id" }] })).join(" ")).toMatch(/role 1.*id/i);
-    expect(officeProblems(base({ roles: [role, { ...role, title: "Other" }] })).join(" ")).toMatch(/same id/i);
-    expect(officeProblems(base({ roles: [{ ...role, title: "" }] })).join(" ")).toMatch(/role 1.*title/i);
     expect(officeProblems(base({ projects: [{ ...project, folder: "  " }] })).join(" ")).toMatch(/project 1.*folder/i);
     expect(officeProblems(base({ projects: [project, { ...project, name: "Again" }] })).join(" ")).toMatch(/same id/i);
     expect(officeProblems(base({ projects: [{ ...project, extraFolders: ["a", "b", "c", "d", "e", "f"] }] })).join(" ")).toMatch(/at most 5/i);
@@ -152,7 +127,7 @@ describe("inside the settings panel", () => {
   });
 
   it("cannot be saved while something is wrong", async () => {
-    const api = apiOf(view(base({ roles: [{ ...role, id: "Bad Id" }] })));
+    const api = apiOf(view(base({ projects: [{ ...project, folder: "" }] })));
     render(<SettingsPanel api={api} onClose={() => {}} initialTab="office" />);
     fireEvent.click(await screen.findByRole("checkbox", { name: /turn the office on/i }));
     expect((screen.getByRole("button", { name: /^save/i }) as HTMLButtonElement).disabled).toBe(true);

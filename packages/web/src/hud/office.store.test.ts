@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { initialState, reduce } from "../store";
 
-const worker = (id: string, over: Record<string, unknown> = {}) => ({ id, name: id.toUpperCase(), roleId: "scribe", projectId: "site", status: "idle", ticketId: null, detail: "", tokens: 0, budget: null, startedAt: null, ...over });
+const worker = (id: string, over: Record<string, unknown> = {}) => ({ id, name: id.toUpperCase(), roleId: "scribe", title: "Scribe", capabilities: "", managerId: null, projectId: "site", status: "idle", ticketId: null, detail: "", tokens: 0, budget: null, startedAt: null, ...over });
 const quota = { fiveHour: { utilization: 0.42, resetsAt: 1792516200 }, sevenDay: null };
 const state = (workers: unknown[], over: Record<string, unknown> = {}) => ({ type: "office.state", enabled: true, workers, tickets: [{ id: 1, projectId: "site", title: "Fix it", status: "doing", workerId: "w1" }], quota, ...over });
 const feed = (workerId: string, text: string, at = 1) => ({ type: "office.feed", workerId, at, kind: "text", text });

@@ -39,7 +39,7 @@ export interface OfficeDeps {
   /** Gets the tokens a run used (counts only, never words). */
   usage: (e: { source: string; input: number; output: number }) => void;
   /** Told when a ticket ends in review or blocked, so Friend can report it and go on with the plan. */
-  notify?: (e: { worker: string; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => void;
+  notify?: (e: { worker: string; jobTitle: string; manager: string | null; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => void;
   emit: (m: ServerMsg) => void;
   spawn?: WorkerFactory;
   bridge?: BridgeFactory;
@@ -124,10 +124,19 @@ export class Office {
 
   // ---- what Friend and the owner ask for ----
 
-  hire(a: { role: string; project: string; name?: string }): Result<{ worker: OfficeWorkerView }> {
+  hire(a: { project: string; title?: string; instructions?: string; capabilities?: string; manager?: string; role?: string; name?: string }): Result<{ worker: OfficeWorkerView }> {
     if (!this.cfg.enabled) return { ok: false, error: OFF };
-    const role = this.cfg.roles.find((r) => r.id === a.role);
-    if (!role) return { ok: false, error: `There is no role "${a.role}". The roles are: ${this.cfg.roles.map((r) => r.id).join(", ") || "(none set up)"}.` };
+    // a starter role is only a template: its job, brief and model are copied onto the worker; anything given here wins
+    const template = a.role ? this.cfg.roles.find((r) => r.id === a.role) : undefined;
+    if (a.role && !template) return { ok: false, error: `There is no starter role "${a.role}". Describe the job with a title and instructions instead${this.cfg.roles.length ? `, or use one of: ${this.cfg.roles.map((r) => r.id).join(", ")}` : ""}.` };
+    const jobTitle = clip((a.title ?? template?.title ?? "").trim(), 40);
+    if (!jobTitle) return { ok: false, error: "Give the job a title (for example Backend engineer) and instructions, or a starter role." };
+    let managerId: string | null = null;
+    if (a.manager && !/^(none|friend|me)$/i.test(a.manager.trim())) {
+      const boss = this.d.store.findWorker(a.manager);
+      if (!boss) return { ok: false, error: this.noWorker(a.manager) };
+      managerId = boss.id;
+    }
     const project = this.cfg.projects.find((p) => p.id === a.project);
     if (!project) return { ok: false, error: `There is no project "${a.project}". The projects are: ${this.cfg.projects.map((p) => p.id).join(", ") || "(none set up)"}.` };
     try {
@@ -139,12 +148,22 @@ export class Office {
     let name = (a.name ?? "").trim().slice(0, 30);
     if (name && taken.has(name.toLowerCase())) return { ok: false, error: `There is already a worker named ${name}.` };
     if (!name) {
-      let n = this.d.store.listWorkers().filter((w) => w.roleId === role.id).length + 1;
-      while (taken.has(`${role.title} ${n}`.toLowerCase())) n++;
-      name = `${role.title} ${n}`.slice(0, 30);
+      let n = this.d.store.listWorkers().filter((w) => w.title === jobTitle).length + 1;
+      while (taken.has(`${jobTitle} ${n}`.toLowerCase())) n++;
+      name = `${jobTitle} ${n}`.slice(0, 30);
     }
-    const w = this.d.store.createWorker({ name, roleId: role.id, projectId: project.id });
-    this.d.audit.log("agent", "office.hire", { worker: w.id, role: role.id, project: project.id });
+    const w = this.d.store.createWorker({
+      name,
+      roleId: template?.id ?? "",
+      projectId: project.id,
+      title: jobTitle,
+      capabilities: clip((a.capabilities ?? "").trim(), 200),
+      instructions: clip((a.instructions ?? template?.instructions ?? "").trim(), 4000),
+      model: clip((template?.model ?? "").trim(), 100),
+      permission: template?.permission ?? "default", // a worker Friend makes up always asks before editing
+      managerId,
+    });
+    this.d.audit.log("agent", "office.hire", { worker: w.id, title: jobTitle, role: template?.id ?? null, project: project.id, manager: managerId });
     this.changed();
     return { ok: true, worker: this.workerView(w) };
   }
@@ -328,11 +347,10 @@ export class Office {
 
   private startRun(worker: WorkerRow, ticket: TicketRow, note?: string): void {
     const o = this.cfg;
-    const role = o.roles.find((r) => r.id === worker.roleId);
     const project = o.projects.find((p) => p.id === worker.projectId);
-    if (!role || !project) {
+    if (!project) {
       this.d.store.patchTicket(ticket.id, { status: "blocked" });
-      this.feed(worker.id, "error", !role ? `The role "${worker.roleId}" no longer exists.` : `The project "${worker.projectId}" no longer exists.`);
+      this.feed(worker.id, "error", `The project "${worker.projectId}" no longer exists.`);
       return;
     }
     this.d.store.patchTicket(ticket.id, { status: "doing", workerId: worker.id });
@@ -343,12 +361,12 @@ export class Office {
     this.runs.set(worker.id, run);
     this.changed();
     const sessionId = this.d.store.getWorker(worker.id)!.sessionId;
-    void this.launch(run, worker, ticket, role, project, sessionId, note).catch((e: Error) =>
+    void this.launch(run, worker, ticket, project, sessionId, note).catch((e: Error) =>
       this.conclude(run, { worker: "failed", ticket: "blocked", feed: { kind: "error", text: `Could not start: ${e.message}` } }),
     );
   }
 
-  private async launch(run: Run, worker: WorkerRow, ticket: TicketRow, role: Config["office"]["roles"][number], project: Config["office"]["projects"][number], resume: string | null, note?: string): Promise<void> {
+  private async launch(run: Run, worker: WorkerRow, ticket: TicketRow, project: Config["office"]["projects"][number], resume: string | null, note?: string): Promise<void> {
     const cfg = this.d.config();
     await run.bridge.start();
     if (run.concluded) return;
@@ -357,9 +375,9 @@ export class Office {
     const mcp = join(dir, `${worker.id}.mcp.json`);
     writeFileSync(mcp, JSON.stringify({ mcpServers: { office: { type: "http", url: run.bridge.url, headers: { Authorization: `Bearer ${run.bridge.token}` } } } }));
     const args = buildWorkerArgs({
-      model: role.model.trim() || cfg.claudeCode.model,
-      instructions: role.instructions,
-      permission: role.permission,
+      model: worker.model.trim() || cfg.claudeCode.model,
+      instructions: this.briefing(worker),
+      permission: worker.permission,
       mcpConfigPath: mcp,
       extraFolders: project.extraFolders,
       ...(resume ? { resume } : { sessionId: randomUUID() }),
@@ -370,6 +388,20 @@ export class Office {
       if (!run.spoke) this.conclude(run, { worker: "failed", ticket: "blocked", feed: { kind: "error", text: `${worker.name} did not start within ${cfg.office.startTimeoutSec} seconds.` } });
     }, timeoutMs);
     run.proc.send(this.prompt(ticket, project, note));
+  }
+
+  /** Who the worker is, who it reports to, and what its job is: its standing brief. Workers made before jobs were kept with them fall back to their starter role. */
+  private briefing(w: WorkerRow): string {
+    const legacy = !w.title && !w.instructions ? this.cfg.roles.find((r) => r.id === w.roleId) : undefined;
+    const title = w.title || legacy?.title || "worker";
+    const boss = w.managerId ? this.d.store.getWorker(w.managerId)?.name : undefined;
+    return [
+      `You are ${w.name}, ${title}${w.capabilities ? ` (${w.capabilities})` : ""}, working for the owner's assistant Friend.`,
+      `You report to ${boss ?? "Friend, the owner's assistant"}. When you are done or stuck, say so plainly in your final reply: that is how your manager hears from you.`,
+      (w.instructions || legacy?.instructions || "").trim(),
+    ]
+      .filter((s) => s !== "")
+      .join("\n\n");
   }
 
   private prompt(ticket: TicketRow, project: Config["office"]["projects"][number], note?: string): string {
@@ -462,7 +494,7 @@ export class Office {
     if ((o.ticket === "review" || o.ticket === "blocked") && this.cfg.notifyFriend && !this.down) {
       const ticket = this.d.store.getTicket(run.ticketId);
       const worker = this.d.store.getWorker(run.workerId);
-      if (ticket && worker) this.d.notify?.({ worker: worker.name, ticketId: ticket.id, title: ticket.title, status: o.ticket, report: run.report || o.feed?.text || "" });
+      if (ticket && worker) this.d.notify?.({ worker: worker.name, jobTitle: worker.title, manager: worker.managerId ? (this.d.store.getWorker(worker.managerId)?.name ?? null) : null, ticketId: ticket.id, title: ticket.title, status: o.ticket, report: run.report || o.feed?.text || "" });
     }
     this.changed();
     this.pump();
@@ -518,7 +550,7 @@ export class Office {
 
   private workerView(w: WorkerRow): OfficeWorkerView {
     const perWorker = this.cfg.budget.perWorkerTokens;
-    return { id: w.id, name: w.name, roleId: w.roleId, projectId: w.projectId, status: w.status, ticketId: w.ticketId, detail: clip(w.detail, DETAIL_CHARS), tokens: w.tokens, budget: perWorker > 0 ? perWorker : null, startedAt: w.startedAt };
+    return { id: w.id, name: w.name, roleId: w.roleId, projectId: w.projectId, status: w.status, ticketId: w.ticketId, detail: clip(w.detail, DETAIL_CHARS), tokens: w.tokens, budget: perWorker > 0 ? perWorker : null, startedAt: w.startedAt, title: w.title || this.cfg.roles.find((r) => r.id === w.roleId)?.title || w.roleId, capabilities: w.capabilities, managerId: w.managerId };
   }
 
   private feed(workerId: string, kind: FeedKind, text: string): void {

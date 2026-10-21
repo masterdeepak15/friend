@@ -1,8 +1,8 @@
 import type { OfficeTicketView, OfficeWorkerView } from "@friend/protocol";
 import { describe, expect, it } from "vitest";
-import { budgetRings, feedLines, ticketCells, ticketProject, usageFromQuota, workerNodes } from "./office";
+import { ORG_CARD_H, ORG_CARD_W, ORG_GAP_X, ORG_GAP_Y, budgetRings, feedLines, layoutOrg, ticketCells, ticketProject, usageFromQuota, workerNodes } from "./office";
 
-const worker = (name: string, over: Partial<OfficeWorkerView> = {}): OfficeWorkerView => ({ id: name.toLowerCase(), name, roleId: "scribe", projectId: "site", status: "idle", ticketId: null, detail: "", tokens: 0, budget: null, startedAt: null, ...over });
+const worker = (name: string, over: Partial<OfficeWorkerView> = {}): OfficeWorkerView => ({ id: name.toLowerCase(), name, roleId: "scribe", title: "Scribe", capabilities: "", managerId: null, projectId: "site", status: "idle", ticketId: null, detail: "", tokens: 0, budget: null, startedAt: null, ...over });
 const ticket = (id: number, status: OfficeTicketView["status"], projectId = "site"): OfficeTicketView => ({ id, projectId, title: `T${id}`, status, workerId: null });
 
 describe("workerNodes", () => {
@@ -111,5 +111,49 @@ describe("usageFromQuota", () => {
     expect(usageFromQuota({ fiveHour: null, sevenDay: null }, 17, now)).toEqual({ value: 17, reset: null, real: false });
     expect(usageFromQuota(quota(0.42, -60_000), 17, now)).toEqual({ value: 17, reset: null, real: false });
     expect(usageFromQuota({ fiveHour: null, sevenDay: null }, null, now)).toEqual({ value: null, reset: null, real: false });
+  });
+});
+
+describe("layoutOrg, the tree of who reports to whom", () => {
+  const w = (name: string, managerId: string | null = null) => worker(name, { managerId });
+  const at = (l: ReturnType<typeof layoutOrg>, id: string) => l.nodes.find((n) => n.id === id)!;
+
+  it("puts Friend at the top and the workers who report to Friend one level down, side by side", () => {
+    const l = layoutOrg([w("Ada"), w("Bob")]);
+    expect(at(l, "friend").y).toBe(0);
+    expect(at(l, "ada").y).toBe(ORG_CARD_H + ORG_GAP_Y);
+    expect(at(l, "bob").y).toBe(ORG_CARD_H + ORG_GAP_Y);
+    expect(at(l, "bob").x - at(l, "ada").x).toBe(ORG_CARD_W + ORG_GAP_X);
+    expect(at(l, "friend").x).toBe((at(l, "ada").x + at(l, "bob").x) / 2); // the parent is centred over its reports
+    expect(l.edges.map((e) => `${e.from}>${e.to}`).sort()).toEqual(["friend>ada", "friend>bob"]);
+  });
+
+  it("follows the reporting lines down several levels", () => {
+    const l = layoutOrg([w("Lena"), w("Ben", "lena"), w("Cy", "ben")]);
+    expect([at(l, "friend").y, at(l, "lena").y, at(l, "ben").y, at(l, "cy").y]).toEqual([0, 1, 2, 3].map((n) => n * (ORG_CARD_H + ORG_GAP_Y)));
+    expect(l.edges.map((e) => `${e.from}>${e.to}`).sort()).toEqual(["ben>cy", "friend>lena", "lena>ben"]);
+  });
+
+  it("does not let a subtree sit on its neighbour", () => {
+    const l = layoutOrg([w("Lena"), w("Ben", "lena"), w("Cy", "lena"), w("Di", "lena"), w("Ed")]);
+    const xs = (ids: string[]) => ids.map((i) => at(l, i).x);
+    const [ben, cy, di, ed] = xs(["ben", "cy", "di", "ed"]);
+    expect(cy! - ben!).toBeGreaterThanOrEqual(ORG_CARD_W + ORG_GAP_X);
+    expect(ed! - di!).toBeGreaterThanOrEqual(ORG_CARD_W + ORG_GAP_X);
+    expect(l.width).toBeGreaterThan(0);
+    expect(l.height).toBe(3 * (ORG_CARD_H + ORG_GAP_Y) - ORG_GAP_Y);
+  });
+
+  it("hangs a worker whose manager is gone, or that is part of a loop, from Friend instead of losing it", () => {
+    const l = layoutOrg([w("Ada", "ghost"), w("Bob", "cy"), w("Cy", "bob")]);
+    expect(l.nodes.map((n) => n.id).sort()).toEqual(["ada", "bob", "cy", "friend"]);
+    expect(l.edges.filter((e) => e.from === "friend").map((e) => e.to)).toContain("ada");
+    expect(l.edges).toHaveLength(3);
+  });
+
+  it("is just Friend with nobody hired", () => {
+    const l = layoutOrg([]);
+    expect(l.nodes.map((n) => n.id)).toEqual(["friend"]);
+    expect(l.edges).toEqual([]);
   });
 });

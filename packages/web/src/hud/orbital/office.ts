@@ -98,3 +98,77 @@ export function usageFromQuota(quota: OfficeQuota, fallback: number | null, nowM
   if (w && w.resetsAt * 1000 > nowMs) return { value: Math.round(clamp(w.utilization * 100)), reset: resetText(w.resetsAt * 1000 - nowMs), real: true };
   return { value: fallback, reset: null, real: false };
 }
+
+export const ORG_CARD_W = 190;
+export const ORG_CARD_H = 78;
+export const ORG_GAP_X = 26;
+export const ORG_GAP_Y = 56;
+
+export interface OrgNode {
+  id: string;
+  x: number;
+  y: number;
+  /** null: Friend, at the top. */
+  worker: OfficeWorkerView | null;
+}
+export interface OrgEdge {
+  from: string;
+  to: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/**
+ * The tree of who reports to whom, with Friend at the top: each card centred over the ones that report to it, none on its neighbour.
+ * A worker whose manager is gone, or that is part of a reporting loop, hangs from Friend, so nobody drops out of the picture.
+ */
+export function layoutOrg(workers: OfficeWorkerView[]): { nodes: OrgNode[]; edges: OrgEdge[]; width: number; height: number } {
+  const byId = new Map(workers.map((w) => [w.id, w]));
+  const inLoop = (w: OfficeWorkerView): boolean => {
+    const seen = new Set<string>([w.id]);
+    for (let m = w.managerId; m && byId.has(m); m = byId.get(m)!.managerId) {
+      if (seen.has(m)) return m === w.id;
+      seen.add(m);
+    }
+    return false;
+  };
+  const parentOf = (w: OfficeWorkerView): string => (w.managerId && byId.has(w.managerId) && !inLoop(w) ? w.managerId : "friend");
+  const kids = new Map<string, OfficeWorkerView[]>();
+  for (const w of workers) kids.set(parentOf(w), [...(kids.get(parentOf(w)) ?? []), w]);
+
+  const width = new Map<string, number>();
+  const measure = (id: string): number => {
+    const ch = kids.get(id) ?? [];
+    const w = ch.length === 0 ? ORG_CARD_W : Math.max(ORG_CARD_W, ch.reduce((s, c) => s + measure(c.id), 0) + (ch.length - 1) * ORG_GAP_X);
+    width.set(id, w);
+    return w;
+  };
+  measure("friend");
+
+  const nodes: OrgNode[] = [];
+  const edges: OrgEdge[] = [];
+  let deepest = 0;
+  const place = (id: string, left: number, depth: number): number => {
+    deepest = Math.max(deepest, depth);
+    const ch = kids.get(id) ?? [];
+    const y = depth * (ORG_CARD_H + ORG_GAP_Y);
+    let x: number;
+    if (ch.length === 0) x = left + (width.get(id)! - ORG_CARD_W) / 2;
+    else {
+      let cursor = left;
+      const xs = ch.map((c) => {
+        const cx = place(c.id, cursor, depth + 1);
+        cursor += width.get(c.id)! + ORG_GAP_X;
+        return cx;
+      });
+      x = (xs[0]! + xs[xs.length - 1]!) / 2;
+      for (const [i, c] of ch.entries()) edges.push({ from: id, to: c.id, x1: x + ORG_CARD_W / 2, y1: y + ORG_CARD_H, x2: xs[i]! + ORG_CARD_W / 2, y2: y + ORG_CARD_H + ORG_GAP_Y });
+    }
+    nodes.push({ id, x, y, worker: id === "friend" ? null : byId.get(id)! });
+    return x;
+  };
+  place("friend", 0, 0);
+  return { nodes, edges, width: width.get("friend")!, height: (deepest + 1) * ORG_CARD_H + deepest * ORG_GAP_Y };
+}

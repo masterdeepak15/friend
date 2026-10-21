@@ -79,7 +79,14 @@ describe("the six office tools", () => {
   it("hire reaches Office.hire and says who is ready", async () => {
     const p = new FakeProvider([[call("1", "office.hire", { role: "scribe", project: "site", name: "Ada" }), done], [text("ok"), done]]);
     await build(p).runTurn("hire a scribe", owner());
-    expect(office.hire).toHaveBeenCalledWith({ role: "scribe", project: "site", name: "Ada" });
+    expect(office.hire).toHaveBeenCalledWith({ role: "scribe", project: "site", name: "Ada" }); // a starter role still works
+    expect(result(p)).toMatch(/Ada is ready/);
+  });
+
+  it("hire passes the job Friend describes, and who the worker reports to", async () => {
+    const p = new FakeProvider([[call("1", "office.hire", { title: "Backend engineer", instructions: "Build the API.", capabilities: "C#", project: "site", manager: "Lena", name: "Ben" }), done], [text("ok"), done]]);
+    await build(p).runTurn("hire", owner());
+    expect(office.hire).toHaveBeenCalledWith({ project: "site", title: "Backend engineer", instructions: "Build the API.", capabilities: "C#", manager: "Lena", name: "Ben" });
     expect(result(p)).toMatch(/Ada is ready/);
   });
 
@@ -202,8 +209,16 @@ describe("the brief", () => {
     expect(b).toMatch(/settings\.set/);
   });
 
-  it("with no roles tells Friend to add one with the owner", () => {
-    expect(officeBrief(cfg({ roles: [] }))).toMatch(/no roles/i);
+  it("tells Friend how to hire anyone for any job: a title, instructions, capabilities and a manager", () => {
+    for (const b of [officeBrief(cfg()), officeBrief(cfg({ roles: [] }))]) {
+      expect(b).toMatch(/office\.hire/);
+      expect(b).toMatch(/title/i);
+      expect(b).toMatch(/instructions/i);
+      expect(b).toMatch(/manager/i);
+      expect(b).toMatch(/no fixed list/i);
+    }
+    expect(officeBrief(cfg({ roles: [] }))).not.toMatch(/no roles/i);
+    expect(officeBrief(cfg())).toMatch(/starter/i);
   });
 
   it("reaches the model's prompt when the Office is on, and not when it is off", async () => {

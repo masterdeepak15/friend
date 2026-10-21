@@ -323,3 +323,21 @@
 .of-check { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; color: #e0fbff; padding: 4px 2px; }
 .of-check .of-hint { flex-basis: 100%; }
 .ob-orb-label small { text-transform: uppercase; letter-spacing: 0.14em; }
+.ob-team-btn { position: absolute; transform: translateX(-50%); background: rgba(0, 20, 30, 0.7); border: 1px solid var(--ob-cyan); color: #e0fbff; font: inherit; font-size: 11px; letter-spacing: 0.22em; padding: 3px 12px; cursor: pointer; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.ob-team-btn:hover, .ob-team-btn:focus-visible { background: color-mix(in srgb, var(--ob-cyan) 22%, transparent); outline: none; box-shadow: 0 0 12px var(--ob-cyan); }
+.ob-org-holder { position: relative; overflow: auto; }
+.ob-org { position: absolute; top: 0; transform-origin: top left; }
+.ob-org-edges { position: absolute; inset: 0; overflow: visible; }
+.ob-org-edges path { fill: none; stroke: var(--ob-cyan); stroke-width: 1.5; opacity: 0.55; }
+.ob-org-card { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 12px; text-align: left; font: inherit; color: #e0fbff; background: linear-gradient(160deg, rgba(8, 34, 48, 0.9), rgba(3, 14, 22, 0.9)); border: 1px solid color-mix(in srgb, var(--ob-cyan) 55%, transparent); clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); cursor: pointer; overflow: hidden; }
+.ob-org-card b { font-size: 13px; letter-spacing: 0.06em; display: flex; align-items: center; gap: 6px; }
+.ob-org-card b i { width: 8px; height: 8px; border-radius: 50%; background: var(--ob-dim, #5a7f8a); display: inline-block; }
+.ob-org-card span { font-size: 11px; color: var(--ob-cyan); }
+.ob-org-card small { font-size: 10px; color: color-mix(in srgb, #e0fbff 65%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-org-card em { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ob-cyan); }
+.ob-org-card[data-status="running"] { border-color: var(--ob-green); }
+.ob-org-card[data-status="running"] b i { background: var(--ob-green); box-shadow: 0 0 8px var(--ob-green); }
+.ob-org-card[data-status="waiting"] { border-color: var(--ob-orange); animation: ob-pulse 1.4s ease-in-out infinite; }
+.ob-org-card[data-status="waiting"] b i { background: var(--ob-orange); }
+.ob-org-card[data-status="failed"] b i { background: #f87171; }
+.ob-org-root { cursor: default; border-color: var(--ob-cyan); box-shadow: inset 0 0 18px rgba(63, 216, 255, 0.15); }

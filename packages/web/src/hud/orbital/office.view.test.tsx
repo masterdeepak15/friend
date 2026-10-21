@@ -1,5 +1,5 @@
 import type { HudView, OfficeWorkerView } from "@friend/protocol";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState, type OfficeState, type StageViewState } from "../../store";
 import { OrbitalHud } from "./OrbitalHud";
@@ -11,7 +11,7 @@ const launcher: HudView["launcher"] = [
   { id: "tasks", label: "Tasks", icon: "T", action: { type: "panel", value: "tasks" } },
 ];
 const hudOf = (over: Partial<HudView> = {}): HudView => ({ terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "standard", widgets: {}, ...over });
-const worker = (name: string, over: Partial<OfficeWorkerView> = {}): OfficeWorkerView => ({ id: name.toLowerCase(), name, roleId: "scribe", projectId: "site", status: "idle", ticketId: null, detail: "", tokens: 0, budget: null, startedAt: null, ...over });
+const worker = (name: string, over: Partial<OfficeWorkerView> = {}): OfficeWorkerView => ({ id: name.toLowerCase(), name, roleId: "scribe", title: "Scribe", capabilities: "", managerId: null, projectId: "site", status: "idle", ticketId: null, detail: "", tokens: 0, budget: null, startedAt: null, ...over });
 const office = (over: Partial<OfficeState> = {}): OfficeState => ({ ...initialState.office, enabled: true, ...over });
 
 function mount(over: Partial<HudView> = {}, state: Partial<StageViewState> = {}, extra: { send?: (m: never) => void; onHire?: () => void; usage?: number | null } = {}) {
@@ -157,5 +157,46 @@ describe("a worker opened on the screen", () => {
     const hud = hudOf();
     rerender(<OrbitalHud hud={hud} state={{ ...initialState, connection: "open", hud, office: office() }} viewport={{ w: 1920, h: 1080 }} onLaunch={() => {}} onExpand={() => {}} />);
     expect(screen.queryByRole("dialog", { name: "Ada" })).toBeNull();
+  });
+});
+
+describe("the team tree", () => {
+  const team = () => office({ workers: [worker("Lena", { title: "Tech lead", status: "running", detail: "Planning" }), worker("Ben", { title: "Developer", managerId: "lena" }), worker("Cy", { title: "Tester", managerId: "lena", status: "waiting" })] });
+
+  it("opens from a Team button and draws Friend, every worker, and a line for each reporting relation", () => {
+    const { container } = mount({}, { office: team(), assistantName: "Maya" });
+    fireEvent.click(screen.getByRole("button", { name: /^team/i }));
+    const d = screen.getByRole("dialog", { name: /office team/i });
+    expect(d.textContent).toContain("Maya");
+    for (const n of ["Lena", "Ben", "Cy"]) expect(within(d).getByRole("button", { name: new RegExp(`^${n},`) })).toBeTruthy();
+    const edges = [...d.querySelectorAll("[data-edge]")].map((e) => e.getAttribute("data-edge")).sort();
+    expect(edges).toEqual(["friend>lena", "lena>ben", "lena>cy"]);
+    expect(container).toBeTruthy();
+  });
+
+  it("shows the job and what each is doing on its card, and a waiting one in orange", () => {
+    mount({}, { office: team() });
+    fireEvent.click(screen.getByRole("button", { name: /^team/i }));
+    const d = screen.getByRole("dialog", { name: /office team/i });
+    const lena = within(d).getByRole("button", { name: /^Lena,/ });
+    expect(lena.textContent).toContain("Tech lead");
+    expect(lena.textContent).toContain("Planning");
+    expect(within(d).getByRole("button", { name: /^Cy,/ }).getAttribute("data-status")).toBe("waiting");
+  });
+
+  it("opens a worker from its card", () => {
+    mount({}, { office: team() });
+    fireEvent.click(screen.getByRole("button", { name: /^team/i }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: /office team/i })).getByRole("button", { name: /^Ben,/ }));
+    expect(screen.getByRole("dialog", { name: "Ben" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: /office team/i })).toBeNull();
+  });
+
+  it("has no Team button until someone is hired, or while the office is off", () => {
+    mount({}, { office: office() });
+    expect(screen.queryByRole("button", { name: /^team/i })).toBeNull();
+    cleanup();
+    mount({}, { office: { ...team(), enabled: false } });
+    expect(screen.queryByRole("button", { name: /^team/i })).toBeNull();
   });
 });
