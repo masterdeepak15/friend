@@ -38,6 +38,8 @@ export interface OfficeDeps {
   audit: Pick<Audit, "log">;
   /** Gets the tokens a run used (counts only, never words). */
   usage: (e: { source: string; input: number; output: number }) => void;
+  /** Told when a ticket ends in review or blocked, so Friend can report it and go on with the plan. */
+  notify?: (e: { worker: string; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => void;
   emit: (m: ServerMsg) => void;
   spawn?: WorkerFactory;
   bridge?: BridgeFactory;
@@ -63,6 +65,8 @@ interface Run {
   spoke: boolean;
   pending: number;
   concluded: boolean;
+  /** What the worker last said it did (its final report). */
+  report: string;
   /** Messages sent to the worker (the ticket first) and answers received: the run ends when every message has been answered. */
   sent: number;
   answered: number;
@@ -325,7 +329,7 @@ export class Office {
     }
     this.d.store.patchTicket(ticket.id, { status: "doing", workerId: worker.id });
     this.d.store.patchWorker(worker.id, { status: "starting", ticketId: ticket.id, detail: "Starting", startedAt: Date.now() });
-    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, sent: 1, answered: 0 };
+    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, report: "", sent: 1, answered: 0 };
     run.bridge = this.makeBridge((call) => void this.onCall(run, call));
     run.bridge.setTools([APPROVE_SPEC]);
     this.runs.set(worker.id, run);
@@ -413,6 +417,7 @@ export class Office {
     this.d.store.addTokens(run.workerId, ev.input + ev.output);
     this.d.usage({ source: "office", input: ev.input, output: ev.output });
     this.feed(run.workerId, "result", ev.text.replace(/\s+/g, " ").trim() || (ev.ok ? "Done." : "Stopped with an error."));
+    run.report = ev.text.replace(/\s+/g, " ").trim() || (ev.ok ? "Done." : "Stopped with an error.");
     run.answered++;
     if (run.answered < run.sent && ev.ok) return; // the owner said something meanwhile; its answer is still to come
     const worker = this.d.store.getWorker(run.workerId)!;
@@ -445,6 +450,11 @@ export class Office {
       /* already gone */
     }
     void run.bridge.stop().catch(() => {});
+    if ((o.ticket === "review" || o.ticket === "blocked") && this.cfg.notifyFriend && !this.down) {
+      const ticket = this.d.store.getTicket(run.ticketId);
+      const worker = this.d.store.getWorker(run.workerId);
+      if (ticket && worker) this.d.notify?.({ worker: worker.name, ticketId: ticket.id, title: ticket.title, status: o.ticket, report: run.report || o.feed?.text || "" });
+    }
     this.changed();
     this.pump();
   }

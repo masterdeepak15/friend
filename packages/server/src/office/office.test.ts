@@ -94,6 +94,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
   const bridges: FakeBridge[] = [];
   const emitted: ServerMsg[] = [];
   const usage = vi.fn();
+  const notify = vi.fn();
   const audit = { log: vi.fn() };
   const resolvers: { req: { tool: string; args: any; tier: string; needsPin: boolean }; resolve: (o: { approved: boolean; reason?: string }) => void }[] = [];
   const approvals = {
@@ -110,6 +111,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
     approvals: approvals as never,
     audit,
     usage,
+    notify,
     emit: (m) => emitted.push(m),
     spawn: (o, onEvent, onExit) => {
       const p = new FakeProc(o, onEvent, onExit);
@@ -130,7 +132,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
   };
   const feeds = () => emitted.filter((m): m is Extract<ServerMsg, { type: "office.feed" }> => m.type === "office.feed");
   const alerts = () => emitted.filter((m) => m.type === "alert");
-  return { dir, projectDir, config, store, office, procs, bridges, emitted, usage, audit, approvals, resolvers, hire, feeds, alerts };
+  return { dir, projectDir, config, store, office, notify, procs, bridges, emitted, usage, audit, approvals, resolvers, hire, feeds, alerts };
 }
 
 describe("hiring", () => {
@@ -618,6 +620,42 @@ describe("reviewing and talking", () => {
     const w = t.hire("scribe");
     const r = t.office.assign({ worker: w.id, title: "x" }) as { ticket: { id: number } };
     expect(t.office.review(r.ticket.id, true)).toMatchObject({ ok: false });
+  });
+
+  it("tells Friend when a ticket is finished, with the worker's report, so Friend can carry on", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    t.office.assign({ worker: w.id, title: "Write notes" });
+    await settle();
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.emit(resultEv({ text: "Wrote notes.md" }));
+    expect(t.notify).toHaveBeenCalledTimes(1);
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ worker: w.name, ticketId: 1, title: "Write notes", status: "review", report: "Wrote notes.md" }));
+  });
+
+  it("tells Friend when a ticket ends blocked, and not when the owner stops it", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    t.office.assign({ worker: w.id, title: "One" });
+    await settle();
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.exit(1, "boom");
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ ticketId: 1, status: "blocked" }));
+    t.notify.mockClear();
+    t.office.assign({ worker: w.id, title: "Two" });
+    await settle();
+    t.office.stop(w.id, "owner");
+    expect(t.notify).not.toHaveBeenCalled();
+  });
+
+  it("keeps quiet when the owner switched off telling Friend", async () => {
+    const t = make({ notifyFriend: false });
+    const w = t.hire("scribe");
+    t.office.assign({ worker: w.id, title: "x" });
+    await settle();
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.emit(resultEv());
+    expect(t.notify).not.toHaveBeenCalled();
   });
 
   it("passes what the owner says to a running worker, and starts a run for one that is idle", async () => {

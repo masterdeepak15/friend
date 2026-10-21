@@ -13,7 +13,7 @@ const project = (over: Record<string, unknown> = {}) => ({ id: "site", name: "Si
 describe("the office defaults", () => {
   it("are off, small, and seeded with editable starter data", () => {
     const o = fresh().office;
-    expect(o).toMatchObject({ enabled: false, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, budget: { perWorkerTokens: 0, totalTokens: 0 }, projects: [] });
+    expect(o).toMatchObject({ enabled: false, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, notifyFriend: true, budget: { perWorkerTokens: 0, totalTokens: 0 }, projects: [] });
     expect(o.roles).toHaveLength(3);
     for (const r of o.roles) expect(OfficeRole.safeParse(r).success, r.id).toBe(true);
     expect(o.policy.allowTools.length).toBeGreaterThan(0);

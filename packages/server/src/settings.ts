@@ -144,6 +144,7 @@ export const SettingsPatch = z
         maxConcurrent: z.number().int().min(1).max(8),
         startTimeoutSec: z.number().int().min(10).max(600),
         pauseAtWindow: z.number().min(0).max(1),
+        notifyFriend: z.boolean(),
         budget: z.object({ perWorkerTokens: z.number().int().min(0).max(1_000_000_000), totalTokens: z.number().int().min(0).max(1_000_000_000) }).partial().strict(),
         roles: z.array(OfficeRole).max(20),
         projects: z.array(OfficeProject).max(20),

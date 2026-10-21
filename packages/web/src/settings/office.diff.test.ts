@@ -3,7 +3,7 @@ import { diffSettings, type OfficeSettings, type SettingsView } from "./settings
 
 const role = { id: "scribe", title: "Scribe", instructions: "Write docs.", model: "", permission: "default" as const };
 const project = { id: "site", name: "Site", folder: "C:\\work\\site", goal: "", extraFolders: [] };
-const office: OfficeSettings = { enabled: false, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, budget: { perWorkerTokens: 0, totalTokens: 0 }, roles: [role], projects: [project], policy: { allowTools: ["Read"], denyCommands: ["git\\s+push"] } };
+const office: OfficeSettings = { enabled: false, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, notifyFriend: true, budget: { perWorkerTokens: 0, totalTokens: 0 }, roles: [role], projects: [project], policy: { allowTools: ["Read"], denyCommands: ["git\\s+push"] } };
 const view = (o: OfficeSettings) => ({ provider: "claude", model: "m", apiKeySet: false, view: "companion", look: {}, ollama: {}, claudeCode: {}, voice: {}, office: o }) as unknown as SettingsView;
 
 describe("saving the office settings", () => {

@@ -287,6 +287,8 @@ export interface OfficeConfig {
   startTimeoutSec: number;
   /** New runs wait while the five-hour window is this full (0..1); 0 never waits. */
   pauseAtWindow: number;
+  /** Tell Friend when a worker finishes or is stuck, so Friend reports it and can give the next ticket. */
+  notifyFriend: boolean;
   /** Tokens a worker may use, and all workers together; 0 means no limit. */
   budget: { perWorkerTokens: number; totalTokens: number };
   roles: OfficeRole[];
@@ -352,6 +354,7 @@ export function sanitizeOffice(raw: unknown): OfficeConfig {
     maxConcurrent: num(r.maxConcurrent, 1, 8, 2),
     startTimeoutSec: num(r.startTimeoutSec, 10, 600, 60),
     pauseAtWindow: num(r.pauseAtWindow, 0, 1, 0.9, false),
+    notifyFriend: r.notifyFriend !== false,
     budget: { perWorkerTokens: num(b.perWorkerTokens, 0, 1_000_000_000, 0), totalTokens: num(b.totalTokens, 0, 1_000_000_000, 0) },
     roles,
     projects,

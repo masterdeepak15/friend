@@ -4,7 +4,7 @@ import { describeStatus } from "../../overlay/StatusBadge";
 import type { UsageApi } from "../../settings/UsageTab";
 import type { StageViewState } from "../../store";
 import { ExpandedView } from "./ExpandedView";
-import { budgetRings, feedLines, ticketCells, ticketProject, usageFromQuota, workerNodes } from "./office";
+import { budgetRings, feedLines, officeMood, ticketCells, ticketProject, usageFromQuota, workerNodes } from "./office";
 import { WorkerView } from "./WorkerView";
 import { DESIGN_H, DESIGN_W, ORBIT_R, centreClear, designScale, layoutMode, orbitNodes, screenOf, type Anchor } from "./geometry";
 import { Frame, HexNode, HudDefs, LinkLine, SegmentedRing, type NodeStatus, type Tone } from "./kit";
@@ -387,7 +387,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
           </svg>
           <div className="ob-orb-label" style={{ left: c.cx, top: c.cy }} aria-hidden="true">
             <b>{name}</b>
-            <small>{state.voice.mode}</small>
+            <small>{officeMood(state.voice.mode, preview ? { enabled: false, workers: [] } : state.office)}</small>
           </div>
           {hasUsage && (
             <>

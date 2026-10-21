@@ -96,6 +96,23 @@ describe("the orbit with the office on", () => {
   });
 });
 
+describe("the name in the middle", () => {
+  const label = (c: HTMLElement) => c.querySelector(".ob-orb-label small")!.textContent;
+  it("says what the office is doing while Friend himself is idle", () => {
+    expect(label(mount({}, { office: office({ workers: [worker("Ada", { status: "running" }), worker("Bob", { status: "starting" })] }) }).container)).toBe("working · 2");
+    cleanup();
+    expect(label(mount({}, { office: office({ workers: [worker("Ada", { status: "waiting" }), worker("Bob", { status: "running" })] }) }).container)).toBe("needs you");
+    cleanup();
+    expect(label(mount({}, { office: office({ workers: [worker("Ada")] }) }).container)).toBe("idle");
+  });
+
+  it("keeps Friend''s own state when he is busy, and ignores the office while it is off", () => {
+    expect(label(mount({}, { voice: { ...initialState.voice, mode: "speaking" }, office: office({ workers: [worker("Ada", { status: "running" })] }) }).container)).toBe("speaking");
+    cleanup();
+    expect(label(mount({}, { office: office({ enabled: false, workers: [worker("Ada", { status: "running" })] }) }).container)).toBe("idle");
+  });
+});
+
 describe("a worker opened on the screen", () => {
   const busy = () => office({ workers: [worker("Ada", { status: "running", detail: "Write a.txt", tokens: 250, budget: 1000 })], feed: { ada: [{ at: 1, kind: "tool", text: "Write a.txt" }, { at: 2, kind: "text", text: "Almost done" }] } });
 

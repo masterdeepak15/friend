@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { createApp } from "../app";
 import { FakeProvider } from "../provider/fake";
+import type { WorkerEvent } from "./events";
+import { OfficeStore } from "./store";
 import type { BridgeLike, WorkerLike } from "./office";
 
 const owner = { password: "correct horse battery", pin: "123456", assistantName: "Jarvis" };
@@ -23,7 +25,7 @@ class FakeProc implements WorkerLike {
   sent: string[] = [];
   exited: Promise<void>;
   private done!: () => void;
-  constructor() {
+  constructor(public onEvent: (e: WorkerEvent) => void = () => {}) {
     this.exited = new Promise((r) => (this.done = r));
   }
   send(t: string) {
@@ -37,22 +39,24 @@ class FakeProc implements WorkerLike {
 }
 const bridge = (): BridgeLike => ({ url: "http://127.0.0.1:1/mcp", token: "t", start: async () => {}, stop: async () => {}, setTools() {}, failPending() {} });
 
-async function boot(officeOn = true) {
+let provider: FakeProvider;
+async function boot(officeOn = true, script: ConstructorParameters<typeof FakeProvider>[0] = []) {
   const dir = mkdtempSync(join(tmpdir(), "friend-officewire-"));
   const folder = join(dir, "site");
   mkdirSync(folder);
   app = await createApp({
     dataDir: dir,
-    provider: new FakeProvider([]),
+    provider: (provider = new FakeProvider(script)),
     config: {
       port: 0,
       roots: [],
-      office: { enabled: officeOn, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, budget: { perWorkerTokens: 0, totalTokens: 0 }, roles: [{ id: "scribe", title: "Scribe", instructions: "Write.", model: "", permission: "default" }], projects: [{ id: "site", name: "Site", folder, goal: "", extraFolders: [] }], policy: { allowTools: ["Read"], denyCommands: [] } },
+      office: { enabled: officeOn, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, notifyFriend: true, budget: { perWorkerTokens: 0, totalTokens: 0 }, roles: [{ id: "scribe", title: "Scribe", instructions: "Write.", model: "", permission: "default" }], projects: [{ id: "site", name: "Site", folder, goal: "", extraFolders: [] }], policy: { allowTools: ["Read"], denyCommands: [] } },
     },
     pluginCatalogDir: join(dir, "none"),
     office: {
-      spawn: () => {
-        const p = new FakeProc();
+      notifyDelayMs: 0,
+      spawn: (_o, onEvent) => {
+        const p = new FakeProc(onEvent);
         procs.push(p);
         return p;
       },
@@ -140,4 +144,31 @@ describe("the Office in the app", () => {
     await until(() => got.some((m) => m.type === "office.state" && !m.enabled));
     expect(got.some((m) => m.type === "office.state" && !m.enabled)).toBe(true);
   });
-});
+
+  it("shows a screen that connects what each worker did lately, not only what happens from then on", async () => {
+    const cookie = await boot();
+    const hired = app!.office.hire({ role: "scribe", project: "site", name: "Ada" });
+    if (!hired.ok) throw new Error(hired.error);
+    const store = new OfficeStore(app!.db);
+    store.addEvent(hired.worker.id, { kind: "tool", text: "Write a.txt" });
+    store.addEvent(hired.worker.id, { kind: "result", text: "Done." });
+    const { got } = await connect(cookie);
+    await until(() => got.filter((m) => m.type === "office.feed").length >= 2);
+    expect(got.filter((m) => m.type === "office.feed").map((m) => (m as { text: string }).text)).toEqual(["Write a.txt", "Done."]);
+  });
+
+  it("tells Friend when a worker finishes, so Friend answers and can go on", async () => {
+    await boot(true, [[{ type: "text_delta", text: "Noted." }, { type: "done" }]]);
+    app!.office.hire({ role: "scribe", project: "site", name: "Ada" });
+    app!.office.assign({ worker: "Ada", title: "Write notes" });
+    await until(() => procs.length === 1);
+    procs[0]!.onEvent({ kind: "init", sessionId: "s", model: "m" });
+    procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
+    await until(() => provider.calls.length > 0);
+    const asked = JSON.stringify(provider.calls[0]!.messages);
+    expect(asked).toContain("Office update");
+    expect(asked).toContain("Ada");
+    expect(asked).toContain("Write notes");
+    expect(asked).toContain("Wrote notes.md");
+    expect(asked).toContain("untrusted");
+  });});

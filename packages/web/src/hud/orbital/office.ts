@@ -67,6 +67,14 @@ export function budgetRings(workers: OfficeWorkerView[]): { label: string; value
 
 const TONE: Record<string, "green" | "orange" | "plain"> = { tool: "green", result: "green", approval: "orange", error: "orange", text: "plain" };
 
+/** What the name in the middle says: Friend's own state, or, while he is idle, what the office is doing. */
+export function officeMood(mode: string, office: { enabled: boolean; workers: OfficeWorkerView[] }): string {
+  if (mode !== "idle" || !office.enabled) return mode;
+  if (office.workers.some((w) => w.status === "waiting")) return "needs you";
+  const busy = office.workers.filter((w) => w.status === "running" || w.status === "starting").length;
+  return busy > 0 ? `working · ${busy}` : mode;
+}
+
 /** The newest lines of every worker's feed, oldest first, each starting with the worker's name. */
 export function feedLines(feed: Record<string, OfficeFeedLine[]>, workers: OfficeWorkerView[], limit = 8): { text: string; tone: "green" | "orange" | "plain" }[] {
   const all = workers.flatMap((w) => (feed[w.id] ?? []).map((l) => ({ ...l, name: w.name.slice(0, 6).toUpperCase().padEnd(7) })));

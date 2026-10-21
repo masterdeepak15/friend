@@ -320,3 +320,6 @@
 
 /* the spoken caption sits above the message strip, not on it */
 .stage:has(.orbital[data-mode="orbit"]) .captions { bottom: 17%; }
+.of-check { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; color: #e0fbff; padding: 4px 2px; }
+.of-check .of-hint { flex-basis: 100%; }
+.ob-orb-label small { text-transform: uppercase; letter-spacing: 0.14em; }

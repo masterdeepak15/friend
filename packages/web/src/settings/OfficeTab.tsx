@@ -145,6 +145,11 @@ export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChan
         </label>
       </section>
 
+      <label className="of-check">
+        <input type="checkbox" checked={office.notifyFriend} onChange={(e) => onChange({ notifyFriend: e.target.checked })} /> Tell Friend when a worker finishes
+        <small className="of-hint">Friend is told when a ticket is done or stuck, says so, and can review it and give the next ticket, so the work keeps moving. Switch it off and he only knows what you ask him.</small>
+      </label>
+
       <Card code="01" title="Limits" note="How many workers run, how long they may take to start, and when they stop.">
         <div className="of-grid">
           <Field label="Most workers at once" hint="The others wait their turn. From 1 to 8.">

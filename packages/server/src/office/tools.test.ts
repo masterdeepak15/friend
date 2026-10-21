@@ -170,6 +170,8 @@ describe("the brief", () => {
     expect(b).toMatch(/The Site/);
     expect(b).toMatch(/Ship v2/);
     expect(b).toMatch(/small and specific/i);
+    expect(b).toMatch(/until the work is done/i); // Friend keeps the plan moving and does not leave workers idle
+    expect(b).toMatch(/only through you/i); // workers do not talk to each other: Friend carries results between them
     expect(b).not.toMatch(/builder|tester|reviewer/);
   });
 
