@@ -27,6 +27,11 @@ import { ElsewhereCard } from "./overlay/ElsewhereCard";
 import { useScreenReport } from "./layout/screen";
 import { HouseholdPanel } from "./voice/HouseholdPanel";
 import { QuickLaunch, type LauncherItem } from "./hud/QuickLaunch";
+import { ORBITAL_ORB_SCALE, layoutMode } from "./hud/orbital/geometry";
+import { Safe } from "./hud/orbital/Safe";
+import { useWindowSize } from "./hud/orbital/useWindowSize";
+import { OrbitalHud } from "./hud/orbital/OrbitalHud";
+import { useUsage } from "./hud/orbital/widgets/useUsage";
 import { MusicPlayerView } from "./music/MusicPlayer";
 import { commandToAction, useMusicPlayer } from "./music/useMusicPlayer";
 import { useRemoteMusic } from "./music/useRemoteMusic";
@@ -94,7 +99,16 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
     else if (value === "chat" || value === "tasks") panels.toggle(value, true);
 
   };
-  const shown = useMemo(() => (muted ? { ...state, objects: [], captions: "" } : state), [muted, state]);
+  // The orbital screen replaces the classic corner widgets and the launcher panel (its nodes are the quick-launch buttons).
+  const orbital = state.viewKnown && state.hud?.layout === "orbital";
+  const usage = useUsage(undefined, orbital);
+  const win = useWindowSize();
+  const orbitMode = layoutMode(win.w, win.h) === "orbit"; // a phone has no orbit, so its orb keeps its full size
+  const shown = useMemo(() => {
+    const base = muted ? { ...state, objects: [], captions: "" } : state;
+    // the orbit and its rings are drawn around the orb, so the orb is drawn smaller than on the classic screen
+    return orbital && orbitMode ? { ...base, look: { ...base.look, size: base.look.size * ORBITAL_ORB_SCALE } } : base;
+  }, [muted, state, orbital, orbitMode]);
 
   // Once per visit, when speech works but nobody's voice is enrolled yet, say how to turn recognition on.
   const reminded = useRef(false);
@@ -210,7 +224,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
 
   return (
     <>
-      <Stage state={shown} send={send} dispatch={dispatch} voice={voice} slash={slash} onMenu={() => setMenuRequest((n) => n + 1)} />
+      <Stage state={shown} send={send} dispatch={dispatch} voice={voice} slash={slash} onMenu={() => setMenuRequest((n) => n + 1)} hudLayer={orbital && state.hud ? <Safe><OrbitalHud hud={state.hud} state={state} usage={usage.share === null ? null : usage.share * 100} send={send} onHire={() => setSettingsOpen("office")} onLaunch={launch} onExpand={() => {}} /></Safe> : null} />
       <Overlay
         approval={state.approval}
         challenge={state.challenge}
@@ -221,17 +235,18 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         voiceMode={state.voice.mode}
         busy={state.busy}
         activity={state.activity}
-        showStatus={state.viewKnown && panels.show.status}
-        showClock={state.viewKnown && panels.show.clock}
-        profile={state.viewKnown && panels.show.profile ? { ownerName: state.ownerName, speaker: state.speaker } : null}
+        showStatus={state.viewKnown && panels.show.status && !orbital}
+        showClock={state.viewKnown && panels.show.clock && !orbital}
+        profile={state.viewKnown && panels.show.profile && !orbital ? { ownerName: state.ownerName, speaker: state.speaker } : null}
         assistantName={state.assistantName}
         hud={state.hud}
+        hudApproval={orbital}
         send={send}
         dispatch={dispatch}
       >
         {state.viewKnown && panels.show.chat && <ChatPanel lines={state.chat} live={state.chatLive} onSend={(text) => send({ type: "chat.send", text })} onClose={() => panels.toggle("chat", false)} />}
         {state.viewKnown && panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
-        {state.viewKnown && panels.show.launcher && state.hud && <QuickLaunch items={state.hud.launcher} animations={animations} onAction={launch} />}
+        {state.viewKnown && panels.show.launcher && state.hud && !orbital && <QuickLaunch items={state.hud.launcher} animations={animations} onAction={launch} />}
         {state.viewKnown && panels.show.music && <MusicPlayerView player={player} music={state.music} animations={animations} />}
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
         {household && <HouseholdPanel onClose={() => setHousehold(false)} />}

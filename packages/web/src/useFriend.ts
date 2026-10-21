@@ -30,6 +30,8 @@ export function useFriend(onUnauthorized: () => void): {
   /** Hands-free listening for the assistant's name. It is a choice of this device, remembered here. */
   handsFree: { on: boolean; supported: boolean; toggle: () => void };
   useHere: () => void;
+  officeStop: (workerId?: string) => void;
+  officeSay: (workerId: string, text: string) => void;
 } {
   const [state, dispatch] = useReducer(reduce as (s: StageViewState, a: unknown) => StageViewState, initialState);
   const socket = useRef<FriendSocket | null>(null);
@@ -179,5 +181,7 @@ export function useFriend(onUnauthorized: () => void): {
     [],
   );
   const useHere = useCallback(() => socket.current?.takeOver(), []);
-  return { state, send, dispatch: local, voice, handsFree, useHere };
+  const officeStop = useCallback((workerId?: string) => send({ type: "office.stop", ...(workerId ? { workerId } : {}) }), [send]);
+  const officeSay = useCallback((workerId: string, text: string) => send({ type: "office.say", workerId, text }), [send]);
+  return { state, send, dispatch: local, voice, handsFree, useHere, officeStop, officeSay };
 }

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, type HudWidgetId } from "./hud";
+import { MAX_FEED_CHARS, OFFICE_FEED_KINDS, OfficeQuota, OfficeTicketView, OfficeWorkerView } from "./office";
 import { parseRef } from "./musicRef";
 import { StageCommand, StageSnapshot } from "./stage";
 import { Tier } from "./tiers";
@@ -89,6 +91,11 @@ export const HudView = z.object({
     .array(z.object({ id: z.string().max(20), label: z.string().max(24), icon: z.string().max(16), action: z.object({ type: z.enum(["url", "prompt", "panel", "music"]), value: z.string().max(500) }) }))
     .max(12),
   animations: z.enum(["full", "reduced", "off"]),
+  layout: z.enum(HUD_LAYOUTS),
+  density: z.enum(HUD_DENSITIES),
+  widgets: z.object(Object.fromEntries(HUD_WIDGET_IDS.map((id) => [id, z.boolean().optional()])) as Record<HudWidgetId, z.ZodOptional<z.ZodBoolean>>),
+  /** The orbital screen shows the approved mockup's sample content (workers, tickets, budget, feed) instead of empty slots. */
+  preview: z.boolean().optional(),
 });
 export type HudView = z.infer<typeof HudView>;
 
@@ -112,6 +119,8 @@ export const ServerMsg = z.discriminatedUnion("type", [
   /** The owner's chosen view (sent on connect and whenever it changes). */
   z.object({ type: z.literal("ui"), view: ViewPreset, look: ClientLook.optional(), ownerName: z.string().max(40).optional(), assistantName: z.string().max(40).optional(), hud: HudView.optional(), music: MusicView.optional() }),
   z.object({ type: z.literal("activity"), text: z.string().max(80).nullable() }),
+  /** How busy this PC is, for the orbital screen (sent every couple of seconds while that screen is chosen). */
+  z.object({ type: z.literal("hud.stats"), cpu: z.number().min(0).max(100), ramUsed: z.number().min(0), ramTotal: z.number().min(0), netDown: z.number().min(0), netUp: z.number().min(0) }),
   z.object({
     type: z.literal("status"),
     busy: z.boolean(),
@@ -154,6 +163,10 @@ export const ServerMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("screen.cancel"), id: z.string() }),
   z.object({ type: z.literal("snapshot"), stage: StageSnapshot, pendingApproval: PendingApproval.nullable().optional() }),
   z.object({ type: z.literal("error"), message: z.string() }),
+  /** The Office as screens draw it (sent on connect and whenever a worker, a ticket or the quota changes). */
+  z.object({ type: z.literal("office.state"), enabled: z.boolean(), workers: z.array(OfficeWorkerView).max(100), tickets: z.array(OfficeTicketView).max(500), quota: OfficeQuota }),
+  /** One line of what a worker is doing. */
+  z.object({ type: z.literal("office.feed"), workerId: z.string().max(64), at: z.number(), kind: z.enum(OFFICE_FEED_KINDS), text: z.string().max(MAX_FEED_CHARS) }),
 ]);
 export type ServerMsg = z.infer<typeof ServerMsg>;
 
@@ -188,6 +201,11 @@ export const ClientMsg = z.discriminatedUnion("type", [
   /** A screen's button press for the PC's player (only used while the output is the PC). */
   z.object({ type: z.literal("music.remote"), command: MusicCommand }),
   z.object({ type: z.literal("ping") }),
+  /** The owner stops one worker, or every worker when no id is given. */
+  z.object({ type: z.literal("office.stop"), workerId: z.string().max(64).optional() }),
+  z.object({ type: z.literal("office.fire"), workerId: z.string().min(1).max(64) }),
+  /** The owner says something to a worker. */
+  z.object({ type: z.literal("office.say"), workerId: z.string().max(64), text: z.string().min(1).max(2000) }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;
 

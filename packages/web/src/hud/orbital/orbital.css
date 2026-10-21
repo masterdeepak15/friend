@@ -1,0 +1,344 @@
+/* The orbital HUD: colours, frame shapes and every loop of motion. Everything lives under .orbital so the classic screen is untouched. */
+
+.orbital {
+  --ob-cyan: var(--accent, #22d3ee);
+  --ob-green: #34d399;
+  --ob-orange: #fb923c;
+  --ob-dark: #031018;
+  --ob-line: color-mix(in srgb, var(--ob-cyan) 55%, transparent);
+  --ob-dim: color-mix(in srgb, var(--ob-cyan) 28%, transparent);
+  position: absolute; /* inside the stage: above the orb, below the pictures the assistant puts up, the message bar and the touch controls */
+  inset: 0;
+  z-index: 5;
+  pointer-events: none; /* only the instruments and nodes take the pointer, so a long press on the stage still talks */
+  font-family: Consolas, "Courier New", monospace;
+  color: #a5f3fc;
+}
+.orbital [data-tone="cyan"] { --ob-tone: var(--ob-cyan); }
+.orbital [data-tone="green"] { --ob-tone: var(--ob-green); }
+.orbital [data-tone="orange"] { --ob-tone: var(--ob-orange); }
+.orbital .ob-hit { pointer-events: auto; }
+
+/* ---- frames: a coloured outer shape, a dark inner one one pixel in, and an optional running light between them ---- */
+.ob-frame {
+  --cut: 10px;
+  position: relative;
+  background: color-mix(in srgb, var(--ob-tone, var(--ob-cyan)) 60%, transparent);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  min-height: 0;
+}
+.ob-frame::before { /* the inner, dark shape */
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: linear-gradient(color-mix(in srgb, var(--ob-dark) 94%, transparent), color-mix(in srgb, var(--ob-dark) 90%, transparent));
+  clip-path: inherit;
+}
+.ob-frame > * { position: relative; }
+.ob-frame[data-running]::after { /* a light that runs round the border */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 0 40%, var(--ob-tone, var(--ob-cyan)) 50%, transparent 60% 100%) 0 0 / 300% 100%;
+  clip-path: inherit;
+  mix-blend-mode: screen;
+  opacity: 0.9;
+  animation: ob-run 5s linear infinite;
+}
+.ob-frame[data-running]::before { z-index: 1; }
+.ob-frame-body { padding: 6px 9px; position: relative; z-index: 2; }
+.ob-frame-title {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 9px 0;
+  color: var(--ob-tone, var(--ob-cyan));
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.ob-v-octagon { --cut: 22px; clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)); }
+.ob-v-slant { --cut: 14px; clip-path: polygon(var(--cut) 0, 100% 0, calc(100% - var(--cut)) 100%, 0 100%); }
+.ob-v-bracket { background: none; clip-path: none; }
+.ob-v-bracket::before { background: none; clip-path: none; inset: 0;
+  border: 0 solid var(--ob-tone, var(--ob-cyan));
+  background:
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) top left / 18px 2px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) top left / 2px 18px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) top right / 18px 2px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) top right / 2px 18px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) bottom left / 18px 2px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) bottom left / 2px 18px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) bottom right / 18px 2px no-repeat,
+    linear-gradient(var(--ob-tone, var(--ob-cyan)), var(--ob-tone, var(--ob-cyan))) bottom right / 2px 18px no-repeat;
+}
+.ob-frame[data-tone="orange"] { animation: ob-pulse 1.8s ease-in-out infinite; }
+
+/* ---- instruments ---- */
+.ob-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.ob-track { fill: none; stroke: var(--ob-dim); }
+.ob-fill { fill: none; stroke: var(--ob-tone, var(--ob-cyan)); filter: url(#ob-glow); transition: stroke-dasharray 0.6s ease; }
+.ob-eq { fill: var(--ob-tone, var(--ob-cyan)); transform-box: fill-box; transform-origin: bottom; animation: ob-eq 0.9s ease-in-out infinite alternate; }
+.ob-ecg-base { fill: none; stroke: var(--ob-dim); stroke-width: 1.5; }
+.ob-ecg { fill: none; stroke: #67e8f9; stroke-width: 2.5; stroke-dasharray: 140 400; animation: ob-ecg 2.4s linear infinite; filter: url(#ob-glow); }
+.ob-link { stroke: var(--ob-tone, var(--ob-cyan)); stroke-width: 1.5; fill: none; filter: url(#ob-glow); }
+.ob-flow { stroke-dasharray: 5 11; animation: ob-flow 1s linear infinite; }
+.ob-seg { stroke: var(--ob-dim); stroke-width: 10; }
+.ob-seg[data-on="true"] { stroke: var(--ob-cyan); filter: url(#ob-glow); }
+.ob-sweep { transform-box: view-box; transform-origin: 0 0; animation: ob-spin 4s linear infinite; }
+.ob-blip { fill: var(--ob-green); animation: ob-pulse 1.8s ease-in-out infinite; filter: url(#ob-glow); }
+[data-dim] .ob-blip { fill: var(--ob-dim); animation: none; filter: none; }
+.ob-spin { transform-box: fill-box; transform-origin: center; animation: ob-spin 40s linear infinite; }
+.ob-breathe { transform-box: fill-box; transform-origin: center; animation: ob-breathe 4s ease-in-out infinite; }
+.ob-ping { transform-box: fill-box; transform-origin: center; animation: ob-ping 3s ease-out infinite; }
+.ob-blink { animation: ob-blink 1s steps(2) infinite; }
+
+/* ---- nodes of the orbit ---- */
+.ob-node { position: absolute; transform: translate(-50%, -50%); background: none; border: 0; padding: 0; cursor: pointer; color: #e0fbff; pointer-events: auto; }
+.ob-node svg { width: 68px; height: 60px; display: block; filter: url(#ob-glow); }
+.ob-node polygon { fill: var(--ob-dark); stroke: var(--ob-tone, var(--ob-cyan)); stroke-width: 1.6; }
+.ob-node:hover polygon, .ob-node:focus-visible polygon { fill: color-mix(in srgb, var(--ob-tone, var(--ob-cyan)) 22%, var(--ob-dark)); }
+.ob-node:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+.ob-node[data-status="waiting"] svg { animation: ob-pulse 0.9s ease-in-out infinite; }
+.ob-node[data-status="idle"] svg, .ob-node[data-status="add"] svg { opacity: 0.6; }
+.ob-node-label { font-size: 11px; letter-spacing: 0.1em; fill: #e0fbff; text-anchor: middle; dominant-baseline: central; }
+
+/* ---- the loops ---- */
+@keyframes ob-spin { to { transform: rotate(360deg); } }
+@keyframes ob-flow { to { stroke-dashoffset: -32; } }
+@keyframes ob-run { from { background-position: 100% 0; } to { background-position: -200% 0; } }
+@keyframes ob-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+@keyframes ob-eq { from { transform: scaleY(calc(var(--lv, 1) * 0.25)); } to { transform: scaleY(var(--lv, 1)); } }
+@keyframes ob-ecg { to { stroke-dashoffset: -540; } }
+@keyframes ob-ping { from { transform: scale(0.6); opacity: 0.8; } to { transform: scale(2.4); opacity: 0; } }
+@keyframes ob-breathe { 0%, 100% { transform: scale(0.96); } 50% { transform: scale(1.06); } }
+@keyframes ob-blink { 50% { opacity: 0; } }
+@keyframes ob-runline { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }
+
+/* ---- motion rules: off stops everything, reduced keeps only the gentle loops, the system's setting always wins ---- */
+.orbital[data-hud-anim="off"],
+.orbital[data-hud-anim="off"] *,
+.orbital[data-hud-anim="off"] *::before,
+.orbital[data-hud-anim="off"] *::after { animation: none !important; transition: none !important; }
+.orbital[data-hud-anim="reduced"] *:not(.ob-pulse):not(.ob-breathe),
+.orbital[data-hud-anim="reduced"] *::before,
+.orbital[data-hud-anim="reduced"] *::after { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .orbital, .orbital *, .orbital *::before, .orbital *::after { animation: none !important; transition: none !important; }
+}
+/* a hidden tab keeps nothing running */
+.orbital[data-paused],
+.orbital[data-paused] *,
+.orbital[data-paused] *::before,
+.orbital[data-paused] *::after { animation-play-state: paused !important; }
+
+/* ---- the scene: rings, orbit, zones, top bar, chips ---- */
+.ob-scene { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ob-ring-dash { fill: none; stroke: var(--ob-cyan); stroke-width: 10; stroke-dasharray: 2 8; opacity: 0.7; }
+.ob-ring-long { fill: none; stroke: #67e8f9; stroke-width: 1.5; stroke-dasharray: 60 20 8 20; }
+.ob-ring-thin { fill: none; stroke: var(--ob-dim); stroke-width: 1; stroke-dasharray: 2 6; }
+.ob-orbit { fill: none; stroke: var(--ob-line); stroke-opacity: 0.5; stroke-dasharray: 3 9; }
+.ob-fast { animation-duration: 14s; }
+.ob-reverse { animation-direction: reverse; }
+.ob-usage-ring { position: absolute; pointer-events: none; }
+.ob-usage-label { position: absolute; background: none; border: 0; color: #9be9f7; font: inherit; font-size: 11px; letter-spacing: 0.14em; cursor: pointer; padding: 4px 8px; }
+.ob-usage-label:hover, .ob-usage-label:focus-visible { color: #fff; }
+.ob-zone { cursor: pointer; color: #bdeef7; overflow: hidden; }
+.ob-zone:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.ob-zone:hover { filter: brightness(1.25); }
+.ob-topbar { cursor: default; }
+.ob-topbar-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; height: 100%; font-size: 12px; letter-spacing: 0.14em; color: #e0fbff; white-space: nowrap; overflow: hidden; }
+.ob-status { color: var(--ob-cyan); overflow: hidden; text-overflow: ellipsis; }
+.ob-hint { position: absolute; margin: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; letter-spacing: 0.16em; color: color-mix(in srgb, var(--ob-cyan) 70%, transparent); pointer-events: none; }
+.orbital[data-mode="compact"] .ob-chips { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 6px; overflow-x: auto; pointer-events: none; }
+.ob-chip { flex: none; background: color-mix(in srgb, var(--ob-dark) 90%, transparent); border: 1px solid var(--ob-line); color: #e0fbff; font: inherit; font-size: 12px; padding: 6px 10px; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); cursor: pointer; }
+.orbital[data-mode="compact"] .ob-strip { position: absolute; left: 8px; right: 8px; bottom: 110px; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; pointer-events: none; }
+.orbital[data-mode="compact"] .ob-strip .ob-zone { position: relative; }
+.orbital[data-mode="compact"] .ob-usage-label { position: relative; flex: none; align-self: center; }
+
+/* ---- instrument contents ---- */
+.ob-li { margin: 2px 0; padding-left: 6px; border-left: 2px solid var(--ob-dim); font-size: 12px; color: #bdeef7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-user { color: #e0fbff; border-color: var(--ob-cyan); }
+.ob-live { color: var(--ob-green); border-color: var(--ob-green); }
+.ob-sub { color: color-mix(in srgb, var(--ob-cyan) 60%, transparent); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
+.ob-voice, .ob-tickets, .ob-budget { display: flex; flex-direction: column; gap: 2px; }
+.ob-static { cursor: default; }
+.ob-approval { display: grid; grid-template-columns: 64px 1fr; gap: 8px 12px; align-items: start; font-size: 12px; color: #fed7aa; max-height: 100%; overflow: auto; }
+.ob-summary { margin: 0; white-space: pre-wrap; color: #fff; font: inherit; font-size: 13px; }
+.ob-warn { color: var(--ob-orange); animation: ob-pulse 0.9s ease-in-out infinite; }
+.ob-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ob-btn { background: transparent; border: 1px solid var(--ob-orange); color: #fed7aa; font: inherit; font-size: 11px; letter-spacing: 0.1em; padding: 6px 10px; cursor: pointer; text-transform: uppercase; }
+.ob-btn:hover:not(:disabled), .ob-btn:focus-visible { background: color-mix(in srgb, var(--ob-orange) 25%, transparent); }
+.ob-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ob-yes { background: color-mix(in srgb, var(--ob-orange) 20%, transparent); }
+
+/* ---- an opened instrument ---- */
+.ob-backdrop { position: absolute; inset: 0; background: rgba(1, 6, 9, 0.55); }
+.ob-expanded { cursor: default; overflow: hidden; z-index: 5; }
+.ob-expanded .ob-frame-body { height: calc(100% - 22px); display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.ob-expanded-body { flex: 1; min-height: 0; overflow: auto; }
+.ob-worker { display: flex; flex-direction: column; gap: 4px; }
+.ob-worker-log { flex: 1; min-height: 0; overflow: auto; }
+.ob-worker-log .ob-li { white-space: normal; overflow: visible; word-break: break-word; }
+.ob-worker-say { display: flex; gap: 6px; margin-top: 8px; }
+.ob-worker-say input { flex: 1; min-width: 0; background: rgba(0, 20, 30, 0.6); border: 1px solid var(--ob-dim); color: #e0fbff; font: inherit; font-size: 13px; padding: 5px 8px; }
+.ob-worker-say input:focus-visible { outline: 1px solid var(--ob-cyan); }
+.ob-worker-say button { background: none; border: 1px solid var(--ob-cyan); color: #e0fbff; font: inherit; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 12px; cursor: pointer; }
+.ob-worker-say button:disabled { opacity: 0.4; cursor: default; }
+.ob-worker-say .ob-stop { border-color: var(--ob-orange); color: var(--ob-orange); }
+.ob-explain { margin: 0; color: color-mix(in srgb, var(--ob-cyan) 75%, transparent); font-size: 12px; line-height: 1.4; }
+.ob-close { position: absolute; top: 4px; right: 12px; z-index: 3; background: none; border: 0; color: #e0fbff; font: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
+.ob-close:hover, .ob-close:focus-visible { color: #fff; outline: 1px solid var(--ob-cyan); }
+
+/* ---- instruments fit their frame: the drawing takes what is left under the title, the text lines sit below it ---- */
+.ob-zone .ob-frame-body, .ob-expanded-body { display: flex; flex-direction: column; min-height: 0; }
+.ob-zone .ob-frame-body { height: calc(100% - 22px); }
+.ob-zone .ob-frame-body > div, .ob-expanded-body > div { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
+.ob-zone .ob-frame-body > .ob-svg, .ob-zone .ob-frame-body > div > .ob-svg, .ob-expanded-body > .ob-svg, .ob-expanded-body > div > .ob-svg { flex: 1 1 0; min-height: 0; height: 0; width: 100%; }
+.ob-feed { justify-content: flex-end; overflow: hidden; }
+.ob-topbar .ob-frame-body { height: 100%; display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
+.ob-topbar-row { width: 100%; }
+.ob-glyph { font-size: 17px; letter-spacing: 0; }
+
+/* ---- review fixes: only the pieces take the pointer on a phone, a status line, the approval as a dialog ---- */
+.ob-strip > * { pointer-events: auto; }
+.ob-chips > * { pointer-events: auto; }
+.ob-compact-status { position: absolute; top: 48px; left: 12px; right: 12px; margin: 0; font-size: 11px; letter-spacing: 0.12em; color: var(--ob-cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.ob-modal-backdrop { z-index: 6; pointer-events: auto; }
+.ob-modal { z-index: 7; }
+.ob-tier-row { display: flex; gap: 8px; align-items: center; }
+
+/* ---- the approved mockup: notched top line, orb label, captions, placeholders ---- */
+.ob-topbar { background: none; pointer-events: none; }
+.ob-topbar-line { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ob-topbar-base { fill: none; stroke: var(--ob-line); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.ob-topbar-run { fill: none; stroke: #67e8f9; stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-dasharray: 6 94; animation: ob-runline 5s linear infinite; filter: url(#ob-glow); }
+.ob-topbar-row { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; height: 100%; padding: 4px 8px 0; }
+.ob-topbar-left { display: flex; flex-direction: column; line-height: 1.5; overflow: hidden; }
+.ob-topbar-left b { font-weight: 400; color: #e0fbff; font-size: 12px; letter-spacing: 0.14em; white-space: nowrap; }
+.ob-topbar-left small { font-size: 10px; letter-spacing: 0.1em; color: color-mix(in srgb, var(--ob-cyan) 70%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-title { color: #e0fbff; font-size: 17px; letter-spacing: 0.5em; text-shadow: 0 0 8px var(--ob-cyan); padding-top: 2px; }
+.ob-time { justify-self: end; font-size: 12px; letter-spacing: 0.14em; color: #e0fbff; white-space: nowrap; }
+.ob-orb-label { position: absolute; transform: translate(-50%, -50%); text-align: center; pointer-events: none; color: #e0fbff; text-shadow: 0 0 10px #000, 0 0 6px var(--ob-cyan); }
+.ob-orb-label b { display: block; font-size: 17px; letter-spacing: 0.3em; }
+.ob-orb-label small { display: block; font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase; margin-top: 2px; }
+.ob-node-caption { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font-size: 11px; letter-spacing: 0.12em; color: #bdeef7; white-space: nowrap; text-shadow: 0 0 6px #000; }
+[data-placeholder] { opacity: 0.35; }
+[data-placeholder] polygon { stroke: var(--ob-dim); }
+
+/* ---- the 1600 x 900 canvas of the approved mockup, scaled to the window ---- */
+.ob-bg { position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(#22d3ee12 1px, transparent 1px), linear-gradient(90deg, #22d3ee12 1px, transparent 1px);
+  background-size: calc(40px * var(--s, 1)) calc(40px * var(--s, 1)); background-position: center; overflow: hidden; }
+.ob-bg::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #22d3ee; opacity: 0.08; animation: ob-scan 7s linear infinite; }
+@keyframes ob-scan { from { transform: translateY(-10px); } to { transform: translateY(100vh); } }
+.ob-corner { position: absolute; width: 30px; height: 30px; border: 0 solid #67e8f9; pointer-events: none; }
+.ob-tl { left: 10px; top: 10px; border-left-width: 2px; border-top-width: 2px; }
+.ob-tr { right: 10px; top: 10px; border-right-width: 2px; border-top-width: 2px; }
+.ob-bl { left: 10px; bottom: 10px; border-left-width: 2px; border-bottom-width: 2px; }
+.ob-br { right: 10px; bottom: 10px; border-right-width: 2px; border-bottom-width: 2px; }
+.ob-canvas { position: absolute; transform-origin: 0 0; pointer-events: none; }
+.ob-canvas .ob-scene { position: absolute; left: 0; top: 0; width: 1600px; height: 900px; }
+.ob-w { position: absolute; cursor: pointer; color: #bdeef7; }
+.ob-w:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.ob-w:hover { filter: brightness(1.25); }
+.ob-w.ob-static { cursor: default; }
+.ob-w > .ob-frame { height: 100%; }
+.ob-wsvg { display: block; width: 100%; height: 100%; overflow: visible; }
+.ob-wsvg text, .ob-scene text { fill: #a5f3fc; letter-spacing: 0.12em; font-family: inherit; }
+.ob-wsvg .ob-lab, .ob-scene .ob-lab { font-size: 11px; fill: #22d3ee; text-transform: uppercase; }
+.ob-wsvg .ob-dim, .ob-scene .ob-dim { font-size: 10px; fill: #5aa9bb; text-transform: uppercase; }
+.ob-wsvg .ob-big { font-size: 26px; fill: #e0fbff; letter-spacing: 0.06em; }
+.ob-wsvg .ob-sm { font-size: 12px; fill: #bdeef7; }
+.ob-wsvg .ob-grn { fill: #6ee7b7; }
+.ob-wsvg .ob-org { fill: #fb923c; }
+.ob-bracket { fill: none; stroke: #22d3ee; stroke-width: 2; }
+.ob-feed-frame { fill: rgba(3, 16, 24, 0.85); stroke: #0e7490; }
+.ob-feed-run { fill: none; stroke: #67e8f9; stroke-width: 2; stroke-dasharray: 6 94; animation: ob-runline 7s linear infinite; filter: url(#ob-glow); vector-effect: non-scaling-stroke; }
+.ob-scene .ob-title { font-size: 18px; fill: #e0fbff; letter-spacing: 0.5em; filter: url(#ob-glow); }
+.ob-scene .ob-topbar-base { fill: none; stroke: #0e7490; stroke-width: 1.5; vector-effect: none; }
+.ob-scene .ob-topbar-run { fill: none; stroke: #67e8f9; stroke-width: 2.5; vector-effect: none; stroke-dasharray: 8 92; animation: ob-runline 5s linear infinite; filter: url(#ob-glow); }
+.ob-orb-ring { fill: none; stroke: #67e8f9; stroke-width: 1.5; }
+.ob-ping { fill: none; stroke: #22d3ee; transform-box: fill-box; transform-origin: center; animation: ob-ping 3s ease-out infinite; }
+.ob-ring-outer { fill: none; stroke: #22d3ee; stroke-opacity: 0.12; stroke-width: 22; stroke-dasharray: 1 28; }
+.ob-slow { animation-duration: 90s; }
+.ob-orb-label b { font-size: 20px; }
+.ob-cmd { position: absolute; left: 520px; top: 828px; width: 560px; height: 36px; background: #22d3ee; clip-path: polygon(24px 0, 536px 0, 560px 100%, 0 100%); pointer-events: none; font-size: 12px; color: #bdeef7; }
+.ob-cmd::before { content: ""; position: absolute; inset: 1px; background: #031018; clip-path: inherit; }
+.ob-cmd > * { position: relative; }
+.ob-cmd { display: flex; justify-content: space-between; align-items: center; padding: 0 40px 0 32px; }
+.ob-cmd > small { font-size: 10px; letter-spacing: 0.14em; color: #5aa9bb; }
+.ob-cursor { display: inline-block; width: 8px; height: 14px; background: #22d3ee; margin-left: 6px; vertical-align: middle; animation: ob-blink 1s steps(2) infinite; }
+.ob-approval-frame { --cut: 40px; height: 100%; }
+.ob-approval-frame .ob-frame-body { padding: 18px 28px; height: 100%; }
+.ob-btn.ob-yes { clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%); padding-right: 22px; }
+.ob-btn.ob-no { clip-path: polygon(14px 0, 100% 0, 100% 100%, 14px 100%, 0 50%); padding-left: 22px; }
+
+
+/* ---- under the stage's orb ---- */
+.ob-base { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 50%, #06222e 0%, #010609 70%); }
+.ob-disc-wrap { transform-box: fill-box; transform-origin: center; transition: transform 0.12s ease-out; }
+
+/* ---- sample data ---- */
+.ob-scene .ob-sample-tag { font-size: 10px; fill: #fb923c; letter-spacing: 0.2em; }
+.ob-scene .ob-node-detail { font-size: 12px; fill: #bdeef7; letter-spacing: 0.1em; }
+.ob-scene .ob-node-detail.ob-grn { fill: #6ee7b7; }
+.ob-scene .ob-node-detail.ob-org { fill: #fb923c; }
+.ob-blip-warn { fill: #fb923c; }
+
+/* ---- the approval, laid out like the mockup ---- */
+.ob-pulse { animation: ob-pulse 1.8s ease-in-out infinite; }
+.ob-tri { width: 56px; height: 52px; }
+.ob-tri path { fill: none; stroke: var(--ob-orange); stroke-width: 3; animation: ob-pulse 0.9s ease-in-out infinite; }
+.ob-tri text { fill: var(--ob-orange); font-size: 24px; }
+.ob-appr-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ob-appr-title { font-size: 11px; letter-spacing: 0.16em; color: var(--ob-orange); }
+.ob-appr-sub { font-size: 12px; color: #fed7aa; }
+.ob-approval .ob-summary { font-size: 16px; color: #fff; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-height: 40vh; overflow-y: auto; }
+.ob-approval .pinpad, .ob-approval .ob-actions { grid-column: 1 / -1; }
+.ob-actions { gap: 10px; }
+.ob-btn { padding: 10px 20px; font-size: 12px; }
+.ob-approval-frame .ob-actions { flex-wrap: nowrap; gap: 8px; }
+.ob-approval-frame .ob-btn { padding: 9px 14px; font-size: 11px; letter-spacing: 0.06em; white-space: nowrap; }
+.ob-frame[data-tone="orange"].ob-approval-frame { animation: none; }
+
+/* ---- the feed moves up: a sample loops, a real feed slides up by a line when something new arrives ---- */
+.ob-feed-scroll { animation: ob-feed-scroll 14s linear infinite; }
+@keyframes ob-feed-scroll { from { transform: translateY(0); } to { transform: translateY(calc(var(--n) * -1px)); } }
+.ob-feed-in { animation: ob-feed-in 0.35s ease-out; }
+@keyframes ob-feed-in { from { transform: translateY(20px); opacity: 0.4; } to { transform: translateY(0); opacity: 1; } }
+
+/* ---- the real message bar, drawn inside the strip of the approved design ---- */
+.ob-cmd { justify-content: flex-end; }
+.command-bar.command-bar-hud { position: absolute; transform: none; bottom: auto; padding: 0; gap: 0; display: block; background: none; border: 0; -webkit-backdrop-filter: none; backdrop-filter: none; font-size: calc(12px * var(--ob-s, 1)); font-family: Consolas, "Courier New", monospace; }
+.command-bar-hud input { width: 100%; height: 100%; min-height: 0; padding: 0; font: inherit; color: #bdeef7; letter-spacing: 0.04em; }
+.command-bar-hud input::placeholder { color: #bdeef7; opacity: 0.9; }
+.command-bar-hud button[type="submit"] { position: absolute; width: 1px; height: 1px; min-width: 0; min-height: 0; padding: 0; border: 0; opacity: 0; overflow: hidden; }
+.command-bar-hud .slash-list { bottom: 100%; margin-bottom: 8px; }
+
+/* the spoken caption sits above the message strip, not on it */
+.stage:has(.orbital[data-mode="orbit"]) .captions { bottom: 17%; }
+.of-check { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; color: #e0fbff; padding: 4px 2px; }
+.of-check .of-hint { flex-basis: 100%; }
+.ob-orb-label small { text-transform: uppercase; letter-spacing: 0.14em; }
+.ob-team-btn { position: absolute; transform: translateX(-50%); background: rgba(0, 20, 30, 0.7); border: 1px solid var(--ob-cyan); color: #e0fbff; font: inherit; font-size: 11px; letter-spacing: 0.22em; padding: 3px 12px; cursor: pointer; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.ob-team-btn:hover, .ob-team-btn:focus-visible { background: color-mix(in srgb, var(--ob-cyan) 22%, transparent); outline: none; box-shadow: 0 0 12px var(--ob-cyan); }
+.ob-org-holder { position: relative; overflow: auto; }
+.ob-org { position: absolute; top: 0; transform-origin: top left; }
+.ob-org-edges { position: absolute; inset: 0; overflow: visible; }
+.ob-org-edges path { fill: none; stroke: var(--ob-cyan); stroke-width: 1.5; opacity: 0.55; }
+.ob-org-card { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 12px; text-align: left; font: inherit; color: #e0fbff; background: linear-gradient(160deg, rgba(8, 34, 48, 0.9), rgba(3, 14, 22, 0.9)); border: 1px solid color-mix(in srgb, var(--ob-cyan) 55%, transparent); clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); cursor: pointer; overflow: hidden; }
+.ob-org-card b { font-size: 13px; letter-spacing: 0.06em; display: flex; align-items: center; gap: 6px; }
+.ob-org-card b i { width: 8px; height: 8px; border-radius: 50%; background: var(--ob-dim, #5a7f8a); display: inline-block; }
+.ob-org-card span { font-size: 11px; color: var(--ob-cyan); }
+.ob-org-card small { font-size: 10px; color: color-mix(in srgb, #e0fbff 65%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-org-card em { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ob-cyan); }
+.ob-org-card[data-status="running"] { border-color: var(--ob-green); }
+.ob-org-card[data-status="running"] b i { background: var(--ob-green); box-shadow: 0 0 8px var(--ob-green); }
+.ob-org-card[data-status="waiting"] { border-color: var(--ob-orange); animation: ob-pulse 1.4s ease-in-out infinite; }
+.ob-org-card[data-status="waiting"] b i { background: var(--ob-orange); }
+.ob-org-card[data-status="failed"] b i { background: #f87171; }
+.ob-org-root { cursor: default; border-color: var(--ob-cyan); box-shadow: inset 0 0 18px rgba(63, 216, 255, 0.15); }
+.ob-li.ob-warn { color: var(--ob-orange); border-color: var(--ob-orange); }

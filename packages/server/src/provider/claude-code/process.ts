@@ -47,6 +47,11 @@ export class ClaudeProc {
     });
   }
 
+  /** The operating system's id for the process, while there is one (the Office needs it to stop a whole process tree). */
+  get pid(): number | undefined {
+    return this.child.pid;
+  }
+
   /** Sends one user message (Anthropic-style content blocks). */
   send(content: unknown[]): void {
     if (!this.alive) return;

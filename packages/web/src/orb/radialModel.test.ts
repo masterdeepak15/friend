@@ -67,7 +67,7 @@ describe("what the menu offers", () => {
     expect(ids(cats)).toEqual(["voice", "screen", "settings", "connect", "account"]);
     expect(items(cats, "voice")).toEqual(["voice.handsfree", "voice.enroll", "voice.family", "voice.mute"]);
     expect(items(cats, "screen")).toEqual(["screen.camera", "screen.chat", "screen.tasks", "screen.music", "screen.launcher", "screen.view"]);
-    expect(items(cats, "settings")).toEqual(["settings.model", "settings.voice", "settings.look", "settings.approvals", "settings.trading", "settings.widgets", "settings.system", "settings.usage", "settings.security"]);
+    expect(items(cats, "settings")).toEqual(["settings.model", "settings.voice", "settings.look", "settings.approvals", "settings.trading", "settings.widgets", "settings.system", "settings.office", "settings.usage", "settings.security"]);
     expect(items(cats, "connect")).toEqual(["connect.plugins", "connect.connectors"]);
     expect(items(cats, "account")).toEqual(["account.classic", "account.logout", "account.lock"]);
   });

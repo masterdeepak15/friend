@@ -133,3 +133,14 @@ describe("a summary for the screen", () => {
     expect(log.summary(Number.NaN).range).toBe(30);
   });
 });
+
+describe("the Office as a source of tokens", () => {
+  it("keeps its own name instead of being filed under other", () => {
+    const { log } = make();
+    log.record(turn({ source: "office", input: 70, output: 7 }));
+    log.record(turn({ source: "something-else", input: 1, output: 1 }));
+    const by = Object.fromEntries(log.bySource(7).map((r) => [r.source, r.input]));
+    expect(by.office).toBe(70);
+    expect(by.other).toBe(1);
+  });
+});

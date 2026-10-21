@@ -8,6 +8,7 @@ export * from "./messages";
 export * from "./tools";
 export * from "./alexa";
 export * from "./hud";
+export * from "./office";
 export * from "./musicRef";
 export * from "./musicQueue";
 export * from "./video";

@@ -1,4 +1,4 @@
-import { PresenceStyle, ViewPreset } from "@friend/protocol";
+import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, OfficeProject, OfficeRole, PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
 import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, VIDEO_YOUTUBE } from "@friend/protocol";
@@ -6,7 +6,7 @@ import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, MUSIC_OUTPUTS, programProblem, LAUNC
 import { statSync } from "node:fs";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
-import { isValidTimeZone, plainWebAddress, sanitizeHud, validDateLocale, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
+import { isValidTimeZone, plainWebAddress, sanitizeHud, sanitizeOffice, validDateLocale, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
 const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
@@ -130,6 +130,25 @@ export const SettingsPatch = z
           .array(z.object({ id: z.string().max(20).optional(), label: z.string(), icon: z.string(), action: z.object({ type: z.enum(LAUNCHER_ACTIONS), value: z.string() }).strict() }).strict())
           .max(MAX_LAUNCHER),
         animations: z.enum(["full", "reduced", "off"]),
+        layout: z.enum(HUD_LAYOUTS),
+        density: z.enum(HUD_DENSITIES),
+        widgets: z.object(Object.fromEntries(HUD_WIDGET_IDS.map((id) => [id, z.boolean()]))).partial().strict(),
+        preview: z.boolean(),
+      })
+      .partial()
+      .strict(),
+    /** The Office: workers, projects and the rules they work under. Owner-only. */
+    office: z
+      .object({
+        enabled: z.boolean(),
+        maxConcurrent: z.number().int().min(1).max(8),
+        startTimeoutSec: z.number().int().min(10).max(600),
+        pauseAtWindow: z.number().min(0).max(1),
+        notifyFriend: z.boolean(),
+        budget: z.object({ perWorkerTokens: z.number().int().min(0).max(1_000_000_000), totalTokens: z.number().int().min(0).max(1_000_000_000) }).partial().strict(),
+        roles: z.array(OfficeRole).max(20),
+        projects: z.array(OfficeProject).max(20),
+        policy: z.object({ allowTools: z.array(z.string().min(1).max(60)).max(40), denyCommands: z.array(z.string().min(1).max(200)).max(40) }).partial().strict(),
       })
       .partial()
       .strict(),
@@ -243,6 +262,7 @@ export interface SettingsView {
   music: Config["music"];
   video: Config["video"];
   hud: Config["hud"];
+  office: Config["office"];
   /** The ids of allowed Amazon accounts are shown shortened. */
   alexa: {
     installed: boolean;
@@ -302,7 +322,8 @@ export function settingsView(c: Config): SettingsView {
     trading: { level: c.trading.level },
     music: { ...c.music, extensions: [...c.music.extensions], spotify: { ...c.music.spotify }, soundcloud: { ...c.music.soundcloud }, audius: { ...c.music.audius } },
     video: { ...c.video, allowedSites: [...c.video.allowedSites] },
-    hud: { ...c.hud, clock: { ...c.hud.clock }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
+    hud: { ...c.hud, clock: { ...c.hud.clock }, widgets: { ...c.hud.widgets }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
+    office: structuredClone(c.office),
     alexa: {
       installed: c.alexa.installed,
       enabled: c.alexa.enabled,
@@ -394,6 +415,21 @@ export function applySettings(config: Config, raw: unknown): Applied {
     }
     if (!isDir) throw new SettingsError("music.folder: That folder was not found on this PC.");
   }
+  if (p.office?.roles) {
+    const ids = p.office.roles.map((x) => x.id);
+    if (new Set(ids).size !== ids.length) throw new SettingsError("office.roles: two roles have the same id; each id can be used only once.");
+  }
+  if (p.office?.projects) {
+    const ids = p.office.projects.map((x) => x.id);
+    if (new Set(ids).size !== ids.length) throw new SettingsError("office.projects: two projects have the same id; each id can be used only once.");
+  }
+  for (const pattern of p.office?.policy?.denyCommands ?? []) {
+    try {
+      new RegExp(pattern, "i");
+    } catch {
+      throw new SettingsError(`office.policy.denyCommands: ${pattern} is not a valid pattern.`);
+    }
+  }
   if (p.hud?.clock?.locale && !validDateLocale(p.hud.clock.locale)) throw new SettingsError("hud.clock.locale: That is not a date format this PC knows, try one like en-GB or en-US.");
   for (const item of p.hud?.launcher ?? []) {
     const problem = launcherProblem(item);
@@ -483,9 +519,18 @@ export function applySettings(config: Config, raw: unknown): Applied {
     Object.assign(config.video, rest);
     if (allowedSites) config.video.allowedSites = normalizeSites(allowedSites);
   }
+  if (p.office) {
+    const { budget, roles, projects, policy, ...rest } = p.office;
+    Object.assign(config.office, rest);
+    if (budget) Object.assign(config.office.budget, budget);
+    if (roles) config.office.roles = roles.map((x) => ({ ...x }));
+    if (projects) config.office.projects = sanitizeOffice({ projects }).projects;
+    if (policy) Object.assign(config.office.policy, policy);
+  }
   if (p.hud) {
-    const { clock, launcher, ...rest } = p.hud;
+    const { clock, launcher, widgets, ...rest } = p.hud;
     Object.assign(config.hud, rest);
+    if (widgets) Object.assign(config.hud.widgets, widgets);
     if (clock) Object.assign(config.hud.clock, clock);
     if (launcher) config.hud.launcher = sanitizeHud({ launcher }).launcher;
   }

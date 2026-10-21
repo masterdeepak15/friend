@@ -97,6 +97,17 @@ export class Approvals {
     this.finish(msg.id, { approved: true }, msg.decision);
   }
 
+  /** Denies every waiting request that matches, so its card leaves the screen (stopping one worker must not touch the others). Returns how many. */
+  denyWhere(match: (req: ApprovalRequest) => boolean, reason: string): number {
+    let n = 0;
+    for (const [id, entry] of [...this.entries]) {
+      if (!match(entry.req)) continue;
+      this.finish(id, { approved: false, reason }, "deny");
+      n++;
+    }
+    return n;
+  }
+
   denyAll(reason: string): void {
     for (const id of [...this.entries.keys()]) this.finish(id, { approved: false, reason }, "deny");
   }

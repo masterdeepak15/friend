@@ -1,11 +1,13 @@
 import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, VIDEO_YOUTUBE, type VideoOutput, type VideoYoutube } from "@friend/protocol";
 import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, type DefaultSource, launcherProblem, MUSIC_OUTPUTS, type MusicOutput, programProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
+import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, type HudDensity, type HudLayout, type HudWidgetId } from "@friend/protocol";
+import { OfficePolicy, OfficeProject, OfficeRole } from "@friend/protocol";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME, type AlexaLocale } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { DEFAULT_HINDI_VOICE, DEFAULT_MARATHI_VOICE, type PresenceStyle, type ViewPreset } from "@friend/protocol";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
 
 export interface Config {
   bind: string;
@@ -55,6 +57,8 @@ export interface Config {
   video: VideoConfig;
   /** The screen widgets: profile label, date and time, quick-launch buttons, animations. */
   hud: HudConfig;
+  /** The Office: workers Friend hires, in the owner's projects, under the owner's rules. */
+  office: OfficeConfig;
   dataDir: string;
 }
 
@@ -120,6 +124,14 @@ export interface HudConfig {
   launcher: LauncherItem[];
   /** full: every animation; reduced: only the gentle ones; off: none. The system's "reduce motion" always wins. */
   animations: "full" | "reduced" | "off";
+  /** classic: the orb with floating cards. orbital: the HUD with rings, an orbit and edge instruments. */
+  layout: HudLayout;
+  /** How much the orbital screen shows. */
+  density: HudDensity;
+  /** Instruments switched on or off by hand; a missing one follows the density. */
+  widgets: Partial<Record<HudWidgetId, boolean>>;
+  /** Show sample content in the orbital screen (to preview the look before workers exist); it is labelled as sample. */
+  preview: boolean;
 }
 
 export interface AlexaConfig {
@@ -234,6 +246,13 @@ export const validDateLocale = (l: unknown): l is string => {
   }
 };
 
+const sanitizeWidgets = (raw: unknown): Partial<Record<HudWidgetId, boolean>> => {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const out: Partial<Record<HudWidgetId, boolean>> = {};
+  for (const id of HUD_WIDGET_IDS) if (typeof r[id] === "boolean") out[id] = r[id] as boolean;
+  return out;
+};
+
 export function sanitizeHud(raw: unknown): HudConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const c = (r.clock && typeof r.clock === "object" ? r.clock : {}) as Record<string, unknown>;
@@ -252,9 +271,96 @@ export function sanitizeHud(raw: unknown): HudConfig {
     clock: { hour12: c.hour12 !== false, seconds: c.seconds === true, locale: validDateLocale(c.locale) ? c.locale : "" },
     launcher: launcher.slice(0, MAX_LAUNCHER),
     animations: r.animations === "reduced" || r.animations === "off" ? r.animations : "full",
+    layout: (HUD_LAYOUTS as readonly unknown[]).includes(r.layout) ? (r.layout as HudLayout) : "classic",
+    density: (HUD_DENSITIES as readonly unknown[]).includes(r.density) ? (r.density as HudDensity) : "standard",
+    widgets: sanitizeWidgets(r.widgets),
+    preview: r.preview === true,
   };
 }
 
+/** Everything about the Office is a setting. Nothing in code names a role, a model, a folder or a limit. */
+export interface OfficeConfig {
+  enabled: boolean;
+  /** How many workers run at the same time (the rest wait their turn). */
+  maxConcurrent: number;
+  /** A worker that says nothing for this long after it starts is stopped, seconds. */
+  startTimeoutSec: number;
+  /** New runs wait while the five-hour window is this full (0..1); 0 never waits. */
+  pauseAtWindow: number;
+  /** Tell Friend when a worker finishes or is stuck, so Friend reports it and can give the next ticket. */
+  notifyFriend: boolean;
+  /** Tokens a worker may use, and all workers together; 0 means no limit. */
+  budget: { perWorkerTokens: number; totalTokens: number };
+  roles: OfficeRole[];
+  projects: OfficeProject[];
+  policy: OfficePolicy;
+}
+
+/** Starter data, not rules: the owner edits, replaces or deletes all of it, and a saved empty list stays empty. */
+export const DEFAULT_OFFICE_ROLES: OfficeRole[] = [
+  { id: "builder", title: "Builder", instructions: "You build what the ticket asks for, in small, tested steps. Say plainly what you changed.", model: "", permission: "acceptEdits" },
+  { id: "tester", title: "Tester", instructions: "You test the project: write or run tests, find what breaks, and report it. Do not change production code.", model: "", permission: "default" },
+  { id: "reviewer", title: "Reviewer", instructions: "You read the changes and report problems, risks and missing tests. Do not change anything.", model: "", permission: "default" },
+];
+export const DEFAULT_OFFICE_POLICY: OfficePolicy = {
+  allowTools: ["Read", "Glob", "Grep", "Write", "Edit", "NotebookEdit"],
+  denyCommands: ["rm\\s+-rf\\s+[/~]", "format\\s+[a-z]:", "git\\s+push", "npm\\s+publish", "curl[^|]*\\|\\s*(sh|bash)"],
+};
+
+/** A folder written the same way whatever the owner typed: no `..`, no trailing separator. */
+function tidyFolder(p: unknown): string {
+  if (typeof p !== "string") return "";
+  let s = p.trim();
+  if (!s) return "";
+  const win = /^[a-zA-Z]:[\\/]/.test(s) || s.startsWith("\\\\");
+  s = (win ? win32 : posix).normalize(s);
+  if (s.length > 1 && !(win ? /^[a-zA-Z]:\\$/ : /^\/$/).test(s)) s = s.replace(/[\\/]+$/, "");
+  return s.slice(0, 260);
+}
+
+export function sanitizeOffice(raw: unknown): OfficeConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const obj = (v: unknown) => (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const num = (v: unknown, lo: number, hi: number, def: number, whole = true): number =>
+    typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, whole ? Math.round(v) : Math.round(v * 100) / 100)) : def;
+  const b = obj(r.budget);
+  const p = obj(r.policy);
+  const strings = (v: unknown, def: readonly string[], max: number, maxLen: number): string[] =>
+    Array.isArray(v) ? [...new Set(v.filter((s): s is string => typeof s === "string").map((s) => s.trim()).filter((s) => s.length > 0 && s.length <= maxLen))].slice(0, max) : [...def];
+
+  const seenRoles = new Set<string>();
+  const roles = Array.isArray(r.roles)
+    ? r.roles.flatMap((x): OfficeRole[] => {
+        const o = obj(x);
+        const parsed = OfficeRole.safeParse({ ...o, id: typeof o.id === "string" ? o.id.trim() : o.id, title: typeof o.title === "string" ? o.title.trim() : o.title });
+        if (!parsed.success || seenRoles.has(parsed.data.id)) return [];
+        seenRoles.add(parsed.data.id);
+        return [parsed.data];
+      }).slice(0, 20)
+    : DEFAULT_OFFICE_ROLES.map((x) => ({ ...x }));
+
+  const seenProjects = new Set<string>();
+  const projects = (Array.isArray(r.projects) ? r.projects : []).flatMap((x): OfficeProject[] => {
+    const o = obj(x);
+    const extra = (Array.isArray(o.extraFolders) ? o.extraFolders : []).map(tidyFolder).filter((f) => f !== "");
+    const parsed = OfficeProject.safeParse({ ...o, id: typeof o.id === "string" ? o.id.trim() : o.id, folder: tidyFolder(o.folder), extraFolders: extra.slice(0, 5) });
+    if (!parsed.success || seenProjects.has(parsed.data.id)) return [];
+    seenProjects.add(parsed.data.id);
+    return [parsed.data];
+  }).slice(0, 20);
+
+  return {
+    enabled: r.enabled === true,
+    maxConcurrent: num(r.maxConcurrent, 1, 8, 2),
+    startTimeoutSec: num(r.startTimeoutSec, 10, 600, 60),
+    pauseAtWindow: num(r.pauseAtWindow, 0, 1, 0.9, false),
+    notifyFriend: r.notifyFriend !== false,
+    budget: { perWorkerTokens: num(b.perWorkerTokens, 0, 1_000_000_000, 0), totalTokens: num(b.totalTokens, 0, 1_000_000_000, 0) },
+    roles,
+    projects,
+    policy: { allowTools: strings(p.allowTools, DEFAULT_OFFICE_POLICY.allowTools, 40, 60), denyCommands: strings(p.denyCommands, DEFAULT_OFFICE_POLICY.denyCommands, 40, 200) },
+  };
+}
 export function sanitizeAlexa(raw: unknown): AlexaConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const skillId = typeof r.skillId === "string" && SKILL_ID.test(r.skillId.trim()) ? r.skillId.trim() : "";
@@ -670,6 +776,7 @@ const defaults = (dataDir: string): Config => ({
   chrome: sanitizeChrome({}),
   video: sanitizeVideo({}),
   hud: sanitizeHud({}),
+  office: sanitizeOffice({}),
   dataDir,
 });
 
@@ -724,6 +831,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     chrome: sanitizeChrome(stored.chrome),
     video: sanitizeVideo(stored.video),
     hud: sanitizeHud(stored.hud),
+    office: sanitizeOffice(stored.office),
     dataDir,
   };
 }

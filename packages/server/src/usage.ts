@@ -35,7 +35,7 @@ export interface UsageSummary {
   bySource: SourceUsage[];
 }
 
-export const USAGE_SOURCES = ["voice", "chat", "task", "channel"] as const;
+export const USAGE_SOURCES = ["voice", "chat", "task", "channel", "office"] as const;
 const DAY_MS = 86_400_000;
 /** Counts older than this are removed when Friend starts. */
 export const USAGE_KEEP_DAYS = 400;
