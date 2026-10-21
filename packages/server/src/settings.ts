@@ -369,7 +369,7 @@ export function refuseForAgent(raw: unknown): void {
   const cc = (r.claudeCode && typeof r.claudeCode === "object" ? r.claudeCode : {}) as Record<string, unknown>;
   const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
   if ("brokers" in r || "trading" in r) throw new SettingsError("Broker accounts and the trading level can only be changed by the owner on the settings screen.");
-  if ("music" in r || "hud" in r || "office" in r) throw new SettingsError("The music folder, the screen widgets and the Office can only be changed by the owner on the settings screen.");
+  if ("music" in r || "hud" in r) throw new SettingsError("The music folder and the screen widgets can only be changed by the owner on the settings screen.");
   if ("video" in r) throw new SettingsError("Video settings (which programs run, where videos play, which sites) can only be changed by the owner on the settings screen.");
   if ("updates" in r) throw new SettingsError("Whether Friend updates itself can only be changed by the owner on the settings screen.");
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");

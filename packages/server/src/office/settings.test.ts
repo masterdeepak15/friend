@@ -74,8 +74,9 @@ describe("saving the office settings", () => {
     expect(() => applySettings(config, { office: { policy: { denyCommands: ["(unclosed"] } } })).toThrow(/\(unclosed/);
   });
 
-  it("cannot be changed by the assistant, even with the PIN", () => {
-    expect(() => refuseForAgent({ office: { enabled: true } } as never)).toThrow(/only be changed by the owner/);
+  it("can be changed by the assistant (it needs the owner's PIN each time, like every settings change)", () => {
+    expect(() => refuseForAgent({ office: { enabled: true, projects: [project()] } } as never)).not.toThrow();
+    expect(() => refuseForAgent({ office: { policy: { allowTools: ["Read"] } } } as never)).not.toThrow();
   });
 
   it("is shown as a copy, so changing the view does not change the settings", () => {

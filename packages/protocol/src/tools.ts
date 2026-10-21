@@ -409,7 +409,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "settings.set",
     description:
-      "Change the owner's settings, only when the owner asks. The owner approves with their PIN. Fields (all optional): provider (claude-code = their Claude subscription, claude = API key, ollama = local), model, ollama {url, model, vision, contextTokens}, claudeCode {model, fallback: ollama|none}, voice {speakTyped, language, accept, challenge}. The API key and the Claude Code command cannot be changed by you. A change of provider takes effect after your current reply.",
+      "Change the owner's settings, only when the owner asks. The owner approves with their PIN. Fields (all optional): provider (claude-code = their Claude subscription, claude = API key, ollama = local), model, ollama {url, model, vision, contextTokens}, claudeCode {model, fallback: ollama|none}, voice {speakTyped, language, accept, challenge}, office {enabled, maxConcurrent, startTimeoutSec, pauseAtWindow, budget, roles, projects, policy} (lists replace the old list, so send every entry you want to keep). The API key and the Claude Code command cannot be changed by you. A change of provider takes effect after your current reply.",
     input: z.object({ settings: z.record(z.string(), z.unknown()) }),
     baseTier: "T3",
     target: "gateway",
@@ -770,7 +770,7 @@ export function describeCall(name: string, args: unknown, device?: string): stri
     case "settings.get":
       return "Read the settings";
     case "settings.set":
-      return `Change settings: ${visible(clip(JSON.stringify(a.settings ?? {}), 400))}`;
+      return `Change settings: ${visible(clip(JSON.stringify(a.settings ?? {}), (a.settings as { office?: unknown } | undefined)?.office ? 6000 : 400))}`; // an Office change is shown whole: it can set what workers may do
     case "look.set":
       return `Change the look: ${visible(clip(JSON.stringify(a), 300))}`;
     case "view.set":

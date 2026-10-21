@@ -173,9 +173,22 @@ describe("the brief", () => {
     expect(b).not.toMatch(/builder|tester|reviewer/);
   });
 
-  it("is empty when the Office is off or has no roles", () => {
-    expect(officeBrief(cfg({ enabled: false }))).toBe("");
-    expect(officeBrief(cfg({ roles: [] }))).toBe("");
+  it("when the Office is off says only how to turn it on, naming no role or project", () => {
+    const b = officeBrief(cfg({ enabled: false }));
+    expect(b).toMatch(/off/i);
+    expect(b).toMatch(/settings\.set/);
+    expect(b).not.toMatch(/scribe|The Site/);
+  });
+
+  it("with no project yet tells Friend to ask the owner for a folder, make it, and add it", () => {
+    const b = officeBrief(cfg({ projects: [] }));
+    expect(b).toMatch(/no project/i);
+    expect(b).toMatch(/ask the owner/i);
+    expect(b).toMatch(/settings\.set/);
+  });
+
+  it("with no roles tells Friend to add one with the owner", () => {
+    expect(officeBrief(cfg({ roles: [] }))).toMatch(/no roles/i);
   });
 
   it("reaches the model's prompt when the Office is on, and not when it is off", async () => {
@@ -188,6 +201,7 @@ describe("the brief", () => {
     const q = new FakeProvider([[text("hi"), done]]);
     await build(q).runTurn("hello", ctx());
     expect(JSON.stringify(q.calls[0])).not.toMatch(/The Site/);
+    expect(JSON.stringify(q.calls[0])).toMatch(/settings\.set/);
   });
 });
 

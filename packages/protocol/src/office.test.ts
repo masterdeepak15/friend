@@ -82,6 +82,12 @@ describe("the six office tools", () => {
     expect(describeCall("office.hire", { role: "scribe", project: "site" })).toMatch(/scribe/);
   });
 
+  it("shows an Office settings change whole on the PIN card, so nothing is hidden by a clip", () => {
+    const role = { id: "scribe", title: "Scribe", instructions: "x".repeat(900), model: "", permission: "default" };
+    const text = describeCall("settings.set", { settings: { office: { roles: [role] } } });
+    expect(text).toContain("x".repeat(900));
+  });
+
   it("describe a worker's own question in full, so the owner sees the whole command", () => {
     const cmd = "npm test -- " + "x".repeat(400);
     const text = describeCall("office.action", { worker: "Ada", workerId: "w1", summary: `Run: ${cmd}` });
