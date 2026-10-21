@@ -151,6 +151,16 @@ export class OfficeStore {
     this.db.prepare(`update office_tickets set ${keys.map((k) => `${TICKET_COLUMNS[k]} = ?`).join(", ")}, updated_at = ? where id = ?`).run(...keys.map((k) => (p as Record<string, unknown>)[k]), this.now(), id);
   }
 
+  /** Workers who reported to `from` now report to `to` (null: Friend). */
+  reparent(from: string, to: string | null): void {
+    this.db.prepare("update office_workers set manager_id = ? where manager_id = ?").run(to, from);
+  }
+
+  /** Takes a worker off its tickets: work still to do is blocked, finished work stays as it is. */
+  releaseTickets(workerId: string): void {
+    this.db.prepare("update office_tickets set worker_id = null, status = case when status in ('todo', 'doing') then 'blocked' else status end, updated_at = ? where worker_id = ?").run(this.now(), workerId);
+  }
+
   /** Adds a line to a worker's feed, clipped, and drops the oldest lines beyond the newest MAX_EVENTS_PER_WORKER. */
   addEvent(workerId: string, e: { kind: string; text: string; at?: number }): void {
     this.db.prepare("insert into office_events (worker_id, at, kind, text) values (?, ?, ?, ?)").run(workerId, e.at ?? this.now(), e.kind, e.text.slice(0, MAX_EVENT_CHARS));

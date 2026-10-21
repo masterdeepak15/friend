@@ -98,7 +98,7 @@ function describeAction(tool: string, input: Record<string, unknown>): string {
  * it does is read from settings at the moment it does it.
  */
 /** What Friend's own tools use of the Office. */
-export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "stop" | "status" | "report">;
+export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "stop" | "fire" | "status" | "report">;
 
 export class Office {
   private runs = new Map<string, Run>();
@@ -231,6 +231,19 @@ export class Office {
     this.d.audit.log(by, "office.stop", { worker: workerRef ?? "all", stopped: targets.length });
     this.changed();
     return { stopped: targets.length };
+  }
+
+  /** Removes a worker: stops it, hands the workers who reported to it to its manager, and leaves its finished tickets. */
+  fire(workerRef: string, by: "agent" | "owner" = "agent"): Result<{ name: string }> {
+    const w = this.d.store.findWorker(workerRef);
+    if (!w) return { ok: false, error: this.noWorker(workerRef) };
+    this.stop(w.id, by);
+    this.d.store.reparent(w.id, w.managerId);
+    this.d.store.releaseTickets(w.id);
+    this.d.store.removeWorker(w.id);
+    this.d.audit.log(by, "office.fire", { worker: w.id, name: w.name });
+    this.changed();
+    return { ok: true, name: w.name };
   }
 
   /** The whole report a worker gave for a ticket. */

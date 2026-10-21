@@ -135,6 +135,16 @@ describe("a worker opened on the screen", () => {
     expect(send).toHaveBeenCalledWith({ type: "office.stop", workerId: "ada" });
   });
 
+  it("removes the worker only after a second click", () => {
+    const send = vi.fn();
+    mount({}, { office: busy() }, { send });
+    fireEvent.click(screen.getByRole("button", { name: /^Ada/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+    expect(send).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /confirm remove/i }));
+    expect(send).toHaveBeenCalledWith({ type: "office.fire", workerId: "ada" });
+  });
+
   it("says something to the worker, and clears the box", () => {
     const send = vi.fn();
     mount({}, { office: busy() }, { send });

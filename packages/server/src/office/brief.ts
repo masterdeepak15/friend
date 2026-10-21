@@ -10,7 +10,7 @@ const HIRING =
 /** A short note for the model's prompt about the Office, built only from the owner's settings. */
 export function officeBrief(o: OfficeConfig): string {
   if (!o.enabled) return `The Office (hired workers) is off. If the owner wants workers, turn it on with settings.set { office: { enabled: true } } (the owner approves with their PIN), then set up a project.`;
-  const lines = ["The Office: you can hire workers (separate Claude sessions) to do work in the owner's project folders (office.hire, office.assign, office.say, office.review, office.report (read a worker's whole report), office.stop, office.status)."];
+  const lines = ["The Office: you can hire workers (separate Claude sessions) to do work in the owner's project folders (office.hire, office.assign, office.say, office.review, office.report (read a worker's whole report), office.fire (remove a worker who is no longer needed, the owner is asked), office.stop, office.status)."];
   lines.push(HIRING);
   if (o.roles.length) lines.push(`Starter roles you may use instead of describing a job yourself: ${o.roles.map((r) => `${r.id} (${clip(r.title, 40)})`).join(", ")}.`);
   lines.push(

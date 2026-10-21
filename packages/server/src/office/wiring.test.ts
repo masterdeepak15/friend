@@ -119,6 +119,17 @@ describe("the Office in the app", () => {
     expect(got.some((m) => m.type === "office.state" && m.workers.some((w) => w.status === "stopped"))).toBe(true);
   });
 
+  it("removes a worker when the owner asks from the screen", async () => {
+    const cookie = await boot();
+    const { ws } = await connect(cookie);
+    const hired = app!.office.hire({ role: "scribe", project: "site", name: "Ada" });
+    if (!hired.ok) throw new Error(hired.error);
+    expect(app!.office.status().workers).toHaveLength(1);
+    ws.send(JSON.stringify({ type: "office.fire", workerId: hired.worker.id }));
+    await until(() => app!.office.status().workers.length === 0);
+    expect(app!.office.status().workers).toEqual([]);
+  });
+
   it("stops every worker when the app closes", async () => {
     await boot();
     app!.office.hire({ role: "scribe", project: "site", name: "Ada" });

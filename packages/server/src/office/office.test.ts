@@ -265,6 +265,27 @@ describe("a run", () => {
     expect(t.procs[0]!.o.args[t.procs[0]!.o.args.indexOf("--model") + 1]).toBe("fast");
   });
 
+  it("removes a worker: stops it, hands its reports to its manager, and keeps its finished tickets", async () => {
+    const t = make();
+    const lead = t.office.hire({ title: "Lead", project: "site", name: "Lena" });
+    if (!lead.ok) throw new Error(lead.error);
+    const mid = t.office.hire({ title: "Mid", project: "site", name: "Mo", manager: "Lena" });
+    if (!mid.ok) throw new Error(mid.error);
+    t.office.hire({ title: "Dev", project: "site", name: "Dee", manager: "Mo" });
+    t.office.assign({ worker: "Mo", title: "Busy" });
+    await settle();
+    t.procs[0]!.emit(initEv());
+    const r = t.office.fire("mo", "owner");
+    expect(r).toMatchObject({ ok: true, name: "Mo" });
+    expect(t.procs[0]!.killed).toBeGreaterThan(0);
+    const w = t.office.status().workers;
+    expect(w.map((x) => x.name).sort()).toEqual(["Dee", "Lena"]);
+    expect(w.find((x) => x.name === "Dee")!.managerId).toBe(lead.worker.id); // not left hanging
+    expect(t.office.status().tickets[0]).toMatchObject({ workerId: null, status: "blocked" }); // work nobody is doing is not left looking active
+    expect(t.office.fire("nobody", "owner")).toMatchObject({ ok: false });
+    expect(t.audit.log).toHaveBeenCalledWith("owner", "office.fire", expect.objectContaining({ worker: mid.worker.id }));
+  });
+
   it("tells Friend who a finished worker reports to", async () => {
     const t = make();
     const boss = t.office.hire({ title: "Tech lead", project: "site", name: "Lena" });

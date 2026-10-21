@@ -17,6 +17,7 @@ export function WorkerView({ worker, feed, rect, send, onClose }: WorkerViewProp
   const closeRef = useRef<HTMLButtonElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("");
+  const [sure, setSure] = useState(false);
   useEffect(() => closeRef.current?.focus(), [worker.id]);
   useEffect(() => {
     const el = logRef.current;
@@ -59,6 +60,9 @@ export function WorkerView({ worker, feed, rect, send, onClose }: WorkerViewProp
         <button type="submit">Send</button>
         <button type="button" className="ob-stop" disabled={!active} onClick={() => send({ type: "office.stop", workerId: worker.id })}>
           Stop
+        </button>
+        <button type="button" className="ob-stop" onClick={() => (sure ? send({ type: "office.fire", workerId: worker.id }) : setSure(true))} onBlur={() => setSure(false)}>
+          {sure ? "Confirm remove" : "Remove"}
         </button>
       </form>
     </Frame>

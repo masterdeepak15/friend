@@ -51,6 +51,7 @@ beforeEach(async () => {
     review: vi.fn(() => ({ ok: true })),
     stop: vi.fn(() => ({ stopped: 2 })),
     report: vi.fn(),
+    fire: vi.fn(() => ({ ok: true, name: "Ada" })),
     status: vi.fn(() => ({ workers: [view({ status: "running", detail: "Write a.txt" })], tickets: [{ id: 7, projectId: "site", title: "Fix it", status: "doing", workerId: "w1" }], quota })),
   };
   build = (provider, withOffice = true) =>
@@ -119,6 +120,14 @@ describe("the six office tools", () => {
     expect(r).toMatch(/All fine/);
     expect(r.match(/<\/untrusted-worker-report>/g)).toHaveLength(1);
     expect(emitted.some((m) => m.type === "approval.request")).toBe(false); // reading is not asked about
+  });
+
+  it("fire asks the owner, then removes the worker", async () => {
+    const p = new FakeProvider([[call("1", "office.fire", { worker: "Ada" }), done], [text("ok"), done]]);
+    await build(p).runTurn("let Ada go", owner());
+    expect(emitted.some((m) => m.type === "approval.request")).toBe(true);
+    expect(office.fire).toHaveBeenCalledWith("Ada", "agent");
+    expect(result(p)).toMatch(/Ada.*removed/i);
   });
 
   it("review and stop reach their methods", async () => {

@@ -675,6 +675,13 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "office.fire",
+    description: "Remove a worker from the Office when it is no longer needed. It is stopped, the workers who reported to it now report to its manager, and its finished tickets stay. The owner is asked.",
+    input: z.object({ worker: z.string().min(1).max(64) }),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
     name: "office.stop",
     description: "Stop one worker, or every worker when none is named.",
     input: z.object({ worker: z.string().min(1).max(64).optional() }),
@@ -845,6 +852,8 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return `${a.accept ? "Accept" : "Send back"} ticket #${visible(String(a.ticket ?? ""))}`;
     case "office.action": // a worker's own question: what it wants to do is shown whole
       return `Worker ${visible(String(a.worker ?? ""))} wants to ${visible(String(a.summary ?? ""))}`;
+    case "office.fire":
+      return `Remove the worker ${visible(String(a.worker ?? ""))} from the Office`;
     case "office.stop":
       return a.worker ? `Stop the worker ${visible(String(a.worker))}` : "Stop all workers";
     default:

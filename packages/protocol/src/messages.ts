@@ -203,6 +203,7 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ping") }),
   /** The owner stops one worker, or every worker when no id is given. */
   z.object({ type: z.literal("office.stop"), workerId: z.string().max(64).optional() }),
+  z.object({ type: z.literal("office.fire"), workerId: z.string().min(1).max(64) }),
   /** The owner says something to a worker. */
   z.object({ type: z.literal("office.say"), workerId: z.string().max(64), text: z.string().min(1).max(2000) }),
 ]);

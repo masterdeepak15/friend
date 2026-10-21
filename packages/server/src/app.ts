@@ -1547,6 +1547,11 @@ export async function createApp(opts: AppOptions) {
         case "office.stop":
           office.stop(msg.workerId, "owner");
           break;
+        case "office.fire": {
+          const r = office.fire(msg.workerId, "owner");
+          if (!r.ok) audit.log("owner", "office.fire_failed", { error: r.error });
+          break;
+        }
         case "office.say": {
           const r = office.say(msg.workerId, msg.text);
           if (!r.ok) audit.log("owner", "office.say_failed", { error: r.error });

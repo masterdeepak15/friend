@@ -90,6 +90,16 @@ describe("the six office tools", () => {
     expect(ServerMsg.safeParse({ type: "office.state", enabled: true, workers: [{ ...w, title: undefined }], tickets: [], quota: { fiveHour: null, sevenDay: null } }).success).toBe(false);
   });
 
+  it("office.fire removes a worker, asks the owner, and the screen can ask for it too", () => {
+    const d = TOOL_DEFS.find((t) => t.name === "office.fire")!;
+    expect(d.baseTier).toBe("T2");
+    expect(d.input.safeParse({ worker: "Ada" }).success).toBe(true);
+    expect(d.input.safeParse({}).success).toBe(false);
+    expect(describeCall("office.fire", { worker: "Ada" })).toMatch(/Ada/);
+    expect(ClientMsg.safeParse({ type: "office.fire", workerId: "w1" }).success).toBe(true);
+    expect(ClientMsg.safeParse({ type: "office.fire" }).success).toBe(false);
+  });
+
   it("check their arguments", () => {
     expect(def("office.assign")!.input.safeParse({ worker: "w1", title: "Fix login" }).success).toBe(true);
     expect(def("office.assign")!.input.safeParse({ worker: "w1", title: "" }).success).toBe(false);
