@@ -196,7 +196,10 @@
 .ob-zone .ob-frame-body { height: calc(100% - 22px); }
 .ob-zone .ob-frame-body > div, .ob-expanded-body > div { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
 .ob-zone .ob-frame-body > .ob-svg, .ob-zone .ob-frame-body > div > .ob-svg, .ob-expanded-body > .ob-svg, .ob-expanded-body > div > .ob-svg { flex: 1 1 0; min-height: 0; height: 0; width: 100%; }
-.ob-feed { justify-content: flex-end; overflow: hidden; }
+.ob-feed { overflow-y: auto; }
+.ob-feed > *, .ob-worker-log > * { flex: none; }
+.ob-feed > :first-child { margin-top: auto; }
+.ob-feed .ob-li { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 .ob-topbar .ob-frame-body { height: 100%; display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
 .ob-topbar-row { width: 100%; }
 .ob-glyph { font-size: 17px; letter-spacing: 0; }

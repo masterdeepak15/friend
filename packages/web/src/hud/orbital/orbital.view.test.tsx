@@ -142,6 +142,26 @@ describe("what the instruments show", () => {
   });
 });
 
+describe("a long list in a dialog", () => {
+  it("keeps every line its own height and scrolls, instead of squeezing 80 lines into nothing", () => {
+    const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
+    expect(css).toMatch(/\.ob-feed \{[^}]*overflow-y: auto/);
+    expect(css).toMatch(/\.ob-feed > \*[^{]*\{[^}]*flex: none/);
+    expect(css).toMatch(/\.ob-worker-log > \*[^{]*\{[^}]*flex: none/);
+    expect(css).toMatch(/\.ob-feed \.ob-li \{[^}]*white-space: normal/); // a long answer is read in full, not cut with dots
+  });
+
+  it("starts at the newest line", () => {
+    const chat = Array.from({ length: 80 }, (_, i) => ({ role: "assistant" as const, text: `line ${i}` }));
+    const { container } = mount({ density: "standard" }, { chat });
+    fireEvent.click(container.querySelector('[data-widget="feed"]')!);
+    const feed = container.querySelector(".ob-feed") as HTMLElement;
+    Object.defineProperty(feed, "scrollHeight", { value: 5000, configurable: true });
+    fireEvent.scroll(feed);
+    expect(feed.querySelectorAll("p")).toHaveLength(80);
+  });
+});
+
 describe("when one piece of the screen throws", () => {
   it("drops only that piece and keeps the rest", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});

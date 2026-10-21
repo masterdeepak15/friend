@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { ChatLine } from "../../../store";
 
 const SHOWN = 8;
@@ -54,8 +55,13 @@ export function FeedWidget({ lines, activity, busy, limit = SHOWN, marquee = fal
 }
 /** The whole conversation as a scrolling list, for the opened instrument. */
 export function FeedLog({ lines, activity, busy, workers = [] }: { lines: ChatLine[]; activity: string | null; busy: boolean; workers?: { text: string; tone: "green" | "orange" | "plain" }[] }) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (el) el.scrollTop = el.scrollHeight; // opens at the newest line
+  }, [lines.length, workers.length]);
   return (
-    <div className="ob-feed" aria-live="polite">
+    <div className="ob-feed" aria-live="polite" ref={box}>
       {lines.length === 0 && workers.length === 0 && !busy && <p className="ob-li ob-sub">Nothing yet</p>}
       {workers.map((l, i) => (
         <p key={`w${i}`} className={`ob-li${l.tone === "green" ? " ob-live" : l.tone === "orange" ? " ob-warn" : ""}`}>
