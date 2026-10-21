@@ -10,7 +10,7 @@ export interface Rect {
   height: number;
 }
 import { Frame } from "./kit";
-import { budgetRings, ticketCells, ticketProject } from "./office";
+import { budgetRings, feedLines, ticketCells, ticketProject } from "./office";
 import { WIDGETS } from "./registry";
 import { BudgetWidget } from "./widgets/BudgetWidget";
 import { FeedLog } from "./widgets/FeedWidget";
@@ -84,7 +84,7 @@ export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, onClose
       case "voice":
         return <VoiceWidget level={state.voice.level} mode={state.voice.mode} />;
       case "feed":
-        return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} />;
+        return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} workers={state.office.enabled ? feedLines(state.office.feed, state.office.workers, 60) : []} />; // what the workers did comes first
       case "tickets":
         return <TicketsWidget cells={ticketCells(state.office.tickets)} {...(ticketProject(state.office.tickets) ? { project: ticketProject(state.office.tickets)! } : {})} />;
       case "budget":

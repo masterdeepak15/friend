@@ -53,10 +53,15 @@ export function FeedWidget({ lines, activity, busy, limit = SHOWN, marquee = fal
   );
 }
 /** The whole conversation as a scrolling list, for the opened instrument. */
-export function FeedLog({ lines, activity, busy }: { lines: ChatLine[]; activity: string | null; busy: boolean }) {
+export function FeedLog({ lines, activity, busy, workers = [] }: { lines: ChatLine[]; activity: string | null; busy: boolean; workers?: { text: string; tone: "green" | "orange" | "plain" }[] }) {
   return (
     <div className="ob-feed" aria-live="polite">
-      {lines.length === 0 && !busy && <p className="ob-li ob-sub">Nothing yet</p>}
+      {lines.length === 0 && workers.length === 0 && !busy && <p className="ob-li ob-sub">Nothing yet</p>}
+      {workers.map((l, i) => (
+        <p key={`w${i}`} className={`ob-li${l.tone === "green" ? " ob-live" : l.tone === "orange" ? " ob-warn" : ""}`}>
+          {l.text}
+        </p>
+      ))}
       {lines.slice(-200).map((l, i) => (
         <p key={i} className={`ob-li ${l.role === "user" ? "ob-user" : ""}`}>
           {l.role === "user" ? "▸ " : "◂ "}

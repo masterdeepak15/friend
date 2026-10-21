@@ -57,14 +57,27 @@ export function ticketProject(tickets: OfficeTicketView[]): string | undefined {
   return projects.length === 1 ? projects[0] : `${projects.length} projects`;
 }
 
-/** The share of its limit each worker has used (up to three workers that have a limit). */
-export function budgetRings(workers: OfficeWorkerView[]): { label: string; value: number }[] {
-  return workers
-    .filter((w) => w.budget !== null && w.budget > 0)
-    .slice(0, 3)
-    .map((w) => ({ label: w.name.slice(0, 6).toUpperCase(), value: clamp((w.tokens / w.budget!) * 100) }));
-}
+const short = (n: number): string => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
 
+/**
+ * One ring for each of up to three workers. With limits set, the share of its limit a worker has used; with none, what each has used
+ * against the busiest worker, so the instrument shows the work instead of staying empty.
+ */
+export function budgetRings(workers: OfficeWorkerView[]): { label: string; value: number; text: string }[] {
+  const label = (w: OfficeWorkerView) => w.name.slice(0, 6).toUpperCase();
+  const limited = workers.filter((w) => w.budget !== null && w.budget > 0);
+  if (limited.length > 0) {
+    return limited.slice(0, 3).map((w) => {
+      const value = clamp((w.tokens / w.budget!) * 100);
+      return { label: label(w), value, text: `${Math.round(value)}%` };
+    });
+  }
+  const busiest = Math.max(0, ...workers.map((w) => w.tokens));
+  return [...workers]
+    .sort((a, b) => b.tokens - a.tokens)
+    .slice(0, 3)
+    .map((w) => ({ label: label(w), value: busiest > 0 ? clamp(Math.max(w.tokens > 0 ? 1 : 0, Math.round((w.tokens / busiest) * 100))) : 0, text: short(w.tokens) }));
+}
 const TONE: Record<string, "green" | "orange" | "plain"> = { tool: "green", result: "green", approval: "orange", error: "orange", text: "plain" };
 
 /** What the name in the middle says: Friend's own state, or, while he is idle, what the office is doing. */

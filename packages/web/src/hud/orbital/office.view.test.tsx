@@ -113,6 +113,31 @@ describe("the name in the middle", () => {
   });
 });
 
+describe("the activity instrument opened large", () => {
+  const feedState = () => office({ workers: [worker("Ada", { status: "running" })], feed: { ada: [{ at: 1, kind: "tool", text: "Write a.txt" }, { at: 2, kind: "result", text: "Done." }] } });
+
+  it("shows what the workers did, even when there has been no conversation yet", () => {
+    const { container } = mount({ density: "full" }, { office: feedState() });
+    fireEvent.click(container.querySelector('[data-widget="feed"]')!);
+    const d = screen.getByRole("dialog", { name: /activity/i });
+    expect(d.textContent).toContain("ADA");
+    expect(d.textContent).toContain("Write a.txt");
+    expect(d.textContent).toContain("Done.");
+    expect(d.textContent).not.toMatch(/nothing yet/i);
+  });
+
+  it("shows the workers' lines before the conversation, and says so when there is nothing at all", () => {
+    const { container } = mount({ density: "full" }, { office: feedState(), chat: [{ role: "assistant", text: "Ada is on it." }] });
+    fireEvent.click(container.querySelector('[data-widget="feed"]')!);
+    const d = screen.getByRole("dialog", { name: /activity/i });
+    expect(d.textContent!.indexOf("Write a.txt")).toBeLessThan(d.textContent!.indexOf("Ada is on it."));
+    cleanup();
+    const empty = mount({ density: "full" });
+    fireEvent.click(empty.container.querySelector('[data-widget="feed"]')!);
+    expect(screen.getByRole("dialog", { name: /activity/i }).textContent).toMatch(/nothing yet/i);
+  });
+});
+
 describe("a worker opened on the screen", () => {
   const busy = () => office({ workers: [worker("Ada", { status: "running", detail: "Write a.txt", tokens: 250, budget: 1000 })], feed: { ada: [{ at: 1, kind: "tool", text: "Write a.txt" }, { at: 2, kind: "text", text: "Almost done" }] } });
 

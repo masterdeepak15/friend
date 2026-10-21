@@ -57,7 +57,7 @@ describe("the approved mockup, in the parts that do not need workers", () => {
     expect(idle.container.querySelector('[data-widget="approval"] .ob-v-bracket')).toBeTruthy();
     cleanup();
     const waiting = mount({ approval: { id: "a1", tool: "x", summary: "y", tier: "T2", needsPin: false } as never });
-    expect(waiting.container.querySelector('[data-widget="approval"] .ob-v-octagon')).toBeTruthy();
+    expect(waiting.container.querySelector('[data-widget="approval"].ob-v-octagon, [data-widget="approval"] .ob-v-octagon')).toBeTruthy(); // the octagon is now the dialog in the middle
   });
 
   it("shows dim placeholder shapes for tickets and budget until workers exist, and says so", () => {

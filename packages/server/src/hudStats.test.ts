@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HUD_STATS_INTERVAL_MS, StatsSampler, startStatsFeed } from "./hudStats";
+import { HUD_STATS_INTERVAL_MS, StatsSampler, parseNetstatE, parseProcNetDev, startStatsFeed } from "./hudStats";
 
 afterEach(() => vi.useRealTimers());
 
@@ -43,27 +43,27 @@ describe("StatsSampler", () => {
 });
 
 describe("startStatsFeed", () => {
-  const sampler = () => new StatsSampler({ cpus: () => cpu(50, 50), totalmem: () => 2, freemem: () => 1, net: () => null });
+  const sampler = () => new StatsSampler({ cpus: () => cpu(50, 50), totalmem: () => 2, freemem: () => 1, readNet: async () => null });
 
-  it("sends a reading every interval while it is wanted", () => {
+  it("sends a reading every interval while it is wanted", async () => {
     vi.useFakeTimers();
     const emit = vi.fn();
     const stop = startStatsFeed({ sampler: sampler(), wanted: () => true, emit });
-    vi.advanceTimersByTime(HUD_STATS_INTERVAL_MS * 2);
+    await vi.advanceTimersByTimeAsync(HUD_STATS_INTERVAL_MS * 2);
     expect(emit).toHaveBeenCalledTimes(2);
     expect(emit.mock.calls[0]![0]).toMatchObject({ type: "hud.stats", ramTotal: 2, ramUsed: 1 });
     stop();
   });
 
-  it("sends nothing while it is not wanted, and starts when it becomes wanted", () => {
+  it("sends nothing while it is not wanted, and starts when it becomes wanted", async () => {
     vi.useFakeTimers();
     const emit = vi.fn();
     let on = false;
     const stop = startStatsFeed({ sampler: sampler(), wanted: () => on, emit });
-    vi.advanceTimersByTime(HUD_STATS_INTERVAL_MS * 3);
+    await vi.advanceTimersByTimeAsync(HUD_STATS_INTERVAL_MS * 3);
     expect(emit).not.toHaveBeenCalled();
     on = true;
-    vi.advanceTimersByTime(HUD_STATS_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(HUD_STATS_INTERVAL_MS);
     expect(emit).toHaveBeenCalledTimes(1);
     stop();
   });
@@ -75,5 +75,41 @@ describe("startStatsFeed", () => {
     stop();
     vi.advanceTimersByTime(HUD_STATS_INTERVAL_MS * 5);
     expect(emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("reading the network counters", () => {
+  const WINDOWS = ["Interface Statistics", "", "                           Received            Sent", "", "Bytes                 123456789       987654321", "Unicast packets           100000          90000", "Errors                         0              0"].join("\r\n");
+  const OTHER_LANGUAGE = ["Statistiques d''interface", "", "                           Reçus            Envoyés", "", "Octets                 5000000        3000000", "Paquets monodiffusion      10     20"].join("\n");
+  const LINUX = ["Inter-|   Receive                                                |  Transmit", " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed", "    lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0", "  eth0: 5000 50 0 0 0 0 0 0 2000 20 0 0 0 0 0 0", "  wlan0: 700 7 0 0 0 0 0 0 300 3 0 0 0 0 0 0"].join("\n");
+
+  it("takes the bytes line of netstat -e whatever the language of the PC", () => {
+    expect(parseNetstatE(WINDOWS)).toEqual({ rx: 123456789, tx: 987654321 });
+    expect(parseNetstatE(OTHER_LANGUAGE)).toEqual({ rx: 5000000, tx: 3000000 });
+    expect(parseNetstatE("nothing useful")).toBeNull();
+  });
+
+  it("adds up the interfaces of /proc/net/dev except the loopback", () => {
+    expect(parseProcNetDev(LINUX)).toEqual({ rx: 5700, tx: 2300 });
+    expect(parseProcNetDev("")).toBeNull();
+  });
+
+  it("turns two readings into a speed once refreshed twice", async () => {
+    let now = 0;
+    const reads = [{ rx: 1000, tx: 100 }, { rx: 3000, tx: 300 }];
+    const s = new StatsSampler({ now: () => now, totalmem: () => 1, freemem: () => 1, cpus: () => [] });
+    await s.refresh(async () => reads.shift()!);
+    expect(s.sample().netDown).toBe(0);
+    now = 2000;
+    await s.refresh(async () => reads.shift()!);
+    expect(s.sample()).toMatchObject({ netDown: 1000, netUp: 100 });
+  });
+
+  it("stays at 0 when there is no counter or reading it fails", async () => {
+    const s = new StatsSampler({ totalmem: () => 1, freemem: () => 1, cpus: () => [] });
+    await s.refresh(async () => {
+      throw new Error("no netstat");
+    });
+    expect(s.sample()).toMatchObject({ netDown: 0, netUp: 0 });
   });
 });

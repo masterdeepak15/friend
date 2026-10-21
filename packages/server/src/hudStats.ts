@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { cpus as osCpus, freemem as osFreemem, totalmem as osTotalmem } from "node:os";
 import type { ServerMsg } from "@friend/protocol";
 
@@ -18,21 +20,66 @@ export interface SamplerSources {
   cpus?: () => { times: { user: number; nice: number; sys: number; idle: number; irq: number } }[];
   totalmem?: () => number;
   freemem?: () => number;
-  /** Cumulative bytes received and sent, or null when there is no counter (no dependency and no shell is used to find one). */
+  /** Cumulative bytes received and sent as last read (see refresh), or null when this PC gives no counter. */
   net?: () => { rx: number; tx: number } | null;
   now?: () => number;
+  /** How the totals are read when refreshed (the PC's own counters by default). */
+  readNet?: () => Promise<{ rx: number; tx: number } | null>;
 }
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
+
+/** The totals of `netstat -e` (Windows): the first line with two big numbers is the bytes, whatever the language of the PC. */
+export function parseNetstatE(text: string): { rx: number; tx: number } | null {
+  const m = /^\D*?(\d{3,})\s+(\d{3,})\s*$/m.exec(text);
+  return m ? { rx: Number(m[1]), tx: Number(m[2]) } : null;
+}
+
+/** The totals of /proc/net/dev (Linux), every interface except the loopback. */
+export function parseProcNetDev(text: string): { rx: number; tx: number } | null {
+  let rx = 0;
+  let tx = 0;
+  let found = false;
+  for (const line of text.split("\n")) {
+    const m = /^\s*([^\s:]+):\s*(.*)$/.exec(line);
+    if (!m || m[1] === "lo") continue;
+    const f = m[2]!.trim().split(/\s+/).map(Number);
+    if (f.length < 9 || f.some((n) => !Number.isFinite(n))) continue;
+    rx += f[0]!;
+    tx += f[8]!;
+    found = true;
+  }
+  return found ? { rx, tx } : null;
+}
+
+/** Reads this PC's network totals: from /proc on Linux, from the small `netstat -e` program on Windows; null elsewhere. */
+export async function readNetTotals(): Promise<{ rx: number; tx: number } | null> {
+  if (process.platform === "linux") return parseProcNetDev(await readFile("/proc/net/dev", "utf8"));
+  if (process.platform === "win32") {
+    const out = await new Promise<string>((resolve, reject) => execFile("netstat", ["-e"], { windowsHide: true, timeout: 3000 }, (e, stdout) => (e ? reject(e) : resolve(stdout))));
+    return parseNetstatE(out);
+  }
+  return null;
+}
 
 /** Turns the operating system's running totals into readings: processor share and network speed come from the change between two calls. */
 export class StatsSampler {
   private lastCpu: { idle: number; total: number } | null = null;
   private lastNet: { rx: number; tx: number; at: number } | null = null;
+  private totals: { rx: number; tx: number } | null = null;
   private readonly src: Required<SamplerSources>;
 
   constructor(sources: SamplerSources = {}) {
-    this.src = { cpus: osCpus, totalmem: osTotalmem, freemem: osFreemem, net: () => null, now: Date.now, ...sources };
+    this.src = { cpus: osCpus, totalmem: osTotalmem, freemem: osFreemem, net: () => this.totals, now: Date.now, readNet: readNetTotals, ...sources };
+  }
+
+  /** Reads the network totals (the next sample() uses them). A PC that gives none, or a failed read, leaves the speed at 0. */
+  async refresh(read: () => Promise<{ rx: number; tx: number } | null> = this.src.readNet): Promise<void> {
+    try {
+      this.totals = await read();
+    } catch {
+      this.totals = null;
+    }
   }
 
   sample(): Stats {
@@ -73,7 +120,7 @@ export class StatsSampler {
 export function startStatsFeed(opts: { sampler: StatsSampler; wanted: () => boolean; emit: (m: ServerMsg) => void; intervalMs?: number }): () => void {
   const timer = setInterval(() => {
     if (!opts.wanted()) return;
-    opts.emit({ type: "hud.stats", ...opts.sampler.sample() });
+    void opts.sampler.refresh().then(() => opts.emit({ type: "hud.stats", ...opts.sampler.sample() }));
   }, opts.intervalMs ?? HUD_STATS_INTERVAL_MS);
   timer.unref?.();
   return () => clearInterval(timer);

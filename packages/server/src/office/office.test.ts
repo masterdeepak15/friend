@@ -707,6 +707,17 @@ describe("reviewing and talking", () => {
     expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ worker: w.name, ticketId: 1, title: "Write notes", status: "review", report: "Wrote notes.md" }));
   });
 
+  it("does not write the same line twice in the feed when the last words and the report are the same", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    t.office.assign({ worker: w.id, title: "Write notes" });
+    await settle();
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.emit({ kind: "text", text: "All done here." } as never);
+    t.procs[0]!.emit(resultEv({ text: "All done here." }));
+    expect(t.feeds().filter((f) => f.text === "All done here.")).toHaveLength(1);
+  });
+
   it("keeps the worker's whole report on the ticket and hands it over on request", async () => {
     const t = make();
     const w = t.hire("scribe");

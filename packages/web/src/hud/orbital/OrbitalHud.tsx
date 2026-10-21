@@ -218,9 +218,9 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
     </>
   );
   const modalW = mode === "compact" ? w - 16 : Math.max(340, Math.min(480, w * 0.34));
-  const modalH = Math.min(h - 16, Math.max(300, Math.min(520, h * 0.7)));
+  const modalH = Math.min(h - 16, needsPin ? Math.max(300, Math.min(520, h * 0.7)) : Math.max(260, Math.min(420, h * 0.55)));
   const modalRect = { x: (w - modalW) / 2, y: (h - modalH) / 2, width: modalW, height: modalH };
-  const asDialog = pending && (needsPin || mode === "compact");
+  const asDialog = pending; // every question to the owner gets room: a corner box cut off the command and its buttons
   const modalEl = asDialog && (
     <>
       <div className="ob-backdrop ob-modal-backdrop" />

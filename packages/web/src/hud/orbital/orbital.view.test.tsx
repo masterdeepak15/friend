@@ -2,7 +2,7 @@ import type { HudView } from "@friend/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { HUD_WIDGET_IDS } from "@friend/protocol";
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState, type StageViewState } from "../../store";
 import { OrbitalHud } from "./OrbitalHud";
@@ -167,6 +167,26 @@ describe("a waiting approval", () => {
     expect(f.className).toContain("ob-modal");
     expect(parseFloat(f.style.width)).toBeGreaterThanOrEqual(340);
     expect(parseFloat(f.style.height)).toBeGreaterThanOrEqual(300);
+  });
+
+  it("is a dialog in the middle for every approval, with its answers inside, not a small box in the corner", () => {
+    const plain = { id: "a2", tool: "office.action", summary: "Worker Ben wants to Write C:\\Users\\me\\AppData\\Local\\Temp\\friend-office-demo\\site\\hello.txt", tier: "T2", needsPin: false } as never;
+    const { container } = render(element({ approval: plain }, [1366, 768]));
+    const f = container.querySelector<HTMLElement>('[data-widget="approval"]')!;
+    expect(f.className).toContain("ob-modal");
+    expect(within(f).getByRole("button", { name: /^approve$/i })).toBeTruthy();
+    expect(within(f).getByRole("button", { name: /^deny$/i })).toBeTruthy();
+    expect(parseFloat(f.style.height)).toBeLessThanOrEqual(768 - 16);
+    expect(container.querySelectorAll('[data-widget="approval"]')).toHaveLength(1);
+  });
+
+  it("wraps a long command instead of scrolling sideways, and says a worker's question in one line", () => {
+    const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
+    expect(css).toMatch(/\.ob-approval \.ob-summary \{[^}]*white-space: pre-wrap/);
+    expect(css).toMatch(/\.ob-approval \.ob-summary \{[^}]*overflow-wrap: anywhere/);
+    const plain = { id: "a2", tool: "office.action", summary: "Worker Ben wants to Write x", tier: "T2", needsPin: false } as never;
+    const { container } = render(element({ approval: plain }, [1366, 768]));
+    expect(container.textContent).not.toContain("office.action wants to run");
   });
 
   it("fills the width of a phone", () => {

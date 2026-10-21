@@ -20,7 +20,7 @@ function Waiting({ approval, send }: { approval: PendingApproval; send: (m: Clie
         <span className="ob-appr-title">
           APPROVAL NEEDED <span className={`tier tier-${approval.tier}`}>{approval.tier}</span>
         </span>
-        <span className="ob-appr-sub">{approval.tool} wants to run:</span>
+        {!approval.tool.startsWith("office.") && <span className="ob-appr-sub">{approval.tool} wants to run:</span>}
         <pre className="ob-summary" data-testid="approval-summary">{approval.summary}</pre>
       </div>
       {approval.needsPin && <PinPad pin={pin} onChange={setPin} onSubmit={() => canApprove && respond("approve")} />}

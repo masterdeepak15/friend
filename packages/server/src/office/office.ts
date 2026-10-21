@@ -568,6 +568,7 @@ export class Office {
 
   private feed(workerId: string, kind: FeedKind, text: string): void {
     const clipped = clip(text, FEED_CHARS);
+    if (this.d.store.events(workerId, 1).at(-1)?.text === clipped) return; // the closing words and the report are often the same
     this.d.store.addEvent(workerId, { kind, text: clipped });
     this.d.emit({ type: "office.feed", workerId, at: Date.now(), kind, text: clipped });
   }

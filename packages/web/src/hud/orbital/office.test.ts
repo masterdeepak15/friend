@@ -61,14 +61,21 @@ describe("budgetRings", () => {
   it("shows the share of the limit used, up to three workers that have one", () => {
     const ws = [worker("Ada", { tokens: 250, budget: 1000 }), worker("Bob", { tokens: 5, budget: 0 }), worker("Cy", { tokens: 5000, budget: 1000 }), worker("Di", { tokens: 10, budget: null }), worker("Ed", { tokens: 1, budget: 10 }), worker("Flo", { tokens: 2, budget: 10 })];
     expect(budgetRings(ws)).toEqual([
-      { label: "ADA", value: 25 },
-      { label: "CY", value: 100 },
-      { label: "ED", value: 10 },
+      { label: "ADA", value: 25, text: "25%" },
+      { label: "CY", value: 100, text: "100%" },
+      { label: "ED", value: 10, text: "10%" },
     ]);
   });
 
-  it("is empty when no one has a limit", () => {
-    expect(budgetRings([worker("Ada")])).toEqual([]);
+  it("with no limits set, shows what each worker has used against the busiest one, so the instrument is not empty", () => {
+    const ws = [worker("Ada", { tokens: 1100 }), worker("Bob", { tokens: 4400 }), worker("Cy", { tokens: 0 }), worker("Di", { tokens: 50 })];
+    expect(budgetRings(ws)).toEqual([
+      { label: "BOB", value: 100, text: "4.4K" },
+      { label: "ADA", value: 25, text: "1.1K" },
+      { label: "DI", value: 1, text: "50" },
+    ]);
+    expect(budgetRings([worker("Ada")])).toEqual([{ label: "ADA", value: 0, text: "0" }]);
+    expect(budgetRings([])).toEqual([]);
   });
 });
 
