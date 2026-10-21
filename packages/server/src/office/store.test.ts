@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { openDb } from "../db";
-import { MAX_EVENTS_PER_WORKER, MAX_EVENT_CHARS, OfficeStore } from "./store";
+import { MAX_EVENTS_PER_WORKER, MAX_EVENT_CHARS, MAX_REPORT_CHARS, OfficeStore } from "./store";
 
 let dir: string;
 let store: OfficeStore;
@@ -50,6 +50,18 @@ describe("tickets", () => {
     expect(store.listTickets("site")).toHaveLength(1);
     expect(store.listTickets("other")).toHaveLength(0);
     expect(store.listTickets()).toHaveLength(1);
+  });
+});
+
+describe("a ticket's report", () => {
+  it("is kept whole (up to a large limit), and starts empty", () => {
+    const t = store.createTicket({ projectId: "site", title: "Review", description: "" });
+    expect(store.getTicket(t.id)!.report).toBe("");
+    const long = "r".repeat(7000);
+    store.patchTicket(t.id, { report: long });
+    expect(store.getTicket(t.id)!.report).toBe(long);
+    store.patchTicket(t.id, { report: "x".repeat(MAX_REPORT_CHARS + 500) });
+    expect(store.getTicket(t.id)!.report).toHaveLength(MAX_REPORT_CHARS);
   });
 });
 

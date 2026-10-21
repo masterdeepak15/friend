@@ -602,7 +602,7 @@ export async function createApp(opts: AppOptions) {
   let officeNoteTimer: NodeJS.Timeout | null = null;
   const officeNote = (e: { worker: string; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => {
     const safe = (s: string, n: number) => s.replace(/[<>]/g, "‹").replace(/\s+/g, " ").trim().slice(0, n);
-    officeNotes.push(`${safe(e.worker, 40)} ${e.status === "review" ? "finished" : "could not finish"} ticket #${e.ticketId} "${safe(e.title, 200)}" (now ${e.status}). Its report:\n<untrusted-worker-report>${safe(e.report, 600)}</untrusted-worker-report>`);
+    officeNotes.push(`${safe(e.worker, 40)} ${e.status === "review" ? "finished" : "could not finish"} ticket #${e.ticketId} "${safe(e.title, 200)}" (now ${e.status}). The start of its report (read all of it with office.report, ticket ${e.ticketId}):\n<untrusted-worker-report>${safe(e.report, 600)}</untrusted-worker-report>`);
     if (officeNoteTimer) return;
     officeNoteTimer = setTimeout(() => {
       officeNoteTimer = null;

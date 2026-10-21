@@ -231,4 +231,8 @@ create index office_events_worker on office_events (worker_id, id);
 create index office_tickets_project on office_tickets (project_id);
 `,
   },
+  {
+    id: 13,
+    sql: `alter table office_tickets add column report text not null default '';`,
+  },
 ];

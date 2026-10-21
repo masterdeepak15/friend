@@ -66,6 +66,14 @@ describe("the six office tools", () => {
     }
   });
 
+  it("office.report reads a ticket's report without asking", () => {
+    const d = TOOL_DEFS.find((t) => t.name === "office.report")!;
+    expect(d.baseTier).toBe("T0");
+    expect(d.input.safeParse({ ticket: 3 }).success).toBe(true);
+    expect(d.input.safeParse({}).success).toBe(false);
+    expect(describeCall("office.report", { ticket: 3 })).toMatch(/3/);
+  });
+
   it("check their arguments", () => {
     expect(def("office.assign")!.input.safeParse({ worker: "w1", title: "Fix login" }).success).toBe(true);
     expect(def("office.assign")!.input.safeParse({ worker: "w1", title: "" }).success).toBe(false);

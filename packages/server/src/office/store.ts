@@ -27,6 +27,8 @@ export interface TicketRow {
   description: string;
   status: TicketStatus;
   workerId: string | null;
+  /** What the worker reported when it finished the ticket (read with office.report). */
+  report: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -58,14 +60,17 @@ interface TRow {
   description: string;
   status: TicketStatus;
   worker_id: string | null;
+  report: string;
   created_at: number;
   updated_at: number;
 }
 const toWorker = (r: WRow): WorkerRow => ({ id: r.id, name: r.name, roleId: r.role_id, projectId: r.project_id, status: r.status, sessionId: r.session_id, ticketId: r.ticket_id, detail: r.detail, tokens: r.tokens, createdAt: r.created_at, startedAt: r.started_at });
-const toTicket = (r: TRow): TicketRow => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description, status: r.status, workerId: r.worker_id, createdAt: r.created_at, updatedAt: r.updated_at });
+const toTicket = (r: TRow): TicketRow => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description, status: r.status, workerId: r.worker_id, report: r.report, createdAt: r.created_at, updatedAt: r.updated_at });
 
 const WORKER_COLUMNS: Record<string, string> = { status: "status", sessionId: "session_id", ticketId: "ticket_id", detail: "detail", startedAt: "started_at" };
-const TICKET_COLUMNS: Record<string, string> = { status: "status", workerId: "worker_id" };
+const TICKET_COLUMNS: Record<string, string> = { status: "status", workerId: "worker_id", report: "report" };
+/** The most of a worker's report that is kept. */
+export const MAX_REPORT_CHARS = 20_000;
 
 /** The Office's workers, tickets and a short feed of what each worker did. Only what is needed to draw the screen and to carry on after a restart. */
 export class OfficeStore {
@@ -125,7 +130,8 @@ export class OfficeStore {
     return rows.map(toTicket);
   }
 
-  patchTicket(id: number, p: Partial<Pick<TicketRow, "status" | "workerId">>): void {
+  patchTicket(id: number, p: Partial<Pick<TicketRow, "status" | "workerId" | "report">>): void {
+    if (p.report !== undefined) p = { ...p, report: p.report.slice(0, MAX_REPORT_CHARS) };
     const keys = Object.keys(p).filter((k) => k in TICKET_COLUMNS && (p as Record<string, unknown>)[k] !== undefined);
     if (keys.length === 0) return;
     this.db.prepare(`update office_tickets set ${keys.map((k) => `${TICKET_COLUMNS[k]} = ?`).join(", ")}, updated_at = ? where id = ?`).run(...keys.map((k) => (p as Record<string, unknown>)[k]), this.now(), id);

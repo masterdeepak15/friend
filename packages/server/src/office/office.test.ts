@@ -633,6 +633,20 @@ describe("reviewing and talking", () => {
     expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ worker: w.name, ticketId: 1, title: "Write notes", status: "review", report: "Wrote notes.md" }));
   });
 
+  it("keeps the worker's whole report on the ticket and hands it over on request", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    t.office.assign({ worker: w.id, title: "Review the code" });
+    await settle();
+    t.procs[0]!.emit(initEv());
+    const long = "Finding. ".repeat(300);
+    t.procs[0]!.emit(resultEv({ text: long }));
+    const r = t.office.report(1);
+    expect(r).toMatchObject({ ok: true, title: "Review the code", status: "review" });
+    expect(r.ok && r.report.length).toBeGreaterThan(2000); // not cut to a feed line
+    expect(t.office.report(99)).toMatchObject({ ok: false });
+  });
+
   it("tells Friend when a ticket ends blocked, and not when the owner stops it", async () => {
     const t = make();
     const w = t.hire("scribe");

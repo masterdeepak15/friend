@@ -98,7 +98,7 @@ function describeAction(tool: string, input: Record<string, unknown>): string {
  * it does is read from settings at the moment it does it.
  */
 /** What Friend's own tools use of the Office. */
-export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "stop" | "status">;
+export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "stop" | "status" | "report">;
 
 export class Office {
   private runs = new Map<string, Run>();
@@ -212,6 +212,14 @@ export class Office {
     this.d.audit.log(by, "office.stop", { worker: workerRef ?? "all", stopped: targets.length });
     this.changed();
     return { stopped: targets.length };
+  }
+
+  /** The whole report a worker gave for a ticket. */
+  report(ticketId: number): Result<{ title: string; status: TicketStatus; worker: string; report: string }> {
+    const t = this.d.store.getTicket(ticketId);
+    if (!t) return { ok: false, error: `There is no ticket #${ticketId}.` };
+    const w = t.workerId ? this.d.store.getWorker(t.workerId) : undefined;
+    return { ok: true, title: t.title, status: t.status, worker: w?.name ?? "", report: t.report };
   }
 
   status(): { workers: OfficeWorkerView[]; tickets: OfficeTicketView[]; quota: OfficeQuota } {
@@ -418,6 +426,7 @@ export class Office {
     this.d.usage({ source: "office", input: ev.input, output: ev.output });
     this.feed(run.workerId, "result", ev.text.replace(/\s+/g, " ").trim() || (ev.ok ? "Done." : "Stopped with an error."));
     run.report = ev.text.replace(/\s+/g, " ").trim() || (ev.ok ? "Done." : "Stopped with an error.");
+    this.d.store.patchTicket(run.ticketId, { report: ev.text.trim() || run.report }); // kept whole, so Friend can read all of it
     run.answered++;
     if (run.answered < run.sent && ev.ok) return; // the owner said something meanwhile; its answer is still to come
     const worker = this.d.store.getWorker(run.workerId)!;

@@ -171,4 +171,5 @@ describe("the Office in the app", () => {
     expect(asked).toContain("Write notes");
     expect(asked).toContain("Wrote notes.md");
     expect(asked).toContain("untrusted");
+    expect(asked).toContain("office.report"); // and how to read the whole of it
   });});
