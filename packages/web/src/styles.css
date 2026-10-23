@@ -496,3 +496,8 @@ input, textarea, select, .connector-command { -webkit-user-select: text; user-se
 .obj[style*="height"] > .obj-sandbox { height: 100%; }
 .obj[style*="height"] > .obj-sandbox iframe { min-height: 0; }
 .presence-full { transition: transform 0.4s ease; } /* the orb pops out to its full size while Friend listens, thinks or speaks, and tucks back in when idle */
+.obj-jarvis { display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: 0; }
+.jv-row { display: flex; align-items: stretch; }
+.jv-row > * { flex: 1 1 0; min-width: 0; }
+.jv-col { display: flex; flex-direction: column; }
+.jv-grid { display: grid; }

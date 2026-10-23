@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@friend/protocol": "workspace:*",
+    "@masterdeepak15/jarvis-ui": "^1.1.4",
     "dompurify": "^3.4.16",
     "html-to-image": "1.11.13",
     "marked": "^18.1.0",

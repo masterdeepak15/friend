@@ -140,6 +140,7 @@ export function Tabs({ props }: { props: Props }) {
   );
 }
 
+import { Jarvis } from "./jarvis";
 export const CATALOG = {
   card: Card,
   stat: Stat,
@@ -162,4 +163,5 @@ export const CATALOG = {
   checklist: Checklist,
   countdown: Countdown,
   kv: Kv,
+  jarvis: Jarvis,
 } as const;

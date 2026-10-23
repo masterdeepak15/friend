@@ -1,3 +1,4 @@
+import { jarvisCatalog } from "@friend/protocol";
 /**
  * The screen manual the assistant can call up with stage.guide. The system prompt carries only the short rules; this has
  * every widget with its props and an example, how to arrange them, and when to put something on top or clear the screen.
@@ -29,7 +30,7 @@ Containers (ONE object holding several)
 - tabs {title?, tabs:[{title, type, props}]}: several views of one subject (Overview, Details, History).
 - Parts of group and tabs can be any type except group, tabs and sandbox.
 Anything else
-- sandbox {title?, html}: your own small page (animation, clock, simulation, game). No network. Use var(--accent), var(--ink), var(--muted), var(--ok), var(--warn), var(--bad), var(--glass), var(--edge), var(--ui), var(--mono) for colour and fonts.
+- jarvis {title?, ui}: draw with the Jarvis HUD components (the same look as this screen). ui is a plain tree of data, never code: {c: "ComponentName", p: {props}, kids: [more nodes or text]}. At most 6 levels and 120 parts. Prefer it for dashboards, org charts and diagrams that the simple widgets cannot show. Example: {"ui":{"c":"Column","p":{"gap":8},"kids":[{"c":"JStatCard","p":{"title":"CPU","value":"42%","barValue":42}},{"c":"JProgress","p":{"value":70,"label":"Backup"}}]}}. Components:\n${jarvisCatalog()}\n- sandbox {title?, html}: your own small page (animation, clock, simulation, game). No network. Use var(--accent), var(--ink), var(--muted), var(--ok), var(--warn), var(--bad), var(--glass), var(--edge), var(--ui), var(--mono) for colour and fonts.
 Other tools: stage.update {id, props} changes a shown object; stage.hide {id}; stage.clear (pinned widgets stay); stage.pin {id} keeps one; stage.scene {mode}; stage.mood {accent?, intensity?}; stage.presence; view.set; look.set.`;
 
 const LAYOUT = `ARRANGING THE SCREEN

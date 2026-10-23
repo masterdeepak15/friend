@@ -1,5 +1,6 @@
 import {
   OBJECT_TYPES,
+  jarvisProblem,
   StageCommand,
   TOOL_DEFS,
   type SceneMode,
@@ -75,6 +76,7 @@ export function propsError(type: string, props: Record<string, unknown>, require
       if (typeof src !== "string" || !MEDIA_SRC.test(src)) return "Every gallery item needs src from file.present, not a web address.";
     }
   }
+  if (type === "jarvis" && (requireAll || "ui" in props)) return jarvisProblem(props); // only a tree of known components with plain props, never code
   if (type === "group" && (requireAll || "items" in props)) return partsError(props.items, "A group");
   if (type === "tabs" && (requireAll || "tabs" in props)) return partsError(props.tabs, "Tabs");
   return null;

@@ -197,32 +197,36 @@ describe("a worker opened on the screen", () => {
 
 describe("the team tree", () => {
   const team = () => office({ workers: [worker("Lena", { title: "Tech lead", status: "running", detail: "Planning" }), worker("Ben", { title: "Developer", managerId: "lena" }), worker("Cy", { title: "Tester", managerId: "lena", status: "waiting" })] });
+  const dialog = () => screen.getByRole("dialog", { name: /office team/i });
 
-  it("opens from a Team button and draws Friend, every worker, and a line for each reporting relation", () => {
-    const { container } = mount({}, { office: team(), assistantName: "Maya" });
+  it("opens from a Team button and says who reports to whom, Friend at the top", async () => {
+    mount({}, { office: team(), assistantName: "Maya" });
     fireEvent.click(screen.getByRole("button", { name: /^team/i }));
-    const d = screen.getByRole("dialog", { name: /office team/i });
-    expect(d.textContent).toContain("Maya");
-    for (const n of ["Lena", "Ben", "Cy"]) expect(within(d).getByRole("button", { name: new RegExp(`^${n},`) })).toBeTruthy();
-    const edges = [...d.querySelectorAll("[data-edge]")].map((e) => e.getAttribute("data-edge")).sort();
-    expect(edges).toEqual(["friend>lena", "lena>ben", "lena>cy"]);
-    expect(container).toBeTruthy();
+    const lines = [...within(dialog()).getByRole("list", { name: /who reports to whom/i }).querySelectorAll("li")].map((l) => l.textContent);
+    expect(lines).toEqual(["Lena reports to Maya", "Ben reports to Lena", "Cy reports to Lena"]);
   });
 
-  it("shows the job and what each is doing on its card, and a waiting one in orange", () => {
+  it("draws the graph with the Jarvis library: Friend and every worker as nodes", async () => {
+    mount({}, { office: team(), assistantName: "Maya" });
+    fireEvent.click(screen.getByRole("button", { name: /^team/i }));
+    expect(await within(dialog()).findByText("MAYA", {}, { timeout: 8000 })).toBeTruthy(); // the library is fetched when the team opens
+    for (const n of ["LENA", "BEN", "CY"]) expect(within(dialog()).getByText(n)).toBeTruthy();
+    expect(within(dialog()).getByText("Tech lead")).toBeTruthy();
+  });
+
+  it("has a button for each worker with the job and what it is doing, and a waiting one is orange", () => {
     mount({}, { office: team() });
     fireEvent.click(screen.getByRole("button", { name: /^team/i }));
-    const d = screen.getByRole("dialog", { name: /office team/i });
-    const lena = within(d).getByRole("button", { name: /^Lena,/ });
+    const lena = within(dialog()).getByRole("button", { name: /^Lena,/ });
     expect(lena.textContent).toContain("Tech lead");
-    expect(lena.textContent).toContain("Planning");
-    expect(within(d).getByRole("button", { name: /^Cy,/ }).getAttribute("data-status")).toBe("waiting");
+    expect(lena.getAttribute("aria-label")).toContain("Planning");
+    expect(within(dialog()).getByRole("button", { name: /^Cy,/ }).getAttribute("data-status")).toBe("waiting");
   });
 
-  it("opens a worker from its card", () => {
+  it("opens a worker from its button", () => {
     mount({}, { office: team() });
     fireEvent.click(screen.getByRole("button", { name: /^team/i }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: /office team/i })).getByRole("button", { name: /^Ben,/ }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: /^Ben,/ }));
     expect(screen.getByRole("dialog", { name: "Ben" })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /office team/i })).toBeNull();
   });

@@ -395,7 +395,12 @@ The Office lets Friend hire **workers**: separate Claude Code sessions that work
 - **Approvals.** A worker that wants to do something risky asks through Friend's own approval card (the orange octagon on the orbital screen, the card in the classic one), showing the whole command. A path outside the project's folders, and any command that matches one of your **Always refuse** patterns, is refused without asking. Tools on your **Let through without asking** list go ahead inside the folders; everything else asks, and a command that looks dangerous needs your PIN. An unanswered card counts as a no. There is no "always allow" for a worker's question.
 - **Limits.** *Most workers at once* (the others queue), a token limit per worker and in total, a start timeout, and **Pause at N% of the five-hour window**: when your Claude subscription window is that full, workers wait until it resets (0 = never pause). Workers share your Claude subscription with Friend itself, using the program and model chosen under Model.
 - **On the orbital screen** the workers are the orbit nodes (a "+" hires one), Tickets and Budget show the real tickets and token limits, the Activity feed shows what the workers do, and the usage ring shows the real five-hour window with the time it resets. Click a worker to see its live feed, **Stop** it or say something to it. Stop, switching the Office off and closing Friend all end every worker process.
+- **Team.** The **TEAM** button under the name in the middle opens the team as a graph drawn with the Jarvis components: the assistant on the left, each worker to the right of its manager. Friend decides the jobs and who reports to whom when he hires.
 - **Sessions.** A worker keeps its memory between tickets (its Claude Code session is resumed); the process itself ends after each ticket.
+
+## Drawing with the Jarvis components
+
+Besides the simple widgets, Friend can draw with the Jarvis HUD component library (stat cards, gauges, bar and line charts, tables, status pills, node graphs and more) in one `jarvis` object: a plain tree of data, never code. Every component and prop is checked against an allow-list before it is drawn, so nothing can run or restyle the screen. `stage.guide` lists the components for him.
 
 ## Pictures first: weather, stats and graphics
 

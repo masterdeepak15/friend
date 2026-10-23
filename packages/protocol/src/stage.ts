@@ -19,7 +19,7 @@ export type PresenceStyle = z.infer<typeof PresenceStyle>;
 
 export const OBJECT_TYPES = [
   "card", "stat", "list", "table", "code", "chart", "gauge", "timeline", "graph", "sandbox",
-  "markdown", "image", "video", "pdf", "gallery", "group", "tabs", "progress", "checklist", "countdown", "kv",
+  "markdown", "image", "video", "pdf", "gallery", "group", "tabs", "progress", "checklist", "countdown", "kv", "jarvis",
 ] as const;
 
 export const StageObject = z.object({

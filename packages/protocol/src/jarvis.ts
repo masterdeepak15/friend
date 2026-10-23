@@ -1,0 +1,108 @@
+/**
+ * The Jarvis UI components (the HUD library the screen already looks like) that the assistant may draw with. The assistant sends a plain tree
+ * of data, never code: each node names a component from this table and gives only the props listed for it. The screen checks the tree again
+ * before it draws it, so a tree that does not pass here is never drawn.
+ */
+export interface JarvisNode {
+  /** The component: a name from JARVIS_COMPONENTS, or Row, Column, Grid. */
+  c: string;
+  /** Its props: plain data, only the names listed for the component. */
+  p?: Record<string, unknown>;
+  /** What is inside it: more nodes, or text. */
+  kids?: (JarvisNode | string)[];
+}
+
+export const JARVIS_LIMITS = { depth: 6, nodes: 120, text: 2000, items: 200 } as const;
+
+/** Component name -> the props it accepts and what the assistant should know about it. */
+export const JARVIS_COMPONENTS: Record<string, { props: string[]; note?: string; kids?: boolean }> = {
+  Row: { props: ["gap", "wrap"], kids: true, note: "puts its parts side by side" },
+  Column: { props: ["gap"], kids: true, note: "stacks its parts" },
+  Grid: { props: ["columns", "gap"], kids: true, note: "a grid with this many columns" },
+  JCard: { props: ["cardStyle", "color"], kids: true, note: "a card around its parts" },
+  JHudFrame: { props: ["color", "systemLabel", "showTop", "showBottom", "showDots", "showLive", "showWaveform", "showTicks", "showRec"], kids: true, note: "a HUD frame with bars around its parts" },
+  JStatCard: { props: ["title", "value", "state", "sub", "showStatusDot", "badge", "badgeColor", "barValue", "dataRows", "color"], note: "value is a string; dataRows [{label, value}]; barValue 0-100" },
+  JProgress: { props: ["value", "label", "state", "variant", "indeterminate", "showPercent", "total"], note: "value 0-100; variant bar|ticks" },
+  JGaugeChart: { props: ["value", "min", "max", "size", "thickness", "label", "displayValue", "showNeedle", "showTicks", "showMinMax", "ticks"], note: "a radial gauge; size like 200px" },
+  JBarChart: { props: ["data", "height", "orientation", "showGrid", "showAxisLabels", "showValues"], note: "data [{label, value}]; height like 220px" },
+  JLineChart: { props: ["data", "height", "showArea", "showDots", "showAxisLabels", "showGrid", "gridLines"], note: "data [{label, value}]; height like 200px" },
+  JSparkline: { props: ["data", "showArea", "showTrend", "height", "width"], note: "data is a list of numbers; height and width like 40px" },
+  JTable: { props: ["columns", "rows", "stateColumn", "showFooter", "footerLabel"], note: "columns [{key, label}]; rows [{key: value}]" },
+  JBadge: { props: ["color", "size", "shape", "blink", "showDot"], kids: true, note: "a small label; its text is the kids" },
+  JStatusPill: { props: ["state", "blink"], kids: true, note: "a status dot and its text (the kids); state active|warning|error|success" },
+  JAlert: { props: ["state", "title", "blink"], kids: true, note: "a banner; its text is the kids" },
+  JDataRow: { props: ["label", "value", "barPercent", "state"], note: "a key, its value and an optional bar 0-100" },
+  JHudLabel: { props: ["variant", "text", "subText", "value", "color", "showDot", "showLine"], note: "a labelled value; variant chip|arc|metric" },
+  JArcMeter: { props: ["level", "totalArcs", "color", "orientation", "showLabel", "label", "showValue"], note: "a segmented level meter" },
+  JArcReactor: { props: ["level", "size", "color", "label", "animated"], note: "level 0-100" },
+  JHeatmap: { props: ["data", "color", "cellSize", "gap", "showValue", "title"], note: "data is rows of [{value}]" },
+  JActivityFeed: { props: ["items", "maxRows", "showTime", "showSource"], note: "items [{id, time?, level?, message, source?}] oldest first" },
+  JKPITicker: { props: ["items", "speed", "color", "height"], note: "items [{label, value, delta?, trend?}]" },
+  JHudClock: { props: ["analog", "color", "size", "showDate"], note: "a clock" },
+  JWaveform: { props: ["barCount", "color", "height", "active"], note: "animated sound bars" },
+  JDivider: { props: ["orientation", "label", "showDot"], note: "a line, with a label if given; orientation horizontal|vertical" },
+  JNodeGraph: { props: ["nodes", "edges", "height", "title", "showLegend"], note: "nodes [{id, label, x, y, type?, color?, sub?, value?, pulse?}], edges [{from, to, color?, style?, arrow?, animated?}]; x and y in pixels" },
+};
+
+/** Props that are never accepted, whatever the component: they could run code, or restyle or break out of the screen. */
+const NEVER = /^(on[A-Z]|dangerously|style$|className$|ref$|key$|children$|href$|src$)/;
+
+const plain = (v: unknown, depth = 0): string | null => {
+  if (v === null || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v))) return null;
+  if (typeof v === "string") return v.length > JARVIS_LIMITS.text ? "A text is too long." : null;
+  if (depth > 4) return "A prop is nested too deep.";
+  if (Array.isArray(v)) {
+    if (v.length > JARVIS_LIMITS.items) return "A list is too long.";
+    for (const x of v) {
+      const bad = plain(x, depth + 1);
+      if (bad) return bad;
+    }
+    return null;
+  }
+  if (typeof v === "object") {
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+      if (NEVER.test(k)) return `A prop may not have the key ${k}.`;
+      const bad = plain(x, depth + 1);
+      if (bad) return bad;
+    }
+    return null;
+  }
+  return "Props must be plain data (text, numbers, true or false, lists and objects).";
+};
+
+/** Checks the props of a jarvis object ({ title?, ui }) and says what is wrong in a sentence for the assistant, or null when it can be drawn. */
+export function jarvisProblem(props: unknown): string | null {
+  const ui = props && typeof props === "object" ? (props as { ui?: unknown }).ui : undefined;
+  if (!ui || typeof ui !== "object") return "A jarvis object needs ui: a tree like {c: \"JStatCard\", p: {...}, kids: [...]}, where c is the component name.";
+  let count = 0;
+  const walk = (n: unknown, depth: number): string | null => {
+    if (typeof n === "string") return n.length > JARVIS_LIMITS.text ? "A text is too long." : null;
+    if (!n || typeof n !== "object" || typeof (n as JarvisNode).c !== "string") return "Every node needs c, the component name.";
+    if (depth > JARVIS_LIMITS.depth) return `The tree is too deep (at most ${JARVIS_LIMITS.depth} levels).`;
+    if (++count > JARVIS_LIMITS.nodes) return `The tree has too many parts (at most ${JARVIS_LIMITS.nodes}).`;
+    const node = n as JarvisNode;
+    const def = JARVIS_COMPONENTS[node.c];
+    if (!def) return `${node.c} is not available. Use one of: ${Object.keys(JARVIS_COMPONENTS).join(", ")}.`;
+    for (const k of Object.keys(node.p ?? {})) {
+      if (NEVER.test(k)) return `${node.c}: the prop ${k} is not allowed.`;
+      if (!def.props.includes(k)) return `${node.c} has no prop ${k}. Its props: ${def.props.join(", ") || "none"}.`;
+    }
+    const bad = plain(node.p ?? {});
+    if (bad) return `${node.c}: ${bad}`;
+    if (node.kids !== undefined && !Array.isArray(node.kids)) return `${node.c}: kids must be a list.`;
+    if (node.kids && !def.kids && node.kids.some((k) => typeof k !== "string")) return `${node.c} cannot contain other components.`;
+    for (const k of node.kids ?? []) {
+      const r = walk(k, depth + 1);
+      if (r) return r;
+    }
+    return null;
+  };
+  return walk(ui, 1);
+}
+
+/** The list the assistant is given: each component, its props and what it is for. */
+export function jarvisCatalog(): string {
+  return Object.entries(JARVIS_COMPONENTS)
+    .map(([name, d]) => `${name}${d.props.length ? ` {${d.props.join(", ")}}` : ""}${d.kids ? " [kids]" : ""}${d.note ? `: ${d.note}` : ""}`)
+    .join("\n");
+}
