@@ -1,4 +1,4 @@
-import { REGION_NAMES, REGIONS, clampToSafe, overlap, rectOf, type Placement, type Rect, type RegionName, type ScreenInfo, type StageObject } from "@friend/protocol";
+import { REGION_NAMES, REGIONS, clampToSafe, jarvisNaturalSize, jarvisProblem, overlap, rectOf, type Placement, type Rect, type RegionName, type ScreenInfo, type StageObject } from "@friend/protocol";
 
 /** How many pictures a phone screen shows comfortably at once (they stack in one column). */
 export const PHONE_COMFORT = 2;
@@ -49,6 +49,34 @@ function panelObjects(panels: PanelName[]): StageObject[] {
   });
 }
 
+/** The bar a Jarvis card is moved by, in pixels, and a little air round what is drawn. */
+const JARVIS_BAR = 28;
+const JARVIS_AIR = 1.08;
+
+/** A Jarvis drawing gets the box its content needs (the assistant often gives it a square that is far too big or small). Auto stays auto. */
+function sizeJarvis(object: StageObject, screen: ScreenInfo | null): { object: StageObject; note?: string } {
+  if (object.type !== "jarvis" || object.placement === "auto" || jarvisProblem(object.props) !== null) return { object };
+  const sw = screen?.width && screen.width > 200 ? screen.width : 1920;
+  const sh = screen?.height && screen.height > 200 ? screen.height : 1080;
+  const nat = jarvisNaturalSize((object.props as { ui: never }).ui);
+  const w = Math.min(0.9, (nat.w * JARVIS_AIR) / sw);
+  const h = Math.min(0.75, (nat.h * JARVIS_AIR + JARVIS_BAR) / sh);
+  const r = (n: number) => Math.round(n * 1000) / 1000;
+  let x: number;
+  let y: number;
+  if (typeof object.placement === "object") {
+    x = object.placement.x;
+    y = object.placement.y;
+  } else {
+    const [rx, ry, rw, rh] = REGIONS[object.placement];
+    x = (rx + (rw - w * 100) / 2) / 100;
+    y = (ry + (rh - h * 100) / 2) / 100;
+  }
+  const placement = { x: r(Math.max(0, x)), y: r(Math.max(0, y)), w: r(w), h: r(h) };
+  const same = typeof object.placement === "object" && Math.abs(object.placement.w - placement.w) < 0.02 && Math.abs(object.placement.h - placement.h) < 0.02;
+  return same ? { object } : { object: { ...object, placement }, note: `Size changed: this card needs about ${Math.round(nat.w)}x${Math.round(nat.h)} px, so the box is ${Math.round(placement.w * sw)}x${Math.round(placement.h * sh)} px (a Jarvis card is an instrument, not a banner)` };
+}
+
 export interface Placed {
   object: StageObject;
   /** What was changed and why, in words the model can learn from; absent when the object went where it asked. */
@@ -65,9 +93,10 @@ export function placeObject(object: StageObject, shown: StageObject[], panels: P
     if (object.placement === "auto") return { object };
     return { object: { ...object, placement: "auto" }, note: "Placement changed: this is a phone, where objects stack in one column, so it was set to auto." };
   }
+  const sized = sizeJarvis(object, screen);
   const onScreen = [...shown, ...panelObjects(panels)];
-  let placement = object.placement;
-  const notes: string[] = [];
+  let placement = sized.object.placement;
+  const notes: string[] = sized.note ? [sized.note.replace(/\.$/, "")] : [];
 
   if (typeof placement === "object") {
     const want: Rect = [placement.x * 100, placement.y * 100, placement.w * 100, placement.h * 100];
@@ -142,7 +171,7 @@ export function describeScreen(
 export const LAYOUT_GUIDE = `Screen layout (follow this when you decide where things go)
 - Always on screen, never yours to cover or move: the voice presence (middle of the screen; a small round shape in the bottom-left corner during "focus" and "multi" scenes), the live captions at the bottom, a status line in the bottom-left, a small clock in the bottom-right, and the owner's notices along the top edge. Use the middle of the screen for what the owner asked to see.
 - Regions for placement: "center" (the main thing), "left" and "right" (two things side by side), "top" and "bottom" (wide banners: a timeline, a short note). They overlap in places: center overlaps left and right, top and bottom overlap center. Use "auto" for three or more objects: they flow in a tidy grid. Avoid custom boxes; if you must, stay between 2% and 98% across and 10% to 78% down.
-- Use the whole screen. On a desktop the screen is large: give each thing its own object in its own place (center, left, right, top, bottom, or a box {x,y,w,h} for the corners), so the owner sees many things at once, like a control room: a gauge here, a chart there, a status card in a corner. Do not pack a whole answer into one card or one group. A Jarvis card is an instrument, not a wide banner: give it a modest box (about a quarter of the width and a quarter of the height) and put its neighbours beside it, with dark space between. One thing, "center"; two, "left" and "right"; three or more, "auto" with scene "multi" or place each yourself. Give the biggest or most important object the most room. A sandbox page or a big chart takes the whole stage: use scene "focus" and "center".
+- Use the whole screen. On a desktop the screen is large: give each thing its own object in its own place (center, left, right, top, bottom, or a box {x,y,w,h} for the corners), so the owner sees many things at once, like a control room: a gauge here, a chart there, a status card in a corner. Do not pack a whole answer into one card or one group. A Jarvis card is an instrument, not a wide banner: give it the box its content needs (the Jarvis component list in stage.guide gives each component's size in pixels), and put its neighbours beside it, with dark space between. One thing, "center"; two, "left" and "right"; three or more, "auto" with scene "multi" or place each yourself. Give the biggest or most important object the most room. A sandbox page or a big chart takes the whole stage: use scene "focus" and "center".
 - Check "on screen" and "free regions" in each request before you place anything. Update an object (same id) only when it is the same thing refreshed (a gauge getting a new value). A different topic is a new object: never reuse an old card for it. If the new answer replaces the old one, hide the old objects or use stage.clear first; you may clear the screen whenever you need the room. If you place something on top of something else, the system moves it and tells you; use that to choose better next time.
 - Lifetimes: things the owner asked to see stay until they dismiss them or you replace them. Passing information (a reminder, a progress note, a one-off confirmation) gets a ttl of 15 to 60 seconds. Never leave stale objects: remove what no longer matters when the topic changes.
 - Know the screen you are drawing on: each request starts with "screen:" (phone, tablet or desktop, portrait or landscape, its size) and "view=". Lay things out for it: on a phone everything stacks in one column, so show at most two short pictures at a time and prefer a stat, gauge, list or card; on a tablet use up to four; on a wide desktop use the regions. If the screen changes (the owner turns the phone, or opens Friend on another device), the next request tells you; adapt without being asked.

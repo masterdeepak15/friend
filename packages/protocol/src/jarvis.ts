@@ -128,9 +128,92 @@ export function jarvisProblem(props: unknown): string | null {
   return walk(ui, 1);
 }
 
-/** The list the assistant is given: each component, its props and what it is for. */
+/** The list the assistant is given: each component, its props, how big it needs to be and what it is for. */
 export function jarvisCatalog(): string {
   return Object.entries(JARVIS_COMPONENTS)
-    .map(([name, d]) => `${name}${d.props.length ? ` {${d.props.join(", ")}}` : ""}${d.kids ? " [kids]" : ""}${d.slots ? ` [slots: ${d.slots.join(", ")}]` : ""}${d.note ? `: ${d.note}` : ""}`)
+    .map(([name, d]) => `${name}${d.props.length ? ` {${d.props.join(", ")}}` : ""}${d.kids ? " [kids]" : ""}${d.slots ? ` [slots: ${d.slots.join(", ")}]` : ""}${LEAF[name] ? ` (about ${jarvisNaturalSize({ c: name }).w}x${jarvisNaturalSize({ c: name }).h} px)` : ""}${d.note ? `: ${d.note}` : ""}`)
     .join("\n");
+}
+// ---- how big a drawing needs to be ----
+
+type Size = { w: number; h: number };
+const px = (v: unknown, d: number): number => {
+  const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : d;
+};
+const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+const GAP = 8;
+
+/** Text as a part: about this wide and this tall. */
+const textSize = (s: string): Size => ({ w: Math.min(360, Math.max(40, s.length * 8)), h: 22 * Math.max(1, Math.ceil((s.length * 8) / 360)) });
+
+/** What each leaf component needs, from what it is given (the sizes the library draws them at). */
+const LEAF: Record<string, (p: Record<string, unknown>) => Size> = {
+  JStatCard: (p) => ({ w: 260, h: 112 + (typeof p.barValue === "number" ? 16 : 0) + 28 * arr(p.dataRows).length }),
+  JProgress: () => ({ w: 260, h: 50 }),
+  JGaugeChart: (p) => ({ w: px(p.size, 190) + 40, h: Math.round(px(p.size, 190) * 0.8) + 50 }),
+  JBarChart: (p) => ({ w: 340, h: px(p.height, 220) + 30 }),
+  JLineChart: (p) => ({ w: 340, h: px(p.height, 200) + 30 }),
+  JSparkline: (p) => ({ w: px(p.width, 200), h: px(p.height, 40) + 16 }),
+  JTable: (p) => ({ w: Math.max(300, 120 * arr(p.columns).length), h: 64 + 32 * arr(p.rows).length + (p.showFooter === false ? 0 : 28) }),
+  JBadge: () => ({ w: 96, h: 30 }),
+  JStatusPill: () => ({ w: 170, h: 40 }),
+  JAlert: () => ({ w: 320, h: 76 }),
+  JDataRow: () => ({ w: 260, h: 30 }),
+  JHudLabel: () => ({ w: 200, h: 52 }),
+  JArcMeter: () => ({ w: 200, h: 64 }),
+  JArcReactor: (p) => ({ w: px(p.size, 120) + 40, h: px(p.size, 120) + 56 }),
+  JHeatmap: (p) => {
+    const rows = arr(p.data);
+    const cols = Math.max(1, ...rows.map((r) => arr(r).length));
+    const step = px(p.cellSize, 28) + px(p.gap, 3);
+    return { w: cols * step + 40, h: rows.length * step + 64 };
+  },
+  JActivityFeed: (p) => ({ w: 360, h: px(p.maxRows, 8) * 28 + 40 }),
+  JKPITicker: () => ({ w: 520, h: 40 }),
+  JHudClock: (p) => ({ w: px(p.size, 120) + 40, h: px(p.size, 120) + 70 }),
+  JWaveform: (p) => ({ w: 200, h: px(p.height, 40) + 20 }),
+  JDivider: () => ({ w: 200, h: 24 }),
+  JNodeGraph: (p) => ({ w: 560, h: px(p.height, 400) }),
+  JOrb: () => ({ w: 140, h: 160 }),
+  JSpinner: () => ({ w: 90, h: 90 }),
+  JDonutChart: (p) => ({ w: px(p.size, 200) + 40, h: px(p.size, 200) + 40 + (p.showLegend === false ? 0 : 40) }),
+  JRadarChart: (p) => ({ w: px(p.size, 240) + 40, h: px(p.size, 240) + 40 }),
+  JButton: () => ({ w: 150, h: 46 }),
+  JInput: () => ({ w: 260, h: 48 }),
+  JTextArea: (p) => ({ w: 300, h: px(p.rows, 3) * 24 + 40 }),
+  JSelect: () => ({ w: 220, h: 48 }),
+  JToggle: () => ({ w: 200, h: 36 }),
+  JCheckbox: () => ({ w: 200, h: 36 }),
+  JSlider: () => ({ w: 260, h: 48 }),
+  JHudBar: () => ({ w: 600, h: 44 }),
+};
+
+/** What a container adds around its parts: [width, height] on top of them. */
+const AROUND: Record<string, [number, number]> = { JCard: [28, 28], JHudFrame: [40, 72], JHudFrameCard: [32, 56], JFormField: [0, 34], JAccordion: [28, 52], JTabs: [28, 52], JTab: [0, 0] };
+
+/** How big, in pixels, a drawing needs to be to show everything in it well (the box the assistant should give it). */
+export function jarvisNaturalSize(node: JarvisNode | string): Size {
+  if (typeof node === "string") return textSize(node);
+  const p = node.p ?? {};
+  const parts = (node.kids ?? []).map((k) => jarvisNaturalSize(k));
+  const slotParts = Object.values(node.slots ?? {}).flat().map((k) => jarvisNaturalSize(k));
+  const gap = typeof p.gap === "number" && Number.isFinite(p.gap) ? Math.min(32, Math.max(0, p.gap)) : GAP; // 0 is a real gap
+  if (node.c === "Row") return { w: parts.reduce((s, x) => s + x.w, 0) + gap * Math.max(0, parts.length - 1), h: Math.max(0, ...parts.map((x) => x.h)) };
+  if (node.c === "Column") return { w: Math.max(0, ...parts.map((x) => x.w)), h: parts.reduce((s, x) => s + x.h, 0) + gap * Math.max(0, parts.length - 1) };
+  if (node.c === "Grid") {
+    const cols = Math.min(6, Math.max(1, Math.round(px(p.columns, 2))));
+    const w = Math.max(0, ...parts.map((x) => x.w));
+    const rows = Math.ceil(parts.length / cols);
+    const h = Math.max(0, ...parts.map((x) => x.h));
+    return { w: w * Math.min(cols, Math.max(1, parts.length)) + gap * (Math.min(cols, Math.max(1, parts.length)) - 1), h: h * rows + gap * Math.max(0, rows - 1) };
+  }
+  const leaf = LEAF[node.c];
+  if (leaf) return leaf(p);
+  const around = AROUND[node.c];
+  if (around) {
+    const inner = { w: Math.max(0, ...parts.map((x) => x.w), ...slotParts.map((x) => x.w)), h: parts.reduce((s, x) => s + x.h, 0) + slotParts.reduce((s, x) => s + x.h, 0) + (slotParts.length ? 12 : 0) };
+    return { w: Math.max(160, inner.w + around[0]), h: Math.max(60, inner.h + around[1]) };
+  }
+  return { w: 200, h: 80 };
 }

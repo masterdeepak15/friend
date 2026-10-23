@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JARVIS_COMPONENTS, JARVIS_LIMITS, jarvisCatalog, jarvisProblem } from "./jarvis";
+import { JARVIS_COMPONENTS, JARVIS_LIMITS, jarvisCatalog, jarvisNaturalSize, jarvisProblem } from "./jarvis";
 
 const ok = (ui: unknown) => jarvisProblem({ ui });
 
@@ -64,5 +64,57 @@ describe("what the assistant may draw with the Jarvis components", () => {
     for (const name of Object.keys(JARVIS_COMPONENTS)) expect(text, name).toContain(name);
     expect(text).toMatch(/JStatCard\b[^\n]*title/);
     expect(text).not.toMatch(/JDesktop|JWindow\b/);
+  });
+});
+describe("how big a Jarvis drawing needs to be", () => {
+  const ui = (n: unknown) => jarvisNaturalSize(n as never);
+
+  it("knows the size of each component: a card is wider than tall, a pill is small, a gauge is square-ish", () => {
+    expect(ui({ c: "JStatCard", p: { title: "CPU", value: "1%" } })).toMatchObject({ w: 260 });
+    const card = ui({ c: "JStatCard", p: { title: "CPU", value: "1%" } });
+    expect(card.w).toBeGreaterThan(card.h);
+    expect(ui({ c: "JStatusPill" }).h).toBeLessThan(60);
+    const g = ui({ c: "JGaugeChart", p: { value: 5, size: "200px" } });
+    expect(Math.abs(g.w - g.h)).toBeLessThan(80);
+  });
+
+  it("grows with what is in it: more rows make a stat card taller, more rows make a table taller", () => {
+    const a = ui({ c: "JStatCard", p: { title: "x", value: "1" } });
+    const b = ui({ c: "JStatCard", p: { title: "x", value: "1", dataRows: [{ label: "a", value: "1" }, { label: "b", value: "2" }] } });
+    expect(b.h).toBeGreaterThan(a.h + 40);
+    const t1 = ui({ c: "JTable", p: { columns: [{ key: "a", label: "A" }], rows: [{ a: 1 }] } });
+    const t3 = ui({ c: "JTable", p: { columns: [{ key: "a", label: "A" }], rows: [{ a: 1 }, { a: 2 }, { a: 3 }] } });
+    expect(t3.h).toBeGreaterThan(t1.h);
+  });
+
+  it("adds up a row and a column, and lays a grid out in rows", () => {
+    const pill = { c: "JStatusPill", kids: ["UP"] };
+    const one = ui(pill);
+    const row = ui({ c: "Row", p: { gap: 10 }, kids: [pill, pill] });
+    expect(row.w).toBe(one.w * 2 + 10);
+    expect(row.h).toBe(one.h);
+    const col = ui({ c: "Column", p: { gap: 10 }, kids: [pill, pill, pill] });
+    expect(col.h).toBe(one.h * 3 + 20);
+    expect(col.w).toBe(one.w);
+    const grid = ui({ c: "Grid", p: { columns: 2, gap: 0 }, kids: [pill, pill, pill, pill] });
+    expect(grid.w).toBe(one.w * 2);
+    expect(grid.h).toBe(one.h * 2);
+  });
+
+  it("adds the room a card or a frame takes around what is in it", () => {
+    const inner = ui({ c: "JBadge", kids: ["x"] });
+    expect(ui({ c: "JCard", kids: [{ c: "JBadge", kids: ["x"] }] }).w).toBeGreaterThan(inner.w);
+    expect(ui({ c: "JCard", slots: { header: ["HEAD"] }, kids: [{ c: "JBadge", kids: ["x"] }] }).h).toBeGreaterThan(ui({ c: "JCard", kids: [{ c: "JBadge", kids: ["x"] }] }).h);
+  });
+
+  it("gives every size in the list the assistant reads", () => {
+    expect(jarvisCatalog()).toMatch(/JStatCard[^\n]*about 260x\d+ px/);
+    expect(jarvisCatalog()).toMatch(/JGaugeChart[^\n]*about \d+x\d+ px/);
+  });
+
+  it("never answers nonsense for a tree it does not understand", () => {
+    const s = ui({ c: "Unknown" });
+    expect(s.w).toBeGreaterThan(0);
+    expect(s.h).toBeGreaterThan(0);
   });
 });

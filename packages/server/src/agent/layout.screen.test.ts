@@ -29,9 +29,12 @@ describe("using the whole screen, not one card", () => {
 
   it("treats a Jarvis card as an instrument of modest size, not a wide banner", () => {
     expect(screenGuide("widgets")).toMatch(/instrument/i);
-    expect(screenGuide("widgets")).toMatch(/about 18 to 26% of the width/);
+    expect(screenGuide("widgets")).toMatch(/the box its content needs/);
+    expect(screenGuide("widgets")).toMatch(/JStatCard[^\n]*about \d+x\d+ px/);
+    expect(screenGuide("widgets")).toMatch(/fits the box to the content/);
     expect(LAYOUT_GUIDE).toMatch(/instrument/i);
     expect(LAYOUT_GUIDE).toMatch(/not a wide banner/i);
+    expect(LAYOUT_GUIDE).toMatch(/size in pixels/i);
   });
 
   it("keeps the phone and tablet limits", () => {
