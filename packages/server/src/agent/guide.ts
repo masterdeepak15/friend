@@ -25,20 +25,20 @@ Text and code
 - code {title?, language?, code}: a code block.
 Pictures, clips, documents (only from files the owner approved with file.present)
 - image {title?, src}, video {title?, src} (sound files too), pdf {title?, src}, gallery {title?, items:[{src, kind?: image|video, caption?}]}.
-Containers (ONE object holding several)
-- group {title?, layout?: row|column|grid, items:[{type, props}]}: a dashboard. Put 3 to 6 small parts in it (stat, gauge, progress, kv, checklist, list).
+Containers (ONE object holding several: only when the owner asks for one combined panel)
+- group {title?, layout?: row|column|grid, items:[{type, props}]}: a combined panel. Put 3 to 6 small parts in it (stat, gauge, progress, kv, checklist, list). On a wide screen separate objects in separate places usually look better.
 - tabs {title?, tabs:[{title, type, props}]}: several views of one subject (Overview, Details, History).
 - Parts of group and tabs can be any type except group, tabs and sandbox.
 Anything else
-- jarvis {title?, ui}: draw with the Jarvis HUD components (the same look as this screen). ui is a plain tree of data, never code: {c: "ComponentName", p: {props}, kids: [more nodes or text]}. At most 6 levels and 120 parts. Prefer it for dashboards, org charts and diagrams that the simple widgets cannot show. Example: {"ui":{"c":"Column","p":{"gap":8},"kids":[{"c":"JStatCard","p":{"title":"CPU","value":"42%","barValue":42}},{"c":"JProgress","p":{"value":70,"label":"Backup"}}]}}. Components:\n${jarvisCatalog()}\n- sandbox {title?, html}: your own small page (animation, clock, simulation, game). No network. Use var(--accent), var(--ink), var(--muted), var(--ok), var(--warn), var(--bad), var(--glass), var(--edge), var(--ui), var(--mono) for colour and fonts.
+- jarvis {title?, ui}: draw with the Jarvis HUD components (the same look as this screen). ui is a plain tree of data, never code: {c: "ComponentName", p: {props}, kids: [more nodes or text]}. At most 6 levels and 120 parts. Use it for richer cards, status boards, org charts and diagrams that the simple widgets cannot show. One jarvis object is one card: for a dashboard make several jarvis objects (one for each part), each in its own region or corner, not one object holding everything. Example: {"ui":{"c":"Column","p":{"gap":8},"kids":[{"c":"JStatCard","p":{"title":"CPU","value":"42%","barValue":42}},{"c":"JProgress","p":{"value":70,"label":"Backup"}}]}}. Components:\n${jarvisCatalog()}\n- sandbox {title?, html}: your own small page (animation, clock, simulation, game). No network. Use var(--accent), var(--ink), var(--muted), var(--ok), var(--warn), var(--bad), var(--glass), var(--edge), var(--ui), var(--mono) for colour and fonts.
 Other tools: stage.update {id, props} changes a shown object; stage.hide {id}; stage.clear (pinned widgets stay); stage.pin {id} keeps one; stage.scene {mode}; stage.mood {accent?, intensity?}; stage.presence; view.set; look.set.`;
 
 const LAYOUT = `ARRANGING THE SCREEN
 - Read the request's "screen:", "view=", "accent=", "on screen:" and "free regions:" lines before you place anything. They are the truth about this screen.
-- Fewer, richer objects: one group or tabs object beats five cards. One answer is one object or a small set.
+- Use the whole screen: on a desktop give each thing its own object in its own place (regions, or a box for the corners), like a control room. Do not pack a whole answer into one card or one group. Group or tabs only when the owner asks for one combined panel.
 - Placement: one object "center"; two "left" and "right"; three to six "auto" with scene "multi"; one big thing scene "focus" and "center". "top" and "bottom" are wide banners.
 - Never cover the voice presence (middle), captions (bottom), status line (bottom-left), clock (bottom-right) or the owner's pinned widgets. Pinned widgets belong to the owner: leave them, do not move them, do not hide them.
-- Update an object (same id) instead of adding a copy. Remove what no longer matters. At most 12 objects.
+- Update an object (same id) only when it is the same thing refreshed; a different topic is a new object, never reuse an old card for it. Clear the screen (stage.clear) whenever you need the room. At most 12 objects.
 - Phone: everything stacks in one column, so show at most two short objects, prefer stat, gauge, progress, list, card. Tablet: up to four. Desktop: use the regions.
 - Lifetimes: what the owner asked to see stays until they dismiss it or you replace it. Passing information gets a ttl of 15 to 60 seconds.
 - When the task is done and the owner has what they need, take your temporary objects off the screen.`;
