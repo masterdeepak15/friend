@@ -102,17 +102,22 @@ export function OrgCanvas({ workers, name, onWorker }: { workers: OfficeWorkerVi
       >
         <div className="ob-canvas-world" style={{ width: layout.width, height: layout.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
           <svg className="ob-canvas-edges" width={layout.width} height={layout.height} aria-hidden="true">
+            <defs>
+              <marker id="ob-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z" className="ob-arrow" />
+              </marker>
+            </defs>
             {layout.edges.map((e) => {
               const s = status.get(e.to);
               const mid = (e.x1 + e.x2) / 2;
-              return <path key={`${e.from}>${e.to}`} d={`M${e.x1} ${e.y1}C${mid} ${e.y1} ${mid} ${e.y2} ${e.x2} ${e.y2}`} data-flow={s === "running" || s === "starting" ? "on" : s === "waiting" ? "wait" : "off"} />;
+              return <path key={`${e.from}>${e.to}`} d={`M${e.x1} ${e.y1}C${mid} ${e.y1} ${mid} ${e.y2} ${e.x2} ${e.y2}`} markerEnd="url(#ob-arrow)" data-flow={s === "running" || s === "starting" ? "on" : s === "waiting" ? "wait" : "off"} />;
             })}
           </svg>
           {layout.nodes.map((n) => {
             const w = n.worker;
             if (!w)
               return (
-                <div key={n.id} className="ob-cnode ob-cnode-root" data-node="friend" style={{ left: n.x, top: n.y, width: NODE_W, height: NODE_H }}>
+                <div key={n.id} className="ob-cnode ob-cnode-root" data-node="friend" style={{ left: n.x, top: n.y, width: n.w, height: NODE_H }}>
                   <JArcReactor size={92} color="cyan" label={name.toUpperCase()} animated />
                   <small>the assistant</small>
                 </div>

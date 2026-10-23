@@ -4,7 +4,10 @@ import { ORG_CARD_H, ORG_CARD_W, ORG_GAP_X, ORG_GAP_Y, layoutOrg } from "./offic
 /** The size of one node on the canvas, and the room between nodes. */
 export const NODE_W = 240;
 export const NODE_H = 140;
-const STEP_X = NODE_W + 110;
+/** The assistant's node is a round reactor with its name under it. */
+export const ROOT_W = 150;
+const LINK = 110;
+const STEP_X = NODE_W + LINK;
 const STEP_Y = NODE_H + 34;
 
 export const MIN_ZOOM = 0.25;
@@ -17,6 +20,8 @@ export interface CanvasNode {
   id: string;
   x: number;
   y: number;
+  /** How wide it is: the assistant (a round reactor) is narrower than a worker's card. */
+  w: number;
   /** null: the assistant, at the left. */
   worker: OfficeWorkerView | null;
 }
@@ -41,13 +46,14 @@ interface Size {
 /** The team laid out for a canvas: each level a step to the right of its manager, each person in a row of their own, lines from one node's right side to the next one's left. */
 export function canvasLayout(workers: OfficeWorkerView[]): Size & { nodes: CanvasNode[]; edges: CanvasEdge[] } {
   const tree = layoutOrg(workers);
-  const at = (n: { x: number; y: number }) => ({ x: Math.round((n.y / (ORG_CARD_H + ORG_GAP_Y)) * STEP_X), y: Math.round((n.x / (ORG_CARD_W + ORG_GAP_X)) * STEP_Y) });
-  const nodes: CanvasNode[] = tree.nodes.map((n) => ({ id: n.id, worker: n.worker, ...at(n) }));
+  const level = (n: { y: number }) => Math.round(n.y / (ORG_CARD_H + ORG_GAP_Y));
+  const at = (n: { x: number; y: number }) => ({ x: level(n) === 0 ? 0 : ROOT_W + LINK + (level(n) - 1) * STEP_X, y: Math.round((n.x / (ORG_CARD_W + ORG_GAP_X)) * STEP_Y) });
+  const nodes: CanvasNode[] = tree.nodes.map((n) => ({ id: n.id, worker: n.worker, w: n.worker ? NODE_W : ROOT_W, ...at(n) }));
   const spot = new Map(nodes.map((n) => [n.id, n] as const));
   const edges: CanvasEdge[] = tree.edges.map((e) => {
     const a = spot.get(e.from)!;
     const b = spot.get(e.to)!;
-    return { from: e.from, to: e.to, x1: a.x + NODE_W, y1: a.y + NODE_H / 2, x2: b.x, y2: b.y + NODE_H / 2 };
+    return { from: e.from, to: e.to, x1: a.x + a.w, y1: a.y + NODE_H / 2, x2: b.x, y2: b.y + NODE_H / 2 };
   });
   // the first node's row is wherever the tree put it: shift everything so the top row starts at 0
   const top = Math.min(...nodes.map((n) => n.y));
@@ -56,7 +62,7 @@ export function canvasLayout(workers: OfficeWorkerView[]): Size & { nodes: Canva
     e.y1 -= top;
     e.y2 -= top;
   }
-  return { nodes, edges, width: Math.max(...nodes.map((n) => n.x)) + NODE_W, height: Math.max(...nodes.map((n) => n.y)) + NODE_H };
+  return { nodes, edges, width: Math.max(...nodes.map((n) => n.x + n.w)), height: Math.max(...nodes.map((n) => n.y)) + NODE_H };
 }
 
 const clampK = (k: number): number => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, k));

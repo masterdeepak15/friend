@@ -18,6 +18,22 @@ describe("canvasLayout, the team in the room of a canvas", () => {
     expect(l.height).toBeGreaterThanOrEqual(at("cy").y + NODE_H);
   });
 
+  it("starts the first line at the assistant's own edge, not far from it, and ends each line at the left edge of the card it reaches", () => {
+    const l = canvasLayout([w("lena"), w("ben", "lena")]);
+    const at = (id: string) => l.nodes.find((n) => n.id === id)!;
+    const root = at("friend");
+    expect(root.w).toBeLessThan(NODE_W);
+    const first = l.edges.find((e) => e.from === "friend")!;
+    expect(first.x1).toBe(root.x + root.w);
+    for (const e of l.edges) {
+      const to = at(e.to);
+      const from = at(e.from);
+      expect(e.x2).toBe(to.x); // into the left edge of the card it reaches
+      expect(e.x1).toBe(from.x + from.w); // out of the right edge of the card it leaves
+      expect(e.x2 - e.x1).toBeGreaterThan(40); // never a line that runs backwards or touches
+    }
+  });
+
   it("is a single node for an empty team", () => {
     const l = canvasLayout([]);
     expect(l.nodes).toHaveLength(1);
