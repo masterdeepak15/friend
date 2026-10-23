@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { HudView, OfficeWorkerView } from "@friend/protocol";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -211,25 +213,36 @@ describe("the team tree", () => {
     fireEvent.click(screen.getByRole("button", { name: /^team/i }));
     expect(await within(dialog()).findByText("MAYA", {}, { timeout: 8000 })).toBeTruthy(); // the library is fetched when the team opens
     for (const n of ["LENA", "BEN", "CY"]) expect(within(dialog()).getByText(n)).toBeTruthy();
-    expect(within(dialog()).getByText("Tech lead")).toBeTruthy();
+    expect(within(dialog()).getAllByText("Tech lead").length).toBeGreaterThan(0); // on the node and on the card
   }, 20_000);
 
-  it("has a button for each worker with the job and what it is doing, and a waiting one is orange", () => {
+  it("has a card for each worker with the job and what it is doing, and a waiting one is orange", async () => {
     mount({}, { office: team() });
     fireEvent.click(screen.getByRole("button", { name: /^team/i }));
-    const lena = within(dialog()).getByRole("button", { name: /^Lena,/ });
+    const lena = await within(dialog()).findByRole("button", { name: /^Lena,/ }, { timeout: 8000 });
     expect(lena.textContent).toContain("Tech lead");
     expect(lena.getAttribute("aria-label")).toContain("Planning");
     expect(within(dialog()).getByRole("button", { name: /^Cy,/ }).getAttribute("data-status")).toBe("waiting");
-  });
+  }, 20_000);
 
-  it("opens a worker from its button", () => {
+  it("opens a worker from its card", async () => {
     mount({}, { office: team() });
     fireEvent.click(screen.getByRole("button", { name: /^team/i }));
-    fireEvent.click(within(dialog()).getByRole("button", { name: /^Ben,/ }));
+    fireEvent.click(await within(dialog()).findByRole("button", { name: /^Ben,/ }, { timeout: 8000 }));
     expect(screen.getByRole("dialog", { name: "Ben" })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /office team/i })).toBeNull();
-  });
+  }, 20_000);
+
+  it("fills each card with its rows: job, what it is doing, who it reports to and its tokens", async () => {
+    mount({}, { office: team(), assistantName: "Maya" });
+    fireEvent.click(screen.getByRole("button", { name: /^team/i }));
+    const ben = await within(dialog()).findByRole("button", { name: /^Ben,/ }, { timeout: 8000 });
+    expect(ben.textContent).toMatch(/JOB.*Developer/);
+    expect(ben.textContent).toMatch(/REPORTS TO.*Lena/);
+    expect(ben.textContent).toMatch(/TOKENS/);
+    const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
+    expect(css).toMatch(/\.ob-roster-item > \* \{[^}]*width: 100%/); // the card and its rows take the card's whole width
+  }, 20_000);
 
   it("has no Team button until someone is hired, or while the office is off", () => {
     mount({}, { office: office() });
