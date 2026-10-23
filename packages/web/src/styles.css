@@ -504,3 +504,10 @@ input, textarea, select, .connector-command { -webkit-user-select: text; user-se
 .obj-jarvis svg, .obj-jarvis table, .obj-jarvis .recharts-responsive-container { max-width: 100%; }
 .jv-col { display: flex; flex-direction: column; }
 .jv-grid { display: grid; }
+
+/* A Jarvis drawing is not put in another card: its own card is the card, as big as the box the object was given */
+.obj.obj-bare { padding: 0; background: color-mix(in srgb, #050b10 98%, transparent); border: 0; box-shadow: none; backdrop-filter: none; clip-path: none; overflow: hidden; }
+.obj-bare .obj-title { display: none; }
+.obj-bare .obj-jarvis { height: 100%; gap: 0; }
+.obj-bare .obj-jarvis > :not(.obj-title) { height: 100%; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
+.obj-bare .jv-col > * { flex: 1 1 0; min-height: 0; }

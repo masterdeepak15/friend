@@ -136,7 +136,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
       <section
         key={o.id}
         data-object={o.id}
-        className={`obj glass${o.style === "alert" ? " alert" : ""}${overlay ? " overlay" : ""}${o.pinned ? " pinned" : ""}${live ? " dragging" : ""}${leaving ? " leaving" : ""}`}
+        className={`obj glass${o.type === "jarvis" ? " obj-bare" : ""}${o.style === "alert" ? " alert" : ""}${overlay ? " overlay" : ""}${o.pinned ? " pinned" : ""}${live ? " dragging" : ""}${leaving ? " leaving" : ""}`}
         style={overlay ? undefined : placementToStyle(placement, viewport)}
       >
         {movable && (
