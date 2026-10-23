@@ -44,11 +44,23 @@ export function useVoiceKeys(voice: VoiceKeys): void {
     const hidden = () => {
       if (document.hidden) lose();
     };
+    // A button the mouse has just pressed keeps the focus, and Space on a focused button is "press it", not "talk": so after a mouse click the
+    // focus is let go (a click made by the keyboard, which has no position, keeps it, and so does a field or a dialog that took the focus meanwhile).
+    const clicked = (e: MouseEvent) => {
+      if (e.detail === 0 || !(e.target instanceof Element)) return;
+      const el = e.target.closest("button, [role=button], summary, a");
+      if (!(el instanceof HTMLElement)) return;
+      setTimeout(() => {
+        if (document.activeElement === el) el.blur();
+      }, 0);
+    };
+    document.addEventListener("click", clicked);
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", lose);
     document.addEventListener("visibilitychange", hidden);
     return () => {
+      document.removeEventListener("click", clicked);
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", lose);

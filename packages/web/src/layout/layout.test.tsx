@@ -179,6 +179,13 @@ describe("<Movable>", () => {
   });
 });
 
+describe("<ChatPanel> and Space", () => {
+  it("lets Space talk while its box is empty, like the message strip, so an open chat does not take the key", () => {
+    render(<ChatPanel lines={[]} live={false} onSend={() => {}} onClose={() => {}} />);
+    expect(screen.getByLabelText("Type to chat").hasAttribute("data-space-talks")).toBe(true);
+  });
+});
+
 describe("<ChatPanel>", () => {
   it("shows the conversation and sends what is typed", async () => {
     const onSend = vi.fn();

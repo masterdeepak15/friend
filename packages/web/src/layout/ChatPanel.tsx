@@ -45,7 +45,7 @@ export function ChatPanel({ lines, live, onSend, onClose }: { lines: ChatLine[];
           setText("");
         }}
       >
-        <input aria-label="Type to chat" value={text} placeholder="Type a message…" autoComplete="off" onChange={(e) => setText(e.target.value)} />
+        <input aria-label="Type to chat" data-space-talks="" value={text} placeholder="Type a message…" autoComplete="off" onChange={(e) => setText(e.target.value)} />
         <button type="submit" aria-label="Send message">
           ↵
         </button>
