@@ -1,6 +1,7 @@
 import type { OfficeWorkerView } from "@friend/protocol";
 import { Suspense, lazy, useEffect, useRef } from "react";
 import { Frame } from "./kit";
+import { usingKeyboard } from "./modality";
 import type { Rect } from "./ExpandedView";
 
 // the graph library is a separate piece of the page: it is fetched when the team is opened
@@ -20,7 +21,9 @@ const DOT: Record<OfficeWorkerView["status"], string> = { starting: "running", r
 /** Who works for whom: a graph of the team drawn with the Jarvis components, a plain list of the reporting lines, and a button for each worker to open it. */
 export function OrgChart({ workers, name, rect, onWorker, onClose }: OrgChartProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => closeRef.current?.focus(), []);
+  useEffect(() => {
+    if (usingKeyboard()) closeRef.current?.focus();
+  }, []);
   const byId = new Map(workers.map((w) => [w.id, w] as const));
   return (
     <Frame variant="chamfer" running title="Office team" className="ob-expanded ob-hit" style={{ position: "absolute", left: rect.x, top: rect.y, width: rect.width, height: rect.height }} role="dialog" aria-label="Office team">

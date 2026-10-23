@@ -10,6 +10,7 @@ export interface Rect {
   height: number;
 }
 import { Frame } from "./kit";
+import { usingKeyboard } from "./modality";
 import { budgetRings, feedLines, ticketCells, ticketProject } from "./office";
 import { WIDGETS } from "./registry";
 import { BudgetWidget } from "./widgets/BudgetWidget";
@@ -71,7 +72,9 @@ export interface ExpandedViewProps {
 /** One instrument, large, in the middle of the screen. */
 export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, onClose }: ExpandedViewProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => closeRef.current?.focus(), [id]); // the keyboard moves in with it
+  useEffect(() => {
+    if (usingKeyboard()) closeRef.current?.focus(); // the keyboard moves in with it; the mouse leaves the focus alone
+  }, [id]);
   const title = WIDGETS.find((w) => w.id === id)?.title ?? id;
   const body = (() => {
     switch (id) {

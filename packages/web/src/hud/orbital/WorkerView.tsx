@@ -2,6 +2,7 @@ import type { ClientMsg, OfficeWorkerView } from "@friend/protocol";
 import { useEffect, useRef, useState } from "react";
 import type { OfficeFeedLine } from "../../store";
 import { Frame } from "./kit";
+import { usingKeyboard } from "./modality";
 import type { Rect } from "./ExpandedView";
 
 export interface WorkerViewProps {
@@ -18,7 +19,9 @@ export function WorkerView({ worker, feed, rect, send, onClose }: WorkerViewProp
   const logRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("");
   const [sure, setSure] = useState(false);
-  useEffect(() => closeRef.current?.focus(), [worker.id]);
+  useEffect(() => {
+    if (usingKeyboard()) closeRef.current?.focus();
+  }, [worker.id]);
   useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight; // the newest line stays in view

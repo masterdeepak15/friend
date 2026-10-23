@@ -212,7 +212,7 @@ describe("the team tree", () => {
     expect(await within(dialog()).findByText("MAYA", {}, { timeout: 8000 })).toBeTruthy(); // the library is fetched when the team opens
     for (const n of ["LENA", "BEN", "CY"]) expect(within(dialog()).getByText(n)).toBeTruthy();
     expect(within(dialog()).getByText("Tech lead")).toBeTruthy();
-  });
+  }, 20_000);
 
   it("has a button for each worker with the job and what it is doing, and a waiting one is orange", () => {
     mount({}, { office: team() });

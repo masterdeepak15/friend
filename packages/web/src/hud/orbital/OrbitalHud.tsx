@@ -6,6 +6,7 @@ import type { StageViewState } from "../../store";
 import { ExpandedView } from "./ExpandedView";
 import { budgetRings, feedLines, officeMood, ticketCells, ticketProject, usageFromQuota, workerNodes } from "./office";
 import { WorkerView } from "./WorkerView";
+import { usingKeyboard } from "./modality";
 import { OrgChart } from "./OrgChart";
 import { DESIGN_H, DESIGN_W, ORBIT_R, centreClear, designScale, layoutMode, orbitNodes, screenOf, type Anchor } from "./geometry";
 import { Frame, HexNode, HudDefs, LinkLine, SegmentedRing, type NodeStatus, type Tone } from "./kit";
@@ -154,7 +155,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
     setExpanded(null);
     setOpenWorker(null);
     setShowOrg(false);
-    opener.current?.focus();
+    if (usingKeyboard()) opener.current?.focus(); // back to the button for the keyboard; after the mouse nothing holds the focus, so Space still talks
     opener.current = null;
   }, []);
   const open = (id: HudWidgetId) => () => {
