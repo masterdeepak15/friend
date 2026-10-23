@@ -15,6 +15,20 @@ describe("a Jarvis drawing on the stage", () => {
     expect(container.querySelector('[data-object="o1"]')!.className).toContain("obj-bare");
   });
 
+  it("has a title bar to move it by, with the thing's title, and its move, pin, close and resize handles above the card", () => {
+    const { container } = render(<Stage state={{ ...initialState, connection: "open", objects: [{ id: "cpu", type: "jarvis" as const, props: { title: "Processor", ui: { c: "JBadge", kids: ["x"] } }, placement: "left" as const }] }} send={() => {}} dispatch={() => {}} voice={voice} />);
+    expect(container.querySelector('[data-object="cpu"] .obj-grip')!.getAttribute("data-label")).toBe("Processor");
+    for (const h of [".obj-grip", ".obj-pin", ".obj-close", ".obj-resize"]) expect(css).toMatch(new RegExp(`\\.obj-bare ${h.replace(".", "\\.")}[^{]*\\{[^}]*z-index: [3-9]`));
+    expect(css).toMatch(/\.obj-bare \.obj-grip \{[^}]*height: 28px/);
+    expect(css).toMatch(/\.obj-bare \.obj-resize \{[^}]*opacity: 0\.[5-9]/); // the corner to drag is always in sight
+    expect(css).toMatch(/\.obj-bare \.obj-jarvis \{[^}]*padding-top: 28px/); // the card sits below the bar
+  });
+
+  it("falls back to the object's name for the title", () => {
+    const { container } = render(<Stage state={{ ...initialState, connection: "open", objects: objects("jarvis") }} send={() => {}} dispatch={() => {}} voice={voice} />);
+    expect(container.querySelector('[data-object="o1"] .obj-grip')!.getAttribute("data-label")).toBe("o1");
+  });
+
   it("leaves every other kind of object in its glass card", () => {
     const { container } = render(<Stage state={{ ...initialState, connection: "open", objects: objects("card") }} send={() => {}} dispatch={() => {}} voice={voice} />);
     expect(container.querySelector('[data-object="o1"]')!.className).not.toContain("obj-bare");

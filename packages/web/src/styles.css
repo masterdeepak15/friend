@@ -511,3 +511,12 @@ input, textarea, select, .connector-command { -webkit-user-select: text; user-se
 .obj-bare .obj-jarvis { height: 100%; gap: 0; }
 .obj-bare .obj-jarvis > :not(.obj-title) { height: 100%; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
 .obj-bare .jv-col > * { flex: 1 1 0; min-height: 0; }
+
+/* A Jarvis instrument: a slim title bar to move it by, the card below it, handles above the card */
+.obj-bare .obj-grip { z-index: 5; height: 28px; right: 92px; border-radius: 0; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 80%); border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.obj-bare .obj-grip::before { display: none; }
+.obj-bare .obj-grip::after { content: attr(data-label); position: absolute; left: 12px; top: 0; line-height: 28px; font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100% - 24px); }
+.obj-bare .obj-pin { z-index: 5; top: -8px; }
+.obj-bare .obj-close { z-index: 5; }
+.obj-bare .obj-resize { z-index: 5; opacity: 0.7; }
+.obj-bare .obj-jarvis { padding-top: 28px; box-sizing: border-box; }

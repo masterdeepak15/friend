@@ -27,6 +27,13 @@ describe("using the whole screen, not one card", () => {
     expect(screenGuide("widgets")).toMatch(/several jarvis objects|one jarvis object for each part/i);
   });
 
+  it("treats a Jarvis card as an instrument of modest size, not a wide banner", () => {
+    expect(screenGuide("widgets")).toMatch(/instrument/i);
+    expect(screenGuide("widgets")).toMatch(/about 18 to 26% of the width/);
+    expect(LAYOUT_GUIDE).toMatch(/instrument/i);
+    expect(LAYOUT_GUIDE).toMatch(/not a wide banner/i);
+  });
+
   it("keeps the phone and tablet limits", () => {
     expect(screenGuide("layout")).toMatch(/Phone: everything stacks in one column/);
     expect(LAYOUT_GUIDE).toMatch(/on a phone everything stacks/i);

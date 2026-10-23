@@ -145,6 +145,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
             role="button"
             tabIndex={0}
             aria-label={`Move ${o.id}. Drag, or use the arrow keys; hold Shift to resize.`}
+            {...(o.type === "jarvis" ? { "data-label": typeof o.props.title === "string" && o.props.title.trim() ? o.props.title.trim().slice(0, 40) : o.id } : {})}
             onPointerDown={(e) => dragger.begin(e, o, "move")}
             onPointerMove={dragger.move}
             onPointerUp={(e) => dragger.end(e, false)}
