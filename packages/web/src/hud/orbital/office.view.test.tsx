@@ -208,12 +208,12 @@ describe("the team tree", () => {
     expect(lines).toEqual(["Lena reports to Maya", "Ben reports to Lena", "Cy reports to Lena"]);
   });
 
-  it("draws the graph with the Jarvis library: Friend and every worker as nodes", async () => {
+  it("draws the team on a canvas of Jarvis cards: the assistant and every worker", async () => {
     mount({}, { office: team(), assistantName: "Maya" });
     fireEvent.click(screen.getByRole("button", { name: /^team/i }));
     expect(await within(dialog()).findByText("MAYA", {}, { timeout: 8000 })).toBeTruthy(); // the library is fetched when the team opens
-    for (const n of ["LENA", "BEN", "CY"]) expect(within(dialog()).getByText(n)).toBeTruthy();
-    expect(within(dialog()).getAllByText("Tech lead").length).toBeGreaterThan(0); // on the node and on the card
+    for (const n of ["Lena", "Ben", "Cy"]) expect(within(dialog()).getByText(n)).toBeTruthy();
+    expect(within(dialog()).getByText("Tech lead")).toBeTruthy();
   }, 20_000);
 
   it("has a card for each worker with the job and what it is doing, and a waiting one is orange", async () => {
@@ -238,10 +238,10 @@ describe("the team tree", () => {
     fireEvent.click(screen.getByRole("button", { name: /^team/i }));
     const ben = await within(dialog()).findByRole("button", { name: /^Ben,/ }, { timeout: 8000 });
     expect(ben.textContent).toMatch(/JOB.*Developer/);
-    expect(ben.textContent).toMatch(/REPORTS TO.*Lena/);
+    expect(ben.textContent).toMatch(/DOING/);
     expect(ben.textContent).toMatch(/TOKENS/);
     const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
-    expect(css).toMatch(/\.ob-roster-item > \* \{[^}]*width: 100%/); // the card and its rows take the card's whole width
+    expect(css).toMatch(/\.ob-cnode > \* \{[^}]*width: 100%[^}]*height: 100%/); // the card, and its rows, take the node's whole size
   }, 20_000);
 
   it("has no Team button until someone is hired, or while the office is off", () => {

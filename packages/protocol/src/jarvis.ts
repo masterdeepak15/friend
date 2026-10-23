@@ -10,17 +10,36 @@ export interface JarvisNode {
   p?: Record<string, unknown>;
   /** What is inside it: more nodes, or text. */
   kids?: (JarvisNode | string)[];
+  /** Content for the other places a component keeps parts (a card's header and footer): slot name -> parts. */
+  slots?: Record<string, (JarvisNode | string)[]>;
 }
 
 export const JARVIS_LIMITS = { depth: 6, nodes: 120, text: 2000, items: 200 } as const;
 
 /** Component name -> the props it accepts and what the assistant should know about it. */
-export const JARVIS_COMPONENTS: Record<string, { props: string[]; note?: string; kids?: boolean }> = {
+export const JARVIS_COMPONENTS: Record<string, { props: string[]; note?: string; kids?: boolean; slots?: string[] }> = {
   Row: { props: ["gap", "wrap"], kids: true, note: "puts its parts side by side" },
   Column: { props: ["gap"], kids: true, note: "stacks its parts" },
   Grid: { props: ["columns", "gap"], kids: true, note: "a grid with this many columns" },
-  JCard: { props: ["cardStyle", "color"], kids: true, note: "a card around its parts" },
-  JHudFrame: { props: ["color", "systemLabel", "showTop", "showBottom", "showDots", "showLive", "showWaveform", "showTicks", "showRec"], kids: true, note: "a HUD frame with bars around its parts" },
+  JCard: { props: ["cardStyle", "color", "padding"], kids: true, slots: ["header", "footer"], note: "a card around its parts; cardStyle CornerBracket|Notched|SideRail|GlowBorder" },
+  JHudFrame: { props: ["color", "systemLabel", "showTop", "showBottom", "showDots", "showLive", "showWaveform", "showTicks", "showRec"], kids: true, slots: ["topContent", "bottomContent"], note: "a HUD frame with bars around its parts" },
+  JHudFrameCard: { props: ["frameStyle", "color", "title", "showStatusDot", "width", "height"], kids: true, note: "a titled frame card around its parts" },
+  JHudBar: { props: ["position", "color", "animSpeed", "systemLabel", "showDots", "showWaveform", "showTicks", "showLive", "showRec", "tickCount", "tickActive"], kids: true, note: "a top or bottom HUD bar" },
+  JTabs: { props: ["color"], kids: true, note: "tabs; put JTab parts inside it" },
+  JTab: { props: ["tabKey", "label", "icon", "badge", "disabled"], kids: true, note: "one tab and its panel (inside JTabs); tabKey is unique in its JTabs" },
+  JAccordion: { props: ["title", "icon", "badge", "defaultOpen", "state", "color"], kids: true, note: "a section that opens and closes" },
+  JFormField: { props: ["label", "error", "hint", "required"], kids: true, note: "a label, hint and error around a field" },
+  JButton: { props: ["shape", "color", "size", "variant", "loading", "disabled"], kids: true, note: "a button as a picture: it does nothing when pressed" },
+  JInput: { props: ["type", "defaultValue", "placeholder", "disabled", "readOnly", "error", "color", "size"], note: "a text field as a picture (defaultValue shows text in it)" },
+  JTextArea: { props: ["defaultValue", "placeholder", "disabled", "readOnly", "error", "rows", "color", "size"], note: "a text area as a picture" },
+  JSelect: { props: ["options", "defaultValue", "placeholder", "disabled", "color", "size"], note: "options [{value, label}]" },
+  JToggle: { props: ["defaultChecked", "label", "disabled", "color"], note: "a switch" },
+  JCheckbox: { props: ["defaultChecked", "label", "disabled", "color"], note: "a checkbox" },
+  JSlider: { props: ["defaultValue", "min", "max", "step", "showValue", "disabled", "color"], note: "a slider" },
+  JSpinner: { props: ["size", "color", "label", "showLabel"], note: "a loading arc" },
+  JOrb: { props: ["systemName", "size", "color", "state", "listening"], note: "a pulsing orb" },
+  JDonutChart: { props: ["data", "size", "thickness", "centerValue", "centerLabel", "showLegend"], note: "data [{label, value, color?}]; size like 200px" },
+  JRadarChart: { props: ["axes", "size", "rings", "showLabels"], note: "axes [{label, value}]; size like 240px" },
   JStatCard: { props: ["title", "value", "state", "sub", "showStatusDot", "badge", "badgeColor", "barValue", "dataRows", "color"], note: "value is a string; dataRows [{label, value}]; barValue 0-100" },
   JProgress: { props: ["value", "label", "state", "variant", "indeterminate", "showPercent", "total"], note: "value 0-100; variant bar|ticks" },
   JGaugeChart: { props: ["value", "min", "max", "size", "thickness", "label", "displayValue", "showNeedle", "showTicks", "showMinMax", "ticks"], note: "a radial gauge; size like 200px" },
@@ -89,6 +108,15 @@ export function jarvisProblem(props: unknown): string | null {
     }
     const bad = plain(node.p ?? {});
     if (bad) return `${node.c}: ${bad}`;
+    for (const slot of Object.keys(node.slots ?? {})) {
+      if (!def.slots?.includes(slot)) return `${node.c} has no slot ${slot}.${def.slots ? ` Its slots: ${def.slots.join(", ")}.` : ""}`;
+      const parts = node.slots![slot];
+      if (!Array.isArray(parts)) return `${node.c}: the slot ${slot} must be a list.`;
+      for (const part of parts) {
+        const r = walk(part, depth + 1);
+        if (r) return r;
+      }
+    }
     if (node.kids !== undefined && !Array.isArray(node.kids)) return `${node.c}: kids must be a list.`;
     if (node.kids && !def.kids && node.kids.some((k) => typeof k !== "string")) return `${node.c} cannot contain other components.`;
     for (const k of node.kids ?? []) {
@@ -103,6 +131,6 @@ export function jarvisProblem(props: unknown): string | null {
 /** The list the assistant is given: each component, its props and what it is for. */
 export function jarvisCatalog(): string {
   return Object.entries(JARVIS_COMPONENTS)
-    .map(([name, d]) => `${name}${d.props.length ? ` {${d.props.join(", ")}}` : ""}${d.kids ? " [kids]" : ""}${d.note ? `: ${d.note}` : ""}`)
+    .map(([name, d]) => `${name}${d.props.length ? ` {${d.props.join(", ")}}` : ""}${d.kids ? " [kids]" : ""}${d.slots ? ` [slots: ${d.slots.join(", ")}]` : ""}${d.note ? `: ${d.note}` : ""}`)
     .join("\n");
 }

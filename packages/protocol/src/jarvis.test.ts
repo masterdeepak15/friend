@@ -40,6 +40,25 @@ describe("what the assistant may draw with the Jarvis components", () => {
     expect(ok(wide)).toMatch(/many|big|large/i);
   });
 
+  it("covers the library: charts, indicators, frames, forms, tabs and accordions, as well as cards", () => {
+    for (const c of ["JDonutChart", "JRadarChart", "JSpinner", "JHudBar", "JHudFrameCard", "JOrb", "JButton", "JInput", "JToggle", "JSlider", "JCheckbox", "JSelect", "JTextArea", "JFormField", "JAccordion", "JTabs", "JTab"]) expect(JARVIS_COMPONENTS[c], c).toBeTruthy();
+    expect(ok({ c: "JTabs", kids: [{ c: "JTab", p: { tabKey: "a", label: "A" }, kids: [{ c: "JBadge", kids: ["x"] }] }] })).toBeNull();
+    expect(ok({ c: "JSelect", p: { options: [{ value: "a", label: "A" }], defaultValue: "a" } })).toBeNull();
+  });
+
+  it("never takes what runs or follows the person: no click or change handlers, no links, no controlled values", () => {
+    expect(ok({ c: "JButton", p: { onClick: "x" } })).toMatch(/onClick/);
+    expect(ok({ c: "JInput", p: { value: "x" } })).toMatch(/value/); // only defaultValue: a typed value would be lost to nobody
+    expect(ok({ c: "JNavItem", p: { href: "https://example.com" } })).toMatch(/JNavItem/);
+  });
+
+  it("takes parts for the places a component keeps content other than its kids (a card's header and footer)", () => {
+    expect(ok({ c: "JCard", slots: { header: ["TITLE"], footer: [{ c: "JBadge", kids: ["end"] }] }, kids: [{ c: "JBadge", kids: ["body"] }] })).toBeNull();
+    expect(ok({ c: "JCard", slots: { nonsense: ["x"] } })).toMatch(/nonsense/);
+    expect(ok({ c: "JBadge", slots: { header: ["x"] }, kids: ["y"] })).toMatch(/header/);
+    expect(ok({ c: "JCard", slots: { header: [{ c: "JDesktop" }] } })).toMatch(/JDesktop/);
+  });
+
   it("lists every component for the assistant, with its props, built from the same table", () => {
     const text = jarvisCatalog();
     for (const name of Object.keys(JARVIS_COMPONENTS)) expect(text, name).toContain(name);

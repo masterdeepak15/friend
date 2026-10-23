@@ -328,15 +328,26 @@
 .ob-orb-label small { text-transform: uppercase; letter-spacing: 0.14em; }
 .ob-team-btn { position: absolute; transform: translateX(-50%); background: rgba(0, 20, 30, 0.7); border: 1px solid var(--ob-cyan); color: #e0fbff; font: inherit; font-size: 11px; letter-spacing: 0.22em; padding: 3px 12px; cursor: pointer; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
 .ob-team-btn:hover, .ob-team-btn:focus-visible { background: color-mix(in srgb, var(--ob-cyan) 22%, transparent); outline: none; box-shadow: 0 0 12px var(--ob-cyan); }
-.ob-expanded-body.ob-org-body { display: flex; flex-direction: row; gap: 12px; height: 100%; min-height: 0; padding-top: 26px; box-sizing: border-box; } /* room for the close mark */
-.ob-expanded-body.ob-org-body > .ob-org-graph { flex: 1 1 0; display: block; min-width: 0; min-height: 0; position: relative; overflow: hidden; border: 1px solid color-mix(in srgb, var(--ob-cyan) 30%, transparent); }
-.ob-org-zoom { width: 100%; height: 100%; }
-.ob-expanded-body.ob-org-body > .ob-org-side { flex: 0 0 min(340px, 40%); display: block; min-height: 0; overflow-y: auto; }
-.ob-roster { display: flex; flex-direction: column; gap: 10px; }
-.ob-roster-item { cursor: pointer; display: block; }
-.ob-roster-item:focus-visible { outline: 1px solid var(--ob-cyan); outline-offset: 2px; }
-.ob-roster-item > * { width: 100%; box-sizing: border-box; } /* the card, and every row in it, take the card's whole width */
-.ob-roster-item .j-card > *, .ob-roster-item [class*="j-card"] > * { width: 100%; box-sizing: border-box; }
-.ob-roster-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
-.ob-roster-item[data-status="waiting"] { filter: drop-shadow(0 0 6px var(--ob-orange)); }
-.ob-org-lines { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: 0; padding: 0; list-style: none; } /* read out by a screen reader; the graph shows it */
+.ob-expanded-body.ob-org-body { display: block; height: 100%; min-height: 0; padding-top: 26px; box-sizing: border-box; } /* room for the close mark */
+.ob-canvas-room { position: relative; width: 100%; height: 100%; overflow: hidden; border: 1px solid color-mix(in srgb, var(--ob-cyan) 30%, transparent); background: radial-gradient(ellipse at 30% 40%, rgba(63, 216, 255, 0.07), transparent 60%), repeating-linear-gradient(0deg, rgba(63, 216, 255, 0.05) 0 1px, transparent 1px 32px), repeating-linear-gradient(90deg, rgba(63, 216, 255, 0.05) 0 1px, transparent 1px 32px); }
+.ob-canvas-pan { position: absolute; inset: 0; cursor: grab; touch-action: none; }
+.ob-canvas-pan:active { cursor: grabbing; }
+.ob-canvas-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ob-canvas-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.ob-canvas-edges path { fill: none; stroke: var(--ob-cyan); stroke-width: 2; opacity: 0.45; }
+.ob-canvas-edges path[data-flow="on"] { stroke: var(--ob-green); opacity: 0.95; stroke-dasharray: 8 8; animation: ob-canvas-flow 1s linear infinite; }
+.ob-canvas-edges path[data-flow="wait"] { stroke: var(--ob-orange); opacity: 0.9; stroke-dasharray: 3 7; }
+@keyframes ob-canvas-flow { to { stroke-dashoffset: -16; } }
+.ob-cnode { position: absolute; box-sizing: border-box; cursor: pointer; }
+.ob-cnode:focus-visible { outline: 1px solid var(--ob-cyan); outline-offset: 3px; }
+.ob-cnode > * { width: 100%; height: 100%; box-sizing: border-box; } /* the card, and every row in it, take the node's whole size */
+.ob-cnode .j-card > *, .ob-cnode [class*="j-card"] > * { width: 100%; box-sizing: border-box; }
+.ob-cnode[data-status="waiting"] { filter: drop-shadow(0 0 8px var(--ob-orange)); }
+.ob-cnode[data-status="running"] { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--ob-green) 70%, transparent)); }
+.ob-cnode-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.ob-cnode-root { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: default; color: #bdeef7; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+.ob-canvas-tools { position: absolute; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 4px; background: rgba(3, 14, 22, 0.8); border: 1px solid color-mix(in srgb, var(--ob-cyan) 40%, transparent); padding: 3px; }
+.ob-canvas-tools button { width: 30px; height: 28px; background: transparent; color: #e0fbff; border: 1px solid transparent; font: inherit; font-size: 16px; cursor: pointer; }
+.ob-canvas-tools button:hover, .ob-canvas-tools button:focus-visible { border-color: var(--ob-cyan); background: color-mix(in srgb, var(--ob-cyan) 16%, transparent); outline: none; }
+.ob-canvas-tools span { font-size: 11px; color: var(--ob-cyan); min-width: 40px; text-align: center; }
+.ob-org-lines { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: 0; padding: 0; list-style: none; } /* read out by a screen reader; the canvas shows it */
