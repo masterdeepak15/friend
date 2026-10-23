@@ -18,11 +18,17 @@ const mount = (state: Partial<StageViewState> = {}) => render(<OrbitalHud hud={h
 const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
 
 describe("the approved mockup, in the parts that do not need workers", () => {
+  it("writes whatever name the owner gave the assistant, and a plain word when it has none", () => {
+    expect(mount({ assistantName: "Jarvis" }).container.querySelector('[data-testid="orbital-topbar"]')!.textContent).toContain("J A R V I S");
+    cleanup();
+    expect(mount({ assistantName: "" }).container.querySelector('[data-testid="orbital-topbar"]')!.textContent).toContain("A S S I S T A N T");
+  });
+
   it("has a notched top line with a running light, the product name spaced out, and the assistant on the left", () => {
     const { container } = mount();
     const bar = container.querySelector('[data-testid="orbital-topbar"]')!;
-    expect(bar.textContent).toContain("F R I E N D");
-    expect(bar.textContent).toMatch(/MAYA/);
+    expect(bar.textContent).toContain("M A Y A"); // the assistant's own name, spaced out: no product name is written into the screen
+    expect(bar.textContent).not.toContain("F R I E N D");
     expect(bar.querySelector("path.ob-topbar-run")).toBeTruthy();
     expect(css).toMatch(/@keyframes ob-runline/);
   });

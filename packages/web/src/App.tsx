@@ -107,7 +107,9 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
   const shown = useMemo(() => {
     const base = muted ? { ...state, objects: [], captions: "" } : state;
     // the orbit and its rings are drawn around the orb, so the orb is drawn smaller than on the classic screen
-    return orbital && orbitMode ? { ...base, look: { ...base.look, size: base.look.size * ORBITAL_ORB_SCALE } } : base;
+    // while Friend listens, thinks or speaks the orb comes out at its own size; when idle it sits small in the middle
+    const working = state.voice.mode === "listening" || state.voice.mode === "transcribing" || state.voice.mode === "speaking" || state.busy;
+    return orbital && orbitMode && !working ? { ...base, look: { ...base.look, size: base.look.size * ORBITAL_ORB_SCALE } } : base;
   }, [muted, state, orbital, orbitMode]);
 
   // Once per visit, when speech works but nobody's voice is enrolled yet, say how to turn recognition on.

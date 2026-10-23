@@ -271,7 +271,7 @@ export function sanitizeHud(raw: unknown): HudConfig {
     clock: { hour12: c.hour12 !== false, seconds: c.seconds === true, locale: validDateLocale(c.locale) ? c.locale : "" },
     launcher: launcher.slice(0, MAX_LAUNCHER),
     animations: r.animations === "reduced" || r.animations === "off" ? r.animations : "full",
-    layout: (HUD_LAYOUTS as readonly unknown[]).includes(r.layout) ? (r.layout as HudLayout) : "classic",
+    layout: (HUD_LAYOUTS as readonly unknown[]).includes(r.layout) ? (r.layout as HudLayout) : "orbital",
     density: (HUD_DENSITIES as readonly unknown[]).includes(r.density) ? (r.density as HudDensity) : "standard",
     widgets: sanitizeWidgets(r.widgets),
     preview: r.preview === true,

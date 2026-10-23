@@ -72,6 +72,20 @@ describe("the orbital layout in the app", () => {
     expect(classic.container.querySelector<HTMLElement>("[data-presence]")!.style.transform).toBe("");
   });
 
+  it("pops the orb out to its full size while Friend listens, thinks or speaks, and tucks it back in when idle", () => {
+    const orbOf = () => render(<StageApp onSignedOut={() => {}} />).container.querySelector<HTMLElement>("[data-presence]")!.style.transform;
+    for (const mode of ["listening", "transcribing", "speaking"] as const) {
+      show({ hud: hud("orbital"), voice: { ...initialState.voice, mode } });
+      expect(orbOf(), mode).toBe("");
+      cleanup();
+    }
+    show({ hud: hud("orbital"), busy: true });
+    expect(orbOf()).toBe("");
+    cleanup();
+    show({ hud: hud("orbital"), voice: { ...initialState.voice, mode: "idle" }, busy: false });
+    expect(orbOf()).toBe(`scale(${ORBITAL_ORB_SCALE})`);
+  });
+
   it("is drawn inside the stage, between the orb and the pictures the assistant puts up, so those are never hidden behind it", () => {
     show({ hud: hud("orbital") });
     const { container } = render(<StageApp onSignedOut={() => {}} />);

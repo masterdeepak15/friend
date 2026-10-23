@@ -8,9 +8,9 @@ import { applySettings, refuseForAgent, settingsView } from "./settings";
 const fresh = () => loadConfig(mkdtempSync(join(tmpdir(), "friend-hudlayout-")));
 
 describe("the orbital screen settings", () => {
-  it("default to the classic screen, standard density and no widget overrides", () => {
+  it("default to the orbital screen, standard density and no widget overrides", () => {
     const h = sanitizeHud({});
-    expect(h).toMatchObject({ layout: "classic", density: "standard", widgets: {} });
+    expect(h).toMatchObject({ layout: "orbital", density: "standard", widgets: {} });
   });
 
   it("keep the sample-data switch off unless it is exactly true, and save it", () => {
@@ -27,7 +27,7 @@ describe("the orbital screen settings", () => {
     const h = sanitizeHud({ layout: "orbital", density: "full", widgets: { radar: false, bogus: true, feed: "yes", usage: true } });
     expect(h).toMatchObject({ layout: "orbital", density: "full", widgets: { radar: false, usage: true } });
     expect(Object.keys(h.widgets).sort()).toEqual(["radar", "usage"]);
-    expect(sanitizeHud({ layout: "nope", density: "nope" })).toMatchObject({ layout: "classic", density: "standard" });
+    expect(sanitizeHud({ layout: "nope", density: "nope" })).toMatchObject({ layout: "orbital", density: "standard" });
   });
 
   it("are saved by applySettings, merging widget switches instead of replacing them", () => {
@@ -45,7 +45,7 @@ describe("the orbital screen settings", () => {
     expect(() => applySettings(config, { hud: { layout: "cube" } as never })).toThrow();
     expect(() => applySettings(config, { hud: { density: "packed" } as never })).toThrow();
     expect(() => applySettings(config, { hud: { widgets: { bogus: true } } as never })).toThrow();
-    expect(config.hud.layout).toBe("classic");
+    expect(config.hud.layout).toBe("orbital");
   });
 
   it("cannot be changed by the assistant", () => {

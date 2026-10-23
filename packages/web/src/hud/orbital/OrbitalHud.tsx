@@ -64,6 +64,9 @@ function useNow(everyMs: number): Date {
   return now;
 }
 
+/** A name written the way the top bar writes it: capitals, each letter apart. */
+const spaced = (name: string): string => [...name.toUpperCase()].join(" ").replace(/\s{2,}/g, "   ");
+
 const activate = (fn: () => void) => (e: KeyboardEvent) => {
   if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
@@ -115,7 +118,7 @@ function TopBar({ hud, state, preview }: { hud: HudView; state: StageViewState; 
     <g data-testid="orbital-topbar">
       <path className="ob-topbar-base" d={line} />
       <path className="ob-topbar-run" d={line} pathLength={100} />
-      <text className="ob-title" x="800" y="40" textAnchor="middle">F R I E N D</text>
+      <text className="ob-title" x="800" y="40" textAnchor="middle">{spaced(state.assistantName || "Assistant")}</text>
       {preview && <text className="ob-sample-tag" x="800" y="62" textAnchor="middle">SAMPLE DATA · NOT REAL</text>}
       <circle className={online ? "ob-pulse" : undefined} cx="30" cy="34" r="4" fill={online ? "#34d399" : "#fb923c"} />
       <text className="ob-lab" x="40" y="38">{(state.assistantName || "FRIEND").toUpperCase()} · {online ? "ONLINE" : "OFFLINE"}</text>
