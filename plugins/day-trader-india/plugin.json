@@ -1,18 +1,59 @@
 {
   "id": "day-trader-india",
   "name": "Day trader (India)",
-  "version": "1.1.0",
-  "description": "A day-trading method for Indian stocks (NSE, rupees, IST): scan for setups, read the news and filings, time the entry, plan stop and target, size the position, check the limits, replay the odds, and follow insider and bulk-deal buying. Analysis only: it never places an order.",
+  "version": "1.2.0",
+  "description": "A day-trading method for Indian stocks (NSE, rupees, IST): a ranked focus list of intraday setups with entry, stop, target and simulated odds; news, filings, insider and bulk-deal checks; position sizing and limit checks. Analysis only: it never places an order.",
   "skills": [
-    { "name": "day-trade-scan", "description": "Find intraday setups on NSE stocks (opening-range breakout, oversold bounce) and check the index first", "file": "skills/scan.md" },
-    { "name": "day-trade-news", "description": "Check the news and company filings on a stock before a day trade, and whether a result or event falls today", "file": "skills/news.md" },
-    { "name": "day-trade-entry", "description": "Say whether a setup has triggered on a stock yet, bar by bar, and when to skip it", "file": "skills/entry.md" },
-    { "name": "day-trade-exit", "description": "Set the stop, the target and the square-off time before entering a day trade, and set reminders for the times", "file": "skills/exit.md" },
-    { "name": "day-trade-budget", "description": "Size a day trade from the owner's max loss, money and leverage, with exact figures", "file": "skills/budget.md" },
-    { "name": "day-trade-risk", "description": "Check a day-trade plan against the owner's own limits and say pass or block, with the reason", "file": "skills/risk.md" },
-    { "name": "day-trade-replay", "description": "Before a trade, replay the rest of the session thousands of times from the stock's own candles and say how often the target or the stop comes first", "file": "skills/replay.md" },
-    { "name": "day-trade-analyst", "description": "Read a company's latest results, filings and shareholding pattern and sum up what changed", "file": "skills/analyst.md" },
-    { "name": "day-trade-smart-money", "description": "Show what promoters, directors and big investors have been buying or selling: insider trades and bulk and block deals", "file": "skills/smart-money.md" }
+    {
+      "name": "day-trade-focus",
+      "description": "Suggest which stocks to focus on for intraday trading today: scan the market for the most active and breaking-out stocks, check news, simulate the odds and give entry, stop and target levels",
+      "file": "skills/focus.md"
+    },
+    {
+      "name": "day-trade-scan",
+      "description": "Find intraday setups on NSE stocks (opening-range breakout, oversold bounce) and check the index first",
+      "file": "skills/scan.md"
+    },
+    {
+      "name": "day-trade-news",
+      "description": "Check the news and company filings on a stock before a day trade, and whether a result or event falls today",
+      "file": "skills/news.md"
+    },
+    {
+      "name": "day-trade-entry",
+      "description": "Say whether a setup has triggered on a stock yet, bar by bar, and when to skip it",
+      "file": "skills/entry.md"
+    },
+    {
+      "name": "day-trade-exit",
+      "description": "Set the stop, the target and the square-off time before entering a day trade, and set reminders for the times",
+      "file": "skills/exit.md"
+    },
+    {
+      "name": "day-trade-budget",
+      "description": "Size a day trade from the owner's max loss, money and leverage, with exact figures",
+      "file": "skills/budget.md"
+    },
+    {
+      "name": "day-trade-risk",
+      "description": "Check a day-trade plan against the owner's own limits and say pass or block, with the reason",
+      "file": "skills/risk.md"
+    },
+    {
+      "name": "day-trade-replay",
+      "description": "Before a trade, replay the rest of the session thousands of times from the stock's own candles and say how often the target or the stop comes first",
+      "file": "skills/replay.md"
+    },
+    {
+      "name": "day-trade-analyst",
+      "description": "Read a company's latest results, filings and shareholding pattern and sum up what changed",
+      "file": "skills/analyst.md"
+    },
+    {
+      "name": "day-trade-smart-money",
+      "description": "Show what promoters, directors and big investors have been buying or selling: insider trades and bulk and block deals",
+      "file": "skills/smart-money.md"
+    }
   ],
   "tools": [
     {
@@ -21,17 +62,51 @@
       "language": "python",
       "file": "tools/trade_plan.py",
       "input": {
-        "side": { "type": "string", "description": "buy or sell (sell means short)" },
-        "entry": { "type": "number", "description": "Entry price" },
-        "stop": { "type": "number", "description": "Stop-loss price" },
-        "reward_multiple": { "type": "number", "description": "Target as a multiple of the risk per share, for example 1.5" },
-        "max_loss": { "type": "number", "description": "The most the owner will lose on this trade, in rupees" },
-        "capital": { "type": "number", "description": "Money available for this trade, in rupees" },
-        "leverage": { "type": "number", "description": "Intraday leverage the owner has, 1 if none" },
-        "min_reward_multiple": { "type": "number", "description": "The owner's smallest acceptable reward to risk, 0 if none" },
-        "tick": { "type": "number", "description": "Price tick, 0.05 for most NSE stocks" }
+        "side": {
+          "type": "string",
+          "description": "buy or sell (sell means short)"
+        },
+        "entry": {
+          "type": "number",
+          "description": "Entry price"
+        },
+        "stop": {
+          "type": "number",
+          "description": "Stop-loss price"
+        },
+        "reward_multiple": {
+          "type": "number",
+          "description": "Target as a multiple of the risk per share, for example 1.5"
+        },
+        "max_loss": {
+          "type": "number",
+          "description": "The most the owner will lose on this trade, in rupees"
+        },
+        "capital": {
+          "type": "number",
+          "description": "Money available for this trade, in rupees"
+        },
+        "leverage": {
+          "type": "number",
+          "description": "Intraday leverage the owner has, 1 if none"
+        },
+        "min_reward_multiple": {
+          "type": "number",
+          "description": "The owner's smallest acceptable reward to risk, 0 if none"
+        },
+        "tick": {
+          "type": "number",
+          "description": "Price tick, 0.05 for most NSE stocks"
+        }
       },
-      "required": ["side", "entry", "stop", "reward_multiple", "max_loss", "capital"]
+      "required": [
+        "side",
+        "entry",
+        "stop",
+        "reward_multiple",
+        "max_loss",
+        "capital"
+      ]
     }
   ]
 }

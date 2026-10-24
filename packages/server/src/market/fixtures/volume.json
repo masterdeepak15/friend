@@ -1,0 +1,77 @@
+{
+ "data": [
+  {
+   "symbol": "JINDALPOLY",
+   "companyName": "Jindal Poly Films Limited",
+   "volume": 8343139,
+   "week1AvgVolume": 1678508,
+   "week1volChange": 4.97056672810613,
+   "week2AvgVolume": 919325,
+   "week2volChange": 9.075284885556831,
+   "ltp": 712.95,
+   "pChange": 7.26,
+   "turnover": 61480.59129
+  },
+  {
+   "symbol": "ARYAMAN",
+   "companyName": "Aryaman Financial Services Limited",
+   "volume": 58061,
+   "week1AvgVolume": 11686,
+   "week1volChange": 4.968423754920417,
+   "week2AvgVolume": 5858,
+   "week2volChange": 9.91055730989161,
+   "ltp": 621.2,
+   "pChange": -0.59,
+   "turnover": 362.28902
+  },
+  {
+   "symbol": "SVGLOBAL",
+   "companyName": "S V Global Mill Limited",
+   "volume": 58038,
+   "week1AvgVolume": 11939,
+   "week1volChange": 4.861211156713293,
+   "week2AvgVolume": 6176,
+   "week2volChange": 9.397192402972749,
+   "ltp": 132,
+   "pChange": 4.55,
+   "turnover": 84.30599
+  },
+  {
+   "symbol": "WESTLIFE",
+   "companyName": "WESTLIFE FOODWORLD LIMITED",
+   "volume": 8791829,
+   "week1AvgVolume": 1832453,
+   "week1volChange": 4.797844835160373,
+   "week2AvgVolume": 959969,
+   "week2volChange": 9.15844427173066,
+   "ltp": 558.1,
+   "pChange": 4.25,
+   "turnover": 50746.43698
+  },
+  {
+   "symbol": "ORIENTTECH",
+   "companyName": "Orient Technologies Limited",
+   "volume": 13108773,
+   "week1AvgVolume": 2738957,
+   "week1volChange": 4.786044515621564,
+   "week2AvgVolume": 1472056,
+   "week2volChange": 8.905073425500525,
+   "ltp": 202.7,
+   "pChange": -1.99,
+   "turnover": 28358.20863
+  },
+  {
+   "symbol": "NEXT30ADD",
+   "companyName": "DSP Mutual Fund - DSP BSE SENSEX Next 30 ETF",
+   "volume": 142193,
+   "week1AvgVolume": 30321,
+   "week1volChange": 4.689557141537934,
+   "week2AvgVolume": 16112,
+   "week2volChange": 8.825285501489573,
+   "ltp": 39.13,
+   "pChange": -0.31,
+   "turnover": 54.7443
+  }
+ ],
+ "timestamp": "23-Oct-2026 16:00:00"
+}

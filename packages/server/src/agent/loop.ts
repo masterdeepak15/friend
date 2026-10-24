@@ -689,7 +689,7 @@ export class Agent {
       return r.ok ? { text: r.text, isError: false } : fail(r.text);
     }
 
-    if (call.name === "market.get" || call.name === "market.replay") {
+    if (call.name === "market.get" || call.name === "market.scan" || call.name === "market.replay") {
       if (!d.web?.enabled() || !d.market) return fail("Market data is not available.");
       const r = await d.market.run(call.name, args, this.abort?.signal);
       d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: r.ok });

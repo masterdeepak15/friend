@@ -199,3 +199,109 @@ describe("lists come newest first", () => {
     expect(i.text.indexOf("B (")).toBeLessThan(i.text.indexOf("A ("));
   });
 });
+import { detectSetups, formatSetups } from "./scan";
+import type { Series } from "./format";
+
+/** One session of 5-minute candles from 09:15 IST: [open, high, low, close, volume] each. */
+function session(bars: number[][], day = Date.UTC(2026, 9, 23)): Series {
+  const open = day / 1000 + 9 * 3600 + 15 * 60 - 19800;
+  return { symbol: "X.NS", currency: "INR", offset: 19800, last: null, previousClose: null, name: "X", candles: bars.map((b, i) => ({ t: open + i * 300, o: b[0]!, h: b[1]!, l: b[2]!, c: b[3]!, v: b[4]! })) };
+}
+const flat = (n: number, lo: number, hi: number, v = 100) => Array.from({ length: n }, () => [(lo + hi) / 2, hi, lo, (lo + hi) / 2, v]);
+
+describe("setups", () => {
+  it("finds an opening-range breakout: first close above the first 15 minutes' high, with levels worked out", () => {
+    const s = session([...flat(3, 100, 102), [102, 103, 101.5, 101.8, 100], [101.8, 104, 101.8, 103.5, 300], [103.5, 104.5, 103.4, 104.2, 300]]);
+    const [x] = detectSetups("X", s);
+    expect(x).toMatchObject({ symbol: "X", kind: "orb-long", state: "triggered", at: "09:35", entry: 103.5, stop: 101, rangeLow: 100, rangeHigh: 102 });
+    expect(x!.target).toBe(107.25); // 103.5 + 1.5 * 2.5
+    expect(x!.volumeRatio).toBeGreaterThan(1);
+  });
+
+  it("finds a breakdown the other way, with the stop above the entry", () => {
+    const s = session([...flat(3, 100, 102), [100, 100.5, 98.5, 99, 300], [99, 99.2, 97, 97.5, 300]]);
+    const [x] = detectSetups("X", s);
+    expect(x).toMatchObject({ kind: "orb-short", state: "triggered", entry: 99, stop: 101 });
+    expect(x!.target).toBe(96);
+  });
+
+  it("drops a breakout whose price has come back inside the range, and calls one far past the trigger late", () => {
+    expect(detectSetups("X", session([...flat(3, 100, 102), [102, 103, 101.5, 102.8, 100], [102.8, 102.9, 100.5, 101, 100]]))).toEqual([]);
+    const late = detectSetups("X", session([...flat(3, 100, 102), [102, 103, 101.9, 102.6, 100], [102.6, 106, 102.5, 105.5, 100]]));
+    expect(late[0]).toMatchObject({ state: "late" });
+  });
+
+  it("calls a stock near its range edge 'near', and an untouched middle nothing", () => {
+    expect(detectSetups("X", session([...flat(3, 100, 102), [101.4, 101.8, 101.3, 101.7, 100]]))[0]).toMatchObject({ kind: "orb-long", state: "near", at: null, entry: 102 });
+    expect(detectSetups("X", session([...flat(3, 100, 102), [101, 101.2, 100.8, 101, 100]]))).toEqual([]);
+  });
+
+  it("finds an oversold bounce: 2% under the open, a green last candle on above-average volume", () => {
+    const s = session([[100, 100.5, 99, 99.5, 100], [99.5, 99.6, 97, 97.5, 100], [97.5, 97.6, 95.5, 96, 100], [96, 96.2, 95, 95.4, 100], [95.4, 96.8, 95.2, 96.5, 400]]);
+    expect(detectSetups("X", s).find((x) => x.kind === "bounce")).toMatchObject({ entry: 96.5, stop: 95.2, state: "triggered" });
+  });
+
+  it("needs the first 15 minutes before it says anything", () => {
+    expect(detectSetups("X", session(flat(3, 100, 102)))).toEqual([]);
+  });
+
+  it("ranks triggered setups above near ones and says how many stocks were looked at", () => {
+    const a = detectSetups("A", session([...flat(3, 100, 102), [101.4, 101.8, 101.3, 101.7, 100]]));
+    const b = detectSetups("B", session([...flat(3, 100, 102), [102, 103, 101.9, 102.6, 300], [102.6, 103.4, 102.5, 103.2, 300]]));
+    const text = formatSetups([...a, ...b], 12, 5);
+    expect(text).toMatch(/^Looked at 12 stocks\. 2 setups/);
+    expect(text.indexOf("B |")).toBeLessThan(text.indexOf("A |"));
+    expect(formatSetups([], 9, 5)).toMatch(/Looked at 9 stocks: none/);
+  });
+});
+
+const chartOf = (s: Series) => ({ chart: { result: [{ meta: { symbol: s.symbol, currency: "INR", gmtoffset: 19800 }, timestamp: s.candles.map((k) => k.t), indicators: { quote: [{ open: s.candles.map((k) => k.o), high: s.candles.map((k) => k.h), low: s.candles.map((k) => k.l), close: s.candles.map((k) => k.c), volume: s.candles.map((k) => k.v) }] } }] } });
+
+describe("market lists and the scan tool", () => {
+  it("shows what is moving: gainers, losers, most active and volume spurts", async () => {
+    const all = deps({ "variations?index=gainers": fx("gainers"), "variations?index=loosers": fx("losers"), "most-active": fx("active"), "volume-gainers": fx("volume") });
+    expect((await runMarketTool("market.get", { kind: "movers" }, all.d)).text).toMatch(/Top gainers \(FOSec\)[\s\S]*\n[A-Z&-]+ \| \d/);
+    expect((await runMarketTool("market.get", { kind: "movers", direction: "losers", universe: "NIFTY" }, all.d)).text).toMatch(/Top losers \(NIFTY\)/);
+    expect(all.asked.some((u) => u.endsWith("index=loosers"))).toBe(true);
+    expect((await runMarketTool("market.get", { kind: "active" }, all.d)).text).toMatch(/Most active by value[\s\S]*\n[A-Z&-]+ \| /);
+    expect((await runMarketTool("market.get", { kind: "volume" }, all.d)).text).toMatch(/Volume spurts[\s\S]*\n[A-Z&-]+ \| .* \| x/);
+  });
+
+  it("scans your own symbols and ranks the setups it finds", async () => {
+    const hit = session([...flat(3, 100, 102), [102, 103, 101.9, 102.6, 300], [102.6, 103.4, 102.5, 103.2, 300]]);
+    const quiet = session([...flat(3, 100, 102), [101, 101.2, 100.8, 101, 100]]);
+    const answers: Record<string, unknown> = { "TCS.NS": chartOf(hit), "INFY.NS": chartOf(quiet) };
+    const d: MarketDeps = { getJson: vi.fn(async (url: string) => ({ ok: true as const, json: answers[Object.keys(answers).find((k) => url.includes(k))!] })), audit: vi.fn() };
+    const r = await runMarketTool("market.scan", { symbols: ["tcs", "infy", "../bad"] }, d);
+    expect(r.ok).toBe(true);
+    expect(r.text).toMatch(/Looked at 2 stocks\. 1 setups/);
+    expect(r.text).toMatch(/TCS \| LONG opening-range breakout at 09:30/);
+    expect(r.text).not.toMatch(/INFY \|/);
+  });
+
+  it("with no symbols, scans what the market lists name, once each, and says so", async () => {
+    const hit = chartOf(session([...flat(3, 100, 102), [102, 103, 101.9, 102.6, 300], [102.6, 103.4, 102.5, 103.2, 300]]));
+    const asked: string[] = [];
+    const d: MarketDeps = {
+      getJson: vi.fn(async (url: string) => {
+        asked.push(url);
+        if (url.includes("v8/finance/chart")) return { ok: true as const, json: hit };
+        const key = Object.entries({ "variations?index=gainers": "gainers", "variations?index=loosers": "losers", "most-active": "active", "volume-gainers": "volume" }).find(([k]) => url.includes(k));
+        return key ? { ok: true as const, json: fx(key[1]) } : { ok: false as const, error: "no" };
+      }),
+      audit: vi.fn(),
+    };
+    const r = await runMarketTool("market.scan", {}, d);
+    expect(r.ok).toBe(true);
+    expect(r.text).toMatch(/Looked at \d+ stocks/);
+    expect(r.text).toMatch(/most active, the volume spurts and the biggest F&O movers/);
+    const charts = asked.filter((u) => u.includes("v8/finance/chart"));
+    expect(new Set(charts).size).toBe(charts.length);
+    expect(charts.length).toBeLessThanOrEqual(28);
+    for (const u of asked) expect(u).toMatch(/^https:\/\/(query1\.finance\.yahoo\.com\/v8\/finance\/chart\/|www\.nseindia\.com\/api\/)/);
+  });
+
+  it("says so when no list and no candle can be read", async () => {
+    expect(await runMarketTool("market.scan", {}, deps({}).d)).toMatchObject({ ok: false, text: expect.stringMatching(/could not be read/) });
+  });
+});

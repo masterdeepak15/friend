@@ -11,4 +11,4 @@ Use this when the owner has a setup in mind and asks "is it time", "has it trigg
 3. Skip it, and say why, when: the trigger comes after 14:30 IST, the news is exposed to an event today (`day-trade-news`), the index is against the direction, or the move is already more than about one range-width past the trigger (chasing).
 
 ## What you must not do
-You cannot place an order and you do not tell the owner to. Give the facts; the owner decides and places it in their broker app.
+You cannot place an order. Say plainly whether the setup has triggered and whether you would still take it or skip it, and why; the owner decides and places any order in their broker app.

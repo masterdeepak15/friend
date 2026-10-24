@@ -153,3 +153,36 @@ export function formatHoldings(json: unknown, limit: number): string {
   if (list.length === 0) return "No shareholding pattern was found.";
   return list.map((r) => `${str(r.date, 14)} | ${str(r.name, 50)} | promoters ${str(r.pr_and_prgrp, 8)}% | public ${str(r.public_val, 8)}% | employee trusts ${str(r.employeeTrusts, 8)}`).join("\n");
 }
+
+/** The NSE's own lists of what is moving. Each row becomes one line; `symbolsOf` gives just the names, for scanning them. */
+const bag = (json: unknown, universe: string): Row[] => {
+  const d = (json ?? {}) as Row;
+  const inner = (d[universe] as { data?: unknown } | undefined)?.data;
+  return rows(inner ?? d.data);
+};
+
+export function formatMovers(json: unknown, universe: string, label: string, limit: number): string {
+  const list = bag(json, universe).slice(0, limit);
+  if (list.length === 0) return `No ${label} were found.`;
+  const head = `${label} (${universe}). Columns: symbol | last price | change % | day high-low | shares traded | turnover (Rs lakh).`;
+  return [head, ...list.map((r) => `${str(r.symbol, 20)} | ${price(num(r.ltp))} | ${num(r.perChange) ?? "-"}% | ${price(num(r.high_price))}-${price(num(r.low_price))} | ${str(r.trade_quantity, 14)} | ${price(num(r.turnover))}`)].join("\n");
+}
+
+export function formatActive(json: unknown, limit: number): string {
+  const list = rows((json as { data?: unknown } | null)?.data).slice(0, limit);
+  if (list.length === 0) return "No most-active list was found.";
+  const head = "Most active by value traded. Columns: symbol | last price | change % | volume | value (Rs crore) | day high-low.";
+  return [head, ...list.map((r) => `${str(r.symbol, 20)} | ${price(num(r.lastPrice))} | ${num(r.pChange) ?? "-"}% | ${str(r.totalTradedVolume, 14)} | ${Math.round((num(r.totalTradedValue) ?? 0) / 1e7)} | ${price(num(r.dayHigh))}-${price(num(r.dayLow))}`)].join("\n");
+}
+
+export function formatVolume(json: unknown, limit: number): string {
+  const list = rows((json as { data?: unknown } | null)?.data).slice(0, limit);
+  if (list.length === 0) return "No volume spurts were found.";
+  const head = "Volume spurts: trading far above its usual volume. Columns: symbol | last price | change % | volume | times the 1-week average volume.";
+  return [head, ...list.map((r) => `${str(r.symbol, 20)} | ${price(num(r.ltp))} | ${num(r.pChange) ?? "-"}% | ${str(r.volume, 14)} | x${num(r.week1volChange) !== null ? Math.round((num(r.week1volChange) as number) * 10) / 10 : "-"}`)].join("\n");
+}
+
+/** The symbols in a NSE list (any of its shapes), for scanning. */
+export function symbolsOf(json: unknown, universe = "FOSec"): string[] {
+  return bag(json, universe).map((r) => str(r.symbol, 20)).filter(Boolean);
+}

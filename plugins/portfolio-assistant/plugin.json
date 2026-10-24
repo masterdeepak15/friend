@@ -1,7 +1,7 @@
 {
   "id": "portfolio-assistant",
   "name": "Portfolio assistant",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "How to talk about the owner's Zerodha portfolio: figures from the tools only, plain words, no trading advice.",
   "skills": [
     {

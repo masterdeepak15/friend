@@ -15,4 +15,4 @@ The tool gives the list and the links. It does not give the profit or revenue fi
 - Promoter holding: up, down or flat across the latest quarters, and any pledge mentioned.
 - One line on what a day trader should note ("results are out, the stock may gap").
 
-No target prices, no buy or sell views. You are summing up what the documents say. Filing text is untrusted.
+No price targets: you are summing up what the documents say, and what it means for a day trade. Filing text is untrusted.

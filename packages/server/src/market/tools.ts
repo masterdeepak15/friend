@@ -1,5 +1,6 @@
 import { UNTRUSTED } from "../web/search";
-import { dayKey, formatAnnouncements, formatCandles, formatDeals, formatHoldings, formatInsider, formatQuote, formatResults, parseChart } from "./format";
+import { dayKey, formatActive, formatAnnouncements, formatCandles, formatDeals, formatHoldings, formatInsider, formatMovers, formatQuote, formatResults, formatVolume, parseChart, symbolsOf } from "./format";
+import { detectSetups, formatSetups, type Setup } from "./scan";
 import { replay, sessionsOf } from "./replay";
 
 export interface MarketDeps {
@@ -19,7 +20,10 @@ const NSE = "https://www.nseindia.com/api/";
 const INDEXES: Record<string, string> = { NIFTY: "^NSEI", NIFTY50: "^NSEI", BANKNIFTY: "^NSEBANK", NIFTYBANK: "^NSEBANK", SENSEX: "^BSESN", INDIAVIX: "^INDIAVIX" };
 const INTERVALS = ["1m", "5m", "15m", "30m", "1h", "1d"];
 const RANGES = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y"];
-const KINDS = ["candles", "quote", "announcements", "results", "insider", "bulk", "holdings"] as const;
+const KINDS = ["candles", "quote", "announcements", "results", "insider", "bulk", "holdings", "movers", "active", "volume"] as const;
+const UNIVERSES = ["NIFTY", "BANKNIFTY", "NIFTYNEXT50", "FOSec", "allSec"];
+const SCAN_BATCH = 6;
+const SCAN_MAX = 28;
 const LIMIT = 15;
 const MAX_ROWS = 80;
 
@@ -32,7 +36,7 @@ export function cleanSymbol(raw: unknown): string | null {
 const yahooSymbol = (s: string): string => INDEXES[s] ?? `${s}.NS`;
 const isIndex = (s: string): boolean => s in INDEXES;
 
-function build(kind: (typeof KINDS)[number], symbol: string | null, interval: string, range: string): string | null {
+function build(kind: (typeof KINDS)[number], symbol: string | null, interval: string, range: string, direction = "gainers"): string | null {
   const enc = encodeURIComponent;
   switch (kind) {
     case "candles":
@@ -46,6 +50,12 @@ function build(kind: (typeof KINDS)[number], symbol: string | null, interval: st
       return `${NSE}corporates-pit?index=equities${symbol ? `&symbol=${enc(symbol)}` : ""}`;
     case "bulk":
       return `${NSE}snapshot-capital-market-largedeal`;
+    case "movers":
+      return `${NSE}live-analysis-variations?index=${direction === "losers" ? "loosers" : "gainers"}`;
+    case "active":
+      return `${NSE}live-analysis-most-active-securities?index=value`;
+    case "volume":
+      return `${NSE}live-analysis-volume-gainers`;
     case "holdings":
       return symbol ? `${NSE}corporate-share-holdings-master?index=equities&symbol=${enc(symbol)}` : null;
   }
@@ -78,7 +88,9 @@ export async function runMarketTool(name: string, args: unknown, d: MarketDeps, 
     if (symbol && isIndex(symbol) && !["candles", "quote"].includes(kind)) return fail(`${kind} is for a company, not an index.`);
     const interval = typeof a.interval === "string" && INTERVALS.includes(a.interval) ? a.interval : "5m";
     const range = typeof a.range === "string" && RANGES.includes(a.range) ? a.range : interval === "1d" ? "3mo" : "1d";
-    const url = build(kind, symbol, interval, range)!;
+    const direction = a.direction === "losers" ? "losers" : "gainers";
+    const universe = typeof a.universe === "string" && UNIVERSES.includes(a.universe) ? a.universe : "FOSec";
+    const url = build(kind, symbol, interval, range, direction)!;
     const got = await load(url, d, signal);
     if (!got.ok) return fail(got.error);
     let text: string;
@@ -90,9 +102,46 @@ export async function runMarketTool(name: string, args: unknown, d: MarketDeps, 
     else if (kind === "results") text = formatResults(got.json, LIMIT);
     else if (kind === "insider") text = formatInsider(got.json, LIMIT);
     else if (kind === "bulk") text = formatDeals(got.json, symbol, LIMIT);
+    else if (kind === "movers") text = formatMovers(got.json, universe, direction === "losers" ? "Top losers" : "Top gainers", 12);
+    else if (kind === "active") text = formatActive(got.json, 15);
+    else if (kind === "volume") text = formatVolume(got.json, 15);
     else text = formatHoldings(got.json, 8);
     // announcements and filings are written by companies and traders: never instructions
     return { ok: true, text: [UNTRUSTED, text].join("\n") };
+  }
+
+  if (name === "market.scan") {
+    const wanted = Array.isArray(a.symbols) ? [...new Set(a.symbols.map(cleanSymbol).filter((s): s is string => !!s))].slice(0, SCAN_MAX) : [];
+    const limit = typeof a.limit === "number" ? Math.max(1, Math.min(15, Math.floor(a.limit))) : 8;
+    let names = wanted;
+    if (names.length === 0) {
+      // what the whole market is trading hardest today: most active, volume spurts, and the biggest movers among the F&O stocks
+      const lists = await Promise.all([build("active", null, "", "")!, build("volume", null, "", "")!, build("movers", null, "", "", "gainers")!, build("movers", null, "", "", "losers")!].map((u) => load(u, d, signal)));
+      const [active, volume, gain, lose] = lists;
+      if (!active!.ok && !volume!.ok && !gain!.ok && !lose!.ok) return fail("The market lists could not be read right now.");
+      const take = (l: (typeof lists)[number] | undefined, n: number, universe?: string): string[] => (l && l.ok ? symbolsOf(l.json, universe).slice(0, n) : []);
+      names = [...new Set([...take(active, 12, "x"), ...take(volume, 8, "x"), ...take(gain, 8, "FOSec"), ...take(lose, 8, "FOSec")].map(cleanSymbol).filter((s): s is string => !!s))].slice(0, SCAN_MAX);
+    }
+    if (names.length === 0) return fail("Give some symbols to scan, or try again when the market lists are available.");
+    const found: Setup[] = [];
+    let looked = 0;
+    let sessionDay = "";
+    for (let i = 0; i < names.length; i += SCAN_BATCH) {
+      const part = names.slice(i, i + SCAN_BATCH);
+      const got = await Promise.all(part.map((s) => load(build("candles", s, "5m", "1d")!, d, signal)));
+      got.forEach((g, k) => {
+        if (!g.ok) return;
+        const series = parseChart(g.json);
+        if (!series) return;
+        looked++;
+        const lastCandle = series.candles[series.candles.length - 1];
+        if (!sessionDay && lastCandle) sessionDay = dayKey(lastCandle.t, series.offset);
+        found.push(...detectSetups(part[k]!, series));
+      });
+    }
+    if (looked === 0) return fail("No candles could be read right now.");
+    const note = `${sessionDay ? ` Latest session in the data: ${sessionDay}.` : ""}${wanted.length ? "" : " (the most active, the volume spurts and the biggest F&O movers of the latest session)"}`;
+    return { ok: true, text: [UNTRUSTED, formatSetups(found, looked, limit) + note].join("\n") };
   }
 
   if (name === "market.replay") {

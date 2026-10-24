@@ -1,19 +1,17 @@
 # Day trade scan (NSE)
 
-Use this when the owner asks what to watch today, for breakout or bounce setups, or whether a stock they name has a setup.
+Use this when the owner asks what is breaking out, for breakout or bounce setups, or whether a stock they name has a setup. For "what should I trade today" use `day-trade-focus`, which includes this.
 
-## Data
-- Candles come from the `market.get` tool: `kind: "candles"`, `symbol` an NSE name (RELIANCE, TCS, INFY) or NIFTY / BANKNIFTY, `interval: "5m"`, `range: "1d"`. Times it returns are India time (IST). The NSE session is 09:15 to 15:30.
-- Say how fresh the last candle is; the feed can lag a few minutes. If the tool fails, say so and stop. Never invent a price or a candle.
-- The owner's own stocks are in `portfolio.holdings` and `portfolio.positions`; look at those names first when they say "my stocks".
-- You cannot scan the whole market. Scan the names the owner gives, their holdings, and the Nifty 50 stocks they ask about, a handful at a time, and say how many you looked at.
+## Tools
+- `market.scan` does the scan: with no symbols it looks at what is trading hardest today (most active, volume spurts, biggest F&O movers, about 28 stocks); with `symbols` it scans the owner's list (up to 28). It returns the setups ranked, with entry, stop and target. Say how many stocks it looked at.
+- `market.get` with `kind: "candles"` (symbol, `interval: "5m"`, `range: "1d"`) shows one stock's candles; `movers`, `active` and `volume` show the raw market lists. NIFTY and BANKNIFTY work as symbols for the index.
+- The owner's own stocks are in `portfolio.holdings` and `portfolio.positions`: use them as `symbols` when they say "my stocks".
+- Times are India time (IST); the session is 09:15 to 15:30. If a tool fails, say so. Never invent a price or a candle.
 
-## Check the index first
-Read NIFTY (or BANKNIFTY for bank stocks) the same way. If it is falling hard, say long setups are against the market.
-
-## Setups
-1. **Opening-range breakout.** Opening range = high and low of the first 15 minutes (the 09:15, 09:20 and 09:25 candles). Long: the first 5-minute candle that closes above the range high. Short: below the range low. A close back inside the range cancels it. Report the range, the trigger candle's time and close, and how far past the range it is.
-2. **Oversold bounce.** Price at least 2% under the day's open, the last candle closing higher than it opened, and its volume above the day's average candle. Say it is a bounce, not a trend.
+## The setups (what the scan checks)
+1. **Opening-range breakout**: the first 5-minute close above the high (or below the low) of the first 15 minutes. A close back inside the range cancels it. "Near" means it is close to triggering.
+2. **Oversold bounce**: price at least 2% under the open, the last candle green, volume above the day's average.
+Entry is the trigger close, the stop the middle of the opening range (bounce: under the bounce candle), the target 1.5 times the risk. "LATE" means it already ran far past the trigger or triggered after 14:30: do not chase it.
 
 ## Answer
-A short list, best first: symbol, setup, trigger price, range. Then offer news (`day-trade-news`), entry (`day-trade-entry`) or the full plan. You show which rules were met; you do not tell the owner to buy or sell.
+The setups, best first, in the scan's words, plus the market view (is NIFTY with it or against it). Offer the news check, the odds (`day-trade-replay`) and the size. These are the setups the rules flag; the owner decides.

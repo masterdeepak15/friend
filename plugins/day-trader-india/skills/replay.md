@@ -11,6 +11,6 @@ Call `market.replay` with `symbol`, `side` (buy or sell), and the plan's `stop` 
 - "Reshuffled past moves, not a forecast", once.
 - Target first and stop first close together is a coin flip; say that. A stop that comes first more often than the target is worth saying out loud.
 - Fewer than about 20 past days: the result is thin, say so.
-- A result is not a promise and not advice to take or skip the trade.
+- A result is not a promise. Say which way the odds lean and let the owner decide.
 
 It works best when the market is open and a few candles of today exist. If the tool says there are too few candles, say it is too early in the session or the stock is thinly traded.
