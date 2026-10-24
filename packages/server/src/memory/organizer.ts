@@ -7,6 +7,7 @@ const SYSTEM = `You organise the long-term memory of a personal assistant into a
 
 Rules:
 - Folders are topics, chosen by what the notes say: for example family/, people/, work/, projects/friend/, preferences/, health/, learning/, tools/, places/. Reuse an existing folder when it fits and make a new one when none does. Go one level deeper when a topic has several parts (projects/friend/...). Names are lowercase letters, digits and dashes.
+- A summary says only what that note says: never facts from other notes.
 - One note for one subject (a person, a project, a habit, a preference). Give it a short file name based on the subject (family/ishita.md), a short title ("Ishita (daughter)") and a one-line summary. Never use a whole sentence as a title.
 - Merge notes about the same subject into one: list them under merges, with the combined text that keeps every fact.
 - Connect related notes (a person and the projects they are in, a project and its repos, a preference and the thing it is about) by listing related paths: the final paths of other notes, either in this batch or already in the tree.
