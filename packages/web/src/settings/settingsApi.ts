@@ -90,6 +90,15 @@ export interface OfficeSettings {
 
 export type ProviderName ="claude" | "claude-code" | "ollama" | "openai";
 
+/** What Friend remembers: the tree of notes, saving by itself, and how much of the index it sees every turn. */
+export interface MemorySettings {
+  enabled: boolean;
+  autoSave: "off" | "on";
+  showSaved: boolean;
+  saveDelaySec: number;
+  maxIndexChars: number;
+}
+
 export interface SettingsView {
   provider: ProviderName;
   model: string;
@@ -108,6 +117,7 @@ export interface SettingsView {
   music?: MusicSettings;
   hud?: HudSettings;
   office?: OfficeSettings;
+  memory?: MemorySettings;
   look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
@@ -219,7 +229,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
   if ((after.approvals ?? "manual") !== (before.approvals ?? "manual")) patch.approvals = after.approvals ?? "manual";
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
-  for (const group of ["ollama", "claudeCode", "voice", "look", "updates", "session"] as const) {
+  for (const group of ["ollama", "claudeCode", "voice", "look", "updates", "session", "memory"] as const) {
     if (!after[group] || !before[group]) continue;
     const changed: Record<string, unknown> = {};
     for (const k of Object.keys(after[group]) as string[]) {
