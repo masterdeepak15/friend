@@ -127,7 +127,7 @@ export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChan
         <div>
           <div className="of-code">FRIEND · OFFICE</div>
           <h3>Hired workers</h3>
-          <p className="of-note">Friend can hire workers: separate Claude Code sessions that work in your project folders, one ticket at a time. Workers use the Claude Code program and model chosen under Model, and every risky step asks you first. Switched off, no worker runs. On the orbital screen, hired workers take the place of the quick-launch buttons. Friend hires and manages the team himself: he decides the jobs, the instructions and who reports to whom. To see who is hired, click the name in the middle of the orbital screen.</p>
+          <p className="of-note">Friend can hire workers: separate Claude Code sessions that work in your project folders, one ticket at a time. Workers use the Claude Code program and model chosen under Model, and their risky steps ask you first, unless you let Friend decide (How much Friend decides, below). Switched off, no worker runs. On the orbital screen, hired workers take the place of the quick-launch buttons. Friend hires and manages the team himself: he decides the jobs, the instructions and who reports to whom. To see who is hired, click the name in the middle of the orbital screen.</p>
         </div>
         <label className="of-switch">
           <input type="checkbox" checked={office.enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
