@@ -100,6 +100,20 @@ export interface MemorySettings {
   maxIndexChars: number;
 }
 
+/** When Friend may speak first. */
+export interface ProactiveSettings {
+  level: "off" | "low" | "medium" | "high";
+  quietFrom: string;
+  quietTo: string;
+  morningAt: string;
+  eveningAt: string;
+  dailyCap: number;
+  minGapMin: number;
+  silenceHours: number;
+  speak: boolean;
+  phone: boolean;
+}
+
 export interface SettingsView {
   provider: ProviderName;
   model: string;
@@ -119,6 +133,7 @@ export interface SettingsView {
   hud?: HudSettings;
   office?: OfficeSettings;
   memory?: MemorySettings;
+  proactive?: ProactiveSettings;
   look: Look;
   ollama: { url: string; model: string; vision: boolean; contextTokens: number };
   /** Any OpenAI-compatible server, such as OmniRoute. The key itself is never sent to the screen. */
@@ -230,7 +245,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
   if ((after.approvals ?? "manual") !== (before.approvals ?? "manual")) patch.approvals = after.approvals ?? "manual";
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
-  for (const group of ["ollama", "claudeCode", "voice", "look", "updates", "session", "memory"] as const) {
+  for (const group of ["ollama", "claudeCode", "voice", "look", "updates", "session", "memory", "proactive"] as const) {
     if (!after[group] || !before[group]) continue;
     const changed: Record<string, unknown> = {};
     for (const k of Object.keys(after[group]) as string[]) {

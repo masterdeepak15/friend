@@ -435,6 +435,15 @@ Friend keeps what it knows about you as a **tree of small Markdown notes** in yo
 
 Next: a Memory screen to browse and edit notes, and a heartbeat that can start a conversation (see `docs/superpowers/specs/2026-10-24-friend-memory-and-heartbeat-design.md`).
 
+## Heartbeat: Friend speaking first
+
+Esc → Settings → **Heartbeat** (set with your PIN; **off** by default). Today Friend only answers; with the heartbeat on it can start the conversation when it has something worth saying.
+
+- **How it decides.** A quiet check runs every minute and costs nothing: it looks for a reason (code only, no model). Only when it finds one, and your limits allow, Friend asks the model once whether to say anything and what. The model has no tools: it can only choose words, which are shown on the screen (and aloud or on your phone if you allowed it). It never cuts in while you are talking or while Friend is busy, and what it said is added to the conversation so your answer has its context.
+- **Levels.** *Low*: only about what you asked for (a task more than two hours overdue). *Medium*: also a morning check-in (what is due today, your Office), an evening check-in, and a word about a memory note dated today or tomorrow. *High*: also a gentle check-in after a long silence (8 hours by default, in waking hours).
+- **Limits.** Quiet hours (22:00 to 07:00 by default: no contact at all), at most 6 contacts a day, at least 30 minutes between two, the morning and evening times, and whether to speak aloud (off by default) or message your phone when no screen is open (needs Telegram linked). Each reason is dealt with once, even across restarts (`proactive.json` in the data folder), and what was already said today is told to the model so it does not repeat itself.
+- **Control and audit.** Only you can change these settings, not Friend. Every contact and every "nothing worth saying" is in the audit log (`proactive.spoke`, `proactive.quiet`).
+
 ## Plugins
 
 **Day trader (India)** is a bundled plugin with ten skills (focus list, scan for setups, news, entry, exit, budget, risk, replay, analyst, smart money) and an exact sizing tool (`trade-plan`). It reads Indian market data through three built-in tools, `market.get` (candles, quotes, NSE announcements, results, insider trades, bulk and block deals, shareholding, top movers, most active, volume spurts), `market.scan` (finds opening-range breakouts and bounces across the market and ranks them) and `market.replay` (replays the rest of the session from the stock's own recent candles). Both use free public feeds (Yahoo Finance and the NSE, no key), follow the Web switch, and work in IST and rupees. Your limits (max loss, money, leverage) are asked each session, never assumed. It is analysis only: it never places an order, you place it in your broker app.

@@ -216,6 +216,22 @@ export const SettingsPatch = z
       .strict(),
     updates: z.object({ auto: z.boolean() }).partial().strict(),
     /** The memory tree. Owner-only. */
+    /** When Friend may speak first. Owner-only. */
+    proactive: z
+      .object({
+        level: z.enum(["off", "low", "medium", "high"]),
+        quietFrom: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        quietTo: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        morningAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        eveningAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        dailyCap: z.number().int().min(1).max(20),
+        minGapMin: z.number().int().min(5).max(720),
+        silenceHours: z.number().int().min(2).max(72),
+        speak: z.boolean(),
+        phone: z.boolean(),
+      })
+      .partial()
+      .strict(),
     memory: z.object({ enabled: z.boolean(), maxIndexChars: z.number().int().min(400).max(6000), autoSave: z.enum(["off", "on"]), showSaved: z.boolean(), autoTidy: z.boolean(), saveDelaySec: z.number().int().min(10).max(3600) }).partial().strict(),
     web: z
       .object({
@@ -292,6 +308,8 @@ export interface SettingsView {
   updates: Config["updates"];
   /** The memory tree. */
   memory: Config["memory"];
+  /** When Friend may speak first. */
+  proactive: Config["proactive"];
   /** Whether Friend tidies the model's own conversation by itself, and how big it may grow first. */
   session: Config["session"];
   /** Searching the web. The keys are never sent to the screen, only whether they are set. */
@@ -363,6 +381,7 @@ export function settingsView(c: Config): SettingsView {
     },
     updates: { auto: c.updates.auto },
     memory: { ...c.memory },
+    proactive: { ...c.proactive },
     session: { autoCompact: c.session.autoCompact, compactAtTokens: c.session.compactAtTokens },
     web: { enabled: c.web.enabled, provider: c.web.provider, searxngUrl: c.web.searxngUrl, braveKeySet: !!c.web.braveKey, tavilyKeySet: !!c.web.tavilyKey },
   };
@@ -378,6 +397,7 @@ export function refuseForAgent(raw: unknown): void {
   if ("brokers" in r || "trading" in r) throw new SettingsError("Broker accounts and the trading level can only be changed by the owner on the settings screen.");
   if ("music" in r || "hud" in r) throw new SettingsError("The music folder and the screen widgets can only be changed by the owner on the settings screen.");
   if ("video" in r) throw new SettingsError("Video settings (which programs run, where videos play, which sites) can only be changed by the owner on the settings screen.");
+  if ("proactive" in r) throw new SettingsError("When Friend may speak first can only be changed by the owner on the settings screen.");
   if ("memory" in r) throw new SettingsError("Whether memory is a tree, and how much of it is shown every turn, can only be changed by the owner on the settings screen.");
   if ("updates" in r) throw new SettingsError("Whether Friend updates itself can only be changed by the owner on the settings screen.");
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
@@ -574,6 +594,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
   if (p.claudeCode) Object.assign(config.claudeCode, p.claudeCode);
   if (p.updates) Object.assign(config.updates, p.updates);
   if (p.memory) Object.assign(config.memory, p.memory);
+  if (p.proactive) Object.assign(config.proactive, p.proactive);
   if (p.session) Object.assign(config.session, p.session);
   if (p.web) {
     const { braveKey, tavilyKey, ...rest } = p.web;

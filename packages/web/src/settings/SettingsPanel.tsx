@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
+import { HeartbeatTab, heartbeatBad } from "./HeartbeatTab";
 import { MemoryTab } from "./MemoryTab";
 import { OfficeTab, officeProblems } from "./OfficeTab";
 import { SecurityTab } from "./SecurityTab";
@@ -128,6 +129,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
   const dirty = Object.keys(patch).length > 0;
   const m = draft.memory;
   const memoryBad = m ? m.saveDelaySec < 10 || m.saveDelaySec > 3600 || m.maxIndexChars < 400 || m.maxIndexChars > 6000 : false; // out of range: it would only be refused
+  const heartbeatBadNow = draft.proactive ? heartbeatBad(draft.proactive) : false; // a number out of range: it would only be refused
   const officeBad = draft.office ? officeProblems(draft.office).length > 0 : false; // a bad id, an empty folder or a bad pattern: it would only be refused
   const set = <G extends "ollama" | "claudeCode" | "voice" | "look">(group: G, field: keyof SettingsView[G], value: unknown) =>
     setDraft({ ...draft, [group]: { ...draft[group], [field]: value } });
@@ -534,12 +536,13 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       {tab === "system" && <StartupTab auto={draft.updates?.auto ?? true} onAuto={(on) => setDraft({ ...draft, updates: { auto: on } })} />}
       {tab === "office" && draft.office && <OfficeTab office={draft.office} onChange={(p) => setDraft({ ...draft, office: { ...draft.office!, ...p } })} />}
       {tab === "memory" && draft.memory && <MemoryTab memory={draft.memory} onChange={(p) => setDraft({ ...draft, memory: { ...draft.memory!, ...p } })} />}
+      {tab === "heartbeat" && draft.proactive && <HeartbeatTab proactive={draft.proactive} onChange={(p) => setDraft({ ...draft, proactive: { ...draft.proactive!, ...p } })} />}
       {tab === "usage" && <UsageTab />}
           {tab === "security" && <SecurityTab />}
     </>
   );
   const saveClick = () => {
-    if (officeBad || memoryBad) return;
+    if (officeBad || memoryBad || heartbeatBadNow) return;
     setNote(null);
     setError(null);
     if (needsPin(patch)) setAsking(true);
@@ -619,7 +622,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           type="button"
           style={touch}
           className="primary"
-          disabled={!dirty || busy || officeBad || memoryBad}
+          disabled={!dirty || busy || officeBad || memoryBad || heartbeatBadNow}
           onClick={saveClick}
         >
           {dirty && !needsPin(patch) ? "Save" : "Save…"}

@@ -53,6 +53,8 @@ import { MemoryTree } from "./memory/tree";
 import { importFlatNotes } from "./memory/import";
 import { MemoryKeeper } from "./memory/keeper";
 import { MemoryOrganizer } from "./memory/organizer";
+import { ProactiveBeat } from "./proactive/beat";
+import { saveMessage } from "./agent/history";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
 import { WeatherService, weatherSummary } from "./weather";
 import { dirname, extname, resolve } from "node:path";
@@ -834,6 +836,39 @@ export async function createApp(opts: AppOptions) {
       audit.log("system", "task.fired", { id: task.id });
       if (speaker) void speaker.speak(`Reminder: ${task.title}`, broadcast).catch(() => {});
     },
+  });
+
+  /** Friend speaking first: a quiet check every minute, a word with the model only when something is worth saying and the owner's limits allow. */
+  const proactive = new ProactiveBeat({
+    config: () => config.proactive,
+    provider,
+    db,
+    tree: config.memory.enabled ? memoryTree : null,
+    tasks,
+    officeLine: () => {
+      if (!config.office.enabled) return null;
+      const st = office.status();
+      const working = st.workers.filter((w) => w.status === "running" || w.status === "starting").length;
+      const waiting = st.workers.filter((w) => w.status === "waiting").length;
+      const review = st.tickets.filter((t) => t.status === "review").length;
+      return st.workers.length ? `${st.workers.length} workers, ${working} working, ${waiting} waiting for the owner, ${review} tickets to review` : null;
+    },
+    screens: () => clients.size,
+    busy: () => agent.isBusy(),
+    assistantName: () => auth.assistantName(),
+    phoneReady: () => channelHub.status().telegram.linked,
+    deliver: async (text, how) => {
+      saveMessage(db, { role: "assistant", content: [{ type: "text", text }] }); // so the owner's answer has its context
+      if (how.screens > 0) {
+        broadcast({ type: "caption.delta", text });
+        broadcast({ type: "caption.end" });
+        if (how.speak && speaker) void speaker.speak(text, broadcast).catch(() => {});
+      } else if (how.phone) {
+        await channelHub.send("telegram", "me", text);
+      }
+    },
+    audit,
+    statePath: join(opts.dataDir, "proactive.json"),
   });
 
   /** Checks the owner's PIN through the shared rate limit. */
@@ -1726,6 +1761,7 @@ export async function createApp(opts: AppOptions) {
     },
     async start(): Promise<{ port: number }> {
       heartbeat.start();
+  proactive.start();
       // connectors that were on come back in the background; Friend does not wait for them. Chrome control comes back through its plugin,
       // which also corrects a connector saved for a copy of the program that is no longer where it was.
       // an owner who connected Chrome control before it was a plugin keeps it, switched on as it was
@@ -1762,6 +1798,7 @@ export async function createApp(opts: AppOptions) {
       hostPlayer.dispose();
       videoHub.dispose();
       heartbeat.stop();
+      proactive.stop();
       memoryKeeper.stop();
       clearTimeout(tidyAtStart);
       channelHub.stop();

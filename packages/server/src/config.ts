@@ -33,6 +33,7 @@ export interface Config {
   /** Updating Friend: by itself, or only when the owner says so. */
   updates: UpdatesConfig;
   memory: MemoryConfig;
+  proactive: ProactiveConfig;
   session: SessionConfig;
   web: WebConfig;
   /** What the screen shows besides the AI's pictures: minimal, companion (status line and clock) or workspace (also chat and schedule). */
@@ -642,6 +643,43 @@ export interface VoiceConfig {
   duckPercent: number;
 }
 
+/** When Friend may speak first. Everything here is the owner's to set; the default is off. */
+export interface ProactiveConfig {
+  /** off: never. low: only about things you asked for (a task that is long overdue). medium: also a morning and an evening check-in and things in memory dated today or tomorrow. high: also a gentle check-in after a long silence. */
+  level: "off" | "low" | "medium" | "high";
+  /** No contact at all between these two times (24-hour, may wrap past midnight). */
+  quietFrom: string;
+  quietTo: string;
+  morningAt: string;
+  eveningAt: string;
+  /** The most contacts in a day, and the least time between two. */
+  dailyCap: number;
+  minGapMin: number;
+  /** How many hours of silence before a high-level check-in. */
+  silenceHours: number;
+  /** Say it aloud as well as on the screen. */
+  speak: boolean;
+  /** When no screen is open, send it to your phone (Telegram, once linked). */
+  phone: boolean;
+}
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const sanitizeProactive = (p: Partial<ProactiveConfig> | undefined): ProactiveConfig => {
+  const num = (v: unknown, min: number, max: number, def: number): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : def);
+  const time = (v: unknown, def: string): string => (typeof v === "string" && HHMM.test(v) ? v : def);
+  return {
+    level: p?.level === "low" || p?.level === "medium" || p?.level === "high" ? p.level : "off",
+    quietFrom: time(p?.quietFrom, "22:00"),
+    quietTo: time(p?.quietTo, "07:00"),
+    morningAt: time(p?.morningAt, "08:00"),
+    eveningAt: time(p?.eveningAt, "20:30"),
+    dailyCap: num(p?.dailyCap, 1, 20, 6),
+    minGapMin: num(p?.minGapMin, 5, 720, 30),
+    silenceHours: num(p?.silenceHours, 2, 72, 8),
+    speak: p?.speak === true,
+    phone: p?.phone !== false,
+  };
+};
+
 export interface MemoryConfig {
   /** The memory tree: small notes in folders the assistant shapes. Off means the older flat list of notes. */
   enabled: boolean;
@@ -793,6 +831,7 @@ const defaults = (dataDir: string): Config => ({
   voice: { ...DEFAULT_VOICE },
   updates: sanitizeUpdates(undefined),
   memory: sanitizeMemory(undefined),
+  proactive: sanitizeProactive(undefined),
   session: sanitizeSession(undefined),
   web: sanitizeWeb(undefined),
   view: "companion",
@@ -849,6 +888,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
     updates: sanitizeUpdates(stored.updates),
   memory: sanitizeMemory(stored.memory),
+  proactive: sanitizeProactive(stored.proactive),
   session: sanitizeSession(stored.session),
   web: sanitizeWeb(stored.web),
     view: stored.view === "minimal" || stored.view === "workspace" ? stored.view : "companion",

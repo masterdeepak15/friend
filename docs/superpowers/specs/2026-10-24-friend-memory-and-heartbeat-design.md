@@ -1,6 +1,6 @@
 # Friend memory tree and heartbeat
 
-Date: 2026-10-24. Status: approved by the owner. Built so far: step 1 (the tree, its tools, the import, the terminal commands) and step 2 (the save pass). Not built: the Memory screen, the daily consolidation, the heartbeat.
+Date: 2026-10-24. Status: approved by the owner. Built so far: step 1 (the tree, its tools, the import, the terminal commands) and step 2 (the save pass). Step 3 became the AI-driven tidy pass (topics, titles, links). Step 4, the heartbeat, is built: levels off/low/medium/high, quiet hours, a daily cap, a gap between contacts, screen first, voice and phone optional. Not built: the Memory screen, the heartbeat deciding from memory what to follow up on beyond dated notes, a local model for upkeep.
 
 Step 2 as built: the pass runs after the owner has been quiet for `memory.saveDelaySec` (default 120 s) or after 8 turns, reads the conversation since the last pass (a cursor kept in `memory/.keeper.json`), and writes through the tree. `memory.autoSave` is `off` or `on` (the "ask first" mode waits for the Memory screen). The upkeep model is the main model; the choice of a local model is still to do.
 
