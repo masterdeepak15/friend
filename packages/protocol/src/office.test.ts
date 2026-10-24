@@ -59,7 +59,7 @@ describe("the messages", () => {
 describe("the six office tools", () => {
   const def = (n: string) => TOOL_DEFS.find((t) => t.name === n);
   it("exist with the planned tiers, run on the gateway", () => {
-    const want: Record<string, string> = { "office.status": "T0", "office.hire": "T1", "office.assign": "T2", "office.say": "T2", "office.review": "T1", "office.stop": "T1" };
+    const want: Record<string, string> = { "office.status": "T0", "office.hire": "T1", "office.assign": "T1", "office.say": "T1", "office.review": "T1", "office.stop": "T1" };
     for (const [name, tier] of Object.entries(want)) {
       expect(def(name)?.baseTier, name).toBe(tier);
       expect(def(name)?.target, name).toBe("gateway");
@@ -90,9 +90,9 @@ describe("the six office tools", () => {
     expect(ServerMsg.safeParse({ type: "office.state", enabled: true, workers: [{ ...w, title: undefined }], tickets: [], quota: { fiveHour: null, sevenDay: null } }).success).toBe(false);
   });
 
-  it("office.fire removes a worker, asks the owner, and the screen can ask for it too", () => {
+  it("office.fire removes a worker without an owner card, and the screen can ask for it too", () => {
     const d = TOOL_DEFS.find((t) => t.name === "office.fire")!;
-    expect(d.baseTier).toBe("T2");
+    expect(d.baseTier).toBe("T1");
     expect(d.input.safeParse({ worker: "Ada" }).success).toBe(true);
     expect(d.input.safeParse({}).success).toBe(false);
     expect(describeCall("office.fire", { worker: "Ada" })).toMatch(/Ada/);

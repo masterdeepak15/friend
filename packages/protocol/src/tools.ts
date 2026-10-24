@@ -682,16 +682,16 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "office.assign",
-    description: "Give a worker a ticket and start it. Keep tickets small and specific; ask the owner before starting big work.",
+    description: "Give a worker a ticket and start it. Keep tickets small and specific. You decide this yourself; no approval card, so tell the owner what you started.",
     input: z.object({ worker: z.string().min(1).max(64), title: z.string().min(1).max(200), description: z.string().max(4000).optional() }),
-    baseTier: "T2",
+    baseTier: "T1",
     target: "gateway",
   },
   {
     name: "office.say",
     description: "Say something to a worker. It is queued as a follow-up message in that worker's own conversation.",
     input: z.object({ worker: z.string().min(1).max(64), text: z.string().min(1).max(2000) }),
-    baseTier: "T2",
+    baseTier: "T1",
     target: "gateway",
   },
   {
@@ -705,7 +705,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "office.fire",
     description: "Remove a worker from the Office when it is no longer needed. It is stopped, the workers who reported to it now report to its manager, and its finished tickets stay. The owner is asked.",
     input: z.object({ worker: z.string().min(1).max(64) }),
-    baseTier: "T2",
+    baseTier: "T1",
     target: "gateway",
   },
   {
