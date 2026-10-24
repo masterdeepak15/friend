@@ -90,6 +90,8 @@ export interface AgentDeps {
   memoryTree?: MemoryTree;
   /** A turn with the owner ended (not a guest or a household member). Friend uses it to save what is worth keeping. */
   onOwnerTurnEnd?: () => void;
+  /** Files the unfiled notes into topics now (memory.tidy). Returns a sentence about what was done. */
+  memoryTidy?: () => Promise<string>;
   /** The owner's to-dos and reminders. Without it the task tools report they are unavailable. */
   tasks?: Tasks;
   /** Runs programs in a throwaway container. Without it the code tool reports it is unavailable. */
@@ -557,7 +559,7 @@ export class Agent {
       return { ok: true, text: found.length ? found.map((f) => `${f.path} | ${f.title}${f.summary ? ` | ${f.summary}` : ""}`).join("\n") : "No matching notes." };
     }
     if (name === "memory.write") {
-      const r = tree.write(args.path, String(args.text), { title: str("title"), summary: str("summary"), folderSummary: str("folderSummary"), source: "agent" });
+      const r = tree.write(args.path, String(args.text), { title: str("title"), summary: str("summary"), folderSummary: str("folderSummary"), ...(Array.isArray(args.related) ? { related: args.related.filter((x): x is string => typeof x === "string") } : {}), source: "agent" });
       if (!r.ok) return { ok: false, text: r.error };
       audit.log("agent", "memory.write", { path: r.path, length: String(args.text).length });
       return { ok: true, text: `Saved ${r.path}.${r.hint ? ` ${r.hint}` : ""}` };
@@ -741,6 +743,13 @@ export class Agent {
       const r = await d.web.run(call.name, args, this.abort?.signal);
       if (r.ok && call.name === "web.search") for (const u of urlsIn(r.text)) this.seenUrls.add(u);
       return r.ok ? { text: r.text, isError: false } : fail(r.text);
+    }
+
+    if (call.name === "memory.tidy") {
+      if (!d.memoryTidy || !d.memoryTree || !d.config.memory.enabled) return fail("Tidying memory is not available.");
+      const said = await d.memoryTidy();
+      d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: true });
+      return { text: said, isError: false };
     }
 
     if (call.name === "market.get" || call.name === "market.scan" || call.name === "market.replay") {

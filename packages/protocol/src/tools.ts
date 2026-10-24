@@ -150,8 +150,15 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "memory.write",
     description:
-      "Save or change a note in the memory tree at a path you choose, for example family/priya.md. Folders are made as needed and listed in their index for you. Keep it short and about one thing. title and summary (one line) show in the index; folderSummary describes the folder. Never save passwords, PINs or keys.",
-    input: z.object({ path: z.string().min(1).max(200), text: z.string().min(1).max(6000), title: z.string().max(80).optional(), summary: z.string().max(160).optional(), folderSummary: z.string().max(160).optional() }),
+      "Save or change a note in the memory tree at a path you choose, for example family/priya.md. Folders are made as needed and listed in their index for you. Keep it short and about one thing. title (short, not a sentence) and summary (one line) show in the index; folderSummary describes the folder; related lists paths of connected notes. Never save passwords, PINs or keys.",
+    input: z.object({ path: z.string().min(1).max(200), text: z.string().min(1).max(6000), title: z.string().max(80).optional(), summary: z.string().max(160).optional(), folderSummary: z.string().max(160).optional(), related: z.array(z.string().max(200)).max(8).optional() }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "memory.tidy",
+    description: "File the unfiled notes in inbox/ into topic folders now: short titles, one-line summaries, related notes linked, duplicates merged. Use it when the owner asks you to tidy or organise memory, or after saving several quick notes.",
+    input: z.object({}),
     baseTier: "T1",
     target: "gateway",
   },
@@ -794,6 +801,8 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return `Read memory: ${visible(clip(String(a.path ?? "the root"), 200))}`;
     case "memory.write":
       return `Save a memory note at ${visible(clip(String(a.path ?? ""), 200))}`;
+    case "memory.tidy":
+      return "Tidy memory into topics";
     case "memory.move":
       return `Move a memory note ${visible(clip(String(a.from ?? ""), 100))} to ${visible(clip(String(a.to ?? ""), 100))}`;
     case "skill.use":

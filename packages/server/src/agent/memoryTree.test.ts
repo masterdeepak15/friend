@@ -32,6 +32,8 @@ let tree: MemoryTree;
 let flat: Memory;
 let dir: string;
 let ended = 0;
+let tidyReply = "Filed 3 notes and merged 1 under family, projects; 0 left in inbox/.";
+let tidied = 0;
 let config: ReturnType<typeof loadConfig>;
 let build: (provider: FakeProvider, o?: { tree?: boolean }) => Agent;
 
@@ -44,6 +46,7 @@ const ctx = { trust: "owner" as const, emit, ip: "9.9.9.9" };
 beforeEach(async () => {
   emitted = [];
   ended = 0;
+  tidied = 0;
   decision = "approve";
   dir = mkdtempSync(join(tmpdir(), "friend-memtree-"));
   db = openDb(dir);
@@ -69,6 +72,10 @@ beforeEach(async () => {
       memory: flat,
       onOwnerTurnEnd: () => {
         ended++;
+      },
+      memoryTidy: async () => {
+        tidied++;
+        return tidyReply;
       },
       ...(o.tree === false ? {} : { memoryTree: tree }),
       approvals,
@@ -151,6 +158,32 @@ describe("memory tools over the tree", () => {
     const s = system(p);
     expect(s).toMatch(/\(more entries: open the root with memory\.read\)/);
     expect(s.match(/\(topic-\d+\/\)/g)!.length).toBeLessThan(15);
+  });
+});
+
+describe("memory.tidy", () => {
+  it("asks the organiser, needs no approval, and tells the model what was done", async () => {
+    const p = new FakeProvider([[call("1", "memory.tidy", {}), done], [text("Tidied."), done]]);
+    await build(p).runTurn("tidy my memory", ctx);
+    expect(tidied).toBe(1);
+    expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
+    expect(lastTool(p)).toMatch(/Filed 3 notes and merged 1/);
+  });
+
+  it("is reported as unavailable when the tree is off", async () => {
+    config.memory.enabled = false;
+    const p = new FakeProvider([[call("1", "memory.tidy", {}), done], [text("ok"), done]]);
+    await build(p).runTurn("tidy", ctx);
+    expect(tidied).toBe(0);
+    expect(lastTool(p)).toMatch(/not available/);
+  });
+
+  it("memory.write takes related notes and links them", async () => {
+    tree.write("family/sarika.md", "Sarika is the owner's wife.", { title: "Sarika" });
+    const p = new FakeProvider([[call("1", "memory.write", { path: "family/ishita.md", text: "Ishita is the owner's daughter.", title: "Ishita", related: ["family/sarika.md", "nope.md"] }), done], [text("ok"), done]]);
+    await build(p).runTurn("my daughter is Ishita", ctx);
+    const n = tree.notes().find((x) => x.path === "family/ishita.md")!;
+    expect(n.related).toEqual(["family/sarika.md"]);
   });
 });
 

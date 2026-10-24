@@ -95,6 +95,7 @@ export interface MemorySettings {
   enabled: boolean;
   autoSave: "off" | "on";
   showSaved: boolean;
+  autoTidy: boolean;
   saveDelaySec: number;
   maxIndexChars: number;
 }

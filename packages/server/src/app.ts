@@ -52,6 +52,7 @@ import { Memory } from "./memory";
 import { MemoryTree } from "./memory/tree";
 import { importFlatNotes } from "./memory/import";
 import { MemoryKeeper } from "./memory/keeper";
+import { MemoryOrganizer } from "./memory/organizer";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
 import { WeatherService, weatherSummary } from "./weather";
 import { dirname, extname, resolve } from "node:path";
@@ -627,8 +628,17 @@ export async function createApp(opts: AppOptions) {
   };
 
   const weatherService = opts.weather ?? new WeatherService();
+  const say = (text: string): void => {
+    broadcast({ type: "activity", text });
+    setTimeout(() => {
+      if (!agent.isBusy()) broadcast({ type: "activity", text: null });
+    }, 4000).unref();
+  };
+  /** Files unfiled notes into topic folders, with short titles and links between related notes. */
+  const memoryOrganizer = new MemoryOrganizer({ tree: memoryTree, provider, config: () => config.memory, audit, busy: () => agent.isBusy(), say });
   /** Saves what is worth keeping from the conversation once the owner has paused. */
   const memoryKeeper: MemoryKeeper = new MemoryKeeper({
+    after: () => void memoryOrganizer.maybeRun(),
     tree: memoryTree,
     db,
     provider,
@@ -643,6 +653,9 @@ export async function createApp(opts: AppOptions) {
     },
   });
   if (config.memory.enabled && config.memory.autoSave === "on") memoryKeeper.init();
+  // notes that came over from the older list, or were saved quickly, are filed under topics a little after Friend starts
+  const tidyAtStart = setTimeout(() => void memoryOrganizer.maybeRun(), 45_000);
+  tidyAtStart.unref();
   const agent = new Agent({
     settings: agentSettings,
     mcp: hub,
@@ -665,6 +678,12 @@ export async function createApp(opts: AppOptions) {
     memory,
     memoryTree,
     onOwnerTurnEnd: () => memoryKeeper.notify(),
+    memoryTidy: async () => {
+      const r = await memoryOrganizer.run();
+      if (r.skipped === "nothing") return "There is nothing unfiled: every note is already in a topic folder.";
+      if (r.skipped === "no-answer") return "I could not tidy memory just now. Try again in a moment.";
+      return `Filed ${r.filed} notes and merged ${r.merged}${r.folders.length ? ` under ${r.folders.join(", ")}` : ""}; ${r.left} left in inbox/.`;
+    },
     tasks,
     plugins,
     weather: weatherService,
@@ -1744,6 +1763,7 @@ export async function createApp(opts: AppOptions) {
       videoHub.dispose();
       heartbeat.stop();
       memoryKeeper.stop();
+      clearTimeout(tidyAtStart);
       channelHub.stop();
       if (brokerTimer) clearInterval(brokerTimer);
       statsStop?.();

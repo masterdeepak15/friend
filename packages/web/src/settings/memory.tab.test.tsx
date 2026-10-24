@@ -6,7 +6,7 @@ import { DEFAULT_LOOK, diffSettings, type MemorySettings, type SettingsApi, type
 
 afterEach(cleanup);
 
-const base = (over: Partial<MemorySettings> = {}): MemorySettings => ({ enabled: true, autoSave: "on", showSaved: true, saveDelaySec: 120, maxIndexChars: 1500, ...over });
+const base = (over: Partial<MemorySettings> = {}): MemorySettings => ({ enabled: true, autoSave: "on", showSaved: true, autoTidy: true, saveDelaySec: 120, maxIndexChars: 1500, ...over });
 
 function mount(over: Partial<MemorySettings> = {}) {
   const onChange = vi.fn();
@@ -24,6 +24,8 @@ describe("the Memory tab", () => {
     expect(onChange).toHaveBeenLastCalledWith({ autoSave: "off" });
     fireEvent.click(screen.getByRole("checkbox", { name: /tell me what was remembered/i }));
     expect(onChange).toHaveBeenLastCalledWith({ showSaved: false });
+    fireEvent.click(screen.getByRole("checkbox", { name: /tidy notes into topics/i }));
+    expect(onChange).toHaveBeenLastCalledWith({ autoTidy: false });
     typeInto(/wait after i stop talking/i, "300");
     expect(onChange).toHaveBeenLastCalledWith({ saveDelaySec: 300 });
     typeInto(/index size/i, "2500");

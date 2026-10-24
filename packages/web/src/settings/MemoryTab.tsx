@@ -69,7 +69,14 @@ export function MemoryTab({ memory, onChange }: { memory: MemorySettings; onChan
         </div>
       </Card>
 
-      <Card code="02" title="What it sees every turn" note="Friend always sees the top of the memory index and opens a folder only when a question needs it.">
+      <Card code="02" title="Keeping it in order" note="Quick notes land in an inbox. Friend can file them into topic folders (family, work, projects and so on), give them short titles, link notes that belong together and merge duplicates, so memory reads like a small wiki.">
+        <label className="of-check">
+          <input type="checkbox" checked={memory.autoTidy} disabled={!memory.enabled} onChange={(e) => onChange({ autoTidy: e.target.checked })} /> Tidy notes into topics, by itself
+          <small className="of-hint">When a few notes have collected, and after Friend starts. You can also say "tidy my memory" at any time.</small>
+        </label>
+      </Card>
+
+      <Card code="03" title="What it sees every turn" note="Friend always sees the top of the memory index and opens a folder only when a question needs it.">
         <div className="of-grid">
           <Field label="Index size (characters)" hint="The most of the index put in every conversation. A bigger index shows more of your memory at once but costs more each turn. From 400 to 6000.">
             <input type="number" min={400} max={6000} step={100} value={memory.maxIndexChars} disabled={!memory.enabled} onChange={(e) => onChange({ maxIndexChars: whole(e.target.value) })} />

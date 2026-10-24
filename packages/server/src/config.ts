@@ -651,6 +651,8 @@ export interface MemoryConfig {
   autoSave: "off" | "on";
   /** Say, in one line on the screen, what was saved. */
   showSaved: boolean;
+  /** Whether Friend files unfiled notes into topic folders, gives them short titles and links related notes, by itself. */
+  autoTidy: boolean;
   /** How long the owner must be quiet before the save pass runs, seconds. */
   saveDelaySec: number;
 }
@@ -659,6 +661,7 @@ export const sanitizeMemory = (m: Partial<MemoryConfig> | undefined): MemoryConf
   maxIndexChars: typeof m?.maxIndexChars === "number" && Number.isFinite(m.maxIndexChars) ? Math.min(6000, Math.max(400, Math.round(m.maxIndexChars))) : 1500,
   autoSave: m?.autoSave === "off" ? "off" : "on",
   showSaved: typeof m?.showSaved === "boolean" ? m.showSaved : true,
+  autoTidy: typeof m?.autoTidy === "boolean" ? m.autoTidy : true,
   saveDelaySec: typeof m?.saveDelaySec === "number" && Number.isFinite(m.saveDelaySec) ? Math.min(3600, Math.max(10, Math.round(m.saveDelaySec))) : 120,
 });
 

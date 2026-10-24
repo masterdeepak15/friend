@@ -34,7 +34,7 @@ export interface Found {
   summary: string;
 }
 export interface Problem {
-  kind: "unlisted" | "dead-link" | "no-index" | "unlisted-folder";
+  kind: "unlisted" | "dead-link" | "no-index" | "unlisted-folder" | "dead-related";
   path: string;
 }
 
@@ -82,6 +82,8 @@ interface Note {
   summary: string;
   updated: string;
   source: string;
+  /** Paths from the root of other notes this one is about, kept in the header; the body shows them as links. */
+  related: string[];
   body: string;
 }
 
@@ -97,11 +99,23 @@ function parseNote(text: string, fallbackTitle: string): Note {
     body = m[2]!;
   }
   const heading = /^#\s+(.+)$/m.exec(body)?.[1];
-  return { title: head.title || heading || fallbackTitle, summary: head.summary ?? "", updated: head.updated ?? "", source: head.source ?? "", body: body.replace(/^\n+/, "") };
+  const related = (head.related ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  // the links under "Related" are drawn from the header each time a note is saved, so they are not part of what the note says
+  body = body.replace(/\n+## Related\n(?:- .*\n?)*\s*$/, "\n");
+  return { title: head.title || heading || fallbackTitle, summary: head.summary ?? "", updated: head.updated ?? "", source: head.source ?? "", related, body: body.replace(/^\n+/, "").replace(/\s+$/, "") };
 }
 
-function renderNote(n: Note): string {
-  return `---\ntitle: ${n.title}\nsummary: ${n.summary}\nupdated: ${n.updated}\nsource: ${n.source}\n---\n\n${n.body.trim()}\n`;
+function renderNote(n: Note, links: string[] = []): string {
+  const rel = n.related.length ? `related: ${n.related.join(", ")}\n` : "";
+  const section = links.length ? `\n\n## Related\n${links.join("\n")}` : "";
+  return `---\ntitle: ${n.title}\nsummary: ${n.summary}\nupdated: ${n.updated}\nsource: ${n.source}\n${rel}---\n\n${n.body.trim()}${section}\n`;
+}
+
+/** A link from a note in `fromFolder` to the note at `to` (a path from the root), the way an editor can follow it. */
+function relativeLink(fromFolder: string[], to: string[]): string {
+  let i = 0;
+  while (i < fromFolder.length && i < to.length - 1 && fromFolder[i] === to[i]) i++;
+  return [...Array(fromFolder.length - i).fill(".."), ...to.slice(i)].join("/");
 }
 
 /** An index file: free text above (kept as the owner or the assistant wrote it), then one link line per entry. */
@@ -255,7 +269,7 @@ export class MemoryTree {
    * Saves a note, making the folders it needs and listing it (and every new folder on the way) in the indexes. Creating a folder is just
    * writing a note into it: the assistant decides the topic names.
    */
-  write(raw: unknown, text: string, o: { title?: string; summary?: string; source?: Source; folderSummary?: string } = {}): Result<{ path: string; hint?: string }> {
+  write(raw: unknown, text: string, o: { title?: string; summary?: string; source?: Source; folderSummary?: string; related?: string[] } = {}): Result<{ path: string; hint?: string }> {
     const p = cleanPath(raw);
     if (!p.ok) return p;
     if (!p.isNote || p.parts[p.parts.length - 1] === INDEX_FILE) return { ok: false, error: "A note's path ends in .md, for example people/priya.md. INDEX.md is kept by memory itself." };
@@ -273,7 +287,8 @@ export class MemoryTree {
     const prev = existed ? parseNote(readFileSync(file, "utf8"), humanize(name)) : null;
     const title = oneLine(o.title ?? prev?.title ?? humanize(name), MAX_TITLE);
     const summary = oneLine(o.summary ?? prev?.summary ?? body.split("\n")[0]!.replace(/^#+\s*/, ""), MAX_SUMMARY);
-    this.writeFile(file, renderNote({ title, summary, updated: today(this.clock()), source: o.source ?? "agent", body }));
+    const related = o.related !== undefined ? this.validRelated(o.related, p.parts.join("/")) : (prev?.related ?? []).filter((r) => this.noteExists(r));
+    this.writeFile(file, renderNote({ title, summary, updated: today(this.clock()), source: o.source ?? prev?.source ?? "agent", related, body }, this.linkLines(folder, related)));
     this.list(folder, { kind: "note", title, target: name, summary });
     if (o.folderSummary && folder.length > 0) {
       const parent = this.readIndexOf(folder.slice(0, -1));
@@ -290,6 +305,68 @@ export class MemoryTree {
     return { ok: true, path: p.parts.join("/"), ...(hints.length ? { hint: hints.join(" ") } : {}) };
   }
 
+  private noteExists(path: string): boolean {
+    const p = cleanPath(path);
+    return p.ok && p.isNote && p.parts[p.parts.length - 1] !== INDEX_FILE && !this.hasLink(p.parts) && existsSync(this.abs(p.parts));
+  }
+
+  /** Paths of notes that exist, are not the note itself, and are each listed once. */
+  private validRelated(list: string[], self: string): string[] {
+    const out: string[] = [];
+    for (const r of list) {
+      const p = cleanPath(r);
+      if (!p.ok || !p.isNote) continue;
+      const path = p.parts.join("/");
+      if (path !== self && !out.includes(path) && this.noteExists(path)) out.push(path);
+    }
+    return out.slice(0, 12);
+  }
+
+  private linkLines(fromFolder: string[], related: string[]): string[] {
+    return related.map((r) => {
+      const parts = r.split("/");
+      const note = parseNote(readFileSync(this.abs(parts), "utf8"), humanize(parts[parts.length - 1]!));
+      return `- [${note.title}](${relativeLink(fromFolder, parts)})${note.summary ? ` — ${note.summary}` : ""}`;
+    });
+  }
+
+  /** Sets the one-line description shown beside a folder in its parent's index. */
+  describe(raw: unknown, summary: string): Result {
+    const p = cleanPath(raw);
+    if (!p.ok) return p;
+    if (p.isNote || p.parts.length === 0 || !existsSync(this.abs(p.parts))) return { ok: false, error: "That is not a folder in memory." };
+    this.list(p.parts.slice(0, -1), { kind: "folder", title: humanize(p.parts[p.parts.length - 1]!), target: `${p.parts[p.parts.length - 1]}/`, summary: oneLine(summary, MAX_SUMMARY) });
+    return { ok: true };
+  }
+
+  /** Every note (path, title, summary, related), reading the files. For tidying, and for the notes' links. */
+  notes(): { path: string; title: string; summary: string; related: string[]; body: string }[] {
+    const out: { path: string; title: string; summary: string; related: string[]; body: string }[] = [];
+    const walk = (dir: string, parts: string[]): void => {
+      if (!existsSync(dir)) return;
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.isSymbolicLink()) continue;
+        if (e.isDirectory()) walk(join(dir, e.name), [...parts, e.name]);
+        else if (e.isFile() && e.name.endsWith(".md") && e.name !== INDEX_FILE) {
+          const n = parseNote(readFileSync(join(dir, e.name), "utf8"), humanize(e.name));
+          out.push({ path: [...parts, e.name].join("/"), title: n.title, summary: n.summary, related: n.related, body: n.body });
+        }
+      }
+    };
+    walk(this.root, []);
+    return out;
+  }
+
+  /** After a note or folder moved or was deleted, notes that pointed at it follow it (or drop the pointer). */
+  private fixRelated(from: string, to: string | null): void {
+    const prefix = from.endsWith(".md") ? null : `${from}/`;
+    for (const n of this.notes()) {
+      const next = n.related.flatMap((r) => (r === from ? (to ? [to] : []) : prefix && r.startsWith(prefix) ? (to ? [`${to}/${r.slice(prefix.length)}`] : []) : [r]));
+      if (JSON.stringify(next) === JSON.stringify(n.related)) continue;
+      this.write(n.path, n.body, { related: next, source: "agent" });
+    }
+  }
+
   /** Deletes a note, or a folder with everything in it, and takes it off its index. The root cannot be deleted. */
   remove(raw: unknown): Result<{ removed: number }> {
     const p = cleanPath(raw);
@@ -304,6 +381,7 @@ export class MemoryTree {
     const folder = p.parts.slice(0, -1);
     const name = p.parts[p.parts.length - 1]!;
     this.unlist(folder, p.isNote ? name : `${name}/`);
+    this.fixRelated(p.parts.join("/"), null);
     return { ok: true, removed };
   }
 
@@ -348,6 +426,8 @@ export class MemoryTree {
     } else {
       this.list(toFolder, { kind: "folder", title: old?.title ?? humanize(toName), target: `${toName}/`, summary: old?.summary ?? "" });
     }
+    this.fixRelated(a.parts.join("/"), b.parts.join("/"));
+    if (a.isNote) this.write(b.parts.join("/"), parseNote(readFileSync(dst, "utf8"), humanize(toName)).body, { source: "agent" }); // its own links are drawn again from where it is now
     return { ok: true, path: b.parts.join("/") };
   }
 
@@ -425,6 +505,7 @@ export class MemoryTree {
       for (const l of listed) if (!seen.has(l.target)) problems.push({ kind: "dead-link", path: [...folder, l.target].join("/") });
     };
     walk([]);
+    for (const n of this.notes()) for (const r of n.related) if (!this.noteExists(r)) problems.push({ kind: "dead-related", path: `${n.path} -> ${r}` });
     return problems;
   }
 
@@ -432,6 +513,12 @@ export class MemoryTree {
   repair(): number {
     const problems = this.check();
     for (const p of problems) {
+      if (p.kind === "dead-related") {
+        const [note] = p.path.split(" -> ");
+        const n = this.notes().find((x) => x.path === note);
+        if (n) this.write(n.path, n.body, { related: n.related, source: "agent" });
+        continue;
+      }
       const parts = p.path.split("/").filter(Boolean);
       if (p.kind === "dead-link") {
         const target = parts[parts.length - 1]!;
