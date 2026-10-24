@@ -74,7 +74,7 @@ describe("finishing a login", () => {
   it("remembers the login after a restart", async () => {
     const { hub, login, config, dir, db, kite } = setup();
     await login();
-    const again = new BrokerHub({ config, dataDir: dir, db, audit: new Audit(db), channels: { send: async () => ({ ok: true, summary: "" }) }, fetch: kite.fetch, publicBase: () => null });
+    const again = new BrokerHub({ config, dataDir: dir, db, audit: new Audit(db), channels: { send: async () => ({ ok: true, summary: "" }) }, clock: () => ist(9, 5).getTime(), fetch: kite.fetch, publicBase: () => null });
     again.apply();
     expect(again.status("zerodha").loggedIn).toBe(true);
   });
