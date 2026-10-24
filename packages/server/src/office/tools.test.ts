@@ -191,6 +191,14 @@ describe("the brief", () => {
     ...over,
   });
 
+  it("tells the model the level the owner chose, and that it does not answer the workers' own requests", () => {
+    const at = (autonomy: "low" | "medium" | "high") => officeBrief({ ...cfg(), autonomy });
+    expect(at("low")).toMatch(/Autonomy is LOW/);
+    expect(at("medium")).toMatch(/Autonomy is MEDIUM/);
+    expect(at("high")).toMatch(/Autonomy is HIGH/);
+    expect(at("high")).not.toMatch(/Every risky step of a worker still asks the owner/);
+  });
+
   it("lists the roles and projects from the settings, whatever their names", () => {
     const b = officeBrief(cfg());
     expect(b).toMatch(/scribe/);

@@ -105,6 +105,12 @@ function Card({ code, title, note, children }: { code: string; title: string; no
   );
 }
 
+const LEVELS: { id: OfficeSettings["autonomy"]; name: string; text: string }[] = [
+  { id: "low", name: "Low", text: "Friend asks you for every request a worker makes that is not on your let-through list." },
+  { id: "medium", name: "Medium", text: "Friend answers the ordinary requests itself. Anything that looks dangerous (deleting files, installing, force pushes) still asks you, with your PIN." },
+  { id: "high", name: "High", text: "Friend answers every request itself, even dangerous ones, so you are not asked. The refusals below still hold." },
+];
+
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
@@ -137,6 +143,18 @@ export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChan
         <input type="checkbox" checked={office.notifyFriend} onChange={(e) => onChange({ notifyFriend: e.target.checked })} /> Tell Friend when a worker finishes
         <small className="of-hint">Friend is told when a ticket is done or stuck, says so, and can review it and give the next ticket, so the work keeps moving. Switch it off and he only knows what you ask him.</small>
       </label>
+
+      <Card code="00" title="How much Friend decides" note="When a worker asks to do something (run a command, write a file), who answers. Friend always refuses what is outside the project folders, what changes the files that control a worker, and the commands you list under Rules.">
+        <div className="of-levels" role="radiogroup" aria-label="How much Friend decides">
+          {LEVELS.map((l) => (
+            <label key={l.id} className="of-level" data-on={office.autonomy === l.id ? "true" : "false"}>
+              <input type="radio" name="of-autonomy" checked={office.autonomy === l.id} onChange={() => onChange({ autonomy: l.id })} />
+              <b>{l.name}</b>
+              <small className="of-hint">{l.text}</small>
+            </label>
+          ))}
+        </div>
+      </Card>
 
       <Card code="01" title="Limits" note="How many workers run, how long they may take to start, and when they stop.">
         <div className="of-grid">

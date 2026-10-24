@@ -461,6 +461,44 @@ describe("what a worker may do", () => {
     expect(t.store.getWorker(w.id)!.status).toBe("running");
   });
 
+  describe("when the owner lets the assistant decide", () => {
+    it("medium answers an ordinary request itself, shows who allowed it, and still asks about a dangerous one with the PIN", async () => {
+      const { t, w, bridge } = await running({ autonomy: "medium" });
+      await expect(bridge.ask("Bash", { command: "npm install left-pad" })).resolves.toMatchObject({ behavior: "allow" });
+      expect(t.approvals.request).not.toHaveBeenCalled();
+      expect(t.audit.log).toHaveBeenCalledWith("agent", "office.approval", expect.objectContaining({ verdict: "allow", by: "assistant", level: "medium" }));
+      expect(t.feeds().some((f) => f.workerId === w.id && /Allowed by the assistant \(medium\)/.test(f.text))).toBe(true);
+      const pending = bridge.ask("Bash", { command: "rm -rf build" });
+      await settle();
+      expect(t.resolvers[0]!.req).toMatchObject({ tool: "office.action", tier: "T3", needsPin: true });
+      t.resolvers[0]!.resolve({ approved: false });
+      await pending;
+    });
+
+    it("high answers even a dangerous request itself", async () => {
+      const { t, bridge } = await running({ autonomy: "high" });
+      await expect(bridge.ask("Bash", { command: "rm -rf build" })).resolves.toMatchObject({ behavior: "allow" });
+      expect(t.approvals.request).not.toHaveBeenCalled();
+      expect(t.audit.log).toHaveBeenCalledWith("agent", "office.approval", expect.objectContaining({ by: "assistant", level: "high", danger: true }));
+    });
+
+    it("high still refuses what the gate refuses: outside the folders, the deny patterns, the files that control a worker", async () => {
+      const { t, bridge } = await running({ autonomy: "high" });
+      expect(await bridge.ask("Read", { file_path: "C:\\Windows\\win.ini" })).toMatchObject({ behavior: "deny" });
+      expect(await bridge.ask("Bash", { command: "git push origin main" })).toMatchObject({ behavior: "deny" });
+      expect(await bridge.ask("Write", { file_path: join(t.projectDir, ".claude", "settings.json"), content: "{}" })).toMatchObject({ behavior: "deny" });
+      expect(t.approvals.request).not.toHaveBeenCalled();
+    });
+
+    it("low (the default) asks about an ordinary request, as before", async () => {
+      const { t, bridge } = await running();
+      const pending = bridge.ask("Bash", { command: "npm install left-pad" });
+      await settle();
+      expect(t.approvals.request).toHaveBeenCalledTimes(1);
+      t.resolvers[0]!.resolve({ approved: false });
+      await pending;
+    });
+  });
   it("answers no when the owner says no, or when the card times out, with the reason", async () => {
     const { t, bridge } = await running();
     const a = bridge.ask("Bash", { command: "ls" });

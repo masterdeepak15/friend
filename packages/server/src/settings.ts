@@ -145,6 +145,7 @@ export const SettingsPatch = z
         startTimeoutSec: z.number().int().min(10).max(600),
         pauseAtWindow: z.number().min(0).max(1),
         notifyFriend: z.boolean(),
+        autonomy: z.enum(["low", "medium", "high"]),
         budget: z.object({ perWorkerTokens: z.number().int().min(0).max(1_000_000_000), totalTokens: z.number().int().min(0).max(1_000_000_000) }).partial().strict(),
         roles: z.array(OfficeRole).max(20),
         projects: z.array(OfficeProject).max(20),
@@ -375,6 +376,7 @@ export function refuseForAgent(raw: unknown): void {
   if ("updates" in r) throw new SettingsError("Whether Friend updates itself can only be changed by the owner on the settings screen.");
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
   if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
+  if (r.office && typeof r.office === "object" && "autonomy" in (r.office as object)) throw new SettingsError("How much of the workers' requests Friend answers itself can only be changed by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
   if ("web" in r) throw new SettingsError("Web search settings (the source, its keys and addresses) can only be changed by the owner on the settings screen.");
   if ("apiKey" in r || "apiKey" in oa) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");

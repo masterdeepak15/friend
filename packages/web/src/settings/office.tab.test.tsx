@@ -8,7 +8,7 @@ afterEach(cleanup);
 
 const role = { id: "scribe", title: "Scribe", instructions: "Write docs.", model: "", permission: "default" as const };
 const project = { id: "site", name: "Site", folder: "C:\\work\\site", goal: "Ship v2", extraFolders: ["C:\\shared"] };
-const base = (over: Partial<OfficeSettings> = {}): OfficeSettings => ({ enabled: false, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, notifyFriend: true, budget: { perWorkerTokens: 1000, totalTokens: 5000 }, roles: [role], projects: [project], policy: { allowTools: ["Read", "Grep"], denyCommands: ["git\\s+push"] }, ...over });
+const base = (over: Partial<OfficeSettings> = {}): OfficeSettings => ({ enabled: false, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, notifyFriend: true, autonomy: "low" as const, budget: { perWorkerTokens: 1000, totalTokens: 5000 }, roles: [role], projects: [project], policy: { allowTools: ["Read", "Grep"], denyCommands: ["git\\s+push"] }, ...over });
 
 function mount(over: Partial<OfficeSettings> = {}) {
   const onChange = vi.fn();
@@ -48,6 +48,23 @@ describe("the switches and numbers", () => {
     mount();
     expect(screen.getByText(/never pause/i)).toBeTruthy();
     expect(screen.getByText(/claude code program and model chosen under model/i)).toBeTruthy();
+  });
+});
+
+describe("how much Friend decides", () => {
+  it("shows the three levels with the saved one chosen, and sends exactly the level picked", () => {
+    const { onChange } = mount({ autonomy: "medium" });
+    const radio = (name: RegExp) => screen.getByRole("radio", { name }) as HTMLInputElement;
+    expect(radio(/^medium/i).checked).toBe(true);
+    expect(radio(/^low/i).checked).toBe(false);
+    fireEvent.click(radio(/^high/i));
+    expect(onChange).toHaveBeenLastCalledWith({ autonomy: "high" });
+    fireEvent.click(radio(/^low/i));
+    expect(onChange).toHaveBeenLastCalledWith({ autonomy: "low" });
+  });
+  it("says what stays refused at every level", () => {
+    mount();
+    expect(screen.getByText(/always refuses what is outside the project folders/i)).toBeTruthy();
   });
 });
 

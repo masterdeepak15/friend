@@ -81,6 +81,7 @@ export interface OfficeSettings {
   startTimeoutSec: number;
   pauseAtWindow: number;
   notifyFriend: boolean;
+  autonomy: "low" | "medium" | "high";
   budget: { perWorkerTokens: number; totalTokens: number };
   roles: OfficeRole[];
   projects: OfficeProject[];
@@ -252,7 +253,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     const changed: Record<string, unknown> = {};
     const a = after.office;
     const b = before.office;
-    for (const k of ["enabled", "maxConcurrent", "startTimeoutSec", "pauseAtWindow", "notifyFriend"] as const) if (a[k] !== b[k]) changed[k] = a[k];
+    for (const k of ["enabled", "maxConcurrent", "startTimeoutSec", "pauseAtWindow", "notifyFriend", "autonomy"] as const) if (a[k] !== b[k]) changed[k] = a[k];
     const budget: Record<string, number> = {};
     for (const k of ["perWorkerTokens", "totalTokens"] as const) if (a.budget[k] !== b.budget[k]) budget[k] = a.budget[k];
     if (Object.keys(budget).length) changed.budget = budget;

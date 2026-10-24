@@ -21,6 +21,27 @@ describe("the office defaults", () => {
   });
 });
 
+describe("the autonomy level", () => {
+  it("is low unless the owner chose otherwise, and a value that is not a level is low", () => {
+    expect(fresh().office.autonomy).toBe("low");
+    expect(sanitizeOffice({ autonomy: "high" }).autonomy).toBe("high");
+    expect(sanitizeOffice({ autonomy: "medium" }).autonomy).toBe("medium");
+    for (const bad of ["max", "", 3, null, undefined]) expect(sanitizeOffice({ autonomy: bad }).autonomy).toBe("low");
+  });
+
+  it("is saved from the settings screen and refused for anything that is not a level", () => {
+    const c = fresh();
+    applySettings(c, { office: { autonomy: "high" } });
+    expect(c.office.autonomy).toBe("high");
+    expect(() => applySettings(c, { office: { autonomy: "everything" } })).toThrow();
+    expect(c.office.autonomy).toBe("high");
+  });
+
+  it("cannot be changed by the assistant itself", () => {
+    expect(() => refuseForAgent({ office: { autonomy: "high" } } as never)).toThrow(/only be changed by the owner/);
+  });
+});
+
 describe("sanitizeOffice, what is read back from the saved file", () => {
   it("keeps every number inside its range", () => {
     expect(sanitizeOffice({ maxConcurrent: 99, startTimeoutSec: 1, pauseAtWindow: 5 })).toMatchObject({ maxConcurrent: 8, startTimeoutSec: 10, pauseAtWindow: 1 });

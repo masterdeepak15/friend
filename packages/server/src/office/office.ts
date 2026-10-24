@@ -8,7 +8,7 @@ import type { Config } from "../config";
 import { ToolBridge, type BridgeCall, type BridgeTool } from "../provider/claude-code/bridge";
 import type { WorkerEvent } from "./events";
 import { summarizeToolCall } from "./events";
-import { decideAction } from "./gate";
+import { assistantDecides, decideAction } from "./gate";
 import { WorkerProc, buildWorkerArgs, type WorkerExit } from "./runner";
 import type { OfficeStore, TicketRow, WorkerRow } from "./store";
 
@@ -537,6 +537,12 @@ export class Office {
       this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: "deny", by: "policy" });
       this.feed(worker.id, "approval", `Refused: ${summary} (${verdict.reason})`);
       return answer({ behavior: "deny", message: verdict.reason });
+    }
+
+    if (assistantDecides(verdict, this.cfg.autonomy)) {
+      this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: "allow", by: "assistant", level: this.cfg.autonomy, danger: verdict.danger });
+      this.feed(worker.id, "approval", `Allowed by the assistant (${this.cfg.autonomy}): ${summary}`);
+      return answer({ behavior: "allow", updatedInput: input });
     }
 
     run.pending++;

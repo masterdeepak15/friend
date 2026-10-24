@@ -289,12 +289,17 @@ export interface OfficeConfig {
   pauseAtWindow: number;
   /** Tell Friend when a worker finishes or is stuck, so Friend reports it and can give the next ticket. */
   notifyFriend: boolean;
+  /** How much of what workers ask to do the assistant decides itself: low asks the owner every time, medium decides what is not risky, high decides everything the gate does not refuse. */
+  autonomy: OfficeAutonomy;
   /** Tokens a worker may use, and all workers together; 0 means no limit. */
   budget: { perWorkerTokens: number; totalTokens: number };
   roles: OfficeRole[];
   projects: OfficeProject[];
   policy: OfficePolicy;
 }
+
+export const OFFICE_AUTONOMY = ["low", "medium", "high"] as const;
+export type OfficeAutonomy = (typeof OFFICE_AUTONOMY)[number];
 
 /** Starter data, not rules: the owner edits, replaces or deletes all of it, and a saved empty list stays empty. */
 export const DEFAULT_OFFICE_ROLES: OfficeRole[] = [
@@ -355,6 +360,7 @@ export function sanitizeOffice(raw: unknown): OfficeConfig {
     startTimeoutSec: num(r.startTimeoutSec, 10, 600, 60),
     pauseAtWindow: num(r.pauseAtWindow, 0, 1, 0.9, false),
     notifyFriend: r.notifyFriend !== false,
+    autonomy: OFFICE_AUTONOMY.find((l) => l === r.autonomy) ?? "low",
     budget: { perWorkerTokens: num(b.perWorkerTokens, 0, 1_000_000_000, 0), totalTokens: num(b.totalTokens, 0, 1_000_000_000, 0) },
     roles,
     projects,

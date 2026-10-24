@@ -4,6 +4,15 @@ import { lexicalInsideRoots } from "../tools/registry";
 
 export type GateVerdict = { verdict: "allow" } | { verdict: "deny"; reason: string } | { verdict: "ask"; danger: boolean };
 
+/**
+ * Whether the assistant answers a question the gate did not settle, at the owner's chosen level. low: never, the owner is asked. medium: when the
+ * command or tool is not dangerous. high: always. A refusal by the gate is never reaching here, so a high level still cannot go outside the
+ * project folders, touch the files that decide what a worker may do, or run a command the owner listed as refused.
+ */
+export function assistantDecides(ask: { danger: boolean }, level: "low" | "medium" | "high"): boolean {
+  return level === "high" || (level === "medium" && !ask.danger);
+}
+
 /** The fields of a tool call that can hold a path. A path in any of them must be inside the project. */
 const PATH_FIELDS = ["file_path", "path", "notebook_path", "cwd"] as const;
 
