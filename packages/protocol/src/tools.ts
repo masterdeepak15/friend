@@ -565,6 +565,13 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "stage.check",
+    description: "Look at the screen after you drew on it: for every object, whether its content is cut off, whether it is empty, outside the screen or on top of another object or one of the screen's instruments, as short sentences. No picture, no PIN. Call it once after you draw a screen, then fix what it reports (stage.update, stage.show with a new place or size, stage.hide).",
+    input: z.object({}),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
     name: "stage.guide",
     description:
       "Read the screen manual: every widget with its props and an example, how to arrange things, when to put something on top (layer overlay) or clear the screen, the theme, files and recipes. Call it before building a screen you have not built before, or when unsure. topic: all (default), widgets, layout, overlay, theme, files or recipes.",
@@ -840,6 +847,8 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return "Take one picture with the camera and show it to the AI model";
     case "office.status":
       return "Show the Office: the workers and the tickets";
+    case "stage.check":
+      return "Look at how the screen came out";
     case "office.report":
       return `Read the report of ticket #${visible(String(a.ticket ?? ""))}`;
     case "office.hire":

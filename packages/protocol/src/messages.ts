@@ -160,6 +160,8 @@ export const ServerMsg = z.discriminatedUnion("type", [
   /** Opens a panel on the owner's screen (the assistant sends it so the owner can finish a step, such as pasting a token). */
   z.object({ type: z.literal("ui.open"), panel: z.literal("plugins"), integration: z.string().max(40).optional() }),
   z.object({ type: z.literal("screen.request"), id: z.string() }),
+  /** Asks the screen to look at itself (where each object is, what is cut off or overlapping) and answer with screen.checked. */
+  z.object({ type: z.literal("screen.check"), id: z.string() }),
   z.object({ type: z.literal("screen.cancel"), id: z.string() }),
   z.object({ type: z.literal("snapshot"), stage: StageSnapshot, pendingApproval: PendingApproval.nullable().optional() }),
   z.object({ type: z.literal("error"), message: z.string() }),
@@ -188,6 +190,7 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("voice.confirm"), id: z.string(), pin: z.string().max(32) }),
   z.object({ type: z.literal("voice.cancel"), id: z.string() }),
   z.object({ type: z.literal("camera.denied"), id: z.string(), reason: z.enum(["off", "no-camera", "permission", "busy"]) }),
+  z.object({ type: z.literal("screen.checked"), id: z.string(), lines: z.array(z.string().max(200)).max(12) }),
   z.object({ type: z.literal("screen.denied"), id: z.string(), reason: z.enum(["unsupported", "failed", "busy"]) }),
   /** Which side panels the owner has open, so the AI keeps its pictures out of their way. */
   z.object({ type: z.literal("ui.panels"), open: z.array(z.enum(["chat", "tasks"])).max(2) }),

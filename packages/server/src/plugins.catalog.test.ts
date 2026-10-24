@@ -11,7 +11,7 @@ const ids = readdirSync(catalog);
 
 describe("bundled catalog", () => {
   it("contains the example plugins and the portfolio skill", () => {
-    expect(ids.sort()).toEqual(["portfolio-assistant", "rubber-duck", "standup-writer", "unit-converter"]);
+    expect(ids.sort()).toEqual(["day-trader-india", "portfolio-assistant", "rubber-duck", "standup-writer", "unit-converter"]);
   });
 
   it.each(ids)("%s is a valid plugin and its folder name is its id", (id) => {

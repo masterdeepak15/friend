@@ -129,3 +129,19 @@ describe("the six office tools", () => {
     expect(text).toContain(cmd);
   });
 });
+
+describe("looking at the screen after drawing (stage.check)", () => {
+  it("is a free tool that asks the screen how it came out, with no picture and no PIN", () => {
+    const d = TOOL_DEFS.find((t) => t.name === "stage.check")!;
+    expect(d.baseTier).toBe("T0");
+    expect(d.input.safeParse({}).success).toBe(true);
+    expect(describeCall("stage.check", {})).toMatch(/screen/i);
+  });
+
+  it("asks the screen and carries its short answer back", () => {
+    expect(ServerMsg.safeParse({ type: "screen.check", id: "c1" }).success).toBe(true);
+    expect(ClientMsg.safeParse({ type: "screen.checked", id: "c1", lines: ["a: cut off"] }).success).toBe(true);
+    expect(ClientMsg.safeParse({ type: "screen.checked", id: "c1", lines: Array.from({ length: 13 }, () => "x") }).success).toBe(false);
+    expect(ClientMsg.safeParse({ type: "screen.checked", id: "c1", lines: ["x".repeat(201)] }).success).toBe(false);
+  });
+});

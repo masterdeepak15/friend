@@ -347,6 +347,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     case "camera.cancel":
     case "screen.request":
     case "screen.cancel":
+    case "screen.check":
       return state; // handled by the camera controller, outside the reducer
   }
 }

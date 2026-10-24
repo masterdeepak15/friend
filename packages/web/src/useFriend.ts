@@ -4,6 +4,7 @@ import { createSocket, type FriendSocket } from "./socket";
 import { initialState, reduce, type LocalAction, type StageViewState } from "./store";
 import { CameraController } from "./camera/controller";
 import { ScreenController } from "./screen/capture";
+import { analyzeScreen, measureScreen } from "./screen/inspect";
 import { pageDuck } from "./audio/duck";
 import { useDuckReporting } from "./audio/useDuckReporting";
 import { postUtterance, postWake } from "./voice/api";
@@ -93,6 +94,10 @@ export function useFriend(onUnauthorized: () => void): {
       const id = (m as { id?: unknown } | null)?.id;
       if ((type === "camera.request" || type === "camera.cancel") && typeof id === "string") void cam.handle({ type, id });
       if ((type === "screen.request" || type === "screen.cancel") && typeof id === "string") void scr.handle({ type, id });
+      if (type === "screen.check" && typeof id === "string") {
+        // let what was just drawn finish laying out, then measure it and report in words
+        setTimeout(() => s.send({ type: "screen.checked", id, lines: analyzeScreen(measureScreen(document, window)) }), 500);
+      }
       if (type === "audio.duck") pageDuck.set((m as { level?: number }).level ?? 1); // music and video on this screen turn down while someone talks
       if (type === "audio.chunk" || type === "audio.stop") ctl.handleServer(m as Parameters<VoiceController["handleServer"]>[0]);
     });

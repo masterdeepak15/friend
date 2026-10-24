@@ -27,6 +27,7 @@ import type { AdminApi } from "../admin";
 import type { ContentBlock, Msg, Provider, ToolSpec } from "../provider/types";
 import { z } from "zod";
 import { runStageTool, type StageState } from "../stage";
+import type { ScreenCheck } from "../screenCheck";
 import { getToolDef, lexicalInsideRoots, pathArg, toolSpecs } from "../tools/registry";
 import { conversationText, summarize } from "./compact";
 import { loadHistory, repairDangling, saveMessage } from "./history";
@@ -64,6 +65,8 @@ export interface AgentDeps {
   camera?: Pick<CameraBroker, "request">;
   /** Takes one picture of the owner's Friend screen through their browser. Without it screen.look reports it is unavailable. */
   screen?: Pick<CameraBroker, "request">;
+  /** Asks the owner's screen how a drawing came out (stage.check). Without it the tool reports it is unavailable. */
+  screenCheck?: Pick<ScreenCheck, "request">;
   /** Opens a file the owner approved so the screen can show it. Without it file.present reports it is unavailable. */
   media?: Pick<MediaStore, "present" | "sendable">;
   /** Sends messages and reads the inbox. Without it the message tools report they are unavailable. */
@@ -803,6 +806,13 @@ export class Agent {
       const out = runStageTool("stage.show", { object: { id: objectId, type: shown.type, props: shown.props, placement: placement ?? "auto" } }, d.stage, ctx.emit);
       if (!out.ok) return fail(out.error);
       return { text: `${shown.summary} It is on the screen as "${objectId}".`, isError: false };
+    }
+
+    if (call.name === "stage.check") {
+      if (!d.screenCheck) return fail("Checking the screen is not available.");
+      const seen = await d.screenCheck.request(ctx.emit, signal);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: seen.ok });
+      return seen.ok ? { text: seen.lines.join("\n"), isError: false } : fail(seen.error);
     }
 
     if (call.name === "camera.snap") {

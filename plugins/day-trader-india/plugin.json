@@ -1,0 +1,59 @@
+{
+  "id": "day-trader-india",
+  "name": "Day trader (India)",
+  "version": "1.0.0",
+  "description": "A day-trading method for Indian stocks (NSE, rupees, IST): find setups, time the entry, plan stop and target, size the position, and replay the odds. Analysis only: it never places an order.",
+  "skills": [
+    {
+      "name": "day-trade-scan",
+      "description": "Find intraday setups on NSE stocks (opening-range breakout, oversold bounce) from free Yahoo Finance candles, and check the news before choosing",
+      "file": "skills/scan.md"
+    },
+    {
+      "name": "day-trade-plan",
+      "description": "Time an entry on a setup, set the stop and target before entering, size the position from the owner's max loss, and check the plan against the owner's limits",
+      "file": "skills/plan.md"
+    },
+    {
+      "name": "day-trade-replay",
+      "description": "Before a trade, replay the rest of the session many times from the stock's own recent candles and say honestly how often the target or the stop comes first",
+      "file": "skills/replay.md"
+    }
+  ],
+  "tools": [
+    {
+      "name": "trade-plan",
+      "description": "Exact arithmetic for one long or short intraday trade: stop, target, quantity from the max loss, capital used, risk to reward, and which limits it breaks. Prices in rupees.",
+      "language": "python",
+      "file": "tools/trade_plan.py",
+      "input": {
+        "side": { "type": "string", "description": "buy or sell (sell means short)" },
+        "entry": { "type": "number", "description": "Entry price" },
+        "stop": { "type": "number", "description": "Stop-loss price" },
+        "reward_multiple": { "type": "number", "description": "Target as a multiple of the risk per share, for example 1.5" },
+        "max_loss": { "type": "number", "description": "The most the owner will lose on this trade, in rupees" },
+        "capital": { "type": "number", "description": "Money available for this trade, in rupees" },
+        "leverage": { "type": "number", "description": "Intraday leverage the owner has, 1 if none" },
+        "min_reward_multiple": { "type": "number", "description": "The owner's smallest acceptable reward to risk, 0 if none" },
+        "tick": { "type": "number", "description": "Price tick, 0.05 for most NSE stocks" }
+      },
+      "required": ["side", "entry", "stop", "reward_multiple", "max_loss", "capital"]
+    },
+    {
+      "name": "replay",
+      "description": "Replays the rest of a session many times. Give the stock's recent 5-minute closes, one past session per line (oldest first), and today's closes so far; it draws returns from the same time of day on past days and counts how often the target or the stop comes first. Seeded, so it repeats.",
+      "language": "python",
+      "file": "tools/replay.py",
+      "input": {
+        "days": { "type": "string", "description": "Past sessions, oldest first: one session per line, its 5-minute closes from the open separated by commas" },
+        "today": { "type": "string", "description": "Today's 5-minute closes so far, from the open, separated by commas" },
+        "side": { "type": "string", "description": "buy or sell" },
+        "stop": { "type": "number", "description": "Stop price" },
+        "target": { "type": "number", "description": "Target price" },
+        "runs": { "type": "number", "description": "How many simulated sessions, default 10000" },
+        "seed": { "type": "number", "description": "Random seed, default 1" }
+      },
+      "required": ["days", "today", "side", "stop", "target"]
+    }
+  ]
+}

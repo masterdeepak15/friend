@@ -23,6 +23,7 @@ import { Approvals } from "./approvals";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
+import { ScreenCheck } from "./screenCheck";
 import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
 import { AlexaHub, fetchAmazonCert } from "./alexa/hub";
@@ -222,6 +223,7 @@ export async function createApp(opts: AppOptions) {
   const provider: Provider = opts.provider ?? switchable!;
   const camera = new CameraBroker(opts.cameraTimeoutMs);
   const screenShot = new CameraBroker(opts.cameraTimeoutMs, "screen");
+  const screenCheck = new ScreenCheck();
   const media = new MediaStore(db, config.dataDir);
   // files shown earlier are kept while a widget still uses them; the rest are forgotten after a day
   media.prune(new Set(JSON.stringify(stage.snapshot().objects).match(/(?<=\/api\/media\/)[0-9a-f]{32}/g) ?? []));
@@ -650,6 +652,9 @@ export async function createApp(opts: AppOptions) {
         audit.log("agent", "screen.requested", {});
         return screenShot.request(emit, signal);
       },
+    },
+    screenCheck: {
+      request: (emit, signal) => screenCheck.request(emit, signal),
     },
     media,
     channels: channelHub,
@@ -1532,6 +1537,9 @@ export async function createApp(opts: AppOptions) {
             broadcast({ type: "camera.cancel", id: msg.id });
           }
           break;
+        case "screen.checked":
+          screenCheck.reply(msg.id, msg.lines);
+          break;
         case "screen.denied":
           if (screenShot.deny(msg.id, msg.reason)) {
             audit.log("owner", "screen.denied", { reason: msg.reason });
@@ -1612,6 +1620,7 @@ export async function createApp(opts: AppOptions) {
       enrollment?.cancel();
       camera.cancelAll(broadcast);
       screenShot.cancelAll(broadcast);
+      screenCheck.cancelAll();
       agent.cancel();
       speaker?.interrupt(broadcast);
       approvals.denyAll("Emergency lock");
@@ -1699,6 +1708,7 @@ export async function createApp(opts: AppOptions) {
       challenges.clear();
       camera.cancelAll(broadcast);
       screenShot.cancelAll(broadcast);
+      screenCheck.cancelAll();
       agent.cancel();
       approvals.denyAll("Shutting down");
       // connectors, the provider and the web server close side by side, so the slowest one sets the time, not their sum

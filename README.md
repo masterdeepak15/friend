@@ -116,6 +116,8 @@ Restart `friend start` after any of these.
 
 ### Plugins
 
+**Day trader (India)** is a bundled plugin with three skills (scan NSE stocks for setups, plan the entry, stop, target and size, replay the odds) and two exact tools (	rade-plan, eplay). It reads free Yahoo Finance candles for NSE (SYMBOL.NS, IST, rupees) and works from your own limits (max loss, money, leverage). It is analysis only: it never places an order, you place it in your broker app.
+
 | Command | What it does | Use it when |
 |---|---|---|
 | `friend plugin catalog` | Lists the plugins that come with Friend. | Looking for something to add. |
@@ -425,6 +427,8 @@ Tell Friend "remember that my sister is Priya" and it keeps a short note. The 20
 - Notes are treated as **data about you, never as instructions**, so text inside a note (or text a web page tricked the agent into saving) cannot give the agent orders. Guests and unrecognized voices never see your notes. The agent is told never to save passwords, PINs or keys.
 
 ## Plugins
+
+**Day trader (India)** is a bundled plugin with three skills (scan NSE stocks for setups, plan the entry, stop, target and size, replay the odds) and two exact tools (	rade-plan, eplay). It reads free Yahoo Finance candles for NSE (SYMBOL.NS, IST, rupees) and works from your own limits (max loss, money, leverage). It is analysis only: it never places an order, you place it in your broker app.
 
 Plugins add **skills** (instructions the agent loads when they fit, for example "write my stand-up") and **tools** (small programs the agent can call, for example an exact unit converter). Three examples are bundled in `plugins/`: `unit-converter`, `standup-writer`, `rubber-duck`.
 
