@@ -13,6 +13,8 @@ export interface FetchOptions {
   maxBytes?: number;
   maxRedirects?: number;
   signal?: AbortSignal;
+  /** Other content types to take as text, for a data feed that answers in JSON. Web pages never use this. */
+  acceptTypes?: string[];
 }
 
 type Address = { address: string; family: number };
@@ -79,7 +81,7 @@ export async function safeFetch(url: string, o: FetchOptions = {}): Promise<Fetc
         redirect: "manual",
         credentials: "omit",
         signal: control.signal,
-        headers: { "user-agent": "Friend (personal assistant)", accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1" },
+        headers: { "user-agent": "Friend (personal assistant)", accept: o.acceptTypes?.length ? `${o.acceptTypes.join(",")},*/*;q=0.1` : "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1" },
       });
 
       if (res.status >= 300 && res.status < 400) {
@@ -102,7 +104,7 @@ export async function safeFetch(url: string, o: FetchOptions = {}): Promise<Fetc
 
       const typeHeader = res.headers.get("content-type") ?? "";
       const type = typeHeader.split(";")[0]!.trim().toLowerCase();
-      if (!TEXT_TYPES.has(type)) {
+      if (!TEXT_TYPES.has(type) && !o.acceptTypes?.includes(type)) {
         await res.body?.cancel().catch(() => undefined);
         return { ok: false, error: "That link is not a text page, so Friend cannot read it." };
       }

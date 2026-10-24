@@ -1,24 +1,18 @@
 {
   "id": "day-trader-india",
   "name": "Day trader (India)",
-  "version": "1.0.0",
-  "description": "A day-trading method for Indian stocks (NSE, rupees, IST): find setups, time the entry, plan stop and target, size the position, and replay the odds. Analysis only: it never places an order.",
+  "version": "1.1.0",
+  "description": "A day-trading method for Indian stocks (NSE, rupees, IST): scan for setups, read the news and filings, time the entry, plan stop and target, size the position, check the limits, replay the odds, and follow insider and bulk-deal buying. Analysis only: it never places an order.",
   "skills": [
-    {
-      "name": "day-trade-scan",
-      "description": "Find intraday setups on NSE stocks (opening-range breakout, oversold bounce) from free Yahoo Finance candles, and check the news before choosing",
-      "file": "skills/scan.md"
-    },
-    {
-      "name": "day-trade-plan",
-      "description": "Time an entry on a setup, set the stop and target before entering, size the position from the owner's max loss, and check the plan against the owner's limits",
-      "file": "skills/plan.md"
-    },
-    {
-      "name": "day-trade-replay",
-      "description": "Before a trade, replay the rest of the session many times from the stock's own recent candles and say honestly how often the target or the stop comes first",
-      "file": "skills/replay.md"
-    }
+    { "name": "day-trade-scan", "description": "Find intraday setups on NSE stocks (opening-range breakout, oversold bounce) and check the index first", "file": "skills/scan.md" },
+    { "name": "day-trade-news", "description": "Check the news and company filings on a stock before a day trade, and whether a result or event falls today", "file": "skills/news.md" },
+    { "name": "day-trade-entry", "description": "Say whether a setup has triggered on a stock yet, bar by bar, and when to skip it", "file": "skills/entry.md" },
+    { "name": "day-trade-exit", "description": "Set the stop, the target and the square-off time before entering a day trade, and set reminders for the times", "file": "skills/exit.md" },
+    { "name": "day-trade-budget", "description": "Size a day trade from the owner's max loss, money and leverage, with exact figures", "file": "skills/budget.md" },
+    { "name": "day-trade-risk", "description": "Check a day-trade plan against the owner's own limits and say pass or block, with the reason", "file": "skills/risk.md" },
+    { "name": "day-trade-replay", "description": "Before a trade, replay the rest of the session thousands of times from the stock's own candles and say how often the target or the stop comes first", "file": "skills/replay.md" },
+    { "name": "day-trade-analyst", "description": "Read a company's latest results, filings and shareholding pattern and sum up what changed", "file": "skills/analyst.md" },
+    { "name": "day-trade-smart-money", "description": "Show what promoters, directors and big investors have been buying or selling: insider trades and bulk and block deals", "file": "skills/smart-money.md" }
   ],
   "tools": [
     {
@@ -38,22 +32,6 @@
         "tick": { "type": "number", "description": "Price tick, 0.05 for most NSE stocks" }
       },
       "required": ["side", "entry", "stop", "reward_multiple", "max_loss", "capital"]
-    },
-    {
-      "name": "replay",
-      "description": "Replays the rest of a session many times. Give the stock's recent 5-minute closes, one past session per line (oldest first), and today's closes so far; it draws returns from the same time of day on past days and counts how often the target or the stop comes first. Seeded, so it repeats.",
-      "language": "python",
-      "file": "tools/replay.py",
-      "input": {
-        "days": { "type": "string", "description": "Past sessions, oldest first: one session per line, its 5-minute closes from the open separated by commas" },
-        "today": { "type": "string", "description": "Today's 5-minute closes so far, from the open, separated by commas" },
-        "side": { "type": "string", "description": "buy or sell" },
-        "stop": { "type": "number", "description": "Stop price" },
-        "target": { "type": "number", "description": "Target price" },
-        "runs": { "type": "number", "description": "How many simulated sessions, default 10000" },
-        "seed": { "type": "number", "description": "Random seed, default 1" }
-      },
-      "required": ["days", "today", "side", "stop", "target"]
     }
   ]
 }

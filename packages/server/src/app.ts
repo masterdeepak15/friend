@@ -24,6 +24,7 @@ import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
 import { ScreenCheck } from "./screenCheck";
+import { runMarketTool } from "./market/tools";
 import { MediaStore } from "./media";
 import { ChannelHub } from "./channels/hub";
 import { AlexaHub, fetchAmazonCert } from "./alexa/hub";
@@ -655,6 +656,21 @@ export async function createApp(opts: AppOptions) {
     },
     screenCheck: {
       request: (emit, signal) => screenCheck.request(emit, signal),
+    },
+    market: {
+      run: (name, args, signal) =>
+        runMarketTool(name, args, {
+          getJson: async (url, s) => {
+            const got = await safeFetch(url, { signal: s, acceptTypes: ["application/json"], maxBytes: 4_000_000 });
+            if (!got.ok) return got;
+            try {
+              return { ok: true, json: JSON.parse(got.body) };
+            } catch {
+              return { ok: false, error: "The market feed did not answer properly." };
+            }
+          },
+          audit: (e) => audit.log("agent", "market.read", e),
+        }, signal),
     },
     media,
     channels: channelHub,

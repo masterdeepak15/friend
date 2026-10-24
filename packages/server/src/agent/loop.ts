@@ -67,6 +67,8 @@ export interface AgentDeps {
   screen?: Pick<CameraBroker, "request">;
   /** Asks the owner's screen how a drawing came out (stage.check). Without it the tool reports it is unavailable. */
   screenCheck?: Pick<ScreenCheck, "request">;
+  /** market.get and market.replay: Indian market data from free public feeds. Without it, or with the web switched off, the model is not offered them. */
+  market?: { run(name: string, args: unknown, signal?: AbortSignal): Promise<{ ok: boolean; text: string }> };
   /** Opens a file the owner approved so the screen can show it. Without it file.present reports it is unavailable. */
   media?: Pick<MediaStore, "present" | "sendable">;
   /** Sends messages and reads the inbox. Without it the message tools report they are unavailable. */
@@ -292,13 +294,14 @@ export class Agent {
       const messages: Msg[] = isolated ? [...earlier, userMsg] : loadHistory(d.db);
       const pluginTools = (d.plugins?.toolDefs() ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
       const webOn = !!d.web?.enabled();
+      const marketOn = webOn && !!d.market;
       const tools = (
         ctx.trust === "owner"
           ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])]
           : member
             ? toolSpecs().filter((t) => MEMBER_TOOLS.has(t.name))
             : []
-      ).filter((t) => webOn || !t.name.startsWith("web."));
+      ).filter((t) => (webOn || !t.name.startsWith("web.")) && (marketOn || !t.name.startsWith("market.")));
       let nudged = false;
 
       // Clear requests for real data (weather in a named city, the computer's stats) are answered with the real tools
@@ -683,6 +686,13 @@ export class Agent {
       if (!d.web?.enabled()) return fail("Web search is switched off.");
       const r = await d.web.run(call.name, args, this.abort?.signal);
       if (r.ok && call.name === "web.search") for (const u of urlsIn(r.text)) this.seenUrls.add(u);
+      return r.ok ? { text: r.text, isError: false } : fail(r.text);
+    }
+
+    if (call.name === "market.get" || call.name === "market.replay") {
+      if (!d.web?.enabled() || !d.market) return fail("Market data is not available.");
+      const r = await d.market.run(call.name, args, this.abort?.signal);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: r.ok });
       return r.ok ? { text: r.text, isError: false } : fail(r.text);
     }
 

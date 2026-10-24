@@ -102,6 +102,14 @@ describe("fetching a page safely", () => {
     expect((await safeFetch("https://example.com/", web(() => new Response(new Uint8Array([120]))).opts)).ok).toBe(false);
   });
 
+  it("takes JSON only when the caller names it, for a data feed", async () => {
+    const feed = () => html('{"a":1}', "application/json; charset=utf-8");
+    expect((await safeFetch("https://example.com/f", web(feed).opts)).ok).toBe(false);
+    const w = web(feed);
+    expect(await safeFetch("https://example.com/f", { ...w.opts, acceptTypes: ["application/json"] })).toMatchObject({ ok: true, contentType: "application/json", body: '{"a":1}' });
+    expect(new Headers(w.inits[0]!.headers).get("accept")).toMatch(/^application\/json/);
+    expect((await safeFetch("https://example.com/f", { ...web(() => html("x", "application/pdf")).opts, acceptTypes: ["application/json"] })).ok).toBe(false);
+  });
   it("gives up on a site that does not answer", async () => {
     const w = web((_u, init) => new Promise<Response>((_res, rej) => init.signal?.addEventListener("abort", () => rej(new DOMException("aborted", "AbortError")))));
     const started = Date.now();

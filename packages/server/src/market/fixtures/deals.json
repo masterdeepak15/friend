@@ -1,0 +1,77 @@
+{
+ "as_on_date": "23-Oct-2026",
+ "BULK_DEALS_DATA": [
+  {
+   "buySell": "BUY",
+   "clientName": "CATAMARAN VENTURES LLP",
+   "date": "23-Oct-2026",
+   "name": "Bonfiglioli Trans Limited",
+   "qty": "1045000",
+   "remarks": "-",
+   "symbol": "BONFIG",
+   "watp": "581.35"
+  },
+  {
+   "buySell": "BUY",
+   "clientName": "EQUISM CAPITAL PRIVATE  LIMITED",
+   "date": "23-Oct-2026",
+   "name": "Bonfiglioli Trans Limited",
+   "qty": "955000",
+   "remarks": "-",
+   "symbol": "BONFIG",
+   "watp": "585.07"
+  },
+  {
+   "buySell": "BUY",
+   "clientName": "IRAGE BROKING SERVICES LLP",
+   "date": "23-Oct-2026",
+   "name": "Bonfiglioli Trans Limited",
+   "qty": "481498",
+   "remarks": "-",
+   "symbol": "BONFIG",
+   "watp": "569.7"
+  },
+  {
+   "buySell": "BUY",
+   "clientName": "CATAMARAN VENTURES LLP",
+   "date": "23-Oct-2026",
+   "name": "Bonfiglioli Trans Limited",
+   "qty": "1089318",
+   "remarks": "-",
+   "symbol": "BONFIG",
+   "watp": "534.72"
+  },
+  {
+   "buySell": "BUY",
+   "clientName": "ARIHANT CAPITAL MARKETS LIMITED",
+   "date": "23-Oct-2026",
+   "name": "Commercial Syn Bags Ltd",
+   "qty": "210629",
+   "remarks": "-",
+   "symbol": "COMSYN",
+   "watp": "217.21"
+  }
+ ],
+ "BLOCK_DEALS_DATA": [
+  {
+   "buySell": "BUY",
+   "clientName": "LARSEN & TOUBRO LIMITED",
+   "date": "22-Oct-2026",
+   "name": "Capital Infra Trust",
+   "qty": "6644519",
+   "remarks": null,
+   "symbol": "CAPINVIT",
+   "watp": "75.59"
+  },
+  {
+   "buySell": "BUY",
+   "clientName": "SURYALAXMI INFRACON PRIVATE LIMITED",
+   "date": "22-Oct-2026",
+   "name": "Gallantt Ispat Limited",
+   "qty": "2651975",
+   "remarks": null,
+   "symbol": "GALLANTT",
+   "watp": "565"
+  }
+ ]
+}

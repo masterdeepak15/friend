@@ -116,7 +116,7 @@ Restart `friend start` after any of these.
 
 ### Plugins
 
-**Day trader (India)** is a bundled plugin with three skills (scan NSE stocks for setups, plan the entry, stop, target and size, replay the odds) and two exact tools (	rade-plan, eplay). It reads free Yahoo Finance candles for NSE (SYMBOL.NS, IST, rupees) and works from your own limits (max loss, money, leverage). It is analysis only: it never places an order, you place it in your broker app.
+**Day trader (India)** is a bundled plugin with nine skills (scan for setups, news, entry, exit, budget, risk, replay, analyst, smart money) and an exact sizing tool (`trade-plan`). It reads Indian market data through two built-in tools, `market.get` (candles, quotes, NSE announcements, results, insider trades, bulk and block deals, shareholding) and `market.replay` (replays the rest of the session from the stock's own recent candles). Both use free public feeds (Yahoo Finance and the NSE, no key), follow the Web switch, and work in IST and rupees. Your limits (max loss, money, leverage) are asked each session, never assumed. It is analysis only: it never places an order, you place it in your broker app.
 
 | Command | What it does | Use it when |
 |---|---|---|
@@ -428,7 +428,7 @@ Tell Friend "remember that my sister is Priya" and it keeps a short note. The 20
 
 ## Plugins
 
-**Day trader (India)** is a bundled plugin with three skills (scan NSE stocks for setups, plan the entry, stop, target and size, replay the odds) and two exact tools (	rade-plan, eplay). It reads free Yahoo Finance candles for NSE (SYMBOL.NS, IST, rupees) and works from your own limits (max loss, money, leverage). It is analysis only: it never places an order, you place it in your broker app.
+**Day trader (India)** is a bundled plugin with nine skills (scan for setups, news, entry, exit, budget, risk, replay, analyst, smart money) and an exact sizing tool (`trade-plan`). It reads Indian market data through two built-in tools, `market.get` (candles, quotes, NSE announcements, results, insider trades, bulk and block deals, shareholding) and `market.replay` (replays the rest of the session from the stock's own recent candles). Both use free public feeds (Yahoo Finance and the NSE, no key), follow the Web switch, and work in IST and rupees. Your limits (max loss, money, leverage) are asked each session, never assumed. It is analysis only: it never places an order, you place it in your broker app.
 
 Plugins add **skills** (instructions the agent loads when they fit, for example "write my stand-up") and **tools** (small programs the agent can call, for example an exact unit converter). Three examples are bundled in `plugins/`: `unit-converter`, `standup-writer`, `rubber-duck`.
 
