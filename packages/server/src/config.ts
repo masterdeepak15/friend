@@ -647,10 +647,19 @@ export interface MemoryConfig {
   enabled: boolean;
   /** The most characters of the root index put in every prompt. */
   maxIndexChars: number;
+  /** Whether Friend saves what is worth keeping from a conversation by itself (a separate pass after the owner has finished talking). */
+  autoSave: "off" | "on";
+  /** Say, in one line on the screen, what was saved. */
+  showSaved: boolean;
+  /** How long the owner must be quiet before the save pass runs, seconds. */
+  saveDelaySec: number;
 }
 export const sanitizeMemory = (m: Partial<MemoryConfig> | undefined): MemoryConfig => ({
   enabled: typeof m?.enabled === "boolean" ? m.enabled : true,
   maxIndexChars: typeof m?.maxIndexChars === "number" && Number.isFinite(m.maxIndexChars) ? Math.min(6000, Math.max(400, Math.round(m.maxIndexChars))) : 1500,
+  autoSave: m?.autoSave === "off" ? "off" : "on",
+  showSaved: typeof m?.showSaved === "boolean" ? m.showSaved : true,
+  saveDelaySec: typeof m?.saveDelaySec === "number" && Number.isFinite(m.saveDelaySec) ? Math.min(3600, Math.max(10, Math.round(m.saveDelaySec))) : 120,
 });
 
 export interface UpdatesConfig {

@@ -45,6 +45,21 @@ const oneLine = (s: string, max: number): string => {
 };
 const humanize = (segment: string): string => segment.replace(/\.md$/, "").replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
 
+const SECRETS: RegExp[] = [
+  /\b(pass(word|wd|code)?|pin|otp|cvv|secret|token|api[ _-]?key|private[ _-]?key)\b[^.\n]{0,20}?(\bis\b|\bare\b|=|:)\s*\S{3,}/i,
+  /\b(?:\d[ -]?){13,19}\b/,
+  /\bsk-[A-Za-z0-9_-]{16,}/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}/,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}/,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+];
+
+/** Whether a text looks like it holds a password, a PIN, a key, a card number or a one-time code. Memory never keeps those. */
+export function looksSecret(text: string): boolean {
+  return SECRETS.some((re) => re.test(text));
+}
+
 /** A path inside the tree, made safe: relative, lowercase segments of letters, digits and dashes, no ".." and not too deep. */
 export function cleanPath(raw: unknown): { ok: true; parts: string[]; isNote: boolean } | { ok: false; error: string } {
   if (typeof raw !== "string") return { ok: false, error: "Give a path." };
@@ -247,6 +262,7 @@ export class MemoryTree {
     if (this.hasLink(p.parts)) return { ok: false, error: "That path is a link, which memory does not follow." };
     const body = text.replace(/\r\n/g, "\n").trim();
     if (!body) return { ok: false, error: "There is nothing to save." };
+    if (looksSecret(body)) return { ok: false, error: "That looks like a password, a PIN, a key, a card number or a code. Memory does not keep those." };
     if (body.length > MAX_NOTE_CHARS) return { ok: false, error: `That note is too long (${body.length} characters; the limit is ${MAX_NOTE_CHARS}). Split it into smaller notes.` };
     this.ensure();
     const file = this.abs(p.parts);

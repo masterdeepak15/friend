@@ -51,6 +51,7 @@ import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
 import { MemoryTree } from "./memory/tree";
 import { importFlatNotes } from "./memory/import";
+import { MemoryKeeper } from "./memory/keeper";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
 import { WeatherService, weatherSummary } from "./weather";
 import { dirname, extname, resolve } from "node:path";
@@ -626,6 +627,22 @@ export async function createApp(opts: AppOptions) {
   };
 
   const weatherService = opts.weather ?? new WeatherService();
+  /** Saves what is worth keeping from the conversation once the owner has paused. */
+  const memoryKeeper: MemoryKeeper = new MemoryKeeper({
+    tree: memoryTree,
+    db,
+    provider,
+    config: () => config.memory,
+    audit,
+    busy: () => agent.isBusy(),
+    say: (text) => {
+      broadcast({ type: "activity", text });
+      setTimeout(() => {
+        if (!agent.isBusy()) broadcast({ type: "activity", text: null });
+      }, 4000).unref();
+    },
+  });
+  if (config.memory.enabled && config.memory.autoSave === "on") memoryKeeper.init();
   const agent = new Agent({
     settings: agentSettings,
     mcp: hub,
@@ -647,6 +664,7 @@ export async function createApp(opts: AppOptions) {
     assistantName: () => auth.assistantName(),
     memory,
     memoryTree,
+    onOwnerTurnEnd: () => memoryKeeper.notify(),
     tasks,
     plugins,
     weather: weatherService,
@@ -1725,6 +1743,7 @@ export async function createApp(opts: AppOptions) {
       hostPlayer.dispose();
       videoHub.dispose();
       heartbeat.stop();
+      memoryKeeper.stop();
       channelHub.stop();
       if (brokerTimer) clearInterval(brokerTimer);
       statsStop?.();

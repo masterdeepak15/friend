@@ -31,6 +31,7 @@ let db: ReturnType<typeof openDb>;
 let tree: MemoryTree;
 let flat: Memory;
 let dir: string;
+let ended = 0;
 let config: ReturnType<typeof loadConfig>;
 let build: (provider: FakeProvider, o?: { tree?: boolean }) => Agent;
 
@@ -42,6 +43,7 @@ const ctx = { trust: "owner" as const, emit, ip: "9.9.9.9" };
 
 beforeEach(async () => {
   emitted = [];
+  ended = 0;
   decision = "approve";
   dir = mkdtempSync(join(tmpdir(), "friend-memtree-"));
   db = openDb(dir);
@@ -65,6 +67,9 @@ beforeEach(async () => {
       config,
       assistantName: () => "Jarvis",
       memory: flat,
+      onOwnerTurnEnd: () => {
+        ended++;
+      },
       ...(o.tree === false ? {} : { memoryTree: tree }),
       approvals,
     });
@@ -146,6 +151,16 @@ describe("memory tools over the tree", () => {
     const s = system(p);
     expect(s).toMatch(/\(more entries: open the root with memory\.read\)/);
     expect(s.match(/\(topic-\d+\/\)/g)!.length).toBeLessThan(15);
+  });
+});
+
+describe("telling the memory keeper a turn ended", () => {
+  it("after a turn with the owner, but not after a guest or a household member", async () => {
+    await build(new FakeProvider([[text("hi"), done]])).runTurn("hello", ctx);
+    expect(ended).toBe(1);
+    await build(new FakeProvider([[text("hi"), done]])).runTurn("hello", { ...ctx, trust: "guest" });
+    await build(new FakeProvider([[text("hi"), done]])).runTurn("hello", { ...ctx, trust: "member", person: { id: 1, name: "Sam" } });
+    expect(ended).toBe(1);
   });
 });
 

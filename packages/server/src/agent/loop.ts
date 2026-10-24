@@ -88,6 +88,8 @@ export interface AgentDeps {
   memory?: Memory;
   /** The memory tree. With it, and memory.enabled in the settings, the memory tools and the prompt use the tree instead of the flat list. */
   memoryTree?: MemoryTree;
+  /** A turn with the owner ended (not a guest or a household member). Friend uses it to save what is worth keeping. */
+  onOwnerTurnEnd?: () => void;
   /** The owner's to-dos and reminders. Without it the task tools report they are unavailable. */
   tasks?: Tasks;
   /** Runs programs in a throwaway container. Without it the code tool reports it is unavailable. */
@@ -429,6 +431,7 @@ export class Agent {
       stage({ cmd: "presence", state: "idle" });
       this.busy = false;
       emit({ type: "status", busy: false, deviceOnline: d.devices.hasOnline() });
+      if (!isolated) d.onOwnerTurnEnd?.();
       for (const job of this.idleJobs.splice(0)) {
         try {
           job();

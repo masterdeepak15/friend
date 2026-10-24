@@ -216,7 +216,7 @@ export const SettingsPatch = z
       .strict(),
     updates: z.object({ auto: z.boolean() }).partial().strict(),
     /** The memory tree. Owner-only. */
-    memory: z.object({ enabled: z.boolean(), maxIndexChars: z.number().int().min(400).max(6000) }).partial().strict(),
+    memory: z.object({ enabled: z.boolean(), maxIndexChars: z.number().int().min(400).max(6000), autoSave: z.enum(["off", "on"]), showSaved: z.boolean(), saveDelaySec: z.number().int().min(10).max(3600) }).partial().strict(),
     web: z
       .object({
         enabled: z.boolean(),
