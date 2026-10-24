@@ -63,6 +63,16 @@ export const JARVIS_COMPONENTS: Record<string, { props: string[]; note?: string;
   JNodeGraph: { props: ["nodes", "edges", "height", "title", "showLegend"], note: "nodes [{id, label, x, y, type?, color?, sub?, value?, pulse?}], edges [{from, to, color?, style?, arrow?, animated?}]; x and y in pixels" },
 };
 
+/** The names of the components that are object types of their own (Row, Column and Grid only lay parts out inside one). */
+export const JARVIS_TYPES: string[] = Object.keys(JARVIS_COMPONENTS).filter((n) => !["Row", "Column", "Grid"].includes(n));
+export const isJarvisType = (type: string): boolean => JARVIS_TYPES.includes(type);
+
+/** What an object of a Jarvis type draws: the component named by its type, with the rest of its props, and kids and slots for the parts inside. */
+export function jarvisTreeOf(type: string, props: Record<string, unknown>): JarvisNode {
+  const { kids, slots, ...p } = props;
+  return { c: type, p, ...(Array.isArray(kids) ? { kids: kids as JarvisNode["kids"] } : {}), ...(slots && typeof slots === "object" ? { slots: slots as JarvisNode["slots"] } : {}) };
+}
+
 /** Props that are never accepted, whatever the component: they could run code, or restyle or break out of the screen. */
 const NEVER = /^(on[A-Z]|dangerously|style$|className$|ref$|key$|children$|href$|src$)/;
 
@@ -126,6 +136,11 @@ export function jarvisProblem(props: unknown): string | null {
     return null;
   };
   return walk(ui, 1);
+}
+
+/** Checks an object of a Jarvis type (its type is the component): a sentence for the assistant when it is wrong, null when it can be drawn. */
+export function jarvisObjectProblem(type: string, props: Record<string, unknown>): string | null {
+  return jarvisProblem({ ui: jarvisTreeOf(type, props) });
 }
 
 /** The list the assistant is given: each component, its props, how big it needs to be and what it is for. */

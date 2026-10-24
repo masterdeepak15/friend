@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { JARVIS_TYPES } from "./jarvis";
 
 const unit = z.number().min(0).max(1);
 
@@ -17,10 +18,12 @@ export type PresenceState = z.infer<typeof PresenceState>;
 export const PresenceStyle = z.enum(["sphere", "orb", "ring"]);
 export type PresenceStyle = z.infer<typeof PresenceStyle>;
 
-export const OBJECT_TYPES = [
+/** The basic widgets, and then every Jarvis component by its own name (JStatCard, JGaugeChart, JButton, ...): they are all object types, none is a special case. */
+export const BASIC_TYPES = [
   "card", "stat", "list", "table", "code", "chart", "gauge", "timeline", "graph", "sandbox",
-  "markdown", "image", "video", "pdf", "gallery", "group", "tabs", "progress", "checklist", "countdown", "kv", "jarvis",
+  "markdown", "image", "video", "pdf", "gallery", "group", "tabs", "progress", "checklist", "countdown", "kv",
 ] as const;
+export const OBJECT_TYPES = [...BASIC_TYPES, ...JARVIS_TYPES] as unknown as readonly [string, ...string[]];
 
 export const StageObject = z.object({
   id: z.string().min(1).max(64),

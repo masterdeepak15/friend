@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { JARVIS_COMPONENTS, JARVIS_LIMITS, jarvisCatalog, jarvisNaturalSize, jarvisProblem } from "./jarvis";
+import { OBJECT_TYPES } from "./stage";
+import { JARVIS_COMPONENTS, JARVIS_LIMITS, JARVIS_TYPES, isJarvisType, jarvisCatalog, jarvisNaturalSize, jarvisObjectProblem, jarvisProblem, jarvisTreeOf } from "./jarvis";
 
 const ok = (ui: unknown) => jarvisProblem({ ui });
 
@@ -116,5 +117,34 @@ describe("how big a Jarvis drawing needs to be", () => {
     const s = ui({ c: "Unknown" });
     expect(s.w).toBeGreaterThan(0);
     expect(s.h).toBeGreaterThan(0);
+  });
+});
+describe("the Jarvis components are object types like the others", () => {
+  it("are in OBJECT_TYPES, each by its own name, and there is no separate jarvis type", () => {
+    for (const name of JARVIS_TYPES) expect(OBJECT_TYPES as readonly string[], name).toContain(name);
+    expect(OBJECT_TYPES as readonly string[]).not.toContain("jarvis");
+    for (const basic of ["card", "stat", "gauge", "table", "sandbox", "markdown"]) expect(OBJECT_TYPES as readonly string[]).toContain(basic); // the older ones stay
+  });
+
+  it("are every component of the library that is allowed, except the three layout words that only make sense inside a tree", () => {
+    expect(JARVIS_TYPES).toEqual(expect.arrayContaining(["JStatCard", "JGaugeChart", "JTable", "JButton", "JCard", "JNodeGraph", "JBarChart"]));
+    expect(JARVIS_TYPES).not.toContain("Row");
+    expect(JARVIS_TYPES).not.toContain("Column");
+    expect(JARVIS_TYPES).not.toContain("Grid");
+    expect(JARVIS_TYPES.length).toBeGreaterThanOrEqual(40);
+    expect(isJarvisType("JStatCard")).toBe(true);
+    expect(isJarvisType("stat")).toBe(false);
+  });
+
+  it("an object of a Jarvis type draws that component with its props, and kids and slots for the parts inside", () => {
+    expect(jarvisTreeOf("JCard", { color: "cyan", kids: ["hi"], slots: { header: ["HEAD"] } })).toEqual({ c: "JCard", p: { color: "cyan" }, kids: ["hi"], slots: { header: ["HEAD"] } });
+    expect(jarvisTreeOf("JStatCard", { title: "CPU", value: "1%" })).toEqual({ c: "JStatCard", p: { title: "CPU", value: "1%" } });
+  });
+
+  it("is checked like a tree: unknown props, handlers and big trees are refused with a sentence", () => {
+    expect(jarvisObjectProblem("JStatCard", { title: "CPU", value: "1%" })).toBeNull();
+    expect(jarvisObjectProblem("JStatCard", { title: "CPU", onClick: "x" })).toMatch(/onClick/);
+    expect(jarvisObjectProblem("JStatCard", { nonsense: 1 })).toMatch(/nonsense/);
+    expect(jarvisObjectProblem("JCard", { kids: [{ c: "JDesktop" }] })).toMatch(/JDesktop/);
   });
 });

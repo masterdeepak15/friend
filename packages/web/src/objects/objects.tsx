@@ -140,8 +140,9 @@ export function Tabs({ props }: { props: Props }) {
   );
 }
 
-import { Jarvis } from "./jarvis";
-export const CATALOG = {
+import { JARVIS_TYPES } from "@friend/protocol";
+import { JarvisObject } from "./jarvis";
+const BASIC = {
   card: Card,
   stat: Stat,
   list: List,
@@ -163,5 +164,9 @@ export const CATALOG = {
   checklist: Checklist,
   countdown: Countdown,
   kv: Kv,
-  jarvis: Jarvis,
 } as const;
+
+type Drawing = (p: { props: Props }) => ReactNode;
+/** Every Jarvis component is an object type under its own name, next to the basic widgets: one list, not a special case. */
+const JARVIS_CATALOG: Record<string, Drawing> = Object.fromEntries(JARVIS_TYPES.map((name) => [name, ({ props }: { props: Props }) => <JarvisObject type={name} props={props} />]));
+export const CATALOG: Record<string, Drawing> = { ...BASIC, ...JARVIS_CATALOG };

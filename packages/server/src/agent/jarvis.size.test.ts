@@ -5,7 +5,8 @@ import { placeObject } from "./layout";
 
 const desktop: ScreenInfo = { kind: "desktop", orientation: "landscape", width: 1920, height: 1080, touch: false };
 const stat = { c: "JStatCard", p: { title: "CPU", value: "15%", barValue: 15 } };
-const jarvis = (placement: StageObject["placement"], ui: unknown = stat, id = "cpu"): StageObject => ({ id, type: "jarvis", props: { ui }, placement });
+/** An object whose type is the root component of the tree, as the assistant makes them. */
+const jarvis = (placement: StageObject["placement"], ui: { c: string; p?: Record<string, unknown>; kids?: unknown[] } = stat, id = "cpu"): StageObject => ({ id, type: ui.c, props: { ...(ui.p ?? {}), ...(ui.kids ? { kids: ui.kids } : {}) }, placement });
 const box = (o: StageObject) => o.placement as { x: number; y: number; w: number; h: number };
 
 describe("giving a Jarvis card the size its content needs", () => {
@@ -36,7 +37,7 @@ describe("giving a Jarvis card the size its content needs", () => {
 
   it("makes a bigger drawing bigger, up to most of the screen", () => {
     const rows = Array.from({ length: 6 }, (_, i) => ({ c: "JStatCard", p: { title: `S${i}`, value: "1" } }));
-    const r = placeObject(jarvis({ x: 0.05, y: 0.12, w: 0.1, h: 0.1 }, { c: "Grid", p: { columns: 3 }, kids: rows }), [], [], desktop);
+    const r = placeObject(jarvis({ x: 0.05, y: 0.12, w: 0.1, h: 0.1 }, { c: "JCard", kids: [{ c: "Grid", p: { columns: 3 }, kids: rows }] }), [], [], desktop);
     expect(box(r.object).w).toBeGreaterThan(0.35);
     expect(box(r.object).w).toBeLessThanOrEqual(0.9);
     expect(box(r.object).h).toBeLessThanOrEqual(0.75);
@@ -51,6 +52,6 @@ describe("giving a Jarvis card the size its content needs", () => {
 
   it("assumes a wide desktop when the screen is not known, and does not fail on a broken tree", () => {
     expect(typeof placeObject(jarvis("center"), [], [], null).object.placement).toBe("object");
-    expect(() => placeObject({ id: "x", type: "jarvis", props: {}, placement: "left" }, [], [], desktop)).not.toThrow();
+    expect(() => placeObject({ id: "x", type: "JCard", props: { kids: [{ c: "Nope" }] }, placement: "left" }, [], [], desktop)).not.toThrow();
   });
 });

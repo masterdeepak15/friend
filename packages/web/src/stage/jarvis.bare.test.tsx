@@ -6,17 +6,17 @@ import { initialState } from "../store";
 import { Stage } from "./Stage";
 
 const voice = { pressStart: vi.fn(), pressEnd: vi.fn(), blur: vi.fn() };
-const objects = (type: "jarvis" | "card") => [{ id: "o1", type, props: type === "jarvis" ? { ui: { c: "JBadge", kids: ["x"] } } : { text: "x" }, placement: "left" as const }];
+const objects = (type: "JBadge" | "card") => [{ id: "o1", type, props: type === "JBadge" ? { kids: ["x"] } : { text: "x" }, placement: "left" as const }];
 const css = readFileSync(join(process.cwd(), "src/styles.css"), "utf8");
 
 describe("a Jarvis drawing on the stage", () => {
   it("is not put inside another card: the Jarvis card is the card", () => {
-    const { container } = render(<Stage state={{ ...initialState, connection: "open", objects: objects("jarvis") }} send={() => {}} dispatch={() => {}} voice={voice} />);
+    const { container } = render(<Stage state={{ ...initialState, connection: "open", objects: objects("JBadge") }} send={() => {}} dispatch={() => {}} voice={voice} />);
     expect(container.querySelector('[data-object="o1"]')!.className).toContain("obj-bare");
   });
 
   it("has a title bar to move it by, with the thing's title, and its move, pin, close and resize handles above the card", () => {
-    const { container } = render(<Stage state={{ ...initialState, connection: "open", objects: [{ id: "cpu", type: "jarvis" as const, props: { title: "Processor", ui: { c: "JBadge", kids: ["x"] } }, placement: "left" as const }] }} send={() => {}} dispatch={() => {}} voice={voice} />);
+    const { container } = render(<Stage state={{ ...initialState, connection: "open", objects: [{ id: "cpu", type: "JStatCard", props: { title: "Processor", value: "1%" }, placement: "left" as const }] }} send={() => {}} dispatch={() => {}} voice={voice} />);
     expect(container.querySelector('[data-object="cpu"] .obj-grip')!.getAttribute("data-label")).toBe("Processor");
     for (const h of [".obj-grip", ".obj-pin", ".obj-close", ".obj-resize"]) expect(css).toMatch(new RegExp(`\\.obj-bare ${h.replace(".", "\\.")}[^{]*\\{[^}]*z-index: [3-9]`));
     expect(css).toMatch(/\.obj-bare \.obj-grip \{[^}]*height: 28px/);
@@ -25,7 +25,7 @@ describe("a Jarvis drawing on the stage", () => {
   });
 
   it("falls back to the object's name for the title", () => {
-    const { container } = render(<Stage state={{ ...initialState, connection: "open", objects: objects("jarvis") }} send={() => {}} dispatch={() => {}} voice={voice} />);
+    const { container } = render(<Stage state={{ ...initialState, connection: "open", objects: objects("JBadge") }} send={() => {}} dispatch={() => {}} voice={voice} />);
     expect(container.querySelector('[data-object="o1"] .obj-grip')!.getAttribute("data-label")).toBe("o1");
   });
 

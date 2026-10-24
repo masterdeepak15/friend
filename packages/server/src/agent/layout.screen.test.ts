@@ -24,7 +24,7 @@ describe("using the whole screen, not one card", () => {
     expect(layout).toMatch(/whole screen/i);
     expect(layout).not.toMatch(/Fewer, richer objects/);
     expect(layout).toMatch(/same thing refreshed/i);
-    expect(screenGuide("widgets")).toMatch(/several jarvis objects|one jarvis object for each part/i);
+    expect(screenGuide("widgets")).toMatch(/for a dashboard make several objects, each in its own place/i);
   });
 
   it("treats a Jarvis card as an instrument of modest size, not a wide banner", () => {

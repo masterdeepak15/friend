@@ -400,7 +400,7 @@ The Office lets Friend hire **workers**: separate Claude Code sessions that work
 
 ## Drawing with the Jarvis components
 
-Besides the simple widgets, Friend can draw with the Jarvis HUD component library (stat cards, gauges, bar and line charts, tables, status pills, node graphs and more) in one `jarvis` object: a plain tree of data, never code. Every component and prop is checked against an allow-list before it is drawn, so nothing can run or restyle the screen. `stage.guide` lists the components for him.
+Besides the simple widgets, Every component of the Jarvis HUD library that is safe to draw (stat cards, gauges, bar, line and donut charts, tables, status pills, node graphs, tabs and about forty more) is an object type of its own, by its own name (`JStatCard`, `JGaugeChart`, `JTable`, ...), in the same list as the basic widgets, and the best looking: Friend picks them first. Parts inside a card go in `kids` and `slots`; it is data, never code. Every component and prop is checked against an allow-list before it is drawn, so nothing can run or restyle the screen. `stage.guide` lists the components for him.
 
 ## Pictures first: weather, stats and graphics
 

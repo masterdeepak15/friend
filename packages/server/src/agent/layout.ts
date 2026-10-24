@@ -1,4 +1,4 @@
-import { REGION_NAMES, REGIONS, clampToSafe, jarvisNaturalSize, jarvisProblem, overlap, rectOf, type Placement, type Rect, type RegionName, type ScreenInfo, type StageObject } from "@friend/protocol";
+import { REGION_NAMES, REGIONS, clampToSafe, isJarvisType, jarvisNaturalSize, jarvisObjectProblem, jarvisTreeOf, overlap, rectOf, type Placement, type Rect, type RegionName, type ScreenInfo, type StageObject } from "@friend/protocol";
 
 /** How many pictures a phone screen shows comfortably at once (they stack in one column). */
 export const PHONE_COMFORT = 2;
@@ -55,10 +55,10 @@ const JARVIS_AIR = 1.08;
 
 /** A Jarvis drawing gets the box its content needs (the assistant often gives it a square that is far too big or small). Auto stays auto. */
 function sizeJarvis(object: StageObject, screen: ScreenInfo | null): { object: StageObject; note?: string } {
-  if (object.type !== "jarvis" || object.placement === "auto" || jarvisProblem(object.props) !== null) return { object };
+  if (!isJarvisType(object.type) || object.placement === "auto" || jarvisObjectProblem(object.type, object.props) !== null) return { object };
   const sw = screen?.width && screen.width > 200 ? screen.width : 1920;
   const sh = screen?.height && screen.height > 200 ? screen.height : 1080;
-  const nat = jarvisNaturalSize((object.props as { ui: never }).ui);
+  const nat = jarvisNaturalSize(jarvisTreeOf(object.type, object.props));
   const w = Math.min(0.9, (nat.w * JARVIS_AIR) / sw);
   const h = Math.min(0.75, (nat.h * JARVIS_AIR + JARVIS_BAR) / sh);
   const r = (n: number) => Math.round(n * 1000) / 1000;

@@ -2,35 +2,42 @@ import { describe, expect, it } from "vitest";
 import { screenGuide } from "./agent/guide";
 import { StageState, propsError, runStageTool } from "./stage";
 
-describe("the assistant drawing with the Jarvis components", () => {
-  const ok = { ui: { c: "Column", kids: [{ c: "JStatCard", p: { title: "CPU", value: "42%" } }] } };
+describe("the assistant drawing with the Jarvis components, as object types", () => {
+  const show = (stage: StageState, type: string, props: Record<string, unknown>, id = "o") => runStageTool("stage.show", { object: { id, type, props, placement: "center" } }, stage, () => {});
 
-  it("is drawn when the tree is valid", () => {
-    expect(propsError("jarvis", ok, true)).toBeNull();
+  it("shows an object whose type is a Jarvis component, with that component's props", () => {
     const stage = new StageState();
-    const r = runStageTool("stage.show", { object: { id: "j", type: "jarvis", props: ok, placement: "center" } }, stage, () => {});
-    expect(r.ok).toBe(true);
+    expect(propsError("JStatCard", { title: "CPU", value: "42%" }, true)).toBeNull();
+    expect(show(stage, "JStatCard", { title: "CPU", value: "42%", barValue: 42 }).ok).toBe(true);
+    expect(show(stage, "JCard", { kids: [{ c: "JBadge", kids: ["x"] }], slots: { header: ["HEAD"] } }, "card2").ok).toBe(true);
   });
 
-  it("is refused with a sentence the assistant can act on, so nothing broken or unsafe reaches the screen", () => {
+  it("refuses a prop the component does not have, a handler, or a part that is not allowed, with a sentence she can act on", () => {
     const stage = new StageState();
-    const bad = runStageTool("stage.show", { object: { id: "j", type: "jarvis", props: { ui: { c: "JBadge", p: { onClick: "x" } } }, placement: "center" } }, stage, () => {});
+    const bad = show(stage, "JBadge", { onClick: "x" });
     expect(bad.ok).toBe(false);
     expect(JSON.stringify(bad)).toMatch(/onClick/);
-    expect(propsError("jarvis", {}, true)).toMatch(/ui/);
-    expect(runStageTool("stage.show", { object: { id: "j", type: "jarvis", props: { ui: { c: "JDesktop" } }, placement: "center" } }, stage, () => {}).ok).toBe(false);
+    expect(propsError("JStatCard", { nonsense: 1 }, true)).toMatch(/nonsense/);
+    expect(show(stage, "JCard", { kids: [{ c: "JDesktop" }] }, "d").ok).toBe(false);
   });
 
-  it("checks an update too, and inside a group", () => {
-    expect(propsError("jarvis", { ui: { c: "Nope" } }, false)).toMatch(/Nope/);
-    expect(propsError("group", { items: [{ type: "jarvis", props: { ui: { c: "Nope" } } }] }, true)).toMatch(/Nope/);
+  it("is no longer a type of its own: jarvis is not an object type", () => {
+    const stage = new StageState();
+    expect(show(stage, "jarvis", { ui: { c: "JBadge", kids: ["x"] } }).ok).toBe(false);
   });
 
-  it("is in the manual with every component and its props", () => {
+  it("checks an update, and a part inside a group", () => {
+    expect(propsError("JStatCard", { nonsense: 1 }, false)).toMatch(/nonsense/);
+    expect(propsError("group", { items: [{ type: "JStatCard", props: { nonsense: 1 } }] }, true)).toMatch(/nonsense/);
+    expect(propsError("group", { items: [{ type: "JStatCard", props: { title: "a", value: "1" } }] }, true)).toBeNull();
+  });
+
+  it("is in the manual as ordinary widgets with every component, its props and its size, and says to use them first", () => {
     const widgets = screenGuide("widgets");
-    expect(widgets).toMatch(/jarvis \{/);
     expect(widgets).toMatch(/JStatCard/);
     expect(widgets).toMatch(/JNodeGraph/);
-    expect(widgets).toMatch(/never code/i);
+    expect(widgets).toMatch(/object types/i);
+    expect(widgets).toMatch(/use them first|first choice/i);
+    expect(widgets).not.toMatch(/jarvis \{title\?, ui\}/); // no separate jarvis object
   });
 });

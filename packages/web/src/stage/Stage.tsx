@@ -6,6 +6,7 @@ import type { Slash } from "../input/commands";
 import { TouchControls } from "../input/TouchControls";
 import { useCoarsePointer } from "../input/useCoarsePointer";
 import { reactivityFactor } from "../presence/reactivity";
+import { isJarvisType } from "@friend/protocol";
 import { CATALOG } from "../objects/objects";
 import { Presence } from "../presence/Presence";
 import type { LocalAction, StageViewState } from "../store";
@@ -126,7 +127,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
   const fixed = entries.filter((e) => e.object.layer !== "overlay" && e.object.placement !== "auto");
 
   const renderObject = ({ object: o, leaving }: GhostEntry) => {
-    const View = CATALOG[o.type as keyof typeof CATALOG];
+    const View = CATALOG[o.type];
     if (!View) return null;
     const overlay = o.layer === "overlay"; // floats over the screen: fixed in the middle, nothing to drag or pin
     const movable = !narrow && !leaving && !overlay; // a phone stacks everything in one column: nothing to drag there
@@ -136,7 +137,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
       <section
         key={o.id}
         data-object={o.id}
-        className={`obj glass${o.type === "jarvis" ? " obj-bare" : ""}${o.style === "alert" ? " alert" : ""}${overlay ? " overlay" : ""}${o.pinned ? " pinned" : ""}${live ? " dragging" : ""}${leaving ? " leaving" : ""}`}
+        className={`obj glass${isJarvisType(o.type) ? " obj-bare" : ""}${o.style === "alert" ? " alert" : ""}${overlay ? " overlay" : ""}${o.pinned ? " pinned" : ""}${live ? " dragging" : ""}${leaving ? " leaving" : ""}`}
         style={overlay ? undefined : placementToStyle(placement, viewport)}
       >
         {movable && (
@@ -145,7 +146,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
             role="button"
             tabIndex={0}
             aria-label={`Move ${o.id}. Drag, or use the arrow keys; hold Shift to resize.`}
-            {...(o.type === "jarvis" ? { "data-label": typeof o.props.title === "string" && o.props.title.trim() ? o.props.title.trim().slice(0, 40) : o.id } : {})}
+            {...(isJarvisType(o.type) ? { "data-label": typeof o.props.title === "string" && o.props.title.trim() ? o.props.title.trim().slice(0, 40) : o.id } : {})}
             onPointerDown={(e) => dragger.begin(e, o, "move")}
             onPointerMove={dragger.move}
             onPointerUp={(e) => dragger.end(e, false)}
