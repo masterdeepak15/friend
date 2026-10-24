@@ -108,8 +108,9 @@ Restart `friend start` after any of these.
 
 | Command | What it does | Use it when |
 |---|---|---|
-| `friend memory list` | Lists the notes Friend keeps about you, numbered. | Seeing what it remembers. |
-| `friend memory forget <number>` | Deletes one note. | A note is wrong or private. |
+| `friend memory list` | Shows the tree of notes Friend keeps about you, folder by folder (the older flat list if the tree is not there yet). | Seeing what it remembers. |
+| `friend memory show <path>` | Prints one note, or a folder's index (for example `family/priya.md` or `family`). | Reading what it wrote. |
+| `friend memory forget <path or number>` | Deletes one note, a whole folder (by path), or an older numbered note. | A note is wrong or private. |
 | `friend memory clear` | Deletes all notes (asks for your PIN). | Starting fresh. |
 | `friend rules list` | Lists the "always allow" rules you created by choosing *Always allow* on an approval card. | Reviewing what Friend may do without asking. |
 | `friend rules remove <id>` | Removes a rule, so Friend asks again. | You trust something less now. |
@@ -421,15 +422,20 @@ Browsers keep sound blocked until the page has had a click, tap or key press. Fr
 
 ## Memory
 
-Tell Friend "remember that my sister is Priya" and it keeps a short note. The 20 newest notes are in front of the model in every conversation; older ones are found on demand ("what do you know about Priya?").
+Friend keeps what it knows about you as a **tree of small Markdown notes** in your data folder (`memory/`), not one long list. There is one entry point, `memory/INDEX.md`, and every folder has its own `INDEX.md` that lists what is inside. The program fixes no branch names: Friend makes the folders it wants (`family/`, `projects/friend/`, `trading/`, and deeper as a topic grows) and keeps every folder listed from the root, so everything can be found by walking down from the entry point.
 
-- Up to 200 notes of 500 characters each, stored in the local database. When full it refuses and asks you to forget something; it never drops notes silently.
-- You control all of it: `friend memory list`, `friend memory forget <number>`, `friend memory clear` (asks for the PIN). You can also just say "forget note 7".
-- Notes are treated as **data about you, never as instructions**, so text inside a note (or text a web page tricked the agent into saving) cannot give the agent orders. Guests and unrecognized voices never see your notes. The agent is told never to save passwords, PINs or keys.
+- **What Friend reads.** Only the root index goes into each prompt (a few hundred tokens, however much memory there is). Friend opens a branch with `memory.read` when a question needs it, and finds notes by words with `memory.search`.
+- **What Friend writes.** `memory.write` (a note at a path it chooses, folders made as needed), `memory.move` (group notes into sub-folders when a folder gets crowded) and `memory.forget`. A quick fact with no clear place goes to `inbox/` with `memory.remember`. Notes are short; a long one or a crowded folder is flagged so Friend splits it. A note is at most 6,000 characters, a path at most 6 folders deep, up to 2,000 notes.
+- **Your control.** The notes are plain files: open and edit them with any editor, and a note you drop in by hand is listed the next time Friend starts. In the terminal: `friend memory list` (the tree), `friend memory show <path>`, `friend memory forget <path or number>` and `friend memory clear` (asks for the PIN). You can also say "forget what you know about Priya".
+- **Your older notes.** The first time the tree starts, your older flat notes are copied once into `inbox/`; the old list is left untouched.
+- **Settings** (changed by you on the settings screen, never by Friend): `memory.enabled` (off means the older flat list of the 20 newest notes) and `memory.maxIndexChars` (how much of the root index is shown every turn).
+- **Safety.** Notes are **data about you, never instructions**: text inside a note (or text a web page tricked the agent into saving) cannot change a setting or start work. Guests and unrecognized voices never see your notes. Friend never follows a link out of the folder, and is told never to save passwords, PINs or keys.
+
+Next: Friend saving by itself after a conversation, a daily tidy-up, and a heartbeat that can start a conversation (see `docs/superpowers/specs/2026-10-24-friend-memory-and-heartbeat-design.md`).
 
 ## Plugins
 
-**Day trader (India)** is a bundled plugin with nine skills (scan for setups, news, entry, exit, budget, risk, replay, analyst, smart money) and an exact sizing tool (`trade-plan`). It reads Indian market data through two built-in tools, `market.get` (candles, quotes, NSE announcements, results, insider trades, bulk and block deals, shareholding) and `market.replay` (replays the rest of the session from the stock's own recent candles). Both use free public feeds (Yahoo Finance and the NSE, no key), follow the Web switch, and work in IST and rupees. Your limits (max loss, money, leverage) are asked each session, never assumed. It is analysis only: it never places an order, you place it in your broker app.
+**Day trader (India)** is a bundled plugin with ten skills (focus list, scan for setups, news, entry, exit, budget, risk, replay, analyst, smart money) and an exact sizing tool (`trade-plan`). It reads Indian market data through three built-in tools, `market.get` (candles, quotes, NSE announcements, results, insider trades, bulk and block deals, shareholding, top movers, most active, volume spurts), `market.scan` (finds opening-range breakouts and bounces across the market and ranks them) and `market.replay` (replays the rest of the session from the stock's own recent candles). Both use free public feeds (Yahoo Finance and the NSE, no key), follow the Web switch, and work in IST and rupees. Your limits (max loss, money, leverage) are asked each session, never assumed. It is analysis only: it never places an order, you place it in your broker app.
 
 Plugins add **skills** (instructions the agent loads when they fit, for example "write my stand-up") and **tools** (small programs the agent can call, for example an exact unit converter). Three examples are bundled in `plugins/`: `unit-converter`, `standup-writer`, `rubber-duck`.
 

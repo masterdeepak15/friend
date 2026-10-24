@@ -52,7 +52,7 @@ export const USAGE = `Usage: friend <command>
   lan status|on|off|port N|https on|off  let other devices on your network open Friend, change the port, or turn on the secure (https) address a phone needs for the microphone (restart to apply)
   claude setup|status        use your Claude subscription through Claude Code (no API key needed)
   voice setup|list|status|forget  install local speech and choose a female or male voice; check it; forget deletes your saved voice
-  memory list|forget <n>|clear  see and delete the notes Friend keeps about you
+  memory list|show <path>|forget <path or n>|clear  see and delete the notes Friend keeps about you
   plugin catalog|list|install|enable|disable|remove  add skills and sandboxed tools
   rules list|remove <id>     manage always-allow rules
   devices list|revoke <id>   manage paired devices

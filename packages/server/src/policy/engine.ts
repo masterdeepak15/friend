@@ -20,6 +20,7 @@ export const VOICE_TOOLS = new Set([
   "task.list",
   "task.add",
   "memory.search",
+  "memory.read",
   "system.info",
   "portfolio.status",
   "portfolio.summary",

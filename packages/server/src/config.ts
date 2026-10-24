@@ -32,6 +32,7 @@ export interface Config {
   voice: VoiceConfig;
   /** Updating Friend: by itself, or only when the owner says so. */
   updates: UpdatesConfig;
+  memory: MemoryConfig;
   session: SessionConfig;
   web: WebConfig;
   /** What the screen shows besides the AI's pictures: minimal, companion (status line and clock) or workspace (also chat and schedule). */
@@ -641,6 +642,17 @@ export interface VoiceConfig {
   duckPercent: number;
 }
 
+export interface MemoryConfig {
+  /** The memory tree: small notes in folders the assistant shapes. Off means the older flat list of notes. */
+  enabled: boolean;
+  /** The most characters of the root index put in every prompt. */
+  maxIndexChars: number;
+}
+export const sanitizeMemory = (m: Partial<MemoryConfig> | undefined): MemoryConfig => ({
+  enabled: typeof m?.enabled === "boolean" ? m.enabled : true,
+  maxIndexChars: typeof m?.maxIndexChars === "number" && Number.isFinite(m.maxIndexChars) ? Math.min(6000, Math.max(400, Math.round(m.maxIndexChars))) : 1500,
+});
+
 export interface UpdatesConfig {
   /** Look for a newer Friend when it starts, and install it by itself while Friend is not busy. */
   auto: boolean;
@@ -768,6 +780,7 @@ const defaults = (dataDir: string): Config => ({
   claudeCode: { ...DEFAULT_CLAUDE_CODE },
   voice: { ...DEFAULT_VOICE },
   updates: sanitizeUpdates(undefined),
+  memory: sanitizeMemory(undefined),
   session: sanitizeSession(undefined),
   web: sanitizeWeb(undefined),
   view: "companion",
@@ -823,6 +836,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     claudeCode: sanitizeClaudeCode(stored.claudeCode),
     voice: sanitizeVoice({ ...DEFAULT_VOICE, ...stored.voice }),
     updates: sanitizeUpdates(stored.updates),
+  memory: sanitizeMemory(stored.memory),
   session: sanitizeSession(stored.session),
   web: sanitizeWeb(stored.web),
     view: stored.view === "minimal" || stored.view === "workspace" ? stored.view : "companion",

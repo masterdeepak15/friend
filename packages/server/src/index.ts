@@ -7,6 +7,7 @@ export type { AppOptions } from "./app";
 export { Audit } from "./audit";
 export { Voiceprint } from "./voice/voiceprint";
 export { Memory } from "./memory";
+export { MemoryTree } from "./memory/tree";
 export { Plugins, inspectPlugin } from "./plugins";
 export type { PluginInfo, PluginManifest } from "./plugins";
 export { Auth } from "./auth";

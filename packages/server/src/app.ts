@@ -49,6 +49,8 @@ import { changeAlexa, changeBroker, changeChrome, changeIntegration, changeVideo
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
+import { MemoryTree } from "./memory/tree";
+import { importFlatNotes } from "./memory/import";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
 import { WeatherService, weatherSummary } from "./weather";
 import { dirname, extname, resolve } from "node:path";
@@ -281,6 +283,12 @@ export async function createApp(opts: AppOptions) {
   const musicHub = new MusicHub({ library: musicLibrary, sources: musicSources, host: hostPlayer, output: () => config.music.output });
   void musicLibrary.scan().catch(() => {});
   const memory = new Memory(db);
+  const memoryTree = new MemoryTree(join(opts.dataDir, "memory"));
+  if (config.memory.enabled) {
+    memoryTree.ensure();
+    importFlatNotes(memory, memoryTree); // once: the older flat notes come over into inbox/
+    memoryTree.repair(); // anything the owner dropped in by hand is listed so it can be found from the root
+  }
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
   const hub = new McpHub(new ConnectorStore(opts.dataDir));
@@ -638,6 +646,7 @@ export async function createApp(opts: AppOptions) {
     config,
     assistantName: () => auth.assistantName(),
     memory,
+    memoryTree,
     tasks,
     plugins,
     weather: weatherService,
@@ -1669,6 +1678,7 @@ export async function createApp(opts: AppOptions) {
     /** Telegram, SMS and WhatsApp. */
     channels: channelHub,
     memory,
+    memoryTree,
     tasks,
     plugins,
     /** Playing videos from the internet. */

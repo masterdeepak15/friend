@@ -141,16 +141,38 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "memory.read",
+    description: "Open a note, or a folder's index, in the memory tree. path is from the root, for example family/priya.md or family/. An empty path shows the root index.",
+    input: z.object({ path: z.string().max(200).optional() }),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "memory.write",
+    description:
+      "Save or change a note in the memory tree at a path you choose, for example family/priya.md. Folders are made as needed and listed in their index for you. Keep it short and about one thing. title and summary (one line) show in the index; folderSummary describes the folder. Never save passwords, PINs or keys.",
+    input: z.object({ path: z.string().min(1).max(200), text: z.string().min(1).max(6000), title: z.string().max(80).optional(), summary: z.string().max(160).optional(), folderSummary: z.string().max(160).optional() }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "memory.move",
+    description: "Move a note or a folder in the memory tree to another path (both indexes follow). Use it to group notes when a folder gets crowded.",
+    input: z.object({ from: z.string().min(1).max(200), to: z.string().min(1).max(200) }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
     name: "memory.search",
-    description: "Look through all saved notes about the owner for older facts. Every word of the query must appear in a note.",
+    description: "Look through all saved notes about the owner by words. Every word of the query must appear in a note (title, summary or text). Gives the paths to open with memory.read.",
     input: z.object({ query: z.string().min(1).max(200) }),
     baseTier: "T0",
     target: "gateway",
   },
   {
     name: "memory.forget",
-    description: "Delete one saved note by its number (the #number shown in the notes list or in search results). Use it when the owner asks you to forget something.",
-    input: z.object({ id: z.number().int().positive() }),
+    description: "Delete a saved note by its path (a folder path deletes the folder and everything in it), or by its number in the older flat list. Use it when the owner asks you to forget something.",
+    input: z.object({ path: z.string().min(1).max(200).optional(), id: z.number().int().positive().optional() }).refine((a) => !!a.path || !!a.id, { message: "Give the path of the note to forget." }),
     baseTier: "T1",
     target: "gateway",
   },
@@ -768,6 +790,12 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return "Scan the market for intraday setups";
     case "market.replay":
       return `Replay the rest of today for ${visible(clip(String(a.symbol ?? ""), 30))}`;
+    case "memory.read":
+      return `Read memory: ${visible(clip(String(a.path ?? "the root"), 200))}`;
+    case "memory.write":
+      return `Save a memory note at ${visible(clip(String(a.path ?? ""), 200))}`;
+    case "memory.move":
+      return `Move a memory note ${visible(clip(String(a.from ?? ""), 100))} to ${visible(clip(String(a.to ?? ""), 100))}`;
     case "skill.use":
       return `Load skill ${visible(String(a.plugin ?? ""))}/${visible(String(a.name ?? ""))}`;
     case "code.run":
@@ -777,7 +805,7 @@ export function describeCall(name: string, args: unknown, device?: string): stri
     case "memory.search":
       return `Search notes for: ${visible(clip(String(a.query ?? ""), 200))}`;
     case "memory.forget":
-      return `Forget note #${visible(String(a.id ?? ""))}`;
+      return a.path ? `Forget the memory ${visible(clip(String(a.path), 200))}` : `Forget note #${visible(String(a.id ?? ""))}`;
     case "task.add":
       return `Add task: ${visible(clip(String(a.title ?? ""), 200))}`;
     case "task.list":
