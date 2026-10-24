@@ -175,3 +175,27 @@ describe("links between notes stay right", () => {
     expect(tree.notes().find((n) => n.path === "a/two.md")!.related).toEqual(["a/one.md"]);
   });
 });
+
+describe("a model that slips a little", () => {
+  it("loses only the bad item, clips an over-long title, and says in the result why things were refused", async () => {
+    seedInbox();
+    const slip = {
+      notes: [
+        { from: "inbox/ishita-is-the-owner-s-daughter.md", to: "family/ishita.md", title: "A".repeat(200), summary: "the owner's daughter" },
+        { from: "inbox/sarika-is-the-owner-s-wife-she-m.md" }, // malformed: no destination
+        { from: "inbox/shivay-is-the-owner-s-son-he-may.md", to: "../bad.md", title: "x", summary: "x" },
+      ],
+    };
+    const r = await organizer(new FakeProvider([[text("```json\n" + JSON.stringify(slip) + "\n```"), done]])).run();
+    expect(r.filed).toBe(1);
+    expect(ok(tree.read("family")).text).toMatch(/\[A{80}\]\(ishita\.md\)/);
+    expect(r.why?.join(" ")).toMatch(/shivay.*refused/);
+  });
+
+  it("records what the model said when nothing in it could be used", async () => {
+    seedInbox();
+    const r = await organizer(new FakeProvider([[text("I think these notes are about a family and a project."), done]])).run();
+    expect(r.filed).toBe(0);
+    expect(r.left).toBe(6);
+  });
+});

@@ -17,11 +17,15 @@ Rules:
 Reply with JSON only, in this shape:
 {"notes":[{"from":"inbox/x.md","to":"family/ishita.md","title":"Ishita (daughter)","summary":"the owner's daughter","related":["family/sarika.md"]}],"merges":[{"from":["inbox/a.md","inbox/b.md"],"to":"projects/friend/overview.md","title":"Friend project","summary":"what Friend is","text":"combined note","related":[]}],"folders":[{"path":"family","summary":"the owner's family"}]}`;
 
-const Out = z.object({
-  notes: z.array(z.object({ from: z.string(), to: z.string(), title: z.string().max(80), summary: z.string().max(160), related: z.array(z.string()).max(8).optional() })).max(40).default([]),
-  merges: z.array(z.object({ from: z.array(z.string()).min(2).max(6), to: z.string(), title: z.string().max(80), summary: z.string().max(160), text: z.string().min(1).max(1500), related: z.array(z.string()).max(8).optional() })).max(10).default([]),
-  folders: z.array(z.object({ path: z.string(), summary: z.string().max(160) })).max(30).default([]),
-});
+const clip = (n: number) => z.string().transform((s) => s.replace(/\s+/g, " ").trim().slice(0, n));
+const NoteOp = z.object({ from: z.string(), to: z.string(), title: clip(80), summary: clip(160).default(""), related: z.array(z.string()).max(8).optional().catch(undefined) });
+const MergeOp = z.object({ from: z.array(z.string()).min(2).max(6), to: z.string(), title: clip(80), summary: clip(160).default(""), text: z.string().min(1).max(1500), related: z.array(z.string()).max(8).optional().catch(undefined) });
+const FolderOp = z.object({ path: z.string(), summary: clip(160) });
+
+/** The items of a list that are well formed. One bad item loses only itself. */
+function good<T>(schema: z.ZodType<T>, v: unknown): T[] {
+  return Array.isArray(v) ? v.flatMap((x) => { const r = schema.safeParse(x); return r.success ? [r.data] : []; }) : [];
+}
 
 const BATCH = 25;
 const OUTLINE_LINES = 150;
@@ -45,6 +49,8 @@ export interface TidyResult {
   left: number;
   folders: string[];
   skipped?: "nothing" | "no-answer";
+  /** Why items were not applied, for the audit log. */
+  why?: string[];
 }
 
 /**
@@ -99,7 +105,7 @@ export class MemoryOrganizer {
         return { filed: 0, merged: 0, left: batch.length, folders: [], skipped: "no-answer" };
       }
       const result = this.apply(out, batch);
-      this.d.audit.log("agent", "memory.tidy", { filed: result.filed, merged: result.merged, left: result.left, folders: result.folders });
+      this.d.audit.log("agent", "memory.tidy", { filed: result.filed, merged: result.merged, left: result.left, folders: result.folders, ...(result.why ? { why: result.why } : {}) });
       if (result.filed + result.merged > 0 && this.d.config().showSaved) {
         this.d.say?.(`Tidied memory: ${result.filed + result.merged} notes filed under ${result.folders.slice(0, 3).join(", ")}${result.folders.length > 3 ? " and more" : ""}`);
       }
@@ -121,9 +127,10 @@ export class MemoryOrganizer {
     } catch {
       return none;
     }
-    const parsed = Out.safeParse(raw);
-    if (!parsed.success) return none;
-    const plan = parsed.data;
+    const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const plan = { notes: good(NoteOp, obj.notes), merges: good(MergeOp, obj.merges), folders: good(FolderOp, obj.folders) };
+    const why: string[] = [];
+    if (plan.notes.length + plan.merges.length === 0) return { ...none, why: [`the answer had no usable notes (starts: ${out.slice(0, 160).replace(/\s+/g, " ")})`] };
     const inBatch = new Map(batch.map((n) => [n.path, n]));
     const handled = new Set<string>();
     const moved = new Map<string, string>(); // old path -> new path
@@ -140,7 +147,10 @@ export class MemoryOrganizer {
     for (const m of plan.merges) {
       const to = target(m.to);
       const parts = m.from.map((f) => inBatch.get(f));
-      if (!to || parts.some((p) => !p) || m.from.some((f) => handled.has(f))) continue;
+      if (!to || parts.some((p) => !p) || m.from.some((f) => handled.has(f))) {
+        why.push(`merge into ${m.to} refused: ${!to ? "the path is not usable or is taken" : "a source is not in this batch"}`);
+        continue;
+      }
       const longest = Math.max(...parts.map((p) => p!.body.trim().length));
       if (m.text.trim().length < longest * KEEP_AT_LEAST) continue; // a merge that drops most of a note is not made
       const w = tree.write(to, m.text, { title: m.title, summary: m.summary, source: "agent" });
@@ -158,9 +168,15 @@ export class MemoryOrganizer {
     for (const n of plan.notes) {
       const from = inBatch.get(n.from);
       const to = target(n.to);
-      if (!from || !to || handled.has(n.from)) continue;
+      if (!from || !to || handled.has(n.from)) {
+        why.push(`${n.from} -> ${n.to} refused: ${!from ? "not in this batch" : !to ? "the path is not usable or is taken" : "already handled"}`);
+        continue;
+      }
       const mv = tree.move(n.from, to);
-      if (!mv.ok) continue;
+      if (!mv.ok) {
+        why.push(`${n.from} -> ${to}: ${mv.error}`);
+        continue;
+      }
       handled.add(n.from);
       moved.set(n.from, to);
       tree.write(to, from.body, { title: n.title, summary: n.summary, source: "agent" });
@@ -179,6 +195,6 @@ export class MemoryOrganizer {
       if (!note) continue;
       tree.write(w.to, note.body, { related: [...note.related, ...w.related.map((r) => moved.get(r) ?? r)], source: "agent" });
     }
-    return { filed, merged: plan.merges.filter((m) => m.from.every((f) => handled.has(f))).length, left: batch.filter((n) => !handled.has(n.path)).length, folders: [...topics].sort() };
+    return { filed, merged: plan.merges.filter((m) => m.from.every((f) => handled.has(f))).length, left: batch.filter((n) => !handled.has(n.path)).length, folders: [...topics].sort(), ...(why.length ? { why: why.slice(0, 8) } : {}) };
   }
 }
