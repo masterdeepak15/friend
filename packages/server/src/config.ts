@@ -57,6 +57,8 @@ export interface Config {
   chrome: ChromeConfig;
   /** Playing videos from the internet (YouTube and other sites), on the screen or in a PC window. */
   video: VideoConfig;
+  /** The safe browser: a private, throwaway Chrome the assistant can read and photograph a public page with. */
+  browser: BrowserConfig;
   /** The screen widgets: profile label, date and time, quick-launch buttons, animations. */
   hud: HudConfig;
   /** The Office: workers Friend hires, in the owner's projects, under the owner's rules. */
@@ -80,6 +82,31 @@ export interface VideoConfig {
   autoInstall: boolean;
   /** How a YouTube video plays on the screen: in YouTube's own player (embed), or made by Friend (stream). */
   youtube: VideoYoutube;
+}
+
+export interface BrowserConfig {
+  installed: boolean;
+  enabled: boolean;
+  /** The Chrome, Chromium or Edge program to use; empty means find one. */
+  chromePath: string;
+  /** The longest a page may take to open and be read. */
+  timeoutSec: number;
+  /** The most page text that is given to the model. */
+  maxChars: number;
+}
+export const BROWSER_LIMITS = { timeoutSec: { min: 5, max: 60, def: 20 }, maxChars: { min: 1000, max: 30000, def: 12000 } };
+/** A path to a browser program may have spaces (Program Files); it is started without a shell, so it only has to be a plain path. */
+export const chromePathOk = (v: string): boolean => v === "" || (v.length <= 300 && !/[\u0000-\u001f"<>|*?]/.test(v) && !v.startsWith("-"));
+export function sanitizeBrowser(raw: unknown): BrowserConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const num = (v: unknown, o: { min: number; max: number; def: number }): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(o.max, Math.max(o.min, Math.round(v))) : o.def);
+  return {
+    installed: r.installed === true,
+    enabled: r.enabled === true,
+    chromePath: typeof r.chromePath === "string" && chromePathOk(r.chromePath.trim()) ? r.chromePath.trim() : "",
+    timeoutSec: num(r.timeoutSec, BROWSER_LIMITS.timeoutSec),
+    maxChars: num(r.maxChars, BROWSER_LIMITS.maxChars),
+  };
 }
 
 export interface ChromeConfig {
@@ -718,9 +745,30 @@ export interface WebConfig {
   searxngUrl: string;
   braveKey: string | null;
   tavilyKey: string | null;
+  /** The Tavily plugin: when it is on and has a key, searches go to Tavily (with news, finance, time range and domain filters). */
+  tavily: TavilyConfig;
+}
+export interface TavilyConfig {
+  installed: boolean;
+  enabled: boolean;
+  /** basic costs one credit, advanced two and reads deeper. */
+  depth: "basic" | "advanced";
+  /** How many results a search gives when the assistant does not ask for a number. */
+  maxResults: number;
+}
+export const TAVILY_LIMITS = { maxResults: { min: 1, max: 8, def: 5 } };
+export function sanitizeTavily(raw: unknown): TavilyConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const L = TAVILY_LIMITS.maxResults;
+  return {
+    installed: r.installed === true,
+    enabled: r.enabled === true,
+    depth: r.depth === "advanced" ? "advanced" : "basic",
+    maxResults: typeof r.maxResults === "number" && Number.isFinite(r.maxResults) ? Math.min(L.max, Math.max(L.min, Math.round(r.maxResults))) : L.def,
+  };
 }
 export const WEB_PROVIDERS: readonly WebProvider[] = ["duckduckgo", "brave", "tavily", "searxng"];
-export const DEFAULT_WEB: WebConfig = { enabled: true, provider: "duckduckgo", searxngUrl: "", braveKey: null, tavilyKey: null };
+export const DEFAULT_WEB: WebConfig = { enabled: true, provider: "duckduckgo", searxngUrl: "", braveKey: null, tavilyKey: null, tavily: sanitizeTavily({}) };
 
 /** A web address with no login in it, or nothing. */
 export function plainWebAddress(v: unknown): string {
@@ -741,6 +789,7 @@ export function sanitizeWeb(raw: unknown): WebConfig {
     searxngUrl: plainWebAddress(r.searxngUrl),
     braveKey: key(r.braveKey),
     tavilyKey: key(r.tavilyKey),
+    tavily: sanitizeTavily(r.tavily),
   };
 }
 /** How Friend keeps the model's own conversation from growing without end. */
@@ -845,6 +894,7 @@ const defaults = (dataDir: string): Config => ({
   music: sanitizeMusic({}),
   chrome: sanitizeChrome({}),
   video: sanitizeVideo({}),
+  browser: sanitizeBrowser({}),
   hud: sanitizeHud({}),
   office: sanitizeOffice({}),
   dataDir,
@@ -902,6 +952,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     music: sanitizeMusic(stored.music),
     chrome: sanitizeChrome(stored.chrome),
     video: sanitizeVideo(stored.video),
+    browser: sanitizeBrowser(stored.browser),
     hud: sanitizeHud(stored.hud),
     office: sanitizeOffice(stored.office),
     dataDir,

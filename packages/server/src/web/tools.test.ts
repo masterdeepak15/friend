@@ -130,3 +130,24 @@ describe("a page cannot make the answer huge", () => {
     expect(r.text.length).toBeLessThan(13_000);
   });
 });
+
+describe("the Tavily plugin as the search source", () => {
+  const web = (over: object) => ({ ...DEFAULT_WEB, ...over });
+  const withPlugin = (over: object = {}) => web({ tavily: { ...DEFAULT_WEB.tavily, installed: true, enabled: true, ...over } });
+  const id = (c: ReturnType<typeof chooseSearch>) => ("needsKey" in c ? `needs:${c.needsKey}` : c.id);
+
+  it("takes over from the chosen source once it is on and has a key, and says what is missing without one", () => {
+    expect(id(chooseSearch(withPlugin({}) as never))).toBe("needs:Tavily");
+    expect(id(chooseSearch({ ...withPlugin(), provider: "brave", braveKey: "B", tavilyKey: "K" } as never))).toBe("tavily");
+    expect(id(chooseSearch({ ...web({ provider: "brave", braveKey: "B", tavilyKey: "K" }), tavily: { ...DEFAULT_WEB.tavily, enabled: false } } as never))).toBe("brave");
+  });
+
+  it("passes only well-formed filters from the model to the search", async () => {
+    const search = vi.fn(async () => ({ ok: true, text: "x" }));
+    const d = { enabled: () => true, search, fetch: vi.fn(), audit: vi.fn() } as unknown as WebToolDeps;
+    await runWebTool("web.search", { query: "q", topic: "news", timeRange: "week", includeDomains: ["Reuters.com", "bad domain!", 5], excludeDomains: [], extra: "ignored" }, d);
+    expect(search).toHaveBeenCalledWith("q", undefined, undefined, { topic: "news", timeRange: "week", includeDomains: ["reuters.com"] });
+    await runWebTool("web.search", { query: "q", topic: "weird", timeRange: "decade" }, d);
+    expect(search).toHaveBeenLastCalledWith("q", undefined, undefined, undefined);
+  });
+});

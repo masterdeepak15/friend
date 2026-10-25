@@ -139,3 +139,14 @@ describe("every source", () => {
     expect(hits[0]!.snippet).not.toContain("\n");
   });
 });
+
+describe("Tavily (plugin options)", () => {
+  it("sends the depth, topic, time range and site filters only when they are given", async () => {
+    const a = answer({ results: [] });
+    await tavily("K", { fetchImpl: a.fetchImpl, depth: "advanced" }).search("openai", 4, signal, { topic: "news", timeRange: "week", includeDomains: ["reuters.com"], excludeDomains: ["x.com"] });
+    expect(JSON.parse(String(a.seen[0]!.init.body))).toEqual({ query: "openai", max_results: 4, search_depth: "advanced", topic: "news", time_range: "week", include_domains: ["reuters.com"], exclude_domains: ["x.com"] });
+    const b = answer({ results: [] });
+    await tavily("K", { fetchImpl: b.fetchImpl }).search("openai", 4, signal);
+    expect(JSON.parse(String(b.seen[0]!.init.body))).toEqual({ query: "openai", max_results: 4, search_depth: "basic" });
+  });
+});

@@ -1,0 +1,13 @@
+{
+  "id": "tavily-search",
+  "name": "Tavily search skill",
+  "version": "1.0.0",
+  "description": "How to search the web well with the Tavily plugin: one focused query, the right topic and time range, domain filters, and reading the source before stating a fact.",
+  "skills": [
+    {
+      "name": "web-research",
+      "description": "Research a question on the web: pick the topic and time range, narrow by site, read the best sources, and answer with their names",
+      "file": "skills/web-research.md"
+    }
+  ]
+}

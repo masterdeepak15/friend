@@ -1,13 +1,13 @@
 import type { WebConfig } from "../config";
 import { extractText } from "./extract";
 import type { Fetched } from "./fetch";
-import { brave, duckDuckGo, searxng, tavily } from "./providers";
+import { brave, duckDuckGo, searxng, tavily, type SearchExtras } from "./providers";
 import { UNTRUSTED, type Choice } from "./search";
 
 export interface WebToolDeps {
   /** Read each time, so switching it off in Settings applies at once. */
   enabled(): boolean;
-  search(query: string, count?: number, signal?: AbortSignal): Promise<{ ok: boolean; text: string }>;
+  search(query: string, count?: number, signal?: AbortSignal, extras?: SearchExtras): Promise<{ ok: boolean; text: string }>;
   fetch(url: string, signal?: AbortSignal): Promise<Fetched>;
   /** A page was read: only the site is recorded, never the whole address. */
   audit(entry: { host: string }): void;
@@ -23,7 +23,7 @@ export async function runWebTool(name: string, args: unknown, d: WebToolDeps, si
 
   if (name === "web.search") {
     if (typeof a.query !== "string" || !a.query.trim()) return { ok: false, text: "Give a question to search for." };
-    return d.search(a.query, typeof a.count === "number" ? a.count : undefined, signal);
+    return d.search(a.query, typeof a.count === "number" ? a.count : undefined, signal, searchExtras(a));
   }
 
   if (name === "web.read") {
@@ -43,8 +43,25 @@ export async function runWebTool(name: string, args: unknown, d: WebToolDeps, si
   return { ok: false, text: "That web tool does not exist." };
 }
 
-/** The search source the owner picked in Settings, or what is missing for it. */
+const domains = (v: unknown): string[] | undefined => {
+  if (!Array.isArray(v)) return undefined;
+  const list = v.filter((x): x is string => typeof x === "string" && /^[a-z0-9.-]{1,100}$/i.test(x.trim())).map((x) => x.trim().toLowerCase()).slice(0, 10);
+  return list.length ? list : undefined;
+};
+
+/** The optional filters the model may give a search; anything that is not exactly allowed is left out. */
+export function searchExtras(a: Record<string, unknown>): SearchExtras | undefined {
+  const topic = a.topic === "general" || a.topic === "news" || a.topic === "finance" ? a.topic : undefined;
+  const timeRange = a.timeRange === "day" || a.timeRange === "week" || a.timeRange === "month" || a.timeRange === "year" ? a.timeRange : undefined;
+  const includeDomains = domains(a.includeDomains);
+  const excludeDomains = domains(a.excludeDomains);
+  const out: SearchExtras = { ...(topic ? { topic } : {}), ...(timeRange ? { timeRange } : {}), ...(includeDomains ? { includeDomains } : {}), ...(excludeDomains ? { excludeDomains } : {}) };
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** The search source the owner picked in Settings (or the Tavily plugin, when it is on), or what is missing for it. */
 export function chooseSearch(w: WebConfig): Choice {
+  if (w.tavily.enabled) return w.tavilyKey ? tavily(w.tavilyKey, { depth: w.tavily.depth }) : { needsKey: "Tavily" };
   switch (w.provider) {
     case "brave":
       return w.braveKey ? brave(w.braveKey) : { needsKey: "Brave" };

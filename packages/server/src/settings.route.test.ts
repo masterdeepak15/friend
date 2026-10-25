@@ -146,7 +146,7 @@ describe("web search settings", () => {
     const text = await (await get(cookie)).text();
     expect(text).not.toContain("BRAVE-SECRET-1");
     expect(text).not.toContain("TAVILY-SECRET-2");
-    expect(JSON.parse(text).web).toEqual({ enabled: true, provider: "brave", searxngUrl: "", braveKeySet: true, tavilyKeySet: true });
+    expect(JSON.parse(text).web).toEqual({ enabled: true, provider: "brave", searxngUrl: "", braveKeySet: true, tavilyKeySet: true, tavily: { installed: false, enabled: false, depth: "basic", maxResults: 5 } });
   });
 
   it("change the source and the keys with the PIN, and keep a key when the box is left empty", async () => {

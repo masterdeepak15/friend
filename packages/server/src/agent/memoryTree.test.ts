@@ -7,6 +7,7 @@ import { Approvals } from "../approvals";
 import { Audit } from "../audit";
 import { Memory } from "../memory";
 import { MemoryTree } from "../memory/tree";
+import { Soul } from "../memory/soul";
 import { importFlatNotes } from "../memory/import";
 import { buildSystemPrompt } from "./prompt";
 import { Auth } from "../auth";
@@ -212,5 +213,72 @@ describe("bringing the older notes over", () => {
   it("a prompt without a tree still lists the flat notes", () => {
     expect(buildSystemPrompt("Jarvis", "empty", "owner", ["#1 likes tea"])).toMatch(/#1 likes tea/);
     expect(buildSystemPrompt("Jarvis", "empty", "owner", ["#1 likes tea"], undefined, undefined, undefined, undefined, "# Memory\n- [A](a/)")).not.toMatch(/#1 likes tea/);
+  });
+});
+describe("the soul", () => {
+  const withSoul = (p: FakeProvider) => {
+    const soul = new Soul(tree, join(dir, "soul-history"));
+    soul.ensure();
+    const agent = new Agent({
+      provider: p, policy, devices: { exec: vi.fn(), hasOnline: () => true, targetName: () => "pc" } as never, stage: new StageState(), db,
+      audit: new Audit(db), config, assistantName: () => "Jarvis", memory: flat, memoryTree: tree, soul, approvals,
+    });
+    return { soul, agent };
+  };
+
+  it("is in the system prompt of an owner turn, below the safety rules, and says it cannot loosen them", async () => {
+    const p = new FakeProvider([[text("hi"), done]]);
+    const { soul, agent } = withSoul(p);
+    soul.set("# Soul\nYou are Maya, a patient study coach.", "owner");
+    await agent.runTurn("hello", ctx);
+    const s = system(p);
+    expect(s).toMatch(/Your soul/);
+    expect(s).toMatch(/You are Maya, a patient study coach\./);
+    expect(s.indexOf("Loyalty and safety")).toBeLessThan(s.indexOf("Your soul"));
+    expect(s).toMatch(/never overrides "Loyalty and safety"/);
+  });
+
+  it("uses the default soul when there is no soul object, and never gives it to a guest", async () => {
+    const p = new FakeProvider([[text("hi"), done]]);
+    await build(p).runTurn("hello", ctx);
+    expect(system(p)).toMatch(/You are the personal assistant of one person/);
+    const g = new FakeProvider([[text("no"), done]]);
+    await build(g).runTurn("hello", { trust: "guest", emit, ip: "9.9.9.9" });
+    expect(system(g)).not.toMatch(/Your soul/);
+  });
+
+  it("is changed by soul.set only after the owner approves with the PIN, and the next step already uses it", async () => {
+    const p = new FakeProvider([[call("1", "soul.set", { text: "# Soul\nYou are my blunt coach." }), done], [text("Done."), done]]);
+    const { soul, agent } = withSoul(p);
+    await agent.runTurn("be blunt", ctx);
+    const card = emitted.find((m) => m.type === "approval.request") as Extract<ServerMsg, { type: "approval.request" }>;
+    expect(card).toMatchObject({ tool: "soul.set", tier: "T3", needsPin: true });
+    expect(card.summary).toMatch(/You are my blunt coach/);
+    expect(soul.text()).toBe("# Soul\nYou are my blunt coach.");
+    expect(String(p.calls[1]!.system)).toMatch(/You are my blunt coach/);
+  });
+
+  it("is left alone when the owner denies the change", async () => {
+    decision = "deny";
+    const p = new FakeProvider([[call("1", "soul.set", { text: "# Soul\nYou are rude." }), done], [text("ok"), done]]);
+    const { soul, agent } = withSoul(p);
+    await agent.runTurn("be rude", ctx);
+    expect(soul.isDefault()).toBe(true);
+  });
+
+  it("is restored by soul.restore, read by soul.read without a card, and memory tools refuse to touch it", async () => {
+    const p = new FakeProvider([[call("1", "soul.read"), call("2", "memory.write", { path: "soul.md", text: "x" }), call("3", "memory.forget", { path: "soul.md" }), done], [text("ok"), done]]);
+    const { soul, agent } = withSoul(p);
+    soul.set("# Soul\nYou are odd.", "owner");
+    await agent.runTurn("what is your soul", ctx);
+    const r = lastTool(p);
+    expect(r).toMatch(/You are odd/);
+    expect(r).toMatch(/soul\.set/);
+    expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
+    const q = new FakeProvider([[call("1", "soul.restore", { to: "default" }), done], [text("ok"), done]]);
+    const b = withSoul(q);
+    b.soul.set("# Soul\nYou are odd.", "owner");
+    await b.agent.runTurn("go back to normal", ctx);
+    expect(b.soul.isDefault()).toBe(true);
   });
 });

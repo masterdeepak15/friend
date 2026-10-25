@@ -6,12 +6,12 @@ import type { VideoStatus } from "./video/types";
 import type { AudiusHub } from "./music/audius";
 import type { SoundCloudHub } from "./music/soundcloud";
 import type { SpotifyHub } from "./music/spotify";
-import { DEFAULT_CHANNELS, type AlexaConfig, type BrokersConfig, type ChannelsConfig, type ChromeConfig, type Config, type MusicConfig, type VideoConfig } from "./config";
+import { DEFAULT_CHANNELS, type AlexaConfig, type BrowserConfig, type BrokersConfig, type ChannelsConfig, type ChromeConfig, type Config, type MusicConfig, type VideoConfig, type WebConfig } from "./config";
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
 export type ChannelIntegrationId = "telegram" | "twilio";
-export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius" | "chrome" | "video";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "chrome", "video"];
+export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius" | "browser" | "tavily" | "chrome" | "video";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "browser", "tavily", "chrome", "video"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -46,6 +46,8 @@ const META: Record<IntegrationId, { name: string; description: string }> = {
   audius: { name: "Audius", description: "Free music from Audius, an open music service: ask for a track or an artist. No account, no key and no payment: install it and switch it on. Mostly independent artists." },
   chrome: { name: "Chrome control", description: "Lets Friend open pages, read them, click and type in your own Chrome, through an extension. It comes with Friend: nothing else to install. Every action still asks for your approval, and while it is on, Friend can act as you on the sites it allows." },
   video: { name: "Web video", description: "Play videos from YouTube and almost any video site, on your Friend screen or in a window on this PC: ask for a video by name or give a link. Uses the free programs yt-dlp and ffmpeg (and mpv for a PC window), which you install once; nothing is downloaded to your disk." },
+  tavily: { name: "Tavily search", description: "Better web search for Friend: news and finance searches, \"this week\" filters and site filters, built for assistants. Needs your own Tavily API key (tavily.com has a free monthly allowance; check their current limits). The key stays on this PC and is never shown to the AI. Without it, or when switched off, Friend keeps its free search." },
+  browser: { name: "Safe browser", description: "Lets Friend open a public web page in a private Chrome of its own, to read pages that need scripts and to see how a page looks. It starts fresh each time with no cookies or logins, cannot open addresses on this PC or your network, and is deleted afterwards. It does not try to get past logins, paywalls or bot checks. Uses the Chrome or Edge already on this PC; nothing to download." },
   zerodha: { name: "Zerodha", description: "Read-only look at your Zerodha portfolio: ask Friend how it is doing, or have a report sent to Telegram or WhatsApp every morning and at market close. Friend cannot place orders. Needs a free Kite Connect app." },
 };
 
@@ -60,9 +62,11 @@ export const PUBLIC_SETTINGS: Record<IntegrationId, readonly string[]> = {
   audius: [],
   chrome: [],
   video: [],
+  tavily: [],
+  browser: [],
 };
 
-export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }, audius?: Pick<AudiusHub, "status">, chrome?: { status(): ChromeStatus }, video?: { status(): VideoStatus | null }): IntegrationView[] {
+export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }, audius?: Pick<AudiusHub, "status">, chrome?: { status(): ChromeStatus }, video?: { status(): VideoStatus | null }, browser?: { status(): { chrome: string | null } }): IntegrationView[] {
   const status = hub.status();
   const t = config.channels.telegram;
   const w = config.channels.twilio;
@@ -223,6 +227,35 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     return { state: "online", detail: `Ready. Twilio should post incoming messages to ${status.twilio.webhook ?? publicUrl}.${w.ownerNumber ? "" : " Add your own number so you can talk to Friend from it."}` };
   };
 
+  const tv = config.web.tavily;
+  const tvKey = !!config.web.tavilyKey;
+  const tvSteps: IntegrationStep[] = [
+    { text: "Create a free account at tavily.com and copy your API key.", done: tvKey },
+    { text: "Paste the key in Configure and save.", done: tvKey },
+    { text: "Switch the plugin on.", done: tv.enabled },
+  ];
+  const tvState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!tv.installed) return { state: "not-installed", detail: "" };
+    if (!tvKey) return { state: "needs-setup", detail: "Add your Tavily API key (press Configure)." };
+    if (!tv.enabled) return { state: "off", detail: "Switched off." };
+    if (!config.web.enabled) return { state: "needs-setup", detail: "Web search is switched off in Settings." };
+    return { state: "online", detail: `Ready. Searches go to Tavily (${tv.depth} depth, ${tv.maxResults} results).` };
+  };
+
+  const bw = config.browser;
+  const bwFound = browser?.status().chrome ?? null;
+  const bwSteps: IntegrationStep[] = [
+    { text: "Chrome or Edge is on this PC. Friend finds it by itself; if it cannot, enter its path in Configure.", done: !!bwFound },
+    { text: "Switch the plugin on.", done: bw.enabled },
+    { text: "Ask Friend to open a page and tell you what it says, or to show you how it looks.", done: bw.installed && bw.enabled && !!bwFound },
+  ];
+  const bwState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!bw.installed) return { state: "not-installed", detail: "" };
+    if (!bwFound) return { state: "needs-setup", detail: "Friend cannot find Chrome or Edge on this PC. Install one, or enter its path (press Configure)." };
+    if (!bw.enabled) return { state: "off", detail: "Switched off." };
+    return { state: "online", detail: "Ready. Every page opens in a private, throwaway Chrome, and each one asks for your approval." };
+  };
+
   return [
     { id: "telegram", ...META.telegram, kind: "integration", installed: t.installed, enabled: t.enabled, ...tgState(), steps: tgSteps, settings: {}, secrets: { botToken: !!t.botToken, linked: t.ownerChatId !== null } },
     {
@@ -241,6 +274,8 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { id: "spotify", ...META.spotify, kind: "integration", installed: sp.installed, enabled: sp.enabled, ...spState(), steps: spSteps, settings: { clientId: sp.clientId }, secrets: {} },
     { id: "soundcloud", ...META.soundcloud, kind: "integration", installed: sc.installed, enabled: sc.enabled, ...scState(), steps: scSteps, settings: { clientId: sc.clientId }, secrets: { clientSecret: scSecret } },
     { id: "audius", ...META.audius, kind: "integration", installed: au.installed, enabled: au.enabled, ...auState(), steps: auSteps, settings: {}, secrets: {} },
+    { id: "browser", ...META.browser, kind: "integration", installed: bw.installed, enabled: bw.enabled, ...bwState(), steps: bwSteps, settings: { chrome: bwFound ?? "", chromePath: bw.chromePath, timeoutSec: String(bw.timeoutSec), maxChars: String(bw.maxChars) }, secrets: {} },
+    { id: "tavily", ...META.tavily, kind: "integration", installed: tv.installed, enabled: tv.enabled, ...tvState(), steps: tvSteps, settings: { depth: tv.depth, maxResults: String(tv.maxResults) }, secrets: { apiKey: tvKey } },
     { id: "chrome", ...META.chrome, kind: "integration", installed: ch.installed, enabled: ch.enabled, ...chState(), steps: chSteps, settings: chs?.extensionFolder ? { extensionFolder: chs.extensionFolder } : {}, secrets: {} },
     { id: "video", ...META.video, kind: "integration", installed: vd.installed, enabled: vd.enabled, ...vdState(), steps: vdSteps, settings: {}, secrets: {} },
   ];
@@ -346,6 +381,38 @@ export function changeAudius(audius: MusicConfig["audius"], change: { install: t
   }
   if (!audius.installed) return `${META.audius.name} is not installed yet.`;
   audius.enabled = change.enabled;
+  return null;
+}
+
+/** The same for the Tavily search plugin: it can only be switched on once the owner has put in their key. Removing it keeps the key, which Settings, Web also uses. */
+export function changeTavily(tavily: WebConfig["tavily"], change: { install: true } | { remove: true } | { enabled: boolean }, keySet: boolean): string | null {
+  if ("install" in change) {
+    tavily.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    Object.assign(tavily, { installed: false, enabled: false });
+    return null;
+  }
+  if (!tavily.installed) return `${META.tavily.name} is not installed yet.`;
+  if (change.enabled && !keySet) return "Add your Tavily API key first (Configure), then switch it on.";
+  tavily.enabled = change.enabled;
+  return null;
+}
+
+/** The same for the safe browser: it can only be switched on once a Chrome or Edge is found. */
+export function changeBrowser(browser: BrowserConfig, change: { install: true } | { remove: true } | { enabled: boolean }, found: boolean): string | null {
+  if ("install" in change) {
+    browser.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    Object.assign(browser, { installed: false, enabled: false });
+    return null;
+  }
+  if (!browser.installed) return `${META.browser.name} is not installed yet.`;
+  if (change.enabled && !found) return "Friend cannot find Chrome or Edge on this PC. Install one or enter its path (Configure), then switch it on.";
+  browser.enabled = change.enabled;
   return null;
 }
 

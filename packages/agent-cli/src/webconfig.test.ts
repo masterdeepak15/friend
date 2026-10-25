@@ -33,7 +33,7 @@ describe("friend config set: searching the web and tidying the conversation", ()
     const c = loadConfig(t.dataDir);
     expect(c.claudeCode.webSearch).toBe(false);
     expect(c.session).toEqual({ autoCompact: false, compactAtTokens: 200_000 });
-    expect(c.web).toEqual({ enabled: false, provider: "searxng", searxngUrl: "http://localhost:8080", braveKey: "BK", tavilyKey: "TK" });
+    expect(c.web).toEqual({ enabled: false, provider: "searxng", searxngUrl: "http://localhost:8080", braveKey: "BK", tavilyKey: "TK", tavily: { installed: false, enabled: false, depth: "basic", maxResults: 5 } });
   });
 
   it("refuses values that make no sense", async () => {

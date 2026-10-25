@@ -13,13 +13,13 @@ const withConfig = (cfg: unknown) => {
 
 describe("web settings", () => {
   it("default to searching on, with DuckDuckGo and no keys", () => {
-    expect(DEFAULT_WEB).toEqual({ enabled: true, provider: "duckduckgo", searxngUrl: "", braveKey: null, tavilyKey: null });
+    expect(DEFAULT_WEB).toEqual({ enabled: true, provider: "duckduckgo", searxngUrl: "", braveKey: null, tavilyKey: null, tavily: { installed: false, enabled: false, depth: "basic", maxResults: 5 } });
     expect(withConfig({}).web).toEqual(DEFAULT_WEB);
   });
 
   it("keep what was saved", () => {
     const w = withConfig({ web: { enabled: false, provider: "brave", braveKey: "BK", searxngUrl: "http://localhost:8080" } }).web;
-    expect(w).toEqual({ enabled: false, provider: "brave", searxngUrl: "http://localhost:8080", braveKey: "BK", tavilyKey: null });
+    expect(w).toEqual({ enabled: false, provider: "brave", searxngUrl: "http://localhost:8080", braveKey: "BK", tavilyKey: null, tavily: { installed: false, enabled: false, depth: "basic", maxResults: 5 } });
   });
 
   it("turn nonsense into the defaults", () => {

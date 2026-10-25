@@ -16,6 +16,7 @@ import { TABS, type SettingsTab } from "./tabs";
 import { HoloPanel } from "../orb/HoloPanel";
 import { ConversationSection } from "./ConversationSection";
 import { WebSection } from "./WebSection";
+import { SoulTab } from "./SoulTab";
 import { StartupTab } from "./StartupTab";
 import { UsageTab } from "./UsageTab";
 
@@ -537,6 +538,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       {tab === "office" && draft.office && <OfficeTab office={draft.office} onChange={(p) => setDraft({ ...draft, office: { ...draft.office!, ...p } })} />}
       {tab === "memory" && draft.memory && <MemoryTab memory={draft.memory} onChange={(p) => setDraft({ ...draft, memory: { ...draft.memory!, ...p } })} />}
       {tab === "heartbeat" && draft.proactive && <HeartbeatTab proactive={draft.proactive} onChange={(p) => setDraft({ ...draft, proactive: { ...draft.proactive!, ...p } })} />}
+      {tab === "soul" && <SoulTab />}
       {tab === "usage" && <UsageTab />}
           {tab === "security" && <SecurityTab />}
     </>

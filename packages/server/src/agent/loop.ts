@@ -20,6 +20,7 @@ import type { Config } from "../config";
 import type { Db } from "../db";
 import type { Memory } from "../memory";
 import { MemoryTree, capIndex, inboxName } from "../memory/tree";
+import type { Soul } from "../memory/soul";
 import { localIso, type Tasks } from "../tasks";
 import type { DeviceHub } from "../devices";
 import { classifyShell } from "../policy/classify";
@@ -43,6 +44,15 @@ export const MAX_STEPS = 20;
 const NUDGE = "(Automatic reminder) You said you would do something but did not call a tool. Call the tool now, then show the result on the screen. If nothing more is needed, just answer.";
 /** How many of the newest notes go into every prompt; older ones are found with memory.search. */
 export const NOTES_IN_PROMPT = 20;
+/** Only the site of an address, for the audit log (a whole address can carry private words). */
+const hostOf = (u: string): string => {
+  try {
+    return new URL(u).hostname;
+  } catch {
+    return "";
+  }
+};
+
 /** Largest tool result sent back to the model; older, bigger results would otherwise swamp every later turn. */
 export const MAX_RESULT_CHARS = 24_000;
 
@@ -84,10 +94,14 @@ export interface AgentDeps {
   integrations?: { summary(): string };
   /** The Office of hired workers. Without it, or when switched off, the office tools report they are unavailable. */
   office?: OfficeApi;
+  /** The safe browser (browser.read, browser.screenshot). Without it, or when switched off, the model is not offered them. */
+  browser?: { enabled(): boolean; read(url: string, signal?: AbortSignal): Promise<{ ok: true; text: string } | { ok: false; error: string }>; screenshot(url: string, fullPage: boolean, signal?: AbortSignal): Promise<{ ok: true; mime: string; data: string; note: string } | { ok: false; error: string }> };
   /** The owner's saved notes. Without it the memory tools report they are unavailable. */
   memory?: Memory;
   /** The memory tree. With it, and memory.enabled in the settings, the memory tools and the prompt use the tree instead of the flat list. */
   memoryTree?: MemoryTree;
+  /** The assistant's soul (soul.md in memory): who it is, read into every owner request and changed with soul.set. Without it the default soul is used. */
+  soul?: Soul;
   /** A turn with the owner ended (not a guest or a household member). Friend uses it to save what is worth keeping. */
   onOwnerTurnEnd?: () => void;
   /** Files the unfiled notes into topics now (memory.tidy). Returns a sentence about what was done. */
@@ -302,13 +316,14 @@ export class Agent {
       const pluginTools = (d.plugins?.toolDefs() ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
       const webOn = !!d.web?.enabled();
       const marketOn = webOn && !!d.market;
+      const browserOn = !!d.browser?.enabled();
       const tools = (
         ctx.trust === "owner"
           ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])]
           : member
             ? toolSpecs().filter((t) => MEMBER_TOOLS.has(t.name))
             : []
-      ).filter((t) => (webOn || !t.name.startsWith("web.")) && (marketOn || !t.name.startsWith("market.")));
+      ).filter((t) => (webOn || !t.name.startsWith("web.")) && (marketOn || !t.name.startsWith("market.")) && (browserOn || !t.name.startsWith("browser.")));
       let nudged = false;
 
       // Clear requests for real data (weather in a named city, the computer's stats) are answered with the real tools
@@ -348,6 +363,7 @@ export class Agent {
           member ? ctx.person!.name : undefined,
           languageNote(text, ctx.spoken, voiceGender(devanagariLanguage(text) === "mr" || ctx.spoken?.toLowerCase().startsWith("mr") ? "mr" : "hi", { main: d.config.voice.ttsVoice, hindi: d.config.voice.hindiVoice || undefined, marathi: d.config.voice.marathiVoice || undefined })),
           memoryIndex,
+          isolated ? undefined : d.soul?.text(),
         );
         for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: isolated ? "guest" : "owner", messages, tools, signal: abort.signal })) {
           if (ev.type === "usage") {
@@ -745,6 +761,20 @@ export class Agent {
       return r.ok ? { text: r.text, isError: false } : fail(r.text);
     }
 
+    if (call.name === "browser.read" || call.name === "browser.screenshot") {
+      if (!d.browser?.enabled()) return fail("The safe browser is switched off.");
+      const url = String(args.url ?? "");
+      if (call.name === "browser.read") {
+        const r = await d.browser.read(url, this.abort?.signal);
+        d.audit.log("agent", "tool.call", { tool: call.name, args: { host: hostOf(url) }, tier, ok: r.ok });
+        return r.ok ? { text: r.text, isError: false } : fail(r.error);
+      }
+      if (!d.provider.vision) return fail("This model cannot look at pictures. Use browser.read to read the page text instead.");
+      const r = await d.browser.screenshot(url, args.fullPage === true, this.abort?.signal);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { host: hostOf(url) }, tier, ok: r.ok });
+      return r.ok ? { text: r.note, isError: false, image: { mime: r.mime, data: r.data } } : fail(r.error);
+    }
+
     if (call.name === "memory.tidy") {
       if (!d.memoryTidy || !d.memoryTree || !d.config.memory.enabled) return fail("Tidying memory is not available.");
       const said = await d.memoryTidy();
@@ -797,6 +827,14 @@ export class Agent {
         d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: false });
         return fail((e as Error).message);
       }
+    }
+
+    if (call.name.startsWith("soul.")) {
+      if (!d.soul) return fail("The soul is not available.");
+      if (call.name === "soul.read") return { text: d.soul.text(), isError: false };
+      const r = call.name === "soul.set" ? d.soul.set(args.text, "agent") : d.soul.restore(args.to === "default" ? "default" : "previous", "agent");
+      d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "soul.set" ? { chars: String(args.text ?? "").length } : clipArgs(args), tier, ok: r.ok });
+      return r.ok ? { text: "Done. Your soul is changed and applies from now on.", isError: false } : fail(r.error);
     }
 
     if (call.name.startsWith("memory.") || call.name.startsWith("task.")) {

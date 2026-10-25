@@ -1,0 +1,13 @@
+{
+  "id": "ai-browser",
+  "name": "Safe browser skill",
+  "version": "1.0.0",
+  "description": "How to use the safe browser well: when to open a page in it, what to ask for, and what never to try.",
+  "skills": [
+    {
+      "name": "browse-safely",
+      "description": "Read or look at a public web page that needs scripts or whose layout matters, using the safe browser, and report what it showed",
+      "file": "skills/browse-safely.md"
+    }
+  ]
+}

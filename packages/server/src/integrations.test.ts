@@ -124,7 +124,7 @@ describe("the plugins screen's routes", () => {
   it("lists Telegram, Twilio, Zerodha and Alexa next to the other plugins, not installed", async () => {
     const { list } = await boot();
     const l = await list();
-    expect(l.map((v) => [v.id, v.installed, v.state])).toEqual([["telegram", false, "not-installed"], ["twilio", false, "not-installed"], ["zerodha", false, "not-installed"], ["alexa", false, "not-installed"], ["spotify", false, "not-installed"], ["soundcloud", false, "not-installed"], ["audius", false, "not-installed"], ["chrome", false, "not-installed"], ["video", false, "not-installed"]]);
+    expect(l.map((v) => [v.id, v.installed, v.state])).toEqual([["telegram", false, "not-installed"], ["twilio", false, "not-installed"], ["zerodha", false, "not-installed"], ["alexa", false, "not-installed"], ["spotify", false, "not-installed"], ["soundcloud", false, "not-installed"], ["audius", false, "not-installed"], ["browser", false, "not-installed"], ["tavily", false, "not-installed"], ["chrome", false, "not-installed"], ["video", false, "not-installed"]]);
   });
 
   it("installs with the PIN, is saved, and shows what to do next", async () => {

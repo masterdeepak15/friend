@@ -43,9 +43,11 @@ import { summarize } from "./brokers/portfolio";
 import { BrokerHub } from "./brokers/hub";
 
 const PORTFOLIO_SKILL = "portfolio-assistant";
+const TAVILY_SKILL = "tavily-search";
+const BROWSER_SKILL = "ai-browser";
 /** The type each kind of audio file is sent as. */
 const MIME: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", flac: "audio/flac" };
-import { changeAlexa, changeBroker, changeChrome, changeIntegration, changeVideo, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
+import { changeAlexa, changeBroker, changeBrowser, changeChrome, changeIntegration, changeTavily, changeVideo, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -63,7 +65,7 @@ import { Tasks } from "./tasks";
 import { Office, type BridgeFactory, type WorkerFactory } from "./office/office";
 import { OfficeStore } from "./office/store";
 import { join } from "node:path";
-import { loadConfig, saveConfig, type Config } from "./config";
+import { loadConfig, sanitizeBrowser, sanitizeWeb, saveConfig, type Config } from "./config";
 import { openDb } from "./db";
 import { UsageLog, USAGE_KEEP_DAYS } from "./usage";
 import { safeFetch } from "./web/fetch";
@@ -71,7 +73,9 @@ import { duckDuckGo } from "./web/providers";
 import { webSearch } from "./web/search";
 import { chooseSearch, runWebTool, type WebToolDeps } from "./web/tools";
 import { DeviceHub } from "./devices";
-import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi, type PluginsApi, type SystemApi } from "./gateway";
+import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi, type PluginsApi, type SoulApi, type SystemApi } from "./gateway";
+import { MAX_SOUL_CHARS, Soul } from "./memory/soul";
+import { BrowserHub } from "./browser/hub";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import { StatsSampler, startStatsFeed } from "./hudStats";
@@ -188,6 +192,9 @@ class MissingKeyProvider implements Provider {
 
 export async function createApp(opts: AppOptions) {
   const config = { ...loadConfig(opts.dataDir), ...opts.config };
+  // a section given only in part is completed, so the newer fields (the Tavily plugin, the safe browser) are always there
+  config.web = sanitizeWeb(config.web);
+  config.browser = sanitizeBrowser(config.browser);
   const db = openDb(opts.dataDir);
   const audit = new Audit(db);
   const usageLog = new UsageLog(db);
@@ -222,7 +229,8 @@ export async function createApp(opts: AppOptions) {
   };
   const webToolDeps: WebToolDeps = {
     enabled: () => config.web.enabled,
-    search: webSearch({ choose: () => chooseSearch(config.web), fallback: duckDuckGo(), audit: (e) => audit.log("agent", "web.search", e) }),
+    // the Tavily plugin sets how many results a search gives when nobody asked for a number
+    search: ((run) => (q: string, count?: number, signal?: AbortSignal, extras?: Parameters<typeof run>[3]) => run(q, count ?? (config.web.tavily.enabled ? config.web.tavily.maxResults : undefined), signal, extras))(webSearch({ choose: () => chooseSearch(config.web), fallback: duckDuckGo(), audit: (e) => audit.log("agent", "web.search", e) })),
     fetch: (url, signal) => safeFetch(url, { signal }),
     audit: (e) => audit.log("agent", "web.read", e),
   };
@@ -293,6 +301,9 @@ export async function createApp(opts: AppOptions) {
     importFlatNotes(memory, memoryTree); // once: the older flat notes come over into inbox/
     memoryTree.repair(); // anything the owner dropped in by hand is listed so it can be found from the root
   }
+  const soul = new Soul(memoryTree, join(opts.dataDir, "soul-history"));
+  soul.ensure(); // the default soul is written the first time, so the owner has a file to read and change
+  const browserHub = new BrowserHub({ config: () => config.browser, tmpRoot: join(opts.dataDir, "browser-profiles") });
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
   const hub = new McpHub(new ConnectorStore(opts.dataDir));
@@ -379,6 +390,24 @@ export async function createApp(opts: AppOptions) {
     saveConfig(saved);
     return null;
   };
+  /** The same for the safe browser part of the saved file. */
+  const changeBrowserConfig = (fn: (s: Config["browser"]) => string | null): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.browser);
+    if (err) return err;
+    fn(config.browser);
+    saveConfig(saved);
+    return null;
+  };
+  /** The same for the Tavily part of the saved file. */
+  const changeTavilyConfig = (fn: (s: Config["web"]["tavily"]) => string | null): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.web.tavily);
+    if (err) return err;
+    fn(config.web.tavily);
+    saveConfig(saved);
+    return null;
+  };
   /** The same for the Chrome control part of the saved file. */
   const changeChromeConfig = (fn: (s: Config["chrome"]) => string | null): string | null => {
     const saved = loadConfig(opts.dataDir);
@@ -397,6 +426,20 @@ export async function createApp(opts: AppOptions) {
       return err;
     }
     if (id === "audius") return changeAudiusConfig((s) => changeAudius(s, change));
+    if (id === "browser") {
+      const err = changeBrowserConfig((b) => changeBrowser(b, change, !!browserHub.status().chrome));
+      // its skill comes and goes with the plugin
+      if (!err && "install" in change && listCatalog(catalogDir).some((c) => c.id === BROWSER_SKILL)) plugins.install(join(catalogDir, BROWSER_SKILL));
+      if (!err && "remove" in change) plugins.remove(BROWSER_SKILL);
+      return err;
+    }
+    if (id === "tavily") {
+      const err = changeTavilyConfig((t) => changeTavily(t, change, !!config.web.tavilyKey));
+      // its skill comes and goes with the plugin
+      if (!err && "install" in change && listCatalog(catalogDir).some((c) => c.id === TAVILY_SKILL)) plugins.install(join(catalogDir, TAVILY_SKILL));
+      if (!err && "remove" in change) plugins.remove(TAVILY_SKILL);
+      return err;
+    }
     if (id === "video") {
       const err = changeVideoConfig((v) => changeVideo(v, change));
       if (!err && ("install" in change || ("enabled" in change && change.enabled))) void videoHub.prepare().catch(() => {});
@@ -443,12 +486,12 @@ export async function createApp(opts: AppOptions) {
       },
     },
     integrations: {
-      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub),
+      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub),
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : id === "chrome" ? config.chrome : id === "video" ? config.video : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && id !== "chrome" && id !== "video" && Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : id === "chrome" ? config.chrome : id === "video" ? config.video : id === "tavily" ? config.web.tavily : id === "browser" ? config.browser : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && id !== "chrome" && id !== "video" && id !== "tavily" && id !== "browser" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {
@@ -679,6 +722,8 @@ export async function createApp(opts: AppOptions) {
     assistantName: () => auth.assistantName(),
     memory,
     memoryTree,
+    soul,
+    browser: { enabled: () => config.browser.installed && config.browser.enabled, read: (u, s) => browserHub.read(u, s), screenshot: (u, full, s) => browserHub.screenshot(u, full, s) },
     onOwnerTurnEnd: () => memoryKeeper.notify(),
     memoryTidy: async () => {
       const r = await memoryOrganizer.run();
@@ -726,7 +771,7 @@ export async function createApp(opts: AppOptions) {
     music: musicHub,
     video: videoHub,
     office,
-    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub)) },
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub)) },
   });
 
   const clients = new Set<ClientConn>();
@@ -955,7 +1000,7 @@ export async function createApp(opts: AppOptions) {
       void chromePlugin.refresh(); // so the next look at the screen knows whether the extension was switched on since
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub) };
     },
     install: async (id, pin, ip) => {
       if (isIntegrationId(id)) {
@@ -1137,6 +1182,21 @@ export async function createApp(opts: AppOptions) {
     },
     opts.system?.times,
   );
+  const soulApi: SoulApi = {
+    get: () => ({ text: soul.text(), isDefault: soul.isDefault(), max: MAX_SOUL_CHARS, versions: soul.versions() }),
+    set: async (text, pin, ip) => {
+      await requirePin(pin, ip);
+      const r = soul.set(text, "owner");
+      if (!r.ok) throw new HttpError(400, r.error);
+      audit.log("owner", "soul.set", { chars: r.chars, ip });
+    },
+    restore: async (to, pin, ip) => {
+      await requirePin(pin, ip);
+      const r = soul.restore(to, "owner");
+      if (!r.ok) throw new HttpError(400, r.error);
+      audit.log("owner", "soul.restore", { to, ip });
+    },
+  };
   const systemApi: SystemApi = {
     info: async () => ({ version: updater.state().current, update: updater.state(), autostart: await autostart.status(), auto: config.updates.auto }),
     check: () => updater.check(),
@@ -1159,6 +1219,7 @@ export async function createApp(opts: AppOptions) {
     connectors: connectorsApi,
     chrome: chromeRemoteApi,
     system: systemApi,
+    soul: soulApi,
     usage: usageLog,
     session: {
       info: () => ({ supported: !!provider.resetSession, contextTokens: agent.contextTokens(), autoCompact: config.session.autoCompact, compactAtTokens: config.session.compactAtTokens }),

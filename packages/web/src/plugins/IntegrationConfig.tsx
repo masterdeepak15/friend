@@ -7,6 +7,8 @@ import { AlexaForm, alexaProblem, httpAlexaApi, type AlexaApi } from "./AlexaFor
 import { ChromeForm, httpChromeApi, type ChromeApi } from "./ChromeForm";
 import { SoundCloudForm, httpSoundCloudApi, type SoundCloudApi } from "./SoundCloudForm";
 import { SpotifyForm, httpSpotifyApi, type SpotifyApi } from "./SpotifyForm";
+import { BrowserForm } from "./BrowserForm";
+import { TavilyForm } from "./TavilyForm";
 import { VideoForm, httpVideoApi, type VideoApi } from "./VideoForm";
 import { ZerodhaForm, httpBrokersApi, type BrokersApi } from "./ZerodhaForm";
 import type { IntegrationEntry } from "./pluginsApi";
@@ -74,7 +76,9 @@ export function IntegrationConfig({
   const isAudius = integration.id === "audius";
   const isChrome = integration.id === "chrome";
   const isVideo = integration.id === "video";
-  const nothingToSave = isSpotify || isSoundCloud || isAudius || isChrome || isVideo;
+  const isTavily = integration.id === "tavily";
+  const isBrowser = integration.id === "browser";
+  const nothingToSave = isSpotify || isSoundCloud || isAudius || isChrome || isVideo || isTavily || isBrowser;
 
   useEffect(() => {
     alive.current = true;
@@ -205,6 +209,8 @@ export function IntegrationConfig({
       {isSoundCloud && <SoundCloudForm api={soundcloudApi} />}
       {isChrome && <ChromeForm api={chromeApi} />}
       {isVideo && <VideoForm api={videoApi} />}
+      {isTavily && <TavilyForm api={settingsApi} />}
+      {isBrowser && <BrowserForm api={settingsApi} found={String(integration.settings?.chrome ?? "")} />}
       {isAlexa && savedA && <AlexaForm view={draftA} setView={setDraftA} api={alexaApi} />}
       {isZerodha && savedB && <ZerodhaForm view={draftB} setView={setDraftB} secret={secret} setSecret={setSecret} api={brokersApi} />}
       {!isZerodha &&
@@ -214,6 +220,8 @@ export function IntegrationConfig({
         !isAudius &&
         !isChrome &&
         !isVideo &&
+        !isTavily &&
+        !isBrowser &&
         saved &&
         (isTelegram ? (
           <TelegramForm view={{ ...draft.telegram, enabled: integration.enabled }} secret={secret} setSecret={setSecret} api={channelsApi} />

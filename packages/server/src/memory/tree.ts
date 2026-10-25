@@ -8,6 +8,9 @@ import { dirname, join } from "node:path";
  */
 
 export const INDEX_FILE = "INDEX.md";
+/** The assistant's soul: a note at the root of memory that memory's own tools cannot change (see Soul). */
+export const SOUL_PATH = "soul.md";
+const SOUL_ONLY = "soul.md is your soul. Memory tools cannot change, move or delete it: use soul.set (the owner approves with their PIN).";
 const MAX_DEPTH = 6;
 const MAX_NOTES = 2000;
 const MAX_NOTE_CHARS = 6000;
@@ -87,7 +90,7 @@ interface Note {
   body: string;
 }
 
-function parseNote(text: string, fallbackTitle: string): Note {
+export function parseNote(text: string, fallbackTitle: string): Note {
   const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text.replace(/\r\n/g, "\n"));
   const head: Record<string, string> = {};
   let body = text.replace(/\r\n/g, "\n");
@@ -269,9 +272,10 @@ export class MemoryTree {
    * Saves a note, making the folders it needs and listing it (and every new folder on the way) in the indexes. Creating a folder is just
    * writing a note into it: the assistant decides the topic names.
    */
-  write(raw: unknown, text: string, o: { title?: string; summary?: string; source?: Source; folderSummary?: string; related?: string[] } = {}): Result<{ path: string; hint?: string }> {
+  write(raw: unknown, text: string, o: { title?: string; summary?: string; source?: Source; folderSummary?: string; related?: string[]; soul?: boolean } = {}): Result<{ path: string; hint?: string }> {
     const p = cleanPath(raw);
     if (!p.ok) return p;
+    if (p.parts.join("/") === SOUL_PATH && !o.soul) return { ok: false, error: SOUL_ONLY };
     if (!p.isNote || p.parts[p.parts.length - 1] === INDEX_FILE) return { ok: false, error: "A note's path ends in .md, for example people/priya.md. INDEX.md is kept by memory itself." };
     if (this.hasLink(p.parts)) return { ok: false, error: "That path is a link, which memory does not follow." };
     const body = text.replace(/\r\n/g, "\n").trim();
@@ -372,6 +376,7 @@ export class MemoryTree {
     const p = cleanPath(raw);
     if (!p.ok) return p;
     if (p.parts.length === 0) return { ok: false, error: "The root of memory cannot be deleted." };
+    if (p.parts.join("/") === SOUL_PATH) return { ok: false, error: SOUL_ONLY };
     if (p.parts[p.parts.length - 1] === INDEX_FILE) return { ok: false, error: "INDEX.md is kept by memory itself." };
     if (this.hasLink(p.parts)) return { ok: false, error: "That path is a link, which memory does not follow." };
     const target = this.abs(p.parts);
@@ -405,6 +410,7 @@ export class MemoryTree {
     if (!a.ok) return a;
     if (!b.ok) return b;
     if (a.parts.length === 0 || b.parts.length === 0) return { ok: false, error: "Give a note or folder to move and where to." };
+    if (a.parts.join("/") === SOUL_PATH || b.parts.join("/") === SOUL_PATH) return { ok: false, error: SOUL_ONLY };
     if (a.isNote !== b.isNote) return { ok: false, error: "A note moves to a note path (.md) and a folder to a folder path." };
     if (this.hasLink(a.parts) || this.hasLink(b.parts)) return { ok: false, error: "That path is a link, which memory does not follow." };
     const src = this.abs(a.parts);

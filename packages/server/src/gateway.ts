@@ -51,6 +51,8 @@ export interface GatewayDeps {
   /** Chrome control reached from outside on Friend's own address (/chrome/mcp and /chrome/ws), and the extension to download. */
   chrome?: ChromeRemoteApi;
   system?: SystemApi;
+  /** The assistant's soul, edited from the settings screen; the routes answer 503 without it. */
+  soul?: SoulApi;
   /** Token counts for the Usage page and riend usage. */
   usage?: UsageApi;
   /** The model's own conversation: how big it is, tidying it, starting it over. */
@@ -212,6 +214,14 @@ export interface SessionApi {
   compact(): Promise<{ ok: boolean; message: string }>;
   /** Needs the PIN: it makes Friend forget the earlier conversation. */
   clear(pin: string, ip: string): Promise<{ ok: boolean; message: string }>;
+}
+
+export interface SoulApi {
+  get(): { text: string; isDefault: boolean; max: number; versions: { at: number; chars: number }[] };
+  /** Needs the PIN: it changes who the assistant is. */
+  set(text: string, pin: string, ip: string): Promise<void>;
+  /** Needs the PIN. */
+  restore(to: "previous" | "default", pin: string, ip: string): Promise<void>;
 }
 
 export interface SystemApi {
@@ -1013,6 +1023,39 @@ export function createGateway(deps: GatewayDeps) {
       return await deps.system!.setAutostart(body.data.enabled, body.data.pin, req.ip);
     } catch (e) {
       return systemError(reply, e, "autostart");
+    }
+  });
+
+  // ---- the assistant's soul (owner session only) ----
+  const soulGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    if (!(token && auth.resolveSession(token))) return reply.code(401).send({ error: "Unauthorized" });
+    if (!deps.soul) return reply.code(503).send({ error: "Not available" });
+  };
+  const soulError = (reply: FastifyReply, e: unknown) => {
+    if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+    audit.log("owner", "soul.failed", { message: (e as Error).message });
+    return reply.code(500).send({ error: "That did not work. Try again." });
+  };
+  app.get("/api/soul", { onRequest: soulGuard }, async () => deps.soul!.get());
+  app.put("/api/soul", { onRequest: soulGuard }, async (req, reply) => {
+    const body = z.object({ text: z.string().min(1).max(10_000), pin: z.string().min(1).max(32) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Write the soul and enter your PIN" });
+    try {
+      await deps.soul!.set(body.data.text, body.data.pin, req.ip);
+      return deps.soul!.get();
+    } catch (e) {
+      return soulError(reply, e);
+    }
+  });
+  app.post("/api/soul/restore", { onRequest: soulGuard }, async (req, reply) => {
+    const body = z.object({ to: z.enum(["previous", "default"]), pin: z.string().min(1).max(32) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN" });
+    try {
+      await deps.soul!.restore(body.data.to, body.data.pin, req.ip);
+      return deps.soul!.get();
+    } catch (e) {
+      return soulError(reply, e);
     }
   });
 

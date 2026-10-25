@@ -7,9 +7,17 @@ export interface SearchHit {
 }
 
 /** A place to ask. Throws an Error whose message is a plain sentence when it cannot answer. */
+/** What only some sources can do: Tavily takes these, the others ignore them. */
+export interface SearchExtras {
+  topic?: "general" | "news" | "finance";
+  timeRange?: "day" | "week" | "month" | "year";
+  includeDomains?: string[];
+  excludeDomains?: string[];
+}
+
 export interface SearchProvider {
   id: string;
-  search(query: string, count: number, signal: AbortSignal): Promise<SearchHit[]>;
+  search(query: string, count: number, signal: AbortSignal, extras?: SearchExtras): Promise<SearchHit[]>;
 }
 
 interface Options {
@@ -123,14 +131,23 @@ export function brave(key: string, o: Options = {}): SearchProvider {
 }
 
 /** Tavily's interface, made for assistants. Needs the owner's key, sent in a header. */
-export function tavily(key: string, o: Options = {}): SearchProvider {
+export function tavily(key: string, o: Options & { depth?: "basic" | "advanced" } = {}): SearchProvider {
   const f = o.fetchImpl ?? fetch;
   return {
     id: "tavily",
-    async search(query, count, signal) {
-      const res = await get(f, "https://api.tavily.com/search", { method: "POST", signal, headers: { "content-type": "application/json", authorization: `Bearer ${key}`, "user-agent": AGENT }, body: JSON.stringify({ query, max_results: count, search_depth: "basic" }) }, "Tavily", "Tavily refused the key.");
-      const body = await jsonOf(res, "Tavily");
-      const rows = Array.isArray(body.results) ? body.results : [];
+    async search(query, count, signal, extras) {
+      const body = {
+        query,
+        max_results: count,
+        search_depth: o.depth ?? "basic",
+        ...(extras?.topic ? { topic: extras.topic } : {}),
+        ...(extras?.timeRange ? { time_range: extras.timeRange } : {}),
+        ...(extras?.includeDomains?.length ? { include_domains: extras.includeDomains } : {}),
+        ...(extras?.excludeDomains?.length ? { exclude_domains: extras.excludeDomains } : {}),
+      };
+      const res = await get(f, "https://api.tavily.com/search", { method: "POST", signal, headers: { "content-type": "application/json", authorization: `Bearer ${key}`, "user-agent": AGENT }, body: JSON.stringify(body) }, "Tavily", "Tavily refused the key.");
+      const answer = await jsonOf(res, "Tavily");
+      const rows = Array.isArray(answer.results) ? answer.results : [];
       return tidy(rows.map((r: any) => ({ title: r.title, url: r.url, snippet: r.content })), count);
     },
   };

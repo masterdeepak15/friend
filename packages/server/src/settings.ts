@@ -6,7 +6,7 @@ import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, MUSIC_OUTPUTS, programProblem, LAUNC
 import { statSync } from "node:fs";
 import { ALEXA_LIMITS, ALEXA_LOCALES, isNeverByVoice, TOOL_NAME } from "./alexa/constants";
 import { invocationNameProblem } from "./alexa/invocation";
-import { isValidTimeZone, plainWebAddress, sanitizeHud, sanitizeOffice, validDateLocale, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
+import { BROWSER_LIMITS, TAVILY_LIMITS, chromePathOk, isValidTimeZone, plainWebAddress, sanitizeHud, sanitizeOffice, validDateLocale, validNumberLocale, phoneNumber, sanitizeBrokers, sanitizeLook, sanitizeVoice } from "./config";
 
 const word = /^[\w.:/\\-]+$/;
 const modelName = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][\w.:/-]*$/, "A model name has no spaces");
@@ -240,6 +240,15 @@ export const SettingsPatch = z
         searxngUrl: z.string().trim().max(300).refine((v) => v === "" || plainWebAddress(v) !== "", "Enter a web address starting with http:// or https://"),
         braveKey: z.string().trim().max(200),
         tavilyKey: z.string().trim().max(200),
+        tavily: z.object({ depth: z.enum(["basic", "advanced"]), maxResults: z.number().int().min(TAVILY_LIMITS.maxResults.min).max(TAVILY_LIMITS.maxResults.max) }).partial().strict(),
+      })
+      .partial()
+      .strict(),
+    browser: z
+      .object({
+        chromePath: z.string().trim().max(300).refine((v) => chromePathOk(v), { message: "That is not a plain path to a browser program." }),
+        timeoutSec: z.number().int().min(BROWSER_LIMITS.timeoutSec.min).max(BROWSER_LIMITS.timeoutSec.max),
+        maxChars: z.number().int().min(BROWSER_LIMITS.maxChars.min).max(BROWSER_LIMITS.maxChars.max),
       })
       .partial()
       .strict(),
@@ -280,6 +289,8 @@ export interface SettingsView {
   trading: { level: "read" };
   music: Config["music"];
   video: Config["video"];
+  /** The safe browser's settings (switching it on and off is the plugins list). */
+  browser: Config["browser"];
   hud: Config["hud"];
   office: Config["office"];
   /** The ids of allowed Amazon accounts are shown shortened. */
@@ -313,7 +324,7 @@ export interface SettingsView {
   /** Whether Friend tidies the model's own conversation by itself, and how big it may grow first. */
   session: Config["session"];
   /** Searching the web. The keys are never sent to the screen, only whether they are set. */
-  web: { enabled: boolean; provider: Config["web"]["provider"]; searxngUrl: string; braveKeySet: boolean; tavilyKeySet: boolean };
+  web: { enabled: boolean; provider: Config["web"]["provider"]; searxngUrl: string; braveKeySet: boolean; tavilyKeySet: boolean; tavily: Config["web"]["tavily"] };
 }
 
 export function settingsView(c: Config): SettingsView {
@@ -345,6 +356,7 @@ export function settingsView(c: Config): SettingsView {
     trading: { level: c.trading.level },
     music: { ...c.music, extensions: [...c.music.extensions], spotify: { ...c.music.spotify }, soundcloud: { ...c.music.soundcloud }, audius: { ...c.music.audius } },
     video: { ...c.video, allowedSites: [...c.video.allowedSites] },
+    browser: { ...c.browser },
     hud: { ...c.hud, clock: { ...c.hud.clock }, widgets: { ...c.hud.widgets }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
     office: structuredClone(c.office),
     alexa: {
@@ -383,7 +395,7 @@ export function settingsView(c: Config): SettingsView {
     memory: { ...c.memory },
     proactive: { ...c.proactive },
     session: { autoCompact: c.session.autoCompact, compactAtTokens: c.session.compactAtTokens },
-    web: { enabled: c.web.enabled, provider: c.web.provider, searxngUrl: c.web.searxngUrl, braveKeySet: !!c.web.braveKey, tavilyKeySet: !!c.web.tavilyKey },
+    web: { enabled: c.web.enabled, provider: c.web.provider, searxngUrl: c.web.searxngUrl, braveKeySet: !!c.web.braveKey, tavilyKeySet: !!c.web.tavilyKey, tavily: { ...c.web.tavily } },
   };
 }
 
@@ -396,6 +408,7 @@ export function refuseForAgent(raw: unknown): void {
   const oa = (r.openai && typeof r.openai === "object" ? r.openai : {}) as Record<string, unknown>;
   if ("brokers" in r || "trading" in r) throw new SettingsError("Broker accounts and the trading level can only be changed by the owner on the settings screen.");
   if ("music" in r || "hud" in r) throw new SettingsError("The music folder and the screen widgets can only be changed by the owner on the settings screen.");
+  if ("browser" in r) throw new SettingsError("The safe browser's settings (which program runs, how long, how much text) can only be changed by the owner on the settings screen.");
   if ("video" in r) throw new SettingsError("Video settings (which programs run, where videos play, which sites) can only be changed by the owner on the settings screen.");
   if ("proactive" in r) throw new SettingsError("When Friend may speak first can only be changed by the owner on the settings screen.");
   if ("memory" in r) throw new SettingsError("Whether memory is a tree, and how much of it is shown every turn, can only be changed by the owner on the settings screen.");
@@ -596,9 +609,11 @@ export function applySettings(config: Config, raw: unknown): Applied {
   if (p.memory) Object.assign(config.memory, p.memory);
   if (p.proactive) Object.assign(config.proactive, p.proactive);
   if (p.session) Object.assign(config.session, p.session);
+  if (p.browser) Object.assign(config.browser, p.browser);
   if (p.web) {
-    const { braveKey, tavilyKey, ...rest } = p.web;
+    const { braveKey, tavilyKey, tavily, ...rest } = p.web;
     Object.assign(config.web, rest);
+    if (tavily) Object.assign(config.web.tavily, tavily);
     if (braveKey) config.web.braveKey = braveKey;
     if (tavilyKey) config.web.tavilyKey = tavilyKey;
   }
