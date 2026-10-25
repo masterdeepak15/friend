@@ -27,7 +27,7 @@ export function systemTree(stats: HudStats | null, detail = false): JarvisNode {
       c: "Row",
       p: { gap: 12 },
       kids: [
-        { c: "JGaugeChart", p: { value: cpu, min: 0, max: 100, size: detail ? "190px" : "120px", label: "CPU", displayValue: `${cpu}%`, showNeedle: false, showTicks: false, showMinMax: false } },
+        { c: "JGaugeChart", p: { value: cpu, min: 0, max: 100, size: detail ? "190px" : "150px", label: "CPU", displayValue: `${cpu}%`, showNeedle: false, showTicks: false, showMinMax: false } },
         {
           c: "Column",
           p: { gap: 6 },

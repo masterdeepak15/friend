@@ -382,3 +382,10 @@
 .ob-trend { margin: 0; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #5aa9bb; text-align: center; }
 .ob-wrap { white-space: normal; overflow: visible; }
 .ob-pic-wait { display: inline-block; width: 150px; height: 60px; }
+
+/* the gauge writes its number and its name in the drawing's own units, which come out tiny when it is scaled down: make them readable */
+.ob-jlive .j-chart-donut-center-val, .ob-details .j-chart-donut-center-val { font-size: 28px !important; font-weight: 700; fill: #e0fbff; letter-spacing: 0.04em; }
+.ob-jlive .j-chart-donut-center-lbl, .ob-details .j-chart-donut-center-lbl { font-size: 15px !important; letter-spacing: 0.14em; fill: #8fd9e8; }
+/* the small labels and values of the library's rows (CPU, RAM, DOWN, UP) in a size that can be read */
+.ob-jlive :is(span, div, b, p) { font-size: 12px; letter-spacing: 0.05em; }
+.ob-jlive .j-hfc-title { font-size: 12px; }
