@@ -23,6 +23,7 @@ const INFO = "platform: win32\nhost: PC\ncpu: Intel x12\ncpu load: 56%\nmemory: 
 let emitted: ServerMsg[];
 let approvals: Approvals;
 let stage: StageState;
+let config: ReturnType<typeof loadConfig>;
 let build: (provider: FakeProvider) => Agent;
 
 const emit = (m: ServerMsg) => {
@@ -39,7 +40,8 @@ beforeEach(async () => {
   const audit = new Audit(db);
   const auth = new Auth(db, audit);
   await auth.setupOwner({ password: "correct horse battery", pin, assistantName: "Jarvis" });
-  const config = loadConfig(dir);
+  config = loadConfig(dir);
+  config.hud.layout = "classic";
   const policy = new PolicyEngine(db, config);
   approvals = new Approvals({ auth, policy, audit, db }, 500);
   stage = new StageState();
@@ -58,7 +60,17 @@ beforeEach(async () => {
 });
 
 describe("the live instruments and the scene", () => {
-  it("system.info draws its gauge cards when the system instrument is not up", async () => {
+  it("on the orbital home screen system.info brings the live system instrument up and draws no cards", async () => {
+    config.hud.layout = "orbital";
+    const p = new FakeProvider([[call("1", "system.info", {}), done], [text("ok"), done]]);
+    await build(p).runTurn("how is my pc", ctx);
+    expect(stage.snapshot().widgets).toEqual(["system"]);
+    expect(stage.snapshot().objects).toEqual([]);
+    expect(emitted.some((m) => m.type === "stage" && (m as { command: { cmd: string } }).command.cmd === "widget")).toBe(true);
+  });
+
+  it("on the classic screen, and with no instrument up, system.info draws its gauge cards", async () => {
+    config.hud.layout = "classic";
     const p = new FakeProvider([[call("1", "system.info", {}), done], [text("ok"), done]]);
     await build(p).runTurn("how is my pc", ctx);
     expect(stage.snapshot().objects.length).toBeGreaterThan(0);
@@ -70,7 +82,7 @@ describe("the live instruments and the scene", () => {
     await build(p).runTurn("show my system", ctx);
     expect(stage.snapshot().widgets).toEqual(["system"]);
     expect(stage.snapshot().objects).toEqual([]);
-    expect(lastTool(p)).toMatch(/system instrument is already on the screen/);
+    expect(lastTool(p)).toMatch(/system instrument is (already )?on the screen/);
   });
 
   it("a new scene replaces the pictures but not the instruments that were brought up", async () => {

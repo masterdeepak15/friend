@@ -908,8 +908,10 @@ export class Agent {
     let text = result.truncated || capped ? `${output}\n[output truncated]` : output;
     if (call.name === "system.info") {
       // the gauges appear whatever the model does next
-      if (d.stage.snapshot().widgets?.includes("system")) {
-        text += "\n(The system instrument is already on the screen, live; just say a short summary.)";
+      if (d.stage.snapshot().widgets?.includes("system") || d.config.hud.layout === "orbital") {
+        // the orbital home screen has a live system instrument: bring it up (it stays current) instead of drawing static gauge cards
+        if (!d.stage.snapshot().widgets?.includes("system")) this.showWidget(["system"], ctx.emit);
+        text += "\n(The system instrument is on the screen, live; just say a short summary.)";
       } else {
         const scene = statsScene(result.output);
         if (scene) {
@@ -925,6 +927,12 @@ export class Agent {
    * Puts a ready-made set of pictures on the screen. The first one in a request replaces what was there so it always
    * fits; later ones in the same request are added next to it (weather and stats asked for together stay together).
    */
+  /** Brings live instruments up on the home screen, the way the stage.widget tool does. */
+  private showWidget(show: ("system" | "voice" | "network" | "feed" | "radar" | "tickets")[], emit: (m: ServerMsg) => void): void {
+    const cmd: StageCommand = { cmd: "widget", show };
+    if (this.deps.stage.apply(cmd).ok) emit({ type: "stage", command: cmd });
+  }
+
   private showScene(commands: StageCommand[], emit: (m: ServerMsg) => void): void {
     const first = this.scenesThisTurn++ === 0;
     for (const cmd of first ? [{ cmd: "clear", keepInstruments: true } as StageCommand, ...commands] : commands) {

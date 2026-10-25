@@ -43,6 +43,7 @@ beforeEach(async () => {
   const auth = new Auth(db, audit);
   await auth.setupOwner({ password: "correct horse battery", pin: "123456", assistantName: "Jarvis" });
   const config = loadConfig(dir);
+  config.hud.layout = "classic"; // these tests are about the gauge cards the classic screen gets; the orbital screen has a live instrument instead (see instruments.test.ts)
   const policy = new PolicyEngine(db, config);
   build = (provider, o = {}) =>
     new Agent({
