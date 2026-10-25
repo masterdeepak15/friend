@@ -9,8 +9,7 @@ export interface Rect {
   width: number;
   height: number;
 }
-import { JLive, useRolling } from "./JLive";
-import { feedTree, networkTree, radarTree, systemTree, ticketsTree, unframed, voiceTree } from "./jtrees";
+import { DeviceDetails, NetworkDetails, SystemDetails, TicketDetails, VoiceDetails, type Readings } from "./Details";
 import { Frame } from "./kit";
 import { usingKeyboard } from "./modality";
 import { budgetRings, feedLines, ticketCells, ticketProject } from "./office";
@@ -68,51 +67,34 @@ export interface ExpandedViewProps {
   state: StageViewState;
   rect: Rect;
   usageApi?: UsageApi;
+  /** The readings the screen has kept, for the trend lines. */
+  readings?: Readings;
   onClose: () => void;
 }
 
 /** One instrument, large, in the middle of the screen. */
-export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, onClose }: ExpandedViewProps) {
+const NO_READINGS: Readings = { cpu: [], ram: [], down: [], up: [] };
+
+export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, readings = NO_READINGS, onClose }: ExpandedViewProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (usingKeyboard()) closeRef.current?.focus(); // the keyboard moves in with it; the mouse leaves the focus alone
   }, [id]);
   const title = WIDGETS.find((w) => w.id === id)?.title ?? id;
-  const netHistory = useRolling(state.stats?.netDown ?? 0, state.stats?.at);
   const body = (() => {
     switch (id) {
       case "system":
-        return (
-          <JLive node={unframed(systemTree(state.stats, true))}>
-            <SystemWidget stats={state.stats} />
-          </JLive>
-        );
+        return <SystemDetails stats={state.stats} cpuHist={readings.cpu} ramHist={readings.ram} />;
       case "network":
-        return (
-          <JLive node={unframed(networkTree(state.stats, netHistory))}>
-            <NetworkWidget stats={state.stats} />
-          </JLive>
-        );
+        return <NetworkDetails stats={state.stats} down={readings.down} up={readings.up} />;
       case "radar":
-        return (
-          <JLive node={unframed(radarTree(state.deviceOnline, state.voice.available))}>
-            <RadarWidget deviceOnline={state.deviceOnline} voiceAvailable={state.voice.available} />
-          </JLive>
-        );
+        return <DeviceDetails deviceOnline={state.deviceOnline} voiceAvailable={state.voice.available} />;
       case "voice":
-        return (
-          <JLive node={unframed(voiceTree(state.voice.level, state.voice.mode))}>
-            <VoiceWidget level={state.voice.level} mode={state.voice.mode} />
-          </JLive>
-        );
+        return <VoiceDetails voice={state.voice} lastHeard={[...state.chat].reverse().find((c) => c.role === "user")?.text ?? null} />;
       case "feed":
         return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} workers={state.office.enabled ? feedLines(state.office.feed, state.office.workers, 60) : []} />; // the full, scrolling log: what the workers did comes first
       case "tickets":
-        return (
-          <JLive node={unframed(ticketsTree(ticketCells(state.office.tickets), ticketProject(state.office.tickets)))}>
-            <TicketsWidget cells={ticketCells(state.office.tickets)} {...(ticketProject(state.office.tickets) ? { project: ticketProject(state.office.tickets)! } : {})} />
-          </JLive>
-        );
+        return <TicketDetails office={state.office} />;
       case "budget":
         return <BudgetWidget rings={budgetRings(state.office.workers)} />;
       case "usage":

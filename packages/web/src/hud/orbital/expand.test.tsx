@@ -27,7 +27,7 @@ describe("expanding an instrument", () => {
     fireEvent.click(frame(container, "system"));
     const dialog = screen.getByRole("dialog", { name: /system/i });
     expect(dialog).toBeTruthy();
-    expect(dialog.textContent).toMatch(/waiting for data/i);
+    expect(dialog.textContent).toMatch(/waiting for the first reading/i);
   });
 
   it("shows one at a time: the next click replaces the first", () => {
@@ -105,6 +105,6 @@ describe("what each expanded instrument shows", () => {
   it("explains the instrument in plain words", () => {
     const { container } = mount();
     fireEvent.click(frame(container, "tickets"));
-    expect(screen.getByRole("dialog").textContent).toMatch(/no workers yet/i);
+    expect(screen.getByRole("dialog").textContent).toMatch(/office is switched off/i);
   });
 });

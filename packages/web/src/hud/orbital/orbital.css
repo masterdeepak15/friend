@@ -355,9 +355,30 @@
 /* the live instruments drawn with Jarvis components: they fill the box of the instrument, and the click goes to the instrument */
 .ob-jlive { width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
 .ob-jlive > * { max-width: 100%; }
-.ob-expanded-body .ob-jlive { min-height: 240px; height: auto; overflow: auto; pointer-events: auto; }
 /* the library's framed card puts its title on top of the contents and leaves the room to us: keep the contents clear of it, in the middle of what is left */
 .ob-jlive .j-hfc-body { padding: 28px 14px 10px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
 .ob-jlive .jv-row { align-items: center; }
 .ob-jlive .jv-row > * { flex: 0 1 auto; }
-.ob-expanded-body .jv-col { padding: 4px 6px; }
+
+/* the Jarvis pictures keep the screen's own type: the library draws in Courier New at 8 to 9 px, a different face and too small to read */
+.ob-jlive, .ob-details { --j-font: Consolas, "Courier New", monospace; }
+.ob-jlive *, .ob-details *, .ob-details svg text { font-family: Consolas, "Courier New", monospace !important; }
+.ob-jlive [style*="font-size"] { font-size: 12px !important; letter-spacing: 0.05em; }
+.ob-jlive .j-hfc-title { font-size: 12px; letter-spacing: 0.18em; }
+.ob-jlive .j-hfc-body { padding-top: 32px; }
+
+/* what opens when an instrument is clicked */
+.ob-details { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px 10px; min-height: 0; }
+.ob-pics { display: flex; gap: 28px; align-items: center; justify-content: center; padding: 6px 0 2px; flex: none; }
+.ob-pics > .ob-jlive, .ob-details > .ob-jlive { width: auto; height: auto; overflow: visible; pointer-events: auto; flex: none; align-self: center; }
+.ob-fact { display: flex; justify-content: space-between; gap: 16px; margin: 0; padding: 3px 0 3px 8px; border-left: 2px solid var(--ob-dim); font-size: 13px; color: #e0fbff; }
+.ob-fact span { color: color-mix(in srgb, var(--ob-cyan) 70%, transparent); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; align-self: center; }
+.ob-fact b { font-weight: 600; text-align: right; }
+.ob-fact-warn b { color: var(--ob-orange); }
+.ob-fact-ok b { color: #86efac; }
+.ob-say { margin: 8px 0 0; color: #bdeef7; font-size: 13px; line-height: 1.5; }
+.ob-small { font-size: 12px; margin: 0 0 8px 10px; color: #8fcad6; }
+.ob-head { margin: 10px 0 2px; }
+.ob-trend { margin: 0; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #5aa9bb; text-align: center; }
+.ob-wrap { white-space: normal; overflow: visible; }
+.ob-pic-wait { display: inline-block; width: 150px; height: 60px; }

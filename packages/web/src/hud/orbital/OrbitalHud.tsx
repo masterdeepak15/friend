@@ -152,7 +152,15 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
   const [openWorker, setOpenWorker] = useState<string | null>(null);
   const [showOrg, setShowOrg] = useState(false);
   const tick = useNow(30_000); // the time the usage window resets in is worked out from this
-  const netHistory = useRolling(view.stats?.netDown ?? 0, view.stats?.at); // the trend line of the network instrument
+  // the last readings, kept here so a trend line is there the moment an instrument is opened
+  const ramPct = view.stats && view.stats.ramTotal > 0 ? Math.round((100 * view.stats.ramUsed) / view.stats.ramTotal) : 0;
+  const readings = {
+    cpu: useRolling(view.stats ? Math.round(view.stats.cpu) : 0, view.stats?.at, 60),
+    ram: useRolling(ramPct, view.stats?.at, 60),
+    down: useRolling(view.stats?.netDown ?? 0, view.stats?.at, 60),
+    up: useRolling(view.stats?.netUp ?? 0, view.stats?.at, 60),
+  };
+  const netHistory = readings.down.slice(-24); // the trend line of the network instrument
   const opener = useRef<HTMLElement | null>(null);
   const close = useCallback(() => {
     setExpanded(null);
@@ -187,7 +195,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
     <>
       <div className="ob-backdrop ob-hit" onPointerDown={(e) => { e.stopPropagation(); close(); }} />
       <Safe>
-        <ExpandedView id={shownExpanded} state={state} rect={expandedRect} {...(usageApi ? { usageApi } : {})} onClose={close} />
+        <ExpandedView id={shownExpanded} state={state} rect={expandedRect} readings={readings} {...(usageApi ? { usageApi } : {})} onClose={close} />
       </Safe>
     </>
   );
