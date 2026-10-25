@@ -13,7 +13,8 @@ const launcher: HudView["launcher"] = [
   { id: "tasks", label: "Tasks", icon: "T", action: { type: "panel", value: "tasks" } },
   { id: "music", label: "Music", icon: "M", action: { type: "panel", value: "music" } },
 ];
-const hud: HudView = { terminalLabel: "JARVIS TERMINAL", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "full", widgets: {} };
+const ALL_ON = { system: true, voice: true, network: true, feed: true, radar: true, tickets: true, approval: true };
+const hud: HudView = { terminalLabel: "JARVIS TERMINAL", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "full", widgets: ALL_ON };
 const mount = (state: Partial<StageViewState> = {}) => render(<OrbitalHud hud={hud} state={{ ...initialState, connection: "open", hud, assistantName: "maya", ...state }} viewport={{ w: 1920, h: 1080 }} usage={42} onLaunch={() => {}} onExpand={() => {}} />);
 const css = readFileSync(join(process.cwd(), "src/hud/orbital/orbital.css"), "utf8");
 

@@ -39,12 +39,18 @@ export const StageObject = z.object({
 });
 export type StageObject = z.infer<typeof StageObject>;
 
+/** The live instruments of the home screen that the assistant may bring up and put away (the others are always the owner's). */
+export const HudInstrument = z.enum(["system", "voice", "network", "feed", "radar", "tickets"]);
+export type HudInstrument = z.infer<typeof HudInstrument>;
+
 export const StageCommand = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("scene"), mode: SceneMode }),
   z.object({ cmd: z.literal("show"), object: StageObject }),
   z.object({ cmd: z.literal("update"), id: z.string(), props: z.record(z.string(), z.unknown()) }),
   z.object({ cmd: z.literal("hide"), id: z.string() }),
   z.object({ cmd: z.literal("clear") }),
+  /** Bring live instruments up on the home screen (show), put some away (hide), or all of them (reset). */
+  z.object({ cmd: z.literal("widget"), show: z.array(HudInstrument).max(6).optional(), hide: z.array(HudInstrument).max(6).optional(), reset: z.boolean().optional() }),
   /** Make a shown object a widget that stays, or let it go back to being a temporary picture. */
   z.object({ cmd: z.literal("pin"), id: z.string() }),
   z.object({ cmd: z.literal("unpin"), id: z.string() }),
@@ -60,5 +66,7 @@ export const StageSnapshot = z.object({
   objects: z.array(StageObject),
   presence: z.object({ state: PresenceState, style: PresenceStyle }),
   mood: z.object({ accent: z.string(), intensity: unit }),
+  /** The live instruments the assistant has brought up. */
+  widgets: z.array(HudInstrument).optional(),
 });
 export type StageSnapshot = z.infer<typeof StageSnapshot>;

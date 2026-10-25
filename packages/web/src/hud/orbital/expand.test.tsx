@@ -7,7 +7,8 @@ import { OrbitalHud } from "./OrbitalHud";
 
 afterEach(cleanup);
 
-const hud: HudView = { terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher: [], animations: "full", layout: "orbital", density: "full", widgets: {} };
+const ALL_ON = { system: true, voice: true, network: true, feed: true, radar: true, tickets: true, approval: true };
+const hud: HudView = { terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher: [], animations: "full", layout: "orbital", density: "full", widgets: ALL_ON };
 const usageApi = (bySource: UsageSummary["bySource"] = []): UsageApi => ({
   summary: async () => ({ range: 30, days: [], total: { input: 0, output: 0, turns: 0 }, byModel: [], bySource }),
   clear: async () => ({ removed: 0 }),

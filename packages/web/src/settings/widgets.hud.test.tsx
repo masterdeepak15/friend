@@ -25,21 +25,27 @@ describe("the screen layout section of the widgets settings", () => {
     expect(onHud).toHaveBeenCalledWith({ density: "calm" });
   });
 
-  it("has one box per widget, checked unless switched off, and sends only the box that changed", () => {
+  it("has one box per widget; the live instruments are unticked until switched on, the others ticked unless switched off; it sends only the box that changed", () => {
     const onHud = vi.fn();
-    render(<WidgetsTab music={music} hud={{ ...orbital, widgets: { radar: false } }} onMusic={() => {}} onHud={onHud} />);
+    render(<WidgetsTab music={music} hud={{ ...orbital, widgets: { radar: false, voice: true, budget: false } }} onMusic={() => {}} onHud={onHud} />);
     for (const id of HUD_WIDGET_IDS) expect(screen.getByTestId(`hud-widget-${id}`)).toBeTruthy();
-    expect((screen.getByTestId("hud-widget-radar") as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByTestId("hud-widget-system") as HTMLInputElement).checked).toBe(true);
+    const checked = (id: string) => (screen.getByTestId(`hud-widget-${id}`) as HTMLInputElement).checked;
+    expect(checked("radar")).toBe(false);
+    expect(checked("system")).toBe(false); // brought up by Friend when asked
+    expect(checked("voice")).toBe(true); // kept on the screen by the owner
+    expect(checked("usage")).toBe(true);
+    expect(checked("budget")).toBe(false);
     fireEvent.click(screen.getByTestId("hud-widget-radar"));
-    expect(onHud).toHaveBeenCalledWith({ widgets: { radar: true } });
+    expect(onHud).toHaveBeenCalledWith({ widgets: { radar: true, voice: true, budget: false } });
   });
 
   it("keeps the earlier switches when another box is toggled (the screen merges one level only)", () => {
     const onHud = vi.fn();
     render(<WidgetsTab music={music} hud={{ ...orbital, widgets: { radar: false } }} onMusic={() => {}} onHud={onHud} />);
     fireEvent.click(screen.getByTestId("hud-widget-feed"));
-    expect(onHud).toHaveBeenCalledWith({ widgets: { radar: false, feed: false } });
+    expect(onHud).toHaveBeenCalledWith({ widgets: { radar: false, feed: true } });
+    fireEvent.click(screen.getByTestId("hud-widget-usage"));
+    expect(onHud).toHaveBeenLastCalledWith({ widgets: { radar: false, usage: false } });
   });
 
   it("has a switch for sample data that previews the look, off unless set", () => {

@@ -4,6 +4,7 @@ import {
   jarvisObjectProblem,
   StageCommand,
   TOOL_DEFS,
+  type HudInstrument,
   type SceneMode,
   type ScreenInfo,
   type ServerMsg,
@@ -98,6 +99,7 @@ export const MAX_PINNED = 6;
 export class StageState {
   private scene: SceneMode = "conversation";
   private objects = new Map<string, { obj: StageObject; expiresAt: number | null }>();
+  private widgets = new Set<HudInstrument>();
   private presence: StageSnapshot["presence"] = { state: "idle", style: "sphere" };
   private mood: StageSnapshot["mood"] = { accent: "#3fd8ff", intensity: 0.6 };
   private store: WidgetStore | null = null;
@@ -193,9 +195,16 @@ export class StageState {
         return follow.length ? { ok: true, follow } : { ok: true };
       }
       case "clear": {
-        // the temporary pictures go; the owner's widgets stay
+        // the temporary pictures go; the owner's widgets stay; the live instruments the assistant brought up go too
         for (const [id, e] of this.objects) if (!e.obj.pinned) this.objects.delete(id);
+        this.widgets.clear();
         this.scene = "conversation";
+        return { ok: true };
+      }
+      case "widget": {
+        if (cmd.reset) this.widgets.clear();
+        for (const w of cmd.hide ?? []) this.widgets.delete(w);
+        for (const w of cmd.show ?? []) this.widgets.add(w);
         return { ok: true };
       }
       case "pin": {
@@ -253,6 +262,7 @@ export class StageState {
       objects: [...this.objects.values()].map((e) => e.obj),
       presence: { ...this.presence },
       mood: { ...this.mood },
+      widgets: [...this.widgets],
     };
   }
 

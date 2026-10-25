@@ -14,7 +14,8 @@ const launcher: HudView["launcher"] = [
   { id: "tasks", label: "Tasks", icon: "T", action: { type: "panel", value: "tasks" } },
   { id: "music", label: "Music", icon: "M", action: { type: "panel", value: "music" } },
 ];
-const hudOf = (over: Partial<HudView> = {}): HudView => ({ terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "standard", widgets: {}, ...over });
+const ALL_ON = { system: true, voice: true, network: true, feed: true, radar: true, tickets: true, approval: true };
+const hudOf = (over: Partial<HudView> = {}): HudView => ({ terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "standard", widgets: ALL_ON, ...over });
 
 function mount(over: Partial<HudView> = {}, state: Partial<StageViewState> = {}, size: [number, number] = [1920, 1080], handlers: { onLaunch?: (i: HudView["launcher"][number]) => void; onExpand?: (e: unknown) => void } = {}) {
   const hud = hudOf(over);
@@ -44,23 +45,31 @@ describe("the orbit", () => {
 
 describe("the instruments at each density", () => {
   it("calm shows only the usage ring", () => {
-    const { container } = mount({ density: "calm" });
+    const { container } = mount({ density: "calm", widgets: {} });
     expect(widgetIds(container)).toEqual(["usage"]);
     expect(container.querySelectorAll("[data-seg]")).toHaveLength(60);
   });
 
   it("calm still shows an approval that is waiting", () => {
-    const { container } = mount({ density: "calm" }, { approval: { id: "a1", tool: "shell.run", summary: "npm install", tier: "T2" } as never });
+    const { container } = mount({ density: "calm", widgets: {} }, { approval: { id: "a1", tool: "shell.run", summary: "npm install", tier: "T2" } as never });
     expect(widgetIds(container)).toEqual(["approval", "usage"]);
   });
 
-  it("standard shows system, voice, activity, approvals and usage", () => {
-    const { container } = mount({ density: "standard" });
-    expect(widgetIds(container)).toEqual([...HUD_WIDGET_IDS].sort());
+  it("standard shows only the budget ring and the usage line until the assistant brings an instrument up", () => {
+    const { container } = mount({ density: "standard", widgets: {} });
+    expect(widgetIds(container)).toEqual(["budget", "usage"]);
   });
 
-  it("full shows all nine, and a switched-off one stays away", () => {
-    const { container } = mount({ density: "full", widgets: { radar: false } });
+  it("an instrument the assistant brought up is there, and gone when it is put away", () => {
+    const up = mount({ density: "standard", widgets: {} }, { widgets: ["system", "voice"] });
+    expect(widgetIds(up.container)).toEqual(["budget", "system", "usage", "voice"]);
+    const away = mount({ density: "standard", widgets: {} }, { widgets: [] });
+    expect(widgetIds(away.container)).toEqual(["budget", "usage"]);
+  });
+
+  it("with every switch on it shows all nine, and a switched-off one stays away", () => {
+    expect(widgetIds(mount({ density: "full" }).container)).toEqual([...HUD_WIDGET_IDS].sort());
+    const { container } = mount({ density: "full", widgets: { ...ALL_ON, radar: false } });
     expect(widgetIds(container)).toHaveLength(8);
     expect(widgetIds(container)).not.toContain("radar");
   });

@@ -7,7 +7,8 @@ import { OrbitalHud } from "./OrbitalHud";
 afterEach(cleanup);
 
 const launcher: HudView["launcher"] = [{ id: "chat", label: "Chat", icon: "C", action: { type: "panel", value: "chat" } }];
-const hudOf = (over: Partial<HudView> = {}): HudView => ({ terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "full", widgets: {}, ...over });
+const ALL_ON = { system: true, voice: true, network: true, feed: true, radar: true, tickets: true, approval: true };
+const hudOf = (over: Partial<HudView> = {}): HudView => ({ terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "full", widgets: ALL_ON, ...over });
 const mount = (over: Partial<HudView> = {}, state: Partial<StageViewState> = {}, size: [number, number] = [1920, 1080], send = () => {}) => {
   const hud = hudOf(over);
   return render(<OrbitalHud hud={hud} state={{ ...initialState, connection: "open", hud, assistantName: "maya", ...state }} viewport={{ w: size[0], h: size[1] }} usage={null} send={send} onLaunch={() => {}} onExpand={() => {}} />);

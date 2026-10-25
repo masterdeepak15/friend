@@ -9,6 +9,8 @@ export interface Rect {
   width: number;
   height: number;
 }
+import { JLive, useRolling } from "./JLive";
+import { feedTree, networkTree, radarTree, systemTree, ticketsTree, voiceTree } from "./jtrees";
 import { Frame } from "./kit";
 import { usingKeyboard } from "./modality";
 import { budgetRings, feedLines, ticketCells, ticketProject } from "./office";
@@ -76,20 +78,41 @@ export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, onClose
     if (usingKeyboard()) closeRef.current?.focus(); // the keyboard moves in with it; the mouse leaves the focus alone
   }, [id]);
   const title = WIDGETS.find((w) => w.id === id)?.title ?? id;
+  const netHistory = useRolling(state.stats?.netDown ?? 0, state.stats?.at);
   const body = (() => {
     switch (id) {
       case "system":
-        return <SystemWidget stats={state.stats} />;
+        return (
+          <JLive node={systemTree(state.stats, true)}>
+            <SystemWidget stats={state.stats} />
+          </JLive>
+        );
       case "network":
-        return <NetworkWidget stats={state.stats} />;
+        return (
+          <JLive node={networkTree(state.stats, netHistory)}>
+            <NetworkWidget stats={state.stats} />
+          </JLive>
+        );
       case "radar":
-        return <RadarWidget deviceOnline={state.deviceOnline} voiceAvailable={state.voice.available} />;
+        return (
+          <JLive node={radarTree(state.deviceOnline, state.voice.available)}>
+            <RadarWidget deviceOnline={state.deviceOnline} voiceAvailable={state.voice.available} />
+          </JLive>
+        );
       case "voice":
-        return <VoiceWidget level={state.voice.level} mode={state.voice.mode} />;
+        return (
+          <JLive node={voiceTree(state.voice.level, state.voice.mode)}>
+            <VoiceWidget level={state.voice.level} mode={state.voice.mode} />
+          </JLive>
+        );
       case "feed":
-        return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} workers={state.office.enabled ? feedLines(state.office.feed, state.office.workers, 60) : []} />; // what the workers did comes first
+        return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} workers={state.office.enabled ? feedLines(state.office.feed, state.office.workers, 60) : []} />; // the full, scrolling log: what the workers did comes first
       case "tickets":
-        return <TicketsWidget cells={ticketCells(state.office.tickets)} {...(ticketProject(state.office.tickets) ? { project: ticketProject(state.office.tickets)! } : {})} />;
+        return (
+          <JLive node={ticketsTree(ticketCells(state.office.tickets), ticketProject(state.office.tickets))}>
+            <TicketsWidget cells={ticketCells(state.office.tickets)} {...(ticketProject(state.office.tickets) ? { project: ticketProject(state.office.tickets)! } : {})} />
+          </JLive>
+        );
       case "budget":
         return <BudgetWidget rings={budgetRings(state.office.workers)} />;
       case "usage":

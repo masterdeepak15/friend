@@ -29,12 +29,27 @@ describe("which widgets show at each density", () => {
     expect(ids("calm", {}, "orbit", false)).toEqual(["usage"]);
   });
 
-  it("standard shows every instrument of the approved look, so nothing of it is missing by default", () => {
-    expect(ids("standard", {}, "orbit", false)).toEqual([...HUD_WIDGET_IDS]);
+  it("standard and full show the budget ring and the usage line, and none of the live instruments: the home screen is clean until the assistant brings one up", () => {
+    expect(ids("standard", {}, "orbit", false)).toEqual(["budget", "usage"]);
+    expect(ids("full", {}, "orbit", false)).toEqual(["budget", "usage"]);
   });
 
-  it("full shows everything", () => {
-    expect(ids("full", {}, "orbit", false)).toEqual([...HUD_WIDGET_IDS]);
+  it("a live instrument shows when the assistant brought it up, or when the owner switched it on, and the owner's off wins", () => {
+    expect(ids("standard", {}, "orbit", false, ["voice", "system"])).toEqual(["system", "voice", "budget", "usage"]);
+    expect(ids("standard", { radar: true }, "orbit", false)).toEqual(["radar", "budget", "usage"]);
+    expect(ids("standard", { system: false }, "orbit", false, ["system"])).toEqual(["budget", "usage"]);
+    expect(ids("calm", {}, "orbit", false, ["tickets"])).toEqual(["tickets", "usage"]);
+  });
+
+  it("the approvals frame is there only while something waits, unless the owner switched it on", () => {
+    expect(ids("standard", {}, "orbit", false)).not.toContain("approval");
+    expect(ids("standard", {}, "orbit", true)).toContain("approval");
+    expect(ids("calm", { approval: true }, "orbit", false)).toEqual(["approval", "usage"]);
+  });
+
+  it("the sample preview shows everything the owner has not switched off", () => {
+    expect(ids("calm", {}, "orbit", false, [], true)).toEqual([...HUD_WIDGET_IDS]);
+    expect(ids("calm", { radar: false }, "orbit", false, [], true)).not.toContain("radar");
   });
 
   it("a switched-off widget stays off at every density, and a switched-on one shows even at calm", () => {
@@ -49,7 +64,7 @@ describe("which widgets show at each density", () => {
   });
 
   it("lists the same widgets in the compact layout", () => {
-    expect(ids("standard", {}, "compact", false)).toEqual(ids("standard", {}, "orbit", false));
+    expect(ids("standard", {}, "compact", false, ["system"])).toEqual(ids("standard", {}, "orbit", false, ["system"]));
   });
 
   it("ignores switches for widgets it does not know", () => {

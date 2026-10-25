@@ -351,3 +351,8 @@
 .ob-canvas-tools button:hover, .ob-canvas-tools button:focus-visible { border-color: var(--ob-cyan); background: color-mix(in srgb, var(--ob-cyan) 16%, transparent); outline: none; }
 .ob-canvas-tools span { font-size: 11px; color: var(--ob-cyan); min-width: 40px; text-align: center; }
 .ob-org-lines { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: 0; padding: 0; list-style: none; } /* read out by a screen reader; the canvas shows it */.ob-canvas-edges .ob-arrow { fill: var(--ob-cyan); stroke: none; opacity: 0.9; stroke-dasharray: none; animation: none; }
+
+/* the live instruments drawn with Jarvis components: they fill the box of the instrument, and the click goes to the instrument */
+.ob-jlive { width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
+.ob-jlive > * { max-width: 100%; }
+.ob-expanded-body .ob-jlive { min-height: 240px; height: auto; overflow: auto; pointer-events: auto; }

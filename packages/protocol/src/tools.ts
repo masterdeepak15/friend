@@ -653,6 +653,14 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "stage.widget",
+    description:
+      "Bring live instruments up on the home screen, or put them away. They are the owner's live gauges, drawn with the Jarvis look and kept up to date: system (CPU and memory), voice (the sound), network (speed in and out), feed (what is happening and what the workers do), radar (the devices Friend can reach) and tickets (the workers' tickets). The home screen shows none of them until you bring one up; the owner can click one for details. show: list of names to bring up; hide: names to put away; reset: true puts all of them away. stage.clear also puts them all away.",
+    input: z.object({ show: z.array(z.enum(["system", "voice", "network", "feed", "radar", "tickets"])).max(6).optional(), hide: z.array(z.enum(["system", "voice", "network", "feed", "radar", "tickets"])).max(6).optional(), reset: z.boolean().optional() }).refine((a) => !!a.show?.length || !!a.hide?.length || a.reset === true, { message: "Name what to show or hide, or reset." }),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
     name: "stage.clear",
     description: "Remove every temporary picture from the screen and return to the bare presence. Pinned widgets stay.",
     input: z.object({}),
@@ -797,6 +805,10 @@ export function describeCall(name: string, args: unknown, device?: string): stri
       return "Scan the market for intraday setups";
     case "market.replay":
       return `Replay the rest of today for ${visible(clip(String(a.symbol ?? ""), 30))}`;
+    case "stage.widget": {
+      const show = Array.isArray(a.show) ? a.show.map((x) => visible(String(x))).join(", ") : "";
+      return a.reset === true ? "Put away the live instruments" : show ? `Bring up the live instruments: ${show}` : "Put away some live instruments";
+    }
     case "memory.read":
       return `Read memory: ${visible(clip(String(a.path ?? "the root"), 200))}`;
     case "memory.write":

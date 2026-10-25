@@ -10,6 +10,9 @@ export const httpHostCheck = async (): Promise<HostCheck> => {
   return (await res.json()) as HostCheck;
 };
 
+/** The instruments that are not drawn until they are brought up or ticked here. */
+const KEPT: readonly string[] = ["system", "voice", "network", "feed", "radar", "tickets", "approval"];
+
 const WIDGET_NAMES: Record<(typeof HUD_WIDGET_IDS)[number], string> = {
   system: "System (processor and memory)",
   voice: "Voice (sound bars)",
@@ -171,7 +174,7 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
         <span>Density</span>
         <select value={hud.density} disabled={hud.layout !== "orbital"} onChange={(e) => onHud({ density: e.target.value as HudSettings["density"] })}>
           <option value="calm">Calm (the orb, the orbit and the message bar)</option>
-          <option value="standard">Standard (the approved look: every instrument)</option>
+          <option value="standard">Standard (the orb, the orbit, the budget ring and the usage line)</option>
           <option value="full">Full (the same, plus anything added later)</option>
         </select>
       </label>
@@ -179,11 +182,11 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
         <legend>Instruments</legend>
         {HUD_WIDGET_IDS.map((id) => (
           <label key={id} className="settings-check">
-            <input type="checkbox" data-testid={`hud-widget-${id}`} disabled={hud.layout !== "orbital"} checked={hud.widgets[id] !== false} onChange={(e) => onHud({ widgets: { ...hud.widgets, [id]: e.target.checked } })} />
+            <input type="checkbox" data-testid={`hud-widget-${id}`} disabled={hud.layout !== "orbital"} checked={KEPT.includes(id) ? hud.widgets[id] === true : hud.widgets[id] !== false} onChange={(e) => onHud({ widgets: { ...hud.widgets, [id]: e.target.checked } })} />
             <span>{WIDGET_NAMES[id]}</span>
           </label>
         ))}
-        <small className="auth-note">A box you switch off stays off at every density. A waiting approval is always shown.</small>
+        <small className="auth-note">The live instruments (system, voice, network, activity, devices, tickets) and the approvals box are not on the screen until Friend brings them up (ask it, for example "show my system"); it puts them away when you ask or clear the screen. Tick one to keep it on the screen always. A box you switch off stays off. A waiting approval is always shown.</small>
       </fieldset>
       <label className="settings-check">
         <input type="checkbox" data-testid="hud-preview" disabled={hud.layout !== "orbital"} checked={hud.preview === true} onChange={(e) => onHud({ preview: e.target.checked })} />

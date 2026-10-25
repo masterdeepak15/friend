@@ -1,5 +1,6 @@
 import {
   ServerMsg,
+  type HudInstrument,
   type PendingApproval,
   type PresenceState,
   type PresenceStyle,
@@ -51,6 +52,8 @@ export interface CameraView {
 export interface StageViewState {
   scene: SceneMode;
   objects: StageObject[];
+  /** The live instruments of the home screen that the assistant has brought up. */
+  widgets: HudInstrument[];
   captions: string;
   captionDone: boolean;
   presence: { state: PresenceState; style: PresenceStyle; amplitude: number; pulse: number };
@@ -127,6 +130,7 @@ export const DEFAULT_CLIENT_LOOK: ClientLook = { size: 1, reactivity: 0.7, ambie
 export const initialState: StageViewState = {
   scene: "conversation",
   objects: [],
+  widgets: [],
   captions: "",
   captionDone: true,
   presence: { state: "idle", style: "sphere", amplitude: 0, pulse: 0 },
@@ -196,7 +200,11 @@ function applyStage(s: StageViewState, cmd: Extract<ServerMsg, { type: "stage" }
     case "hide":
       return { ...s, objects: s.objects.filter((o) => o.id !== cmd.id) };
     case "clear":
-      return { ...s, objects: s.objects.filter((o) => o.pinned), scene: "conversation" }; // the owner's widgets stay
+      return { ...s, objects: s.objects.filter((o) => o.pinned), widgets: [], scene: "conversation" }; // the owner's widgets stay; the instruments the assistant brought up go
+    case "widget": {
+      const kept = cmd.reset ? [] : s.widgets.filter((w) => !(cmd.hide ?? []).includes(w));
+      return { ...s, widgets: [...kept, ...(cmd.show ?? []).filter((w) => !kept.includes(w))] };
+    }
     case "pin":
       return { ...s, objects: s.objects.map((o) => (o.id === cmd.id ? { ...o, pinned: true } : o)) };
     case "unpin":
@@ -255,6 +263,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
         ...state,
         scene: m.stage.scene,
         objects: m.stage.objects,
+        widgets: m.stage.widgets ?? [],
         presence: { ...state.presence, state: m.stage.presence.state, style: m.stage.presence.style },
         mood: m.stage.mood,
         approval: m.pendingApproval ?? null,

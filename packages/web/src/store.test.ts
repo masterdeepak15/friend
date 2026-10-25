@@ -165,3 +165,23 @@ describe("reduce", () => {
     expect(reduce(initialState, { type: "stage", command: { cmd: "show", object: { id: 1 } } })).toBe(initialState);
   });
 });
+
+describe("the live instruments the assistant brings up", () => {
+  const cmd = (command: object) => ({ type: "stage", command }) as unknown as ServerMsg;
+  it("come up, go away one by one, and all go with reset or with clear", () => {
+    let s = reduce(initialState, cmd({ cmd: "widget", show: ["system", "voice"] }));
+    expect(s.widgets).toEqual(["system", "voice"]);
+    s = reduce(s, cmd({ cmd: "widget", show: ["voice", "network"] })); // one already there is not doubled
+    expect(s.widgets).toEqual(["system", "voice", "network"]);
+    s = reduce(s, cmd({ cmd: "widget", hide: ["voice"] }));
+    expect(s.widgets).toEqual(["system", "network"]);
+    expect(reduce(s, cmd({ cmd: "widget", reset: true })).widgets).toEqual([]);
+    expect(reduce(s, cmd({ cmd: "clear" })).widgets).toEqual([]);
+  });
+
+  it("are restored from the snapshot when a screen opens or reconnects, and none is the same as nothing sent", () => {
+    const snap = (widgets?: string[]) => ({ type: "snapshot", stage: { scene: "conversation", objects: [], presence: { state: "idle", style: "sphere" }, mood: { accent: "#3fd8ff", intensity: 0.6 }, ...(widgets ? { widgets } : {}) }, pendingApproval: null, deviceOnline: false, busy: false }) as unknown as ServerMsg;
+    expect(reduce(initialState, snap(["radar"])).widgets).toEqual(["radar"]);
+    expect(reduce({ ...initialState, widgets: ["radar"] }, snap()).widgets).toEqual([]);
+  });
+});

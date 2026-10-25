@@ -12,7 +12,8 @@ const launcher: HudView["launcher"] = [
   { id: "chat", label: "Chat", icon: "C", action: { type: "panel", value: "chat" } },
   { id: "tasks", label: "Tasks", icon: "T", action: { type: "panel", value: "tasks" } },
 ];
-const hudOf = (over: Partial<HudView> = {}): HudView => ({ terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "standard", widgets: {}, ...over });
+const ALL_ON = { system: true, voice: true, network: true, feed: true, radar: true, tickets: true, approval: true };
+const hudOf = (over: Partial<HudView> = {}): HudView => ({ terminalLabel: "T", clock: { hour12: true, seconds: false, locale: "" }, launcher, animations: "full", layout: "orbital", density: "standard", widgets: ALL_ON, ...over });
 const worker = (name: string, over: Partial<OfficeWorkerView> = {}): OfficeWorkerView => ({ id: name.toLowerCase(), name, roleId: "scribe", title: "Scribe", capabilities: "", managerId: null, projectId: "site", status: "idle", ticketId: null, detail: "", tokens: 0, budget: null, startedAt: null, ...over });
 const office = (over: Partial<OfficeState> = {}): OfficeState => ({ ...initialState.office, enabled: true, ...over });
 

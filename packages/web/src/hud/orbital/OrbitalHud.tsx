@@ -4,6 +4,8 @@ import { describeStatus } from "../../overlay/StatusBadge";
 import type { UsageApi } from "../../settings/UsageTab";
 import type { StageViewState } from "../../store";
 import { ExpandedView } from "./ExpandedView";
+import { JLive, useRolling } from "./JLive";
+import { feedTree, networkTree, radarTree, systemTree, ticketsTree, voiceTree } from "./jtrees";
 import { budgetRings, feedLines, officeMood, ticketCells, ticketProject, usageFromQuota, workerNodes } from "./office";
 import { WorkerView } from "./WorkerView";
 import { usingKeyboard } from "./modality";
@@ -140,7 +142,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
   const mode = layoutMode(w, h);
   // "Show sample data" previews the whole look, so every instrument is drawn (unless switched off by hand)
   const preview = hud.preview === true && mode === "orbit";
-  const widgets = visibleWidgets(preview ? "full" : hud.density, hud.widgets, mode, state.approval !== null);
+  const widgets = visibleWidgets(preview ? "full" : hud.density, hud.widgets, mode, state.approval !== null, state.widgets, preview);
   const view: StageViewState = preview ? { ...state, stats: sampleStats(Date.now()), voice: { ...state.voice, mode: "listening", level: 0.85 } } : state;
   const pending = state.approval !== null;
   const needsPin = state.approval?.needsPin === true;
@@ -150,6 +152,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
   const [openWorker, setOpenWorker] = useState<string | null>(null);
   const [showOrg, setShowOrg] = useState(false);
   const tick = useNow(30_000); // the time the usage window resets in is worked out from this
+  const netHistory = useRolling(view.stats?.netDown ?? 0, view.stats?.at); // the trend line of the network instrument
   const opener = useRef<HTMLElement | null>(null);
   const close = useCallback(() => {
     setExpanded(null);
@@ -242,20 +245,52 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
   const content = (id: HudWidgetId) => {
     switch (id) {
       case "system":
-        return <SystemWidget stats={view.stats} />;
+        return (
+          <JLive node={systemTree(view.stats)}>
+            <SystemWidget stats={view.stats} />
+          </JLive>
+        );
       case "network":
-        return <NetworkWidget stats={view.stats} />;
+        return (
+          <JLive node={networkTree(view.stats, netHistory)}>
+            <NetworkWidget stats={view.stats} />
+          </JLive>
+        );
       case "radar":
-        return <RadarWidget deviceOnline={view.deviceOnline} voiceAvailable={view.voice.available} {...(preview ? { blips: SAMPLE_BLIPS } : {})} />;
+        if (preview) return <RadarWidget deviceOnline={view.deviceOnline} voiceAvailable={view.voice.available} blips={SAMPLE_BLIPS} />;
+        return (
+          <JLive node={radarTree(view.deviceOnline, view.voice.available)}>
+            <RadarWidget deviceOnline={view.deviceOnline} voiceAvailable={view.voice.available} />
+          </JLive>
+        );
       case "voice":
-        return <VoiceWidget level={view.voice.level} mode={view.voice.mode} />;
+        return (
+          <JLive node={voiceTree(view.voice.level, view.voice.mode)}>
+            <VoiceWidget level={view.voice.level} mode={view.voice.mode} />
+          </JLive>
+        );
       case "feed": {
         const workerLines = officeOn ? feedLines(state.office.feed, state.office.workers) : [];
-        return <FeedWidget lines={preview ? SAMPLE_FEED : workerLines.length > 0 ? workerLines : view.chat} activity={view.activity} busy={preview || workerLines.length > 0 ? false : view.busy} marquee={preview} />;
+        const lines = preview ? SAMPLE_FEED : workerLines.length > 0 ? workerLines : view.chat;
+        const plain = <FeedWidget lines={lines} activity={view.activity} busy={preview || workerLines.length > 0 ? false : view.busy} marquee={preview} />;
+        if (preview) return plain;
+        const items = workerLines.length > 0 ? workerLines : view.chat.map((c) => ({ text: `${c.role === "user" ? "You" : "Friend"}: ${c.text}`, tone: "plain" as const }));
+        return (
+          <JLive node={feedTree(items, view.activity, view.busy)}>
+            {plain}
+          </JLive>
+        );
       }
-      case "tickets":
-        if (officeOn) return <TicketsWidget cells={ticketCells(state.office.tickets)} {...(ticketProject(state.office.tickets) ? { project: ticketProject(state.office.tickets)! } : {})} />;
-        return <TicketsWidget {...(preview ? { cells: SAMPLE_TICKETS, project: "landing-page" } : {})} />;
+      case "tickets": {
+        if (preview) return <TicketsWidget cells={SAMPLE_TICKETS} project="landing-page" />;
+        const cells = officeOn ? ticketCells(state.office.tickets) : [];
+        const project = officeOn ? ticketProject(state.office.tickets) : undefined;
+        return (
+          <JLive node={ticketsTree(cells, project)}>
+            <TicketsWidget {...(officeOn ? { cells, ...(project ? { project } : {}) } : {})} />
+          </JLive>
+        );
+      }
       case "budget":
         return <BudgetWidget {...(preview ? { rings: SAMPLE_BUDGET } : officeOn ? { rings: budgetRings(state.office.workers) } : {})} />;
       default:

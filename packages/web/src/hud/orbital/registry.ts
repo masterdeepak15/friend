@@ -29,15 +29,23 @@ if (WIDGETS.length !== HUD_WIDGET_IDS.length) throw new Error("the widget regist
 
 const RANK: Record<HudDensity, number> = { calm: 0, standard: 1, full: 2 };
 
+/** The live instruments: the home screen shows none of them until the assistant brings one up (or the owner switches one on). */
+export const LIVE_INSTRUMENTS: readonly HudWidgetId[] = ["system", "voice", "network", "feed", "radar", "tickets"];
+
 /**
- * Which instruments to draw. The density decides, the owner's switches override it either way, and an approval that is waiting is
- * always shown (it can never be hidden). With nothing waiting, the approval frame is a dim "none waiting" one.
+ * Which instruments to draw. The budget ring and the usage line follow the density and the owner's switches. The six live instruments
+ * (system, voice, network, feed, radar, tickets) are drawn only when the owner switched one on or the assistant brought it up; the owner's
+ * "off" wins over both. An approval that is waiting is always shown (it can never be hidden); with nothing waiting there is no approval
+ * frame unless the owner switched it on. The sample preview shows everything.
  */
-export function visibleWidgets(density: HudDensity, widgets: Partial<Record<HudWidgetId, boolean>>, _mode: "orbit" | "compact", approvalPending: boolean): WidgetDef[] {
+export function visibleWidgets(density: HudDensity, widgets: Partial<Record<HudWidgetId, boolean>>, _mode: "orbit" | "compact", approvalPending: boolean, brought: readonly HudWidgetId[] = [], preview = false): WidgetDef[] {
   return WIDGETS.filter((w) => {
     if (w.id === "approval" && approvalPending) return true;
     const choice = widgets[w.id];
     if (choice === false) return false;
+    if (preview) return true;
+    if (w.id === "approval") return choice === true;
+    if (LIVE_INSTRUMENTS.includes(w.id)) return choice === true || brought.includes(w.id);
     if (choice === true) return true;
     return RANK[density] >= RANK[w.minDensity];
   });
