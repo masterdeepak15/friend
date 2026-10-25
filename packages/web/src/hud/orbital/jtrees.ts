@@ -8,7 +8,10 @@ import { formatBytes } from "./widgets/NetworkWidget";
  */
 
 const pct = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
-const frame = (title: string, kids: JarvisNode["kids"], color = "cyan"): JarvisNode => ({ c: "JHudFrameCard", p: { title, color, showStatusDot: true, width: "100%", height: "100%" }, kids });
+const frame = (title: string, kids: JarvisNode["kids"], color = "cyan"): JarvisNode => ({ c: "JHudFrameCard", p: { title, color, showStatusDot: true, width: "100%" }, kids });
+
+/** The same instrument without its frame, for a dialog that has a frame and a title of its own. */
+export const unframed = (n: JarvisNode): JarvisNode => (n.c === "JHudFrameCard" ? { c: "Column", p: { gap: 10 }, ...(n.kids ? { kids: n.kids } : {}) } : n);
 const row = (label: string, value: string, bar?: number, state?: "active" | "warning" | "error" | "success"): JarvisNode => ({ c: "JDataRow", p: { label, value, ...(bar !== undefined ? { barPercent: pct(bar) } : {}), ...(state ? { state } : {}) } });
 
 export interface FeedItem {
@@ -24,7 +27,7 @@ export function systemTree(stats: HudStats | null, detail = false): JarvisNode {
       c: "Row",
       p: { gap: 12 },
       kids: [
-        { c: "JArcReactor", p: { level: cpu, size: "110px", label: "CPU", animated: true } },
+        { c: "JGaugeChart", p: { value: cpu, min: 0, max: 100, size: detail ? "190px" : "120px", label: "CPU", displayValue: `${cpu}%`, showNeedle: false, showTicks: false, showMinMax: false } },
         {
           c: "Column",
           p: { gap: 6 },

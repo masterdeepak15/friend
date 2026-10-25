@@ -356,3 +356,8 @@
 .ob-jlive { width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
 .ob-jlive > * { max-width: 100%; }
 .ob-expanded-body .ob-jlive { min-height: 240px; height: auto; overflow: auto; pointer-events: auto; }
+/* the library's framed card puts its title on top of the contents and leaves the room to us: keep the contents clear of it, in the middle of what is left */
+.ob-jlive .j-hfc-body { padding: 28px 14px 10px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.ob-jlive .jv-row { align-items: center; }
+.ob-jlive .jv-row > * { flex: 0 1 auto; }
+.ob-expanded-body .jv-col { padding: 4px 6px; }

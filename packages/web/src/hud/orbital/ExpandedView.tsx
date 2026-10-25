@@ -10,7 +10,7 @@ export interface Rect {
   height: number;
 }
 import { JLive, useRolling } from "./JLive";
-import { feedTree, networkTree, radarTree, systemTree, ticketsTree, voiceTree } from "./jtrees";
+import { feedTree, networkTree, radarTree, systemTree, ticketsTree, unframed, voiceTree } from "./jtrees";
 import { Frame } from "./kit";
 import { usingKeyboard } from "./modality";
 import { budgetRings, feedLines, ticketCells, ticketProject } from "./office";
@@ -25,7 +25,7 @@ import { VoiceWidget } from "./widgets/VoiceWidget";
 
 /** What each instrument is, in plain words, shown under it when it is opened. */
 const EXPLAIN: Record<HudWidgetId, string> = {
-  system: "How hard this PC is working. The big arc is the processor; the thin arc inside it is the memory.",
+  system: "How hard this PC is working: the arc and the first row are the processor, the second row is the memory, and below are the memory figures.",
   voice: "The sound Friend is hearing or speaking, live.",
   network: "How fast data moves in and out of this PC. Some PCs do not report it.",
   feed: "The conversation and what Friend is doing right now.",
@@ -83,25 +83,25 @@ export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, onClose
     switch (id) {
       case "system":
         return (
-          <JLive node={systemTree(state.stats, true)}>
+          <JLive node={unframed(systemTree(state.stats, true))}>
             <SystemWidget stats={state.stats} />
           </JLive>
         );
       case "network":
         return (
-          <JLive node={networkTree(state.stats, netHistory)}>
+          <JLive node={unframed(networkTree(state.stats, netHistory))}>
             <NetworkWidget stats={state.stats} />
           </JLive>
         );
       case "radar":
         return (
-          <JLive node={radarTree(state.deviceOnline, state.voice.available)}>
+          <JLive node={unframed(radarTree(state.deviceOnline, state.voice.available))}>
             <RadarWidget deviceOnline={state.deviceOnline} voiceAvailable={state.voice.available} />
           </JLive>
         );
       case "voice":
         return (
-          <JLive node={voiceTree(state.voice.level, state.voice.mode)}>
+          <JLive node={unframed(voiceTree(state.voice.level, state.voice.mode))}>
             <VoiceWidget level={state.voice.level} mode={state.voice.mode} />
           </JLive>
         );
@@ -109,7 +109,7 @@ export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, onClose
         return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} workers={state.office.enabled ? feedLines(state.office.feed, state.office.workers, 60) : []} />; // the full, scrolling log: what the workers did comes first
       case "tickets":
         return (
-          <JLive node={ticketsTree(ticketCells(state.office.tickets), ticketProject(state.office.tickets))}>
+          <JLive node={unframed(ticketsTree(ticketCells(state.office.tickets), ticketProject(state.office.tickets)))}>
             <TicketsWidget cells={ticketCells(state.office.tickets)} {...(ticketProject(state.office.tickets) ? { project: ticketProject(state.office.tickets)! } : {})} />
           </JLive>
         );

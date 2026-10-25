@@ -30,7 +30,8 @@ describe("the live instruments as Jarvis trees", () => {
   });
 
   it("show the readings as numbers the owner can read", () => {
-    expect(text(systemTree(stats))).toMatch(/"level":42/);
+    expect(text(systemTree(stats))).toMatch(/"value":42/);
+    expect(text(systemTree(stats))).toMatch(/"displayValue":"42%"/);
     expect(text(systemTree(stats))).toMatch(/"value":"38%"/); // 6 of 16 GB
     expect(text(systemTree(stats, true))).toMatch(/RAM USED/);
     expect(text(networkTree(stats, []))).toMatch(/"value":"2\.0 KB\/s"/);
