@@ -48,7 +48,8 @@ export const StageCommand = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("show"), object: StageObject }),
   z.object({ cmd: z.literal("update"), id: z.string(), props: z.record(z.string(), z.unknown()) }),
   z.object({ cmd: z.literal("hide"), id: z.string() }),
-  z.object({ cmd: z.literal("clear") }),
+  /** Take the temporary pictures off. The live instruments go too, unless keepInstruments is set (a new scene replaces the pictures, not the instruments). */
+  z.object({ cmd: z.literal("clear"), keepInstruments: z.boolean().optional() }),
   /** Bring live instruments up on the home screen (show), put some away (hide), or all of them (reset). */
   z.object({ cmd: z.literal("widget"), show: z.array(HudInstrument).max(6).optional(), hide: z.array(HudInstrument).max(6).optional(), reset: z.boolean().optional() }),
   /** Make a shown object a widget that stays, or let it go back to being a temporary picture. */

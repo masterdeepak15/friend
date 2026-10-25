@@ -908,10 +908,14 @@ export class Agent {
     let text = result.truncated || capped ? `${output}\n[output truncated]` : output;
     if (call.name === "system.info") {
       // the gauges appear whatever the model does next
-      const scene = statsScene(result.output);
-      if (scene) {
-        this.showScene(scene, ctx.emit);
-        text += "\n(The CPU, memory and disk gauges are already on the screen; just say a short summary.)";
+      if (d.stage.snapshot().widgets?.includes("system")) {
+        text += "\n(The system instrument is already on the screen, live; just say a short summary.)";
+      } else {
+        const scene = statsScene(result.output);
+        if (scene) {
+          this.showScene(scene, ctx.emit);
+          text += "\n(The CPU, memory and disk gauges are already on the screen; just say a short summary.)";
+        }
       }
     }
     return { text, isError: false };
@@ -923,7 +927,7 @@ export class Agent {
    */
   private showScene(commands: StageCommand[], emit: (m: ServerMsg) => void): void {
     const first = this.scenesThisTurn++ === 0;
-    for (const cmd of first ? [{ cmd: "clear" } as StageCommand, ...commands] : commands) {
+    for (const cmd of first ? [{ cmd: "clear", keepInstruments: true } as StageCommand, ...commands] : commands) {
       if (this.deps.stage.apply(cmd).ok) emit({ type: "stage", command: cmd });
     }
   }

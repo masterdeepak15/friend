@@ -185,3 +185,11 @@ describe("the live instruments the assistant brings up", () => {
     expect(reduce({ ...initialState, widgets: ["radar"] }, snap()).widgets).toEqual([]);
   });
 });
+
+describe("a new scene and the instruments (screen)", () => {
+  it("a clear that keeps the instruments leaves them up, and a plain clear puts them away", () => {
+    const up = reduce(initialState, { type: "stage", command: { cmd: "widget", show: ["system", "feed"] } } as unknown as ServerMsg);
+    expect(reduce(up, { type: "stage", command: { cmd: "clear", keepInstruments: true } } as unknown as ServerMsg).widgets).toEqual(["system", "feed"]);
+    expect(reduce(up, { type: "stage", command: { cmd: "clear" } } as unknown as ServerMsg).widgets).toEqual([]);
+  });
+});

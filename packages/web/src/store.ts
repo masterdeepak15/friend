@@ -200,7 +200,7 @@ function applyStage(s: StageViewState, cmd: Extract<ServerMsg, { type: "stage" }
     case "hide":
       return { ...s, objects: s.objects.filter((o) => o.id !== cmd.id) };
     case "clear":
-      return { ...s, objects: s.objects.filter((o) => o.pinned), widgets: [], scene: "conversation" }; // the owner's widgets stay; the instruments the assistant brought up go
+      return { ...s, objects: s.objects.filter((o) => o.pinned), widgets: cmd.keepInstruments ? s.widgets : [], scene: "conversation" }; // the owner's widgets stay; the instruments the assistant brought up go
     case "widget": {
       const kept = cmd.reset ? [] : s.widgets.filter((w) => !(cmd.hide ?? []).includes(w));
       return { ...s, widgets: [...kept, ...(cmd.show ?? []).filter((w) => !kept.includes(w))] };

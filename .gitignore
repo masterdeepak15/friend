@@ -9,3 +9,6 @@ packages/friend/README.md
 
 # scratch files some tools leave behind
 _tmp_*
+
+# files the code-graph tool leaves next to the source it edits
+.gortex-batch-*

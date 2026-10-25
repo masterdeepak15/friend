@@ -197,7 +197,7 @@ export class StageState {
       case "clear": {
         // the temporary pictures go; the owner's widgets stay; the live instruments the assistant brought up go too
         for (const [id, e] of this.objects) if (!e.obj.pinned) this.objects.delete(id);
-        this.widgets.clear();
+        if (!cmd.keepInstruments) this.widgets.clear();
         this.scene = "conversation";
         return { ok: true };
       }

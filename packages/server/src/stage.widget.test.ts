@@ -54,3 +54,16 @@ describe("the live instruments of the home screen", () => {
     expect(describeCall("stage.widget", { reset: true })).toMatch(/Put away/);
   });
 });
+
+describe("a new scene and the instruments", () => {
+  it("clear with keepInstruments takes the pictures off and leaves the instruments up; a plain clear takes both", () => {
+    const s = new StageState();
+    run(s, { show: ["system"] });
+    runStageTool("stage.show", { object: { id: "a", type: "card", props: { text: "x" }, placement: "center" } }, s, () => {});
+    s.apply({ cmd: "clear", keepInstruments: true });
+    expect(s.snapshot().objects).toEqual([]);
+    expect(s.snapshot().widgets).toEqual(["system"]);
+    s.apply({ cmd: "clear" });
+    expect(s.snapshot().widgets).toEqual([]);
+  });
+});
