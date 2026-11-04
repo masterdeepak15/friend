@@ -337,3 +337,45 @@ describe("what the screen is told", () => {
 });
 
 vi.setConfig({ testTimeout: 15_000 });
+
+describe("Telegram: approval buttons", () => {
+  const ID = "11111111-1111-4111-8111-111111111111";
+  const tapper = (hub: ChannelHub, taps: string[]) => {
+    (hub as unknown as { deps: { approvalButton: (d: string) => string | null } }).deps.approvalButton = (d) => (taps.push(d), "Allowed.");
+  };
+
+  it("sends Allow and Deny buttons to the owner, and hands a tap from the owner's chat on", async () => {
+    const taps: string[] = [];
+    const { hub, net } = make((c) => (c.channels.telegram.ownerChatId = 777));
+    tapper(hub, taps);
+    const calls: { method: string; body: Record<string, unknown> }[] = [];
+    const base = net.fetch;
+    (hub as unknown as { f: typeof fetch }).f = async (input, init) => {
+      calls.push({ method: String(input).split("/").pop()!, body: init?.body ? JSON.parse(String(init.body)) : {} });
+      return base(input, init);
+    };
+    const r = await hub.sendApproval("Friend needs your OK", { id: ID });
+    expect(r.ok).toBe(true);
+    const send = calls.find((c) => c.method === "sendMessage")!;
+    expect(send.body.chat_id).toBe(777);
+    expect(JSON.stringify(send.body.reply_markup)).toContain(`fa:${ID}:y`);
+    hub.apply();
+    net.updates.push({ update_id: 5001, callback_query: { id: "cb1", data: `fa:${ID}:y`, from: { id: 777 }, message: { chat: { id: 777 }, message_id: 9 } } });
+    await until(() => taps.length === 1);
+    await until(() => calls.some((c) => c.method === "answerCallbackQuery"));
+    expect(calls.find((c) => c.method === "answerCallbackQuery")!.body).toMatchObject({ callback_query_id: "cb1", text: "Allowed." });
+  });
+
+  it("ignores a tap from anyone but the owner, and never sends without a linked chat", async () => {
+    const taps: string[] = [];
+    const { hub, net } = make((c) => (c.channels.telegram.ownerChatId = 777));
+    tapper(hub, taps);
+    hub.apply();
+    net.updates.push({ update_id: 6001, callback_query: { id: "cb2", data: `fa:${ID}:y`, from: { id: 999 }, message: { chat: { id: 999 }, message_id: 9 } } });
+    await until(() => net.updates.length === 0);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(taps).toEqual([]);
+    const unlinked = make();
+    expect((await unlinked.hub.sendApproval("x", null)).ok).toBe(false);
+  });
+});

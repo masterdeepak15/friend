@@ -43,6 +43,8 @@ export interface Config {
   ownerName: string;
   /** How much Friend asks before acting: manual (asks), edits (files and sandboxed code go ahead) or auto (everything but risky things goes ahead). */
   approvals: ApprovalMode;
+  /** Asking you on your phone (Telegram buttons, or a YES / NO reply) when an action needs your approval and you are not at the screen. */
+  phoneApprovals: PhoneApprovalsConfig;
   /** Messaging channels: Telegram, and SMS and WhatsApp through Twilio. The tokens are secrets and never go to the screen. */
   channels: ChannelsConfig;
   /** Stock brokers the owner can read their account from (Zerodha first). */
@@ -707,6 +709,25 @@ export const sanitizeProactive = (p: Partial<ProactiveConfig> | undefined): Proa
   };
 };
 
+export interface PhoneApprovalsConfig {
+  enabled: boolean;
+  /** Which linked app is asked: auto prefers Telegram, then WhatsApp. */
+  channel: "auto" | "telegram" | "whatsapp";
+  /** Seconds to wait for the screen before also asking on the phone, when a screen is open. With no screen open the phone is asked at once. */
+  delaySec: number;
+  /** Telegram: Allow / Deny buttons under the message (off: reply YES or NO). */
+  buttons: boolean;
+  /** Also let the phone answer the always-ask actions (camera pictures, sending files, Office actions). Off: those wait for the screen. */
+  allowRisky: boolean;
+}
+export const sanitizePhoneApprovals = (p: Partial<PhoneApprovalsConfig> | undefined): PhoneApprovalsConfig => ({
+  enabled: p?.enabled !== false,
+  channel: p?.channel === "telegram" || p?.channel === "whatsapp" ? p.channel : "auto",
+  delaySec: typeof p?.delaySec === "number" && Number.isFinite(p.delaySec) ? Math.min(110, Math.max(0, Math.round(p.delaySec))) : 20,
+  buttons: p?.buttons !== false,
+  allowRisky: p?.allowRisky === true,
+});
+
 export interface MemoryConfig {
   /** The memory tree: small notes in folders the assistant shapes. Off means the older flat list of notes. */
   enabled: boolean;
@@ -887,6 +908,7 @@ const defaults = (dataDir: string): Config => ({
   look: { ...DEFAULT_LOOK },
   ownerName: "",
   approvals: "manual",
+  phoneApprovals: sanitizePhoneApprovals(undefined),
   channels: sanitizeChannels(DEFAULT_CHANNELS),
   brokers: sanitizeBrokers({}),
   trading: { level: "read" },
@@ -945,6 +967,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     look: sanitizeLook(stored.look),
     ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",
     approvals: stored.approvals === "edits" || stored.approvals === "auto" ? stored.approvals : "manual",
+    phoneApprovals: sanitizePhoneApprovals(stored.phoneApprovals),
     channels: sanitizeChannels(stored.channels),
     brokers: sanitizeBrokers(stored.brokers),
     trading: { level: "read" }, // any other level in the file is read as read: orders do not exist in this version

@@ -13,6 +13,14 @@ export interface ApprovalRequest {
   needsPin: boolean;
   /** Name of the device the call will run on, shown on the approval card. */
   device?: string | null;
+  /** False when the question is already going to the owner's phone another way (a speaker device); default true. */
+  remote?: boolean;
+}
+
+/** Asks the owner somewhere other than the screen (their phone). Must never throw into the approval. */
+export interface RemoteAsk {
+  offer(info: PendingApproval, req: ApprovalRequest): void;
+  settled(id: string, decision: string): void;
 }
 export interface ApprovalOutcome {
   approved: boolean;
@@ -37,7 +45,13 @@ interface Deps {
 export class Approvals {
   private entries = new Map<string, Entry>();
 
+  private remote: RemoteAsk | null = null;
+
   constructor(private deps: Deps, private timeoutMs = 120_000) {}
+
+  setRemote(r: RemoteAsk | null): void {
+    this.remote = r;
+  }
 
   request(req: ApprovalRequest, emit: (m: ServerMsg) => void): Promise<ApprovalOutcome> {
     const id = randomUUID();
@@ -55,6 +69,7 @@ export class Approvals {
       const timer = setTimeout(() => this.finish(id, { approved: false, reason: "Approval timed out" }, "timeout"), this.timeoutMs);
       this.entries.set(id, { info, req, emit, resolve, timer });
       emit({ type: "approval.request", ...info });
+      if (req.remote !== false) this.tell(() => this.remote?.offer(info, req));
     });
   }
 
@@ -130,6 +145,15 @@ export class Approvals {
     this.deps.db.prepare("update approvals set decision = ?, decided_at = ? where id = ?").run(decision, Date.now(), id);
     this.deps.audit.log("owner", "approval.decided", { id, tool: entry.info.tool, decision, approved: outcome.approved });
     entry.emit({ type: "approval.resolved", id });
+    this.tell(() => this.remote?.settled(id, decision));
     entry.resolve(outcome);
+  }
+
+  private tell(fn: () => void): void {
+    try {
+      fn();
+    } catch (e) {
+      this.deps.audit.log("system", "approval.remote_failed", { message: String((e as Error).message).slice(0, 200) });
+    }
   }
 }

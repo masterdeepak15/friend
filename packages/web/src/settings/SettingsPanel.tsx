@@ -509,6 +509,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
   );
 
   const mode = draft.approvals ?? "manual";
+  const setPhone = (p: Partial<NonNullable<SettingsView["phoneApprovals"]>>) => setDraft({ ...draft, phoneApprovals: { ...draft.phoneApprovals!, ...p } });
   const approvalsTab = (
     <div className="settings-section" role="radiogroup" aria-label="How much Friend asks before acting">
       <h3>How much should Friend ask?</h3>
@@ -523,6 +524,34 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
         </label>
       ))}
       <small className="auth-note">Whatever you pick, these still ask: risky commands (they need your PIN), the camera, adding connectors or plugins, and anything in Friend's own data folder. Changing this needs your PIN.</small>
+      {draft.phoneApprovals && (
+        <div className="settings-section" aria-label="Asking on your phone">
+          <h3>When you are away from the screen</h3>
+          <label className="settings-check">
+            <input type="checkbox" checked={draft.phoneApprovals.enabled} onChange={(e) => setPhone({ enabled: e.target.checked })} />
+            <span>Ask me on my phone (Telegram or WhatsApp, once linked)</span>
+          </label>
+          <Field label="Ask on">
+            <select value={draft.phoneApprovals.channel} onChange={(e) => setPhone({ channel: e.target.value as "auto" | "telegram" | "whatsapp" })}>
+              <option value="auto">Telegram, else WhatsApp</option>
+              <option value="telegram">Telegram only</option>
+              <option value="whatsapp">WhatsApp only</option>
+            </select>
+          </Field>
+          <Field label="Wait for the screen first (seconds)" hint="0 to 110. Used when a screen is open; with none open the phone is asked at once.">
+            <input type="number" min={0} max={110} value={draft.phoneApprovals.delaySec} onChange={(e) => setPhone({ delaySec: Math.min(110, Math.max(0, Math.round(Number(e.target.value) || 0))) })} />
+          </Field>
+          <label className="settings-check">
+            <input type="checkbox" checked={draft.phoneApprovals.buttons} onChange={(e) => setPhone({ buttons: e.target.checked })} />
+            <span>Telegram: show Allow and Deny buttons (otherwise reply YES or NO)</span>
+          </label>
+          <label className="settings-check">
+            <input type="checkbox" checked={draft.phoneApprovals.allowRisky} onChange={(e) => setPhone({ allowRisky: e.target.checked })} />
+            <span>Also let the phone answer the camera, sending files and the Office's requests</span>
+          </label>
+          <small className="auth-note">With no screen open the question goes to your phone at once; with one open, after the wait above. Whichever you answer first wins. Anything that needs your PIN is never asked on the phone, and "always allow" is only on the screen.</small>
+        </div>
+      )}
     </div>
   );
 

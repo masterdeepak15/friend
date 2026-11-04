@@ -20,6 +20,7 @@ import type { VideoStatus } from "./video/types";
 import { runCommand } from "./connectors/run";
 import { ConnectorStore } from "./connectors/store";
 import { Approvals } from "./approvals";
+import { PhoneApprovals, parseButton } from "./phoneApprovals";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
@@ -249,6 +250,10 @@ export async function createApp(opts: AppOptions) {
     audit,
     notify: (m) => broadcast(m),
     publicBase: () => config.publicUrl ?? null,
+    approvalButton: (data) => {
+      const b = parseButton(data);
+      return b ? phoneApprovals.button(b.id, b.approve) : null;
+    },
     transcribe: async (audio, mime) => {
       const v = opts.voice;
       if (!v || !v.available()) return { ok: false, error: "The voice engine is not running on the PC, so I can't understand voice messages right now." };
@@ -262,6 +267,9 @@ export async function createApp(opts: AppOptions) {
     ask: async (text, via) => {
       // a plain yes or no from the owner may be the answer to something Alexa asked for permission to do
       if (alexaHub.tryApprove(text)) return "Okay.";
+      // so may a yes or no to a question the assistant sent about its own work ("YES 2")
+      const answered = phoneApprovals.reply(text);
+      if (answered !== null) return answered;
       if (agent.isBusy()) return "I am busy with another request. Try again in a moment.";
       let reply = "";
       const emit = (m: ServerMsg) => {
@@ -816,6 +824,25 @@ export async function createApp(opts: AppOptions) {
     audit,
     publicBase: () => config.publicUrl ?? null,
   });
+  // Approvals that wait while no screen is open (or unanswered for a while) are also asked on the owner's phone.
+  const linkedApps = (): ("telegram" | "whatsapp")[] => [
+    ...(config.channels.telegram.enabled && config.channels.telegram.ownerChatId !== null ? (["telegram"] as const) : []),
+    ...(config.channels.twilio.enabled && config.channels.twilio.whatsappFrom && config.channels.twilio.ownerNumber ? (["whatsapp"] as const) : []),
+  ];
+  const phoneApprovals = new PhoneApprovals({
+    config: () => config.phoneApprovals,
+    screenOpen: () => clients.size > 0,
+    linked: linkedApps,
+    send: async (channel, text, buttons) => {
+      if (channel === "telegram") return channelHub.sendApproval(text, buttons);
+      const r = await channelHub.send(channel, "me", text);
+      return { ok: r.ok };
+    },
+    edit: (channel, ref, text) => (channel === "telegram" ? channelHub.editApproval(ref, text) : Promise.resolve()),
+    respond: (id, approve) => approvals.respond({ id, decision: approve ? "approve" : "deny" }, "phone"),
+    audit: (event, detail) => audit.log("owner", event, detail),
+  });
+  approvals.setRemote(phoneApprovals);
   tellFallback = (reason) => {
     audit.log("system", "provider.fallback", { reason: reason.slice(0, 300) });
     broadcast({ type: "alert", level: "info", text: `${reason} Using the local model for now.` });

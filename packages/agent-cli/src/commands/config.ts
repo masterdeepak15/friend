@@ -129,6 +129,20 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
       return v;
     },
   },
+  phoneApprovals: {
+    enabled: bool,
+    buttons: bool,
+    allowRisky: bool,
+    channel: (v) => {
+      if (v !== "auto" && v !== "telegram" && v !== "whatsapp") throw new Error("channel must be auto, telegram or whatsapp");
+      return v;
+    },
+    delaySec: (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 110) throw new Error("delaySec must be a whole number from 0 to 110");
+      return n;
+    },
+  },
   openai: {
     url: (v) => {
       let u: URL;
@@ -182,6 +196,11 @@ export const KEY_HELP: Record<string, string> = {
   "voice.hindiVoice": "the voice that reads Hindi (Devanagari) text: hi_IN-priyamvada-medium, hi_IN-pratham-medium or hi_IN-rohan-medium; empty uses the main voice",
   "voice.marathiVoice": "the voice that reads Marathi (Devanagari) text: mr_IN-google-medium; empty uses the main voice",
   "voice.speakTyped": "true or false: also speak the replies to typed messages",
+  "phoneApprovals.enabled": "true or false: when an action needs your approval and you are not at the screen, ask on your phone (Telegram buttons, or reply YES / NO)",
+  "phoneApprovals.channel": "which linked app is asked: auto (Telegram, else WhatsApp), telegram or whatsapp",
+  "phoneApprovals.delaySec": "0 to 110: seconds to wait for the screen before also asking the phone, when a screen is open (with none open, the phone is asked at once)",
+  "phoneApprovals.buttons": "true or false: Telegram shows Allow / Deny buttons (false: reply YES or NO)",
+  "phoneApprovals.allowRisky": "true or false: the phone may also answer the camera, sending files and the Office's requests (false: those wait for the screen)",
   "voice.duck": "true or false: turn music and video down while you talk to Friend and while it speaks",
   "voice.duckPercent": "0 to 100: how loud music and video are then, as a percent of how loud they were (25 is a quarter)",
   "voice.accept": "0 to 1: a voice at or above this match is you",

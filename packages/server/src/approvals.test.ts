@@ -115,4 +115,35 @@ describe("Approvals", () => {
     await p;
     expect(audit.list(20).some((r) => r.kind === "approval.decided")).toBe(true);
   });
+
+  it("tells the phone side about a request and how it ended, and never lets it break an approval", async () => {
+    const offer = vi.fn();
+    const settled = vi.fn();
+    approvals.setRemote({ offer, settled });
+    const p = approvals.request(t2, emit);
+    expect(offer).toHaveBeenCalledWith(expect.objectContaining({ id: requestMsg().id, tool: "shell.run" }), t2);
+    await approvals.respond({ id: requestMsg().id, decision: "approve" }, "phone");
+    await p;
+    expect(settled).toHaveBeenCalledWith(requestMsg().id, "approve");
+
+    emitted = [];
+    approvals.setRemote({
+      offer: () => {
+        throw new Error("boom");
+      },
+      settled: () => {
+        throw new Error("boom");
+      },
+    });
+    const q = approvals.request(t2, emit);
+    await approvals.respond({ id: requestMsg().id, decision: "deny" }, "phone");
+    expect((await q).approved).toBe(false);
+  });
+
+  it("does not offer a request that is already going to the phone another way", () => {
+    const offer = vi.fn();
+    approvals.setRemote({ offer, settled: () => {} });
+    void approvals.request({ ...t2, remote: false }, emit);
+    expect(offer).not.toHaveBeenCalled();
+  });
 });

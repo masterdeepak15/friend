@@ -696,7 +696,7 @@ export class Agent {
     }
     if (decision === "ask" || decision === "ask_with_pin") {
       const outcome = await d.approvals.request(
-        { tool: call.name, args, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin", device },
+        { tool: call.name, args, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin", device, remote: ctx.trust !== "voice-device" },
         ctx.emit,
       );
       if (!outcome.approved) {

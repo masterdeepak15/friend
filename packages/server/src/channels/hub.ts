@@ -40,6 +40,8 @@ export interface HubDeps {
   ask(text: string, via: ChannelId): Promise<string>;
   /** Turns a voice message into words, or says why it cannot. Left out when there is no voice engine. */
   transcribe?(audio: Buffer, mime: string): Promise<{ ok: true; text: string } | { ok: false; error: string }>;
+  /** A tap on an Allow / Deny button the owner's chat was sent. Returns the short note Telegram shows. Left out when approvals do not go to the phone. */
+  approvalButton?(data: string): string | null;
   /** Tells every open screen something (for example that a message arrived). */
   notify(m: ServerMsg): void;
   fetch?: typeof fetch;
@@ -67,6 +69,7 @@ class VoiceMessageError extends Error {}
 interface TelegramUpdate {
   update_id: number;
   message?: { text?: string; voice?: TelegramClip; audio?: TelegramClip; chat: { id: number }; from?: { username?: string; first_name?: string } };
+  callback_query?: { id: string; data?: string; from?: { id: number }; message?: { chat: { id: number }; message_id: number } };
 }
 
 const LINK_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -251,7 +254,7 @@ export class ChannelHub {
           const me = await this.tg<{ username?: string }>("getMe", {}, signal);
           this.tgBot = me.username ?? null;
         }
-        const updates = await this.tg<TelegramUpdate[]>("getUpdates", { offset: this.tgOffset, timeout: this.deps.pollSeconds ?? 25, allowed_updates: ["message"] }, signal);
+        const updates = await this.tg<TelegramUpdate[]>("getUpdates", { offset: this.tgOffset, timeout: this.deps.pollSeconds ?? 25, allowed_updates: ["message", "callback_query"] }, signal);
         if (gen !== this.tgGen) return;
         this.tgState = "online";
         this.tgDetail = "";
@@ -296,7 +299,39 @@ export class ChannelHub {
     this.deps.audit.log("owner", "channel.telegram_unlinked", {});
   }
 
+  /** A button tap. Only the owner's own chat counts; the note shown back never says more than allowed or refused. */
+  private async onTelegramButton(q: NonNullable<TelegramUpdate["callback_query"]>): Promise<void> {
+    const owner = this.cfg.telegram.ownerChatId;
+    const chat = q.message?.chat.id;
+    const fromOwner = owner !== null && chat === owner && q.from?.id === owner;
+    const note = fromOwner && typeof q.data === "string" ? (this.deps.approvalButton?.(q.data) ?? null) : null;
+    await this.tg("answerCallbackQuery", { callback_query_id: q.id, text: note ?? "This is not for you." }).catch(() => {});
+  }
+
+  /** Sends an approval question to the owner's Telegram, with Allow / Deny buttons when asked. Returns the message to edit later. */
+  async sendApproval(text: string, buttons: { id: string } | null): Promise<{ ok: boolean; ref?: number }> {
+    const t = this.cfg.telegram;
+    if (!t.installed || !t.enabled || !t.botToken || t.ownerChatId === null) return { ok: false };
+    try {
+      const markup = buttons ? { inline_keyboard: [[{ text: "✅ Allow", callback_data: `fa:${buttons.id}:y` }, { text: "⛔ Deny", callback_data: `fa:${buttons.id}:n` }]] } : undefined;
+      const sent = await this.tg<{ message_id: number }>("sendMessage", { chat_id: t.ownerChatId, text: text.slice(0, TELEGRAM_CHUNK), ...(markup ? { reply_markup: markup } : {}) });
+      this.record("telegram", "out", String(t.ownerChatId), "", text);
+      return { ok: true, ref: sent.message_id };
+    } catch (e) {
+      this.deps.audit.log("system", "channel.approval_send_failed", { message: this.mask((e as Error).message).slice(0, 200) });
+      return { ok: false };
+    }
+  }
+
+  /** Replaces an earlier message of ours (the answer takes the place of the buttons). */
+  async editApproval(ref: number, text: string): Promise<void> {
+    const chat = this.cfg.telegram.ownerChatId;
+    if (chat === null) return;
+    await this.tg("editMessageText", { chat_id: chat, message_id: ref, text: text.slice(0, TELEGRAM_CHUNK), reply_markup: { inline_keyboard: [] } });
+  }
+
   private async onTelegram(u: TelegramUpdate): Promise<void> {
+    if (u.callback_query) return this.onTelegramButton(u.callback_query);
     const m = u.message;
     if (!m) return;
     if (typeof m.text !== "string" || !m.text.trim()) {
