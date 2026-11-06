@@ -8,6 +8,7 @@ import { doctorCommand } from "./commands/doctor";
 import { lanCommand } from "./commands/lan";
 import { autostartCommand } from "./commands/autostart";
 import { usageCommand } from "./commands/usage";
+import { auditCommand } from "./commands/audit";
 import { daemonCommand } from "./commands/daemon";
 import { upgradeCommand } from "./commands/upgrade";
 import { onboardCommand } from "./commands/onboard";
@@ -44,6 +45,7 @@ export const USAGE = `Usage: friend <command>
   daemon start|stop|restart|status  run Friend in the background (no terminal needed), stop it, or see if it is running
   upgrade [--force]          stop the background Friend, install the newest version, start it again
   usage [--days N]|clear     tokens used, day by day (counts only, never words)
+  audit list|show|verify|export|seal  read the audit trail of what you, your assistant and your workers did (asks for your PIN)
   autostart on|off|status    start Friend by itself when you sign in to this computer (Windows, macOS, Linux)
   pair                       print a one-time code to connect another PC
   node --url <ws-url> --code <code> [--roots a,b] [--name pc]
@@ -80,6 +82,8 @@ export async function run(argv: string[], io: IO): Promise<number> {
         return await upgradeCommand(rest, io);
       case "usage":
         return await usageCommand(rest, io);
+      case "audit":
+        return await auditCommand(rest, io);
       case "autostart":
         return await autostartCommand(rest, io);
       case "pair":
