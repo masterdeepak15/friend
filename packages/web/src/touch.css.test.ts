@@ -22,3 +22,13 @@ describe("a phone can tap what is under the objects layer", () => {
     expect(css).toContain("@media (pointer: coarse), (max-width: 720px) { .owner-hotspot { display: none; } }");
   });
 });
+
+describe("the approval card with a long command", () => {
+  const orbital = readFileSync(join(__dirname, "hud", "orbital", "orbital.css"), "utf8");
+  it("scrolls the text on its own, keeps the buttons in view, and does not pulse", () => {
+    expect(orbital).toMatch(/\.ob-approval \{ height: 100%; overflow: hidden;/);
+    expect(orbital).toMatch(/\.ob-approval \.ob-summary \{[^}]*max-height: none; overflow-y: auto;/);
+    expect(orbital).toContain('.ob-frame[data-tone="orange"].ob-modal { animation: none; opacity: 1; }');
+    expect(orbital).toContain(".ob-modal::before { background: var(--ob-dark); }");
+  });
+});

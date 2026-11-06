@@ -395,3 +395,26 @@
   .orbital[data-mode="compact"] .ob-chips { gap: 4px; }
   .orbital[data-mode="compact"] .ob-chip { font-size: 11px; padding: 6px 7px; }
 }
+
+/* A long command in the approval card: the text scrolls inside the card on its own, and the buttons stay in view under it (before, the whole card scrolled and the buttons slid under the corners). */
+.ob-approval { height: 100%; overflow: hidden; grid-template-rows: minmax(0, 1fr); grid-auto-rows: auto; }
+.ob-approval .ob-appr-text { min-height: 0; height: 100%; }
+.ob-approval .ob-summary { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; padding-right: 8px; scrollbar-width: thin; scrollbar-color: var(--ob-orange) transparent; }
+.ob-approval .ob-summary::-webkit-scrollbar { width: 6px; }
+.ob-approval .ob-summary::-webkit-scrollbar-thumb { background: var(--ob-orange); }
+.ob-approval .ob-summary::-webkit-scrollbar-track { background: transparent; }
+.ob-approval-frame .ob-frame-body { padding-bottom: 28px; }
+@media (max-width: 480px) {
+  .ob-approval { grid-template-columns: 1fr; }
+  .ob-approval .ob-tri { display: none; }
+  .ob-approval .ob-summary { font-size: 13px; }
+  .ob-approval-frame .ob-frame-body { padding: 22px 22px 26px; }
+}
+.ob-approval-frame .ob-frame-title, .ob-modal .ob-frame-title { padding-left: 34px; padding-top: 8px; }
+/* The question in the middle hides what is behind it: before, the nodes and their names showed through the card and over its text. */
+.ob-modal::before { background: var(--ob-dark); }
+.ob-frame[data-tone="orange"].ob-modal { animation: none; opacity: 1; } /* the dialog must not pulse: the whole card, text included, faded in and out */
+.ob-approval .ob-tri { grid-row: 1; grid-column: 1; }
+.ob-approval .ob-appr-text { grid-row: 1; grid-column: 2; }
+@media (max-width: 480px) { .ob-approval .ob-appr-text { grid-column: 1; } }
+.ob-zone .ob-frame-body > .ob-approval { display: grid; } /* the generic "column" rule for instrument bodies had turned it into a stack: the warning sign took a whole row */
