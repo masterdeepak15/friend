@@ -7,6 +7,8 @@ import { WebSocket } from "ws";
 import { createApp } from "../app";
 import { FakeProvider } from "../provider/fake";
 import type { WorkerEvent } from "./events";
+import { Audit } from "../audit";
+import { currentRequest, runWithRequest } from "../auditContext";
 import { OfficeStore } from "./store";
 import type { BridgeLike, WorkerLike } from "./office";
 
@@ -249,5 +251,29 @@ describe("the Office in the app", () => {
     expect(asked).toMatch(/message\.send/);
     await until(() => (app!.db.prepare("select count(*) n from audit_log where kind = 'owner.unreached'").get() as { n: number }).n > 0);
     expect((app!.db.prepare("select count(*) n from audit_log where kind = 'owner.unreached'").get() as { n: number }).n).toBe(1);
+  });
+
+  it("audit: a worker run's entries carry its own request id, point back at the request that made the ticket, and name the worker", async () => {
+    await boot(true, []);
+    const hired = app!.office.hire({ role: "scribe", project: "site", name: "Ada" });
+    if (!hired.ok) throw new Error(hired.error);
+    let owner = "";
+    runWithRequest({ prefix: "chat" }, () => {
+      owner = currentRequest()!.requestId;
+      app!.office.assign({ worker: "Ada", title: "Write notes" });
+    });
+    await until(() => procs.length === 1);
+    procs[0]!.onEvent({ kind: "init", sessionId: "s", model: "m" });
+    let reply: { text: string } | null = null;
+    workerCall!({ name: "approve", args: { tool_name: "Read", input: { file_path: "C:\\Windows\\win.ini" } }, respond: (r) => (reply = r) });
+    await until(() => reply !== null);
+    const rows = new Audit(app!.db).list(50);
+    const decision = rows.find((r) => r.kind === "office.approval" && r.detail.tool === "Read")!;
+    expect(decision.requestId).toMatch(/^run-[0-9a-f]{8}$/);
+    expect(decision.parentId).toBe(owner);
+    expect(decision).toMatchObject({ actorKind: "worker", actorId: `Ada (${hired.worker.id})` });
+    const assigned = rows.find((r) => r.kind === "office.assign")!;
+    expect(assigned.requestId).toBe(owner);
+    expect(new OfficeStore(app!.db).listTickets()[0]!.requestId).toBe(owner);
   });
 });

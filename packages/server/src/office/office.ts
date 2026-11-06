@@ -9,6 +9,7 @@ import { ToolBridge, type BridgeCall, type BridgeTool } from "../provider/claude
 import type { WorkerEvent } from "./events";
 import { summarizeToolCall } from "./events";
 import { assistantDecides, decideAction } from "./gate";
+import { currentRequest, newRequestId, runWithRequest } from "../auditContext";
 import type { AskInput, AssistantDecision } from "./assistantApprovals";
 import type { JudgeAsk, Judgement } from "./judge";
 import { WorkerProc, buildWorkerArgs, type WorkerExit } from "./runner";
@@ -80,6 +81,9 @@ interface Run {
   /** Messages sent to the worker (the ticket first) and answers received: the run ends when every message has been answered. */
   sent: number;
   answered: number;
+  /** This run's own request id, and the request that made its ticket. */
+  requestId: string;
+  parentRequestId: string | null;
 }
 
 const OFF = "The Office is switched off in Settings.";
@@ -184,7 +188,7 @@ export class Office {
     if (!this.cfg.enabled) return { ok: false, error: OFF };
     const worker = this.d.store.findWorker(a.worker);
     if (!worker) return { ok: false, error: this.noWorker(a.worker) };
-    const ticket = this.d.store.createTicket({ projectId: worker.projectId, title: clip(a.title.trim(), 200), description: clip(a.description ?? "", 4000) });
+    const ticket = this.d.store.createTicket({ projectId: worker.projectId, title: clip(a.title.trim(), 200), description: clip(a.description ?? "", 4000), requestId: currentRequest()?.requestId ?? null });
     this.d.store.patchTicket(ticket.id, { workerId: worker.id });
     this.d.audit.log("agent", "office.assign", { worker: worker.id, ticket: ticket.id });
     this.queue.push({ workerId: worker.id, ticketId: ticket.id });
@@ -385,8 +389,8 @@ export class Office {
     }
     this.d.store.patchTicket(ticket.id, { status: "doing", workerId: worker.id });
     this.d.store.patchWorker(worker.id, { status: "starting", ticketId: ticket.id, detail: "Starting", startedAt: Date.now() });
-    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, report: "", sent: 1, answered: 0 };
-    run.bridge = this.makeBridge((call) => void this.onCall(run, call));
+    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, report: "", sent: 1, answered: 0, requestId: newRequestId("run"), parentRequestId: ticket.requestId };
+    run.bridge = this.makeBridge((call) => void runWithRequest({ prefix: "run", requestId: run.requestId, parentId: run.parentRequestId, actorKind: "worker", actorId: `${worker.name} (${worker.id})` }, () => this.onCall(run, call)));
     run.bridge.setTools([APPROVE_SPEC]);
     this.runs.set(worker.id, run);
     this.changed();

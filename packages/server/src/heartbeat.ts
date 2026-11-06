@@ -1,3 +1,4 @@
+import { runWithRequest } from "./auditContext";
 import type { TaskRow, Tasks } from "./tasks";
 
 export interface HeartbeatDeps {
@@ -43,8 +44,7 @@ export class Heartbeat {
       for (const task of d.tasks.due()) {
         if (this.sending.has(task.id)) continue;
         this.sending.add(task.id);
-        void d
-          .away(task)
+        void runWithRequest({ prefix: "reminder" }, () => d.away!(task))
           .then((ok) => ok && d.tasks.markFired(task.id))
           .catch(() => {})
           .finally(() => this.sending.delete(task.id));
@@ -54,7 +54,7 @@ export class Heartbeat {
     if (d.busy()) return; // not a good moment: it stays due
     for (const task of d.tasks.due()) {
       try {
-        d.notify(task);
+        runWithRequest({ prefix: "reminder" }, () => d.notify(task));
       } catch {
         continue; // leave it due; the next beat tries again
       }

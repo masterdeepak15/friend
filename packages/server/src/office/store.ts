@@ -69,6 +69,8 @@ export interface TicketRow {
   report: string;
   createdAt: number;
   updatedAt: number;
+  /** The request (a chat, a voice turn, ...) that made this ticket; the worker's run points back at it. */
+  requestId: string | null;
 }
 export interface EventRow {
   id: number;
@@ -105,11 +107,12 @@ interface TRow {
   status: TicketStatus;
   worker_id: string | null;
   report: string;
+  request_id: string | null;
   created_at: number;
   updated_at: number;
 }
 const toWorker = (r: WRow): WorkerRow => ({ id: r.id, name: r.name, roleId: r.role_id, projectId: r.project_id, status: r.status, sessionId: r.session_id, ticketId: r.ticket_id, detail: r.detail, tokens: r.tokens, createdAt: r.created_at, startedAt: r.started_at, title: r.title, capabilities: r.capabilities, instructions: r.instructions, model: r.model, permission: r.permission, managerId: r.manager_id });
-const toTicket = (r: TRow): TicketRow => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description, status: r.status, workerId: r.worker_id, report: r.report, createdAt: r.created_at, updatedAt: r.updated_at });
+const toTicket = (r: TRow): TicketRow => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description, status: r.status, workerId: r.worker_id, report: r.report, requestId: r.request_id, createdAt: r.created_at, updatedAt: r.updated_at });
 
 const WORKER_COLUMNS: Record<string, string> = { status: "status", sessionId: "session_id", ticketId: "ticket_id", detail: "detail", startedAt: "started_at" };
 const TICKET_COLUMNS: Record<string, string> = { status: "status", workerId: "worker_id", report: "report" };
@@ -158,9 +161,9 @@ export class OfficeStore {
     })();
   }
 
-  createTicket(t: { projectId: string; title: string; description: string }): TicketRow {
+  createTicket(t: { projectId: string; title: string; description: string; requestId?: string | null }): TicketRow {
     const now = this.now();
-    const r = this.db.prepare("insert into office_tickets (project_id, title, description, created_at, updated_at) values (?, ?, ?, ?, ?)").run(t.projectId, t.title, t.description, now, now);
+    const r = this.db.prepare("insert into office_tickets (project_id, title, description, request_id, created_at, updated_at) values (?, ?, ?, ?, ?, ?)").run(t.projectId, t.title, t.description, t.requestId ?? null, now, now);
     return this.getTicket(Number(r.lastInsertRowid))!;
   }
 

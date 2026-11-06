@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { runWithRequest } from "../auditContext";
 import { conversationText } from "../agent/compact";
 import { loadHistory } from "../agent/history";
 import type { ProactiveConfig } from "../config";
@@ -93,7 +94,7 @@ export class ProactiveBeat {
 
   start(everyMs = 60_000): void {
     if (this.timer) return;
-    this.timer = setInterval(() => void this.tick().catch((e: Error) => this.d.audit.log("system", "proactive.failed", { message: e.message })), everyMs);
+    this.timer = setInterval(() => void runWithRequest({ prefix: "checkin" }, () => this.tick()).catch((e: Error) => this.d.audit.log("system", "proactive.failed", { message: e.message })), everyMs);
     this.timer.unref?.();
   }
 

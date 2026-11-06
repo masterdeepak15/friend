@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { currentRequest } from "./auditContext";
 import { redactDetail } from "./auditRedact";
 import type { Db } from "./db";
 
@@ -90,7 +91,10 @@ export class Audit {
 
   /** The old actor text is kept as it was; its kind is worked out from it. */
   log(actor: string, kind: string, detail: object = {}): void {
-    this.append({ kind, actorKind: KIND_OF_ACTOR[actor] ?? "system", detail }, actor);
+    const ctx = currentRequest();
+    // inside a worker's run the old "agent" actor is the worker
+    const asWorker = actor === "agent" && ctx?.actorKind === "worker";
+    this.append({ kind, actorKind: asWorker ? "worker" : (KIND_OF_ACTOR[actor] ?? "system"), ...(asWorker && ctx?.actorId ? { actorId: ctx.actorId } : {}), detail }, actor);
   }
 
   /** Writes one entry and returns its id. Throws when it cannot be written. */
@@ -154,11 +158,12 @@ export class Audit {
     const prev = (this.db.prepare("select hash from audit_log where legacy = 0 order by id desc limit 1").get() as { hash: string } | undefined)?.hash ?? "";
     const ts = this.clock();
     const { json: detailJson, truncated } = redactDetail(i.detail ?? {});
-    const actorId = i.actorId ?? "";
+    const ctx = currentRequest();
+    const actorId = i.actorId ?? (ctx?.actorKind === i.actorKind ? (ctx.actorId ?? "") : "");
     const target = i.target ?? "";
     const outcome = i.outcome ?? "";
-    const requestId = i.requestId ?? null;
-    const parentId = i.parentId ?? null;
+    const requestId = i.requestId ?? ctx?.requestId ?? null;
+    const parentId = i.parentId ?? (i.requestId ? null : (ctx?.parentId ?? null));
     const hash = rowHash({ ts, actorKind: i.actorKind, actorId, requestId, parentId, kind: i.kind, target, outcome, detailJson, prevHash: prev });
     const info = this.db
       .prepare("insert into audit_log (ts, actor, kind, detail_json, actor_kind, actor_id, request_id, parent_id, target, outcome, truncated, legacy, prev_hash, hash) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)")
