@@ -97,7 +97,10 @@ export class Audit {
     const ctx = currentRequest();
     // inside a worker's run the old "agent" actor is the worker
     const asWorker = actor === "agent" && ctx?.actorKind === "worker";
-    this.append({ kind, actorKind: asWorker ? "worker" : (KIND_OF_ACTOR[actor] ?? "system"), ...(asWorker && ctx?.actorId ? { actorId: ctx.actorId } : {}), detail }, actor);
+    // an old-style entry has no target: it is what its detail names, if it names one
+    const named = (detail as { target?: unknown; tool?: unknown; worker?: unknown; ticket?: unknown }).target ?? (detail as { tool?: unknown }).tool ?? (detail as { worker?: unknown }).worker ?? (detail as { ticket?: unknown }).ticket;
+    const target = typeof named === "string" || typeof named === "number" ? String(named).slice(0, 120) : "";
+    this.append({ kind, actorKind: asWorker ? "worker" : (KIND_OF_ACTOR[actor] ?? "system"), target, ...(asWorker && ctx?.actorId ? { actorId: ctx.actorId } : {}), detail }, actor);
   }
 
   /** Writes one entry and returns its id. Throws when it cannot be written. */

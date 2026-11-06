@@ -108,4 +108,14 @@ describe("the audit chain", () => {
     expect(rows[0]).toMatchObject({ id, kind: "e", actorKind: "worker", actorId: "Dev (be8d8dca)", target: "Write a.txt", outcome: "done", requestId: "run-1", parentId: "chat-1", legacy: false });
     expect(rows[0]!.detail).toEqual({ ok: true });
   });
+
+  it("an old-style entry gets a target from what its detail names (the tool, the worker, the ticket)", () => {
+    const a = new Audit(openDb(dir()));
+    a.log("agent", "office.hire", { worker: "Dev", project: "site" });
+    a.log("agent", "tool.call", { tool: "fs.read" });
+    a.log("agent", "office.review", { ticket: 14, accept: true });
+    a.log("owner", "login.ok", { ip: "1.1.1.1" });
+    const rows = a.list(4);
+    expect(rows.map((r) => r.target)).toEqual(["", "14", "fs.read", "Dev"]);
+  });
 });

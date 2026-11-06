@@ -95,7 +95,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
   const emitted: ServerMsg[] = [];
   const usage = vi.fn();
   const notify = vi.fn();
-  const audit = { log: vi.fn() };
+  const audit = { log: vi.fn(), record: vi.fn() };
   const assistant = { request: vi.fn(async (_a: unknown): Promise<{ kind: "allow" | "deny" | "owner"; reason: string }> => ({ kind: "owner", reason: "not answered" })), cancelWorker: vi.fn(), decide: vi.fn() };
   const judge = vi.fn(async (_a: unknown): Promise<{ allow: boolean; reason: string; unsure?: boolean } | null> => null);
   const resolvers: { req: { tool: string; args: any; tier: string; needsPin: boolean }; resolve: (o: { approved: boolean; reason?: string }) => void }[] = [];
@@ -620,6 +620,61 @@ describe("what a worker may do", () => {
       expect(t.assistant.request).toHaveBeenCalledTimes(3); // asked again: the owner's yes was not kept
       t.resolvers[1]!.resolve({ approved: false });
       await second;
+    });
+
+    describe("what workers do is recorded for the audit trail", () => {
+      const recs = (t: { audit: { record: { mock: { calls: unknown[][] } } } }, kind: string) => t.audit.record.mock.calls.map((c) => c[0] as Record<string, any>).filter((r) => r.kind === kind);
+
+      it("a run starts and ends, each as the worker, in the run's own request, pointing back at the ticket's request", async () => {
+        const { t, w, proc } = await running();
+        const start = recs(t, "worker.run")[0]!;
+        expect(start).toMatchObject({ actorKind: "worker", actorId: `${w.name} (${w.id})`, outcome: "started", target: w.name });
+        expect(start.requestId).toMatch(/^run-[0-9a-f]{8}$/);
+        proc.emit(resultEv({ text: "Wrote it." }));
+        await settle();
+        const end = recs(t, "worker.run").at(-1)!;
+        expect(end).toMatchObject({ outcome: "done", requestId: start.requestId, detail: { status: "idle", ticketStatus: "review" } });
+      });
+
+      it("each tool the worker uses and its result are written, the failure as failed", async () => {
+        const { t, proc } = await running();
+        proc.emit({ kind: "tool", id: "u1", name: "Write", summary: "Write a.txt" });
+        proc.emit({ kind: "tool_result", id: "u1", ok: true, text: "ok" });
+        proc.emit({ kind: "tool", id: "u2", name: "Bash", summary: "Bash: npm test" });
+        proc.emit({ kind: "tool_result", id: "u2", ok: false, text: "exit code 1: tests failed" });
+        expect(recs(t, "worker.tool")).toMatchObject([
+          { actorKind: "worker", outcome: "started", target: "Write", detail: { id: "u1", summary: "Write a.txt" } },
+          { outcome: "started", target: "Bash", detail: { id: "u2" } },
+        ]);
+        expect(recs(t, "worker.tool_result")).toMatchObject([{ outcome: "done", detail: { id: "u1" } }, { outcome: "failed", detail: { id: "u2", text: "exit code 1: tests failed" } }]);
+      });
+
+      it("a request is written with its exact input before it is answered, as waiting", async () => {
+        const { t, bridge } = await running({ autonomy: "high" });
+        await bridge.ask("Bash", { command: "npm install left-pad", password: "hunter2" });
+        const [r] = recs(t, "worker.request");
+        expect(r).toMatchObject({ actorKind: "worker", target: "Bash", outcome: "waiting", detail: { tool: "Bash", input: { command: "npm install left-pad", password: "hunter2" } } });
+        // (the audit log masks the password itself: what is handed to it is the real input)
+      });
+
+      it("the finished ticket's status and the whole report are written", async () => {
+        const { t, proc } = await running();
+        proc.emit(resultEv({ text: "I wrote notes.md and ran the tests: all 12 passed." }));
+        await settle();
+        expect(recs(t, "ticket.status").at(-1)).toMatchObject({ outcome: "done", detail: { status: "review" } });
+        expect(recs(t, "ticket.report")[0]).toMatchObject({ outcome: "done", detail: { report: "I wrote notes.md and ran the tests: all 12 passed." } });
+      });
+
+      it("a worker that ends without a report, and a worker that is stopped, are written as failed and refused", async () => {
+        const failed = await running();
+        failed.proc.exit(1, "boom");
+        await settle();
+        expect(recs(failed.t, "worker.run").at(-1)).toMatchObject({ outcome: "failed", detail: { status: "failed" } });
+        const stopped = await running();
+        stopped.t.office.stop(stopped.w.id, "owner");
+        await settle();
+        expect(recs(stopped.t, "worker.run").at(-1)).toMatchObject({ outcome: "refused", detail: { status: "stopped" } });
+      });
     });
 
     it("the other levels never ask her in her own conversation", async () => {

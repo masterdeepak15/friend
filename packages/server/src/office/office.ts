@@ -9,6 +9,7 @@ import { ToolBridge, type BridgeCall, type BridgeTool } from "../provider/claude
 import type { WorkerEvent } from "./events";
 import { summarizeToolCall } from "./events";
 import { assistantDecides, decideAction } from "./gate";
+import type { Outcome } from "../audit";
 import { currentRequest, newRequestId, runWithRequest } from "../auditContext";
 import type { AskInput, AssistantDecision } from "./assistantApprovals";
 import type { JudgeAsk, Judgement } from "./judge";
@@ -38,7 +39,7 @@ export interface OfficeDeps {
   config: () => Config;
   store: OfficeStore;
   approvals: Pick<Approvals, "request" | "denyWhere">;
-  audit: Pick<Audit, "log">;
+  audit: Pick<Audit, "log"> & { record?: Audit["record"] };
   /** Gets the tokens a run used (counts only, never words). */
   usage: (e: { source: string; input: number; output: number }) => void;
   /** Told when a ticket ends in review or blocked, so Friend can report it and go on with the plan. */
@@ -84,6 +85,8 @@ interface Run {
   /** This run's own request id, and the request that made its ticket. */
   requestId: string;
   parentRequestId: string | null;
+  /** "Dev (be8d8dca)": who the entries of this run name. */
+  label: string;
 }
 
 const OFF = "The Office is switched off in Settings.";
@@ -389,10 +392,11 @@ export class Office {
     }
     this.d.store.patchTicket(ticket.id, { status: "doing", workerId: worker.id });
     this.d.store.patchWorker(worker.id, { status: "starting", ticketId: ticket.id, detail: "Starting", startedAt: Date.now() });
-    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, report: "", sent: 1, answered: 0, requestId: newRequestId("run"), parentRequestId: ticket.requestId };
+    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, report: "", sent: 1, answered: 0, requestId: newRequestId("run"), parentRequestId: ticket.requestId, label: `${worker.name} (${worker.id})` };
     run.bridge = this.makeBridge((call) => void runWithRequest({ prefix: "run", requestId: run.requestId, parentId: run.parentRequestId, actorKind: "worker", actorId: `${worker.name} (${worker.id})` }, () => this.onCall(run, call)));
     run.bridge.setTools([APPROVE_SPEC]);
     this.runs.set(worker.id, run);
+    this.rec(run, "worker.run", "started", worker.name, { ticket: ticket.id, title: clip(ticket.title, 200) });
     this.changed();
     const sessionId = this.d.store.getWorker(worker.id)!.sessionId;
     void this.launch(run, worker, ticket, project, sessionId, note).catch((e: Error) =>
@@ -468,11 +472,13 @@ export class Office {
         this.feed(run.workerId, "text", ev.text.replace(/\s+/g, " ").trim());
         break;
       case "tool":
+        this.rec(run, "worker.tool", "started", ev.name, { id: ev.id, summary: ev.summary });
         this.d.store.patchWorker(run.workerId, { detail: clip(ev.summary, DETAIL_CHARS) });
         this.feed(run.workerId, "tool", ev.summary);
         this.changed();
         break;
       case "tool_result":
+        this.rec(run, "worker.tool_result", ev.ok ? "done" : "failed", "", { id: ev.id, text: ev.text.slice(0, 300) });
         if (!ev.ok) this.feed(run.workerId, "error", ev.text.replace(/\s+/g, " ").trim());
         break;
       case "quota":
@@ -493,6 +499,7 @@ export class Office {
     this.feed(run.workerId, "result", ev.text.replace(/\s+/g, " ").trim() || (ev.ok ? "Done." : "Stopped with an error."));
     run.report = ev.text.replace(/\s+/g, " ").trim() || (ev.ok ? "Done." : "Stopped with an error.");
     this.d.store.patchTicket(run.ticketId, { report: ev.text.trim() || run.report }); // kept whole, so Friend can read all of it
+    this.rec(run, "ticket.report", ev.ok ? "done" : "failed", `#${run.ticketId}`, { ticket: run.ticketId, report: ev.text.trim() || run.report, turns: ev.turns, tokens: ev.input + ev.output });
     run.answered++;
     if (run.answered < run.sent && ev.ok) return; // the owner said something meanwhile; its answer is still to come
     const worker = this.d.store.getWorker(run.workerId)!;
@@ -517,6 +524,8 @@ export class Office {
     this.runs.delete(run.workerId);
     this.d.store.patchWorker(run.workerId, { status: o.worker, detail: "", ticketId: null });
     if (o.ticket) this.d.store.patchTicket(run.ticketId, { status: o.ticket });
+    if (o.ticket) this.rec(run, "ticket.status", o.ticket === "blocked" ? "failed" : "done", `#${run.ticketId}`, { ticket: run.ticketId, status: o.ticket });
+    this.rec(run, "worker.run", o.worker === "idle" ? "done" : o.worker === "stopped" ? "refused" : "failed", run.label, { status: o.worker, ticketStatus: o.ticket, ...(o.feed ? { reason: o.feed.text } : {}) });
     if (o.feed) this.feed(run.workerId, o.feed.kind, o.feed.text);
     this.d.approvals.denyWhere((r) => (r.args as { workerId?: string } | null)?.workerId === run.workerId, "The worker was stopped.");
     this.d.assistant?.cancelWorker(run.workerId);
@@ -535,6 +544,15 @@ export class Office {
     this.pump();
   }
 
+  /** Writes one entry of a run to the audit trail, as the worker, in the run's own request. Never throws: the run goes on. */
+  private rec(run: Run, kind: string, outcome: Outcome, target: string, detail: object): void {
+    try {
+      this.d.audit.record?.({ kind, actorKind: "worker", actorId: run.label, requestId: run.requestId, parentId: run.parentRequestId, target, outcome, detail });
+    } catch {
+      // the audit log is not the worker's concern
+    }
+  }
+
   // ---- the questions a worker asks ----
 
   private async onCall(run: Run, call: BridgeCall): Promise<void> {
@@ -545,6 +563,7 @@ export class Office {
     if (run.concluded) return answer({ behavior: "deny", message: "The worker was stopped." });
     const tool = a.tool_name;
     const input = a.input as Record<string, unknown>;
+    this.rec(run, "worker.request", "waiting", tool, { tool, input });
     const worker = this.d.store.getWorker(run.workerId);
     const project = worker && this.cfg.projects.find((p) => p.id === worker.projectId);
     if (!worker || !project) return answer({ behavior: "deny", message: "The project of this worker no longer exists." });
