@@ -155,12 +155,12 @@ describe("Approvals in the audit trail", () => {
 
   it("writes the request with the card text, tier and whether a PIN is needed, inside the request that asked", async () => {
     let asked = "";
-    const p = runWithRequest({ prefix: "chat" }, () => {
+    const p = runWithRequest({ prefix: "chat", actorKind: "owner" }, () => {
       asked = currentRequest()!.requestId;
       return approvals.request(t2, emit);
     });
     const [r] = kinds("approval.requested");
-    expect(r).toMatchObject({ target: "shell.run", outcome: "waiting", requestId: asked, detail: { id: requestMsg().id, tool: "shell.run", tier: "T2", needsPin: false } });
+    expect(r).toMatchObject({ actorKind: "assistant", target: "shell.run", outcome: "waiting", requestId: asked, detail: { id: requestMsg().id, tool: "shell.run", tier: "T2", needsPin: false } });
     expect(String(r!.detail.summary)).toContain("git status");
     await approvals.respond({ id: requestMsg().id, decision: "deny" }, "1.1.1.1");
     await p;
