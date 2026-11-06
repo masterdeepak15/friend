@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { redactDetail } from "./auditRedact";
 import type { Db } from "./db";
 
 export type ActorKind = "owner" | "assistant" | "worker" | "system" | "outsider";
@@ -37,18 +38,6 @@ export interface RecordInput {
 }
 
 export type VerifyResult = { ok: true; rows: number; lastHash: string } | { ok: false; brokenAt: number; reason: "hash" | "link" | "gap" };
-
-const SECRET_KEY = /pass(word)?|pin|token|secret|key|authorization|cookie/i;
-
-function redact(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redact);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, SECRET_KEY.test(k) ? "[redacted]" : redact(v)]),
-    );
-  }
-  return value;
-}
 
 /** What an entry's hash covers: everything but its id, so the order is only the chain's own links. */
 export function rowHash(f: { ts: number; actorKind: string; actorId: string; requestId: string | null; parentId: string | null; kind: string; target: string; outcome: string; detailJson: string; prevHash: string }): string {
@@ -164,7 +153,7 @@ export class Audit {
   private insert(i: RecordInput, actor: string): number {
     const prev = (this.db.prepare("select hash from audit_log where legacy = 0 order by id desc limit 1").get() as { hash: string } | undefined)?.hash ?? "";
     const ts = this.clock();
-    const detailJson = JSON.stringify(redact(i.detail ?? {}));
+    const { json: detailJson, truncated } = redactDetail(i.detail ?? {});
     const actorId = i.actorId ?? "";
     const target = i.target ?? "";
     const outcome = i.outcome ?? "";
@@ -172,8 +161,8 @@ export class Audit {
     const parentId = i.parentId ?? null;
     const hash = rowHash({ ts, actorKind: i.actorKind, actorId, requestId, parentId, kind: i.kind, target, outcome, detailJson, prevHash: prev });
     const info = this.db
-      .prepare("insert into audit_log (ts, actor, kind, detail_json, actor_kind, actor_id, request_id, parent_id, target, outcome, truncated, legacy, prev_hash, hash) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)")
-      .run(ts, actor, i.kind, detailJson, i.actorKind, actorId, requestId, parentId, target, outcome, prev, hash);
+      .prepare("insert into audit_log (ts, actor, kind, detail_json, actor_kind, actor_id, request_id, parent_id, target, outcome, truncated, legacy, prev_hash, hash) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)")
+      .run(ts, actor, i.kind, detailJson, i.actorKind, actorId, requestId, parentId, target, outcome, truncated ? 1 : 0, prev, hash);
     return Number(info.lastInsertRowid);
   }
 }
