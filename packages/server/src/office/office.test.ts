@@ -96,6 +96,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
   const usage = vi.fn();
   const notify = vi.fn();
   const audit = { log: vi.fn() };
+  const judge = vi.fn(async (_a: unknown): Promise<{ allow: boolean; reason: string } | null> => null);
   const resolvers: { req: { tool: string; args: any; tier: string; needsPin: boolean }; resolve: (o: { approved: boolean; reason?: string }) => void }[] = [];
   const approvals = {
     request: vi.fn((req: any) => new Promise<{ approved: boolean; reason?: string }>((resolve) => resolvers.push({ req, resolve }))),
@@ -112,6 +113,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
     audit,
     usage,
     notify,
+    judge: judge as never,
     emit: (m) => emitted.push(m),
     spawn: (o, onEvent, onExit) => {
       const p = new FakeProc(o, onEvent, onExit);
@@ -132,7 +134,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
   };
   const feeds = () => emitted.filter((m): m is Extract<ServerMsg, { type: "office.feed" }> => m.type === "office.feed");
   const alerts = () => emitted.filter((m) => m.type === "alert");
-  return { dir, projectDir, config, store, office, notify, procs, bridges, emitted, usage, audit, approvals, resolvers, hire, feeds, alerts };
+  return { dir, projectDir, config, store, office, notify, procs, bridges, emitted, usage, audit, approvals, resolvers, hire, feeds, alerts, judge };
 }
 
 describe("hiring", () => {
@@ -488,6 +490,53 @@ describe("what a worker may do", () => {
       expect(await bridge.ask("Bash", { command: "git push origin main" })).toMatchObject({ behavior: "deny" });
       expect(await bridge.ask("Write", { file_path: join(t.projectDir, ".claude", "settings.json"), content: "{}" })).toMatchObject({ behavior: "deny" });
       expect(t.approvals.request).not.toHaveBeenCalled();
+    });
+
+    it("judge: the assistant allows what it finds right, with the worker, ticket and action in front of it, and the owner is not asked", async () => {
+      const { t, w, bridge } = await running({ autonomy: "judge" });
+      t.judge.mockResolvedValueOnce({ allow: true, reason: "Needed to run the tests." });
+      await expect(bridge.ask("Bash", { command: "npm install left-pad" })).resolves.toMatchObject({ behavior: "allow" });
+      expect(t.judge).toHaveBeenCalledWith(expect.objectContaining({ worker: w.name, goal: "Ship it", danger: false, action: expect.stringMatching(/npm install left-pad/), ticket: expect.stringMatching(/^x/) }));
+      expect(t.approvals.request).not.toHaveBeenCalled();
+      expect(t.audit.log).toHaveBeenCalledWith("agent", "office.approval", expect.objectContaining({ verdict: "allow", by: "assistant-judge", reason: "Needed to run the tests." }));
+      expect(t.feeds().some((f) => /Allowed by the assistant: .*Needed to run the tests/.test(f.text))).toBe(true);
+    });
+
+    it("judge: a refusal reaches the worker with the reason, and the owner is not asked", async () => {
+      const { t, bridge } = await running({ autonomy: "judge" });
+      t.judge.mockResolvedValueOnce({ allow: false, reason: "That deletes data the ticket does not touch." });
+      const v = await bridge.ask("Bash", { command: "rm -rf build" });
+      expect(v).toMatchObject({ behavior: "deny", message: expect.stringMatching(/The assistant refused: That deletes data/) });
+      expect(t.judge).toHaveBeenCalledWith(expect.objectContaining({ danger: true }));
+      expect(t.approvals.request).not.toHaveBeenCalled();
+    });
+
+    it("judge: when the assistant cannot decide, the owner is asked (never a silent allow)", async () => {
+      const { t, bridge } = await running({ autonomy: "judge" });
+      const pending = bridge.ask("Bash", { command: "npm install left-pad" });
+      await settle();
+      expect(t.judge).toHaveBeenCalledTimes(1);
+      expect(t.approvals.request).toHaveBeenCalledTimes(1);
+      t.resolvers[0]!.resolve({ approved: false });
+      await expect(pending).resolves.toMatchObject({ behavior: "deny" });
+    });
+
+    it("judge: a thrown error counts as 'cannot decide'", async () => {
+      const { t, bridge } = await running({ autonomy: "judge" });
+      t.judge.mockRejectedValueOnce(new Error("boom"));
+      const pending = bridge.ask("Bash", { command: "npm install left-pad" });
+      await settle();
+      expect(t.approvals.request).toHaveBeenCalledTimes(1);
+      t.resolvers[0]!.resolve({ approved: true });
+      await pending;
+    });
+
+    it("judge never overrides what the gate refuses, and is not asked about it", async () => {
+      const { t, bridge } = await running({ autonomy: "judge" });
+      t.judge.mockResolvedValue({ allow: true, reason: "fine" });
+      expect(await bridge.ask("Read", { file_path: "C:\\Windows\\win.ini" })).toMatchObject({ behavior: "deny" });
+      expect(await bridge.ask("Bash", { command: "git push origin main" })).toMatchObject({ behavior: "deny" });
+      expect(t.judge).not.toHaveBeenCalled();
     });
 
     it("low (the default) asks about an ordinary request, as before", async () => {

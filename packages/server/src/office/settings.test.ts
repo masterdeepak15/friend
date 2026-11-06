@@ -26,6 +26,7 @@ describe("the autonomy level", () => {
     expect(fresh().office.autonomy).toBe("low");
     expect(sanitizeOffice({ autonomy: "high" }).autonomy).toBe("high");
     expect(sanitizeOffice({ autonomy: "medium" }).autonomy).toBe("medium");
+    expect(sanitizeOffice({ autonomy: "judge" }).autonomy).toBe("judge");
     for (const bad of ["max", "", 3, null, undefined]) expect(sanitizeOffice({ autonomy: bad }).autonomy).toBe("low");
   });
 

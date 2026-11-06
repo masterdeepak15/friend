@@ -329,7 +329,7 @@ export interface OfficeConfig {
   policy: OfficePolicy;
 }
 
-export const OFFICE_AUTONOMY = ["low", "medium", "high"] as const;
+export const OFFICE_AUTONOMY = ["low", "medium", "high", "judge"] as const;
 export type OfficeAutonomy = (typeof OFFICE_AUTONOMY)[number];
 
 /** Starter data, not rules: the owner edits, replaces or deletes all of it, and a saved empty list stays empty. */

@@ -21,6 +21,7 @@ import { runCommand } from "./connectors/run";
 import { ConnectorStore } from "./connectors/store";
 import { Approvals } from "./approvals";
 import { PhoneApprovals, parseButton } from "./phoneApprovals";
+import { judgeAction } from "./office/judge";
 import { Audit } from "./audit";
 import { Auth, LockoutError } from "./auth";
 import { CameraBroker } from "./camera";
@@ -658,6 +659,7 @@ export async function createApp(opts: AppOptions) {
     usage: (e) => usageLog.record({ ...e, provider: "claude-code", model: config.claudeCode.model }),
     emit: (m) => broadcastLate(m),
     notify: (e) => officeNote(e),
+    judge: (a) => judgeAction(provider, a),
     dataDir: opts.dataDir,
     ...(opts.office?.spawn ? { spawn: opts.office.spawn } : {}),
     ...(opts.office?.bridge ? { bridge: opts.office.bridge } : {}),

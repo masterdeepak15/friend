@@ -81,7 +81,7 @@ export interface OfficeSettings {
   startTimeoutSec: number;
   pauseAtWindow: number;
   notifyFriend: boolean;
-  autonomy: "low" | "medium" | "high";
+  autonomy: "low" | "medium" | "high" | "judge";
   budget: { perWorkerTokens: number; totalTokens: number };
   roles: OfficeRole[];
   projects: OfficeProject[];

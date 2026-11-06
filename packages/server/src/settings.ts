@@ -156,7 +156,7 @@ export const SettingsPatch = z
         startTimeoutSec: z.number().int().min(10).max(600),
         pauseAtWindow: z.number().min(0).max(1),
         notifyFriend: z.boolean(),
-        autonomy: z.enum(["low", "medium", "high"]),
+        autonomy: z.enum(["low", "medium", "high", "judge"]),
         budget: z.object({ perWorkerTokens: z.number().int().min(0).max(1_000_000_000), totalTokens: z.number().int().min(0).max(1_000_000_000) }).partial().strict(),
         roles: z.array(OfficeRole).max(20),
         projects: z.array(OfficeProject).max(20),

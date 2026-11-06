@@ -108,6 +108,7 @@ function Card({ code, title, note, children }: { code: string; title: string; no
 const LEVELS: { id: OfficeSettings["autonomy"]; name: string; text: string }[] = [
   { id: "low", name: "Low", text: "Friend asks you for every request a worker makes that is not on your let-through list." },
   { id: "medium", name: "Medium", text: "Friend answers the ordinary requests itself. Anything that looks dangerous (deleting files, installing, force pushes) still asks you, with your PIN." },
+  { id: "judge", name: "Your assistant decides", text: "Friend weighs each request like a careful senior engineer: it allows what the ticket needs and refuses what could harm, and the feed shows its reason. If it cannot decide, you are asked. The refusals below still hold." },
   { id: "high", name: "High", text: "Friend answers every request itself, even dangerous ones, so you are not asked. The refusals below still hold." },
 ];
 

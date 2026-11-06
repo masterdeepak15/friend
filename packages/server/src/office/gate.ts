@@ -6,10 +6,10 @@ export type GateVerdict = { verdict: "allow" } | { verdict: "deny"; reason: stri
 
 /**
  * Whether the assistant answers a question the gate did not settle, at the owner's chosen level. low: never, the owner is asked. medium: when the
- * command or tool is not dangerous. high: always. A refusal by the gate is never reaching here, so a high level still cannot go outside the
+ * command or tool is not dangerous. high: always. judge: never here (the assistant weighs each request, see office.ts). A refusal by the gate is never reaching here, so a high level still cannot go outside the
  * project folders, touch the files that decide what a worker may do, or run a command the owner listed as refused.
  */
-export function assistantDecides(ask: { danger: boolean }, level: "low" | "medium" | "high"): boolean {
+export function assistantDecides(ask: { danger: boolean }, level: "low" | "medium" | "high" | "judge"): boolean {
   return level === "high" || (level === "medium" && !ask.danger);
 }
 

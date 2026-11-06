@@ -9,6 +9,7 @@ import { ToolBridge, type BridgeCall, type BridgeTool } from "../provider/claude
 import type { WorkerEvent } from "./events";
 import { summarizeToolCall } from "./events";
 import { assistantDecides, decideAction } from "./gate";
+import type { JudgeAsk, Judgement } from "./judge";
 import { WorkerProc, buildWorkerArgs, type WorkerExit } from "./runner";
 import type { OfficeStore, TicketRow, WorkerRow } from "./store";
 
@@ -41,6 +42,8 @@ export interface OfficeDeps {
   /** Told when a ticket ends in review or blocked, so Friend can report it and go on with the plan. */
   notify?: (e: { worker: string; jobTitle: string; manager: string | null; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => void;
   emit: (m: ServerMsg) => void;
+  /** At autonomy "judge": the assistant weighs one request. Null when it could not answer, and then the owner is asked. */
+  judge?: (a: JudgeAsk) => Promise<Judgement | null>;
   spawn?: WorkerFactory;
   bridge?: BridgeFactory;
   /** Where the per-worker MCP files are kept. */
@@ -543,6 +546,17 @@ export class Office {
       this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: "allow", by: "assistant", level: this.cfg.autonomy, danger: verdict.danger });
       this.feed(worker.id, "approval", `Allowed by the assistant (${this.cfg.autonomy}): ${summary}`);
       return answer({ behavior: "allow", updatedInput: input });
+    }
+
+    if (this.cfg.autonomy === "judge" && this.d.judge) {
+      const ticket = this.d.store.getTicket(run.ticketId);
+      const j = await this.d.judge({ worker: worker.name, job: worker.title, ticket: ticket ? `${ticket.title}\n${ticket.description}` : "", goal: project.goal, action: describeAction(tool, input), danger: verdict.danger }).catch(() => null);
+      if (run.concluded) return answer({ behavior: "deny", message: "The worker was stopped." });
+      if (j) {
+        this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: j.allow ? "allow" : "deny", by: "assistant-judge", danger: verdict.danger, reason: j.reason });
+        this.feed(worker.id, "approval", `${j.allow ? "Allowed" : "Refused"} by the assistant: ${summary} (${j.reason})`);
+        return answer(j.allow ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: `The assistant refused: ${j.reason}` });
+      }
     }
 
     run.pending++;

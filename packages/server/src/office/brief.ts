@@ -10,6 +10,7 @@ const HIRING =
 const LEVEL: Record<OfficeConfig["autonomy"], string> = {
   low: "Autonomy is LOW: what a worker asks to do (a command, a file change) that is not on the owner's let-through list goes to the owner as a card. You do not answer it.",
   medium: "Autonomy is MEDIUM: the Office answers the ordinary requests of workers itself, and a dangerous one (deleting, installing, force-pushing) still goes to the owner with their PIN.",
+  judge: "Autonomy is JUDGE: you decide what a worker asks for, one request at a time, like a careful senior engineer (the Office asks you and tells the owner afterwards). Allow what the ticket plainly needs; refuse what it does not need or could harm. The refusals still hold, and if you cannot be reached the owner is asked.",
   high: "Autonomy is HIGH: the Office answers every request of a worker itself, so the owner is not asked. The refusals still hold (outside the project folders, files that control a worker, the commands the owner refuses). Be careful what you ask workers to do.",
 };
 

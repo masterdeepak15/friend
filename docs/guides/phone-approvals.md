@@ -38,3 +38,10 @@ friend config set phoneApprovals.allowRisky true        # the phone may also ans
 
 Alexa has its own version of this: a request from a speaker is sent to your phone as "reply YES" and is not asked twice.
 Every phone answer is written to the audit log (`approval.phone`).
+
+## Hired workers (the Office)
+
+You do not have to answer the requests of your hired workers yourself. Settings, Office, "How much does Friend answer itself":
+
+- **Your assistant decides**: for each request the assistant weighs the worker's job, the ticket, the project goal and the exact action, like a careful senior engineer. It allows what the ticket needs and refuses what could harm, tells the worker why, and writes its reason in the Office feed and the audit log. If it cannot decide (the model is down or unclear), you are asked, on your phone if away. It is never a silent "yes".
+- The fixed refusals stay in every level: anything outside the project folders, the files that control a worker, and the commands you listed as refused. The assistant is not asked about those.
