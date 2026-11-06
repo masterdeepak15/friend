@@ -709,6 +709,18 @@ export async function createApp(opts: AppOptions) {
     const where = await deliverToOwner(text, { ...phoneDeps(), screenOpen: clients.size > 0, show: showOwnerNote }, title);
     return where === "screen" ? "Shown on the owner's screen." : where === "screen-later" ? "No phone app is set up and no screen is open: it is on the screen for when the owner comes back." : where ? `Sent to the owner's phone (${where}).` : "Nothing to send.";
   };
+  /** Messages from a screen that are only a heartbeat or a level meter, not something the owner did. */
+  const WS_QUIET = new Set<string>(["ping", "audio.activity", "music.state"]);
+  /** Writes one screen message to the audit trail (what it says; a PIN is masked). False when it could not be written. */
+  const recordWs = (msg: ClientMsg): boolean => {
+    if (WS_QUIET.has(msg.type)) return true;
+    try {
+      audit.record({ kind: "ws.message", actorKind: "owner", actorId: "owner", target: msg.type, outcome: "done", detail: { ...msg } });
+      return true;
+    } catch {
+      return false;
+    }
+  };
   /** One line for the model: how the owner can be reached right now. */
   const ownerReach = (): string => `How the owner can be reached: ${clients.size > 0 ? "a Friend screen is open" : "no screen is open"}; phone: ${ownerChannels().join(", ") || "no phone app is set up"}.`;
   const officeNotes: string[] = [];
@@ -1752,10 +1764,13 @@ export async function createApp(opts: AppOptions) {
       };
     },
     onClientMessage: (_session, msg: ClientMsg, conn) => {
+      // every message from a screen is written down before it is handled (a chat message is written inside its own request, below)
+      if (msg.type !== "chat.send" && !recordWs(msg)) return void conn.send({ type: "alert", level: "error", text: "That could not be done because it could not be recorded in the audit log." });
       switch (msg.type) {
         case "chat.send":
           // the reply is spoken as it is written, like one to a spoken request, unless the owner turned that off
           runWithRequest({ prefix: "chat", actorKind: "owner", actorId: "owner" }, () => {
+            recordWs(msg);
             if (speaker && voiceAvailable() && config.voice.speakTyped) {
               void runVoiceTurn(msg.text, conn.ip, lockEpoch).catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
             } else {

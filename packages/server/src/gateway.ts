@@ -364,6 +364,47 @@ export function createGateway(deps: GatewayDeps) {
     }
   });
 
+  // ---- the audit trail: every request that changes something, by whom, from where, and how it ended ----
+  const MISSES_PER_MINUTE = 30;
+  const misses = new Map<string, { start: number; n: number; flooded: boolean }>();
+  /** Requests for routes that do not exist are what a scanner sends: the first few per address a minute are written, then one flood entry. */
+  const allowMiss = (ip: string): boolean => {
+    const now = Date.now();
+    if (misses.size > 1000) for (const [k, v] of misses) if (now - v.start > 300_000) misses.delete(k);
+    let e = misses.get(ip);
+    if (!e || now - e.start > 60_000) misses.set(ip, (e = { start: now, n: 0, flooded: false }));
+    if (++e.n <= MISSES_PER_MINUTE) return true;
+    if (!e.flooded) {
+      e.flooded = true;
+      try {
+        audit.record({ kind: "http.flood", actorKind: "outsider", actorId: ip, outcome: "refused", detail: { perMinute: MISSES_PER_MINUTE } });
+      } catch {
+        // nothing more can be done about it here
+      }
+    }
+    return false;
+  };
+  app.addHook("onResponse", async (req, reply) => {
+    if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+    try {
+      const token = req.cookies?.[COOKIE_NAME];
+      const signedIn = !!token && !!auth.resolveSession(token);
+      const route = req.routeOptions?.url;
+      if (!route && !allowMiss(req.ip)) return;
+      const status = reply.statusCode;
+      audit.record({
+        kind: "http.request",
+        actorKind: signedIn ? "owner" : "outsider",
+        actorId: signedIn ? "owner" : req.ip,
+        target: `${req.method} ${route ?? req.url.split("?")[0]!.slice(0, 120)}`,
+        outcome: status < 400 ? "done" : "refused",
+        detail: { status, ip: req.ip },
+      });
+    } catch {
+      // the answer has already gone out; a failure to write it cannot undo that
+    }
+  });
+
   const isSecure = (req: FastifyRequest) => req.protocol === "https";
 
   app.get("/api/state", async () => ({ hasOwner: auth.hasOwner() }));
