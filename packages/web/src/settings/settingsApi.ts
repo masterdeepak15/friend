@@ -124,6 +124,14 @@ export interface PhoneApprovalsSettings {
   allowRisky: boolean;
 }
 
+/** The audit trail's settings. */
+export interface AuditSettings {
+  keepDays: number;
+  archive: boolean;
+  sealAt: string;
+  unlockMinutes: number;
+}
+
 export interface SettingsView {
   provider: ProviderName;
   model: string;
@@ -135,6 +143,7 @@ export interface SettingsView {
   /** How much Friend asks before acting. */
   approvals?: ApprovalMode;
   phoneApprovals?: PhoneApprovalsSettings;
+  audit?: AuditSettings;
   channels?: ChannelsView;
   brokers?: BrokersView;
   /** What Friend may do with money. Only "read" exists in this version. */
@@ -258,7 +267,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
   if ((after.approvals ?? "manual") !== (before.approvals ?? "manual")) patch.approvals = after.approvals ?? "manual";
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
-  for (const group of ["ollama", "claudeCode", "voice", "look", "updates", "session", "memory", "proactive", "phoneApprovals"] as const) {
+  for (const group of ["ollama", "claudeCode", "voice", "look", "updates", "session", "memory", "proactive", "phoneApprovals", "audit"] as const) {
     if (!after[group] || !before[group]) continue;
     const changed: Record<string, unknown> = {};
     for (const k of Object.keys(after[group]) as string[]) {

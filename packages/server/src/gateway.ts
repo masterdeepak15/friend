@@ -1,4 +1,6 @@
 import fastifyCookie from "@fastify/cookie";
+import { registerAuditRoutes } from "./auditApi";
+import type { AuditQuery } from "./auditQuery";
 import type { UsageApi } from "./usage";
 import fastifyStatic from "@fastify/static";
 import { ClientMsg, type ServerMsg } from "@friend/protocol";
@@ -55,6 +57,8 @@ export interface GatewayDeps {
   soul?: SoulApi;
   /** Token counts for the Usage page and riend usage. */
   usage?: UsageApi;
+  /** Reading the audit trail (needs the owner, the PIN and an open audit area); the routes are not there without it. */
+  auditQuery?: AuditQuery;
   /** The model's own conversation: how big it is, tidying it, starting it over. */
   session?: SessionApi;
   /** Web video: the screen asks for a video at /api/video/<id>, an address Friend made. */
@@ -1099,6 +1103,8 @@ export function createGateway(deps: GatewayDeps) {
       return soulError(reply, e);
     }
   });
+
+  if (deps.auditQuery) registerAuditRoutes({ app, auth, audit, query: deps.auditQuery, config: () => config.audit, cookieName: COOKIE_NAME });
 
   // ---- token usage (owner session only; counts, never words) ----
   const usageGuard = async (req: FastifyRequest, reply: FastifyReply) => {

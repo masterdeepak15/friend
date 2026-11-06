@@ -87,6 +87,9 @@ const toRow = (r: Raw): AuditRow => ({
   hash: r.hash,
 });
 
+/** A raw database row as an entry (for the query layer). */
+export const toAuditRow = toRow;
+
 export class Audit {
   constructor(private db: Db, private clock: () => number = Date.now) {
     this.ensureStart();

@@ -129,6 +129,23 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
       return v;
     },
   },
+  audit: {
+    archive: bool,
+    keepDays: (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 3650) throw new Error("keepDays must be a whole number of days from 0 (keep everything) to 3650");
+      return n;
+    },
+    unlockMinutes: (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1 || n > 120) throw new Error("unlockMinutes must be a whole number from 1 to 120");
+      return n;
+    },
+    sealAt: (v) => {
+      if (v !== "" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) throw new Error("sealAt must be a time such as 09:00, or empty to turn the seal off");
+      return v;
+    },
+  },
   phoneApprovals: {
     enabled: bool,
     buttons: bool,
@@ -196,6 +213,10 @@ export const KEY_HELP: Record<string, string> = {
   "voice.hindiVoice": "the voice that reads Hindi (Devanagari) text: hi_IN-priyamvada-medium, hi_IN-pratham-medium or hi_IN-rohan-medium; empty uses the main voice",
   "voice.marathiVoice": "the voice that reads Marathi (Devanagari) text: mr_IN-google-medium; empty uses the main voice",
   "voice.speakTyped": "true or false: also speak the replies to typed messages",
+  "audit.keepDays": "days the audit trail is kept before older entries are archived and removed (default 90; 0 keeps everything)",
+  "audit.archive": "true or false: keep a verifiable compressed copy of what is removed from the audit trail",
+  "audit.sealAt": "time of day (HH:MM) the daily audit seal is sent to your phone; empty turns it off (default 09:00)",
+  "audit.unlockMinutes": "minutes the audit screen stays open after you give your PIN (default 10)",
   "phoneApprovals.enabled": "true or false: when an action needs your approval and you are not at the screen, ask on your phone (Telegram buttons, or reply YES / NO)",
   "phoneApprovals.channel": "which linked app is asked: auto (Telegram, else WhatsApp), telegram or whatsapp",
   "phoneApprovals.delaySec": "0 to 110: seconds to wait for the screen before also asking the phone, when a screen is open (with none open, the phone is asked at once)",

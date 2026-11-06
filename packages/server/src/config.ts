@@ -46,6 +46,8 @@ export interface Config {
   approvals: ApprovalMode;
   /** Asking you on your phone (Telegram buttons, or a YES / NO reply) when an action needs your approval and you are not at the screen. */
   phoneApprovals: PhoneApprovalsConfig;
+  /** The audit trail: how long it is kept, whether old entries are archived, the daily seal, and how long the audit screen stays open after the PIN. */
+  audit: AuditConfig;
   /** Messaging channels: Telegram, and SMS and WhatsApp through Twilio. The tokens are secrets and never go to the screen. */
   channels: ChannelsConfig;
   /** Stock brokers the owner can read their account from (Zerodha first). */
@@ -732,6 +734,23 @@ export const sanitizePhoneApprovals = (p: Partial<PhoneApprovalsConfig> | undefi
   allowRisky: p?.allowRisky === true,
 });
 
+export interface AuditConfig {
+  /** Days the trail is kept live; older entries are archived and removed. 0 keeps everything. */
+  keepDays: number;
+  /** Keep a verifiable compressed copy of what is removed. */
+  archive: boolean;
+  /** The time of day (HH:MM) the daily seal goes to the owner's phone; empty turns the seal off. */
+  sealAt: string;
+  /** Minutes the audit screen stays open after the PIN. */
+  unlockMinutes: number;
+}
+export const sanitizeAudit = (a: Partial<AuditConfig> | undefined): AuditConfig => ({
+  keepDays: typeof a?.keepDays === "number" && Number.isFinite(a.keepDays) ? Math.min(3650, Math.max(0, Math.round(a.keepDays))) : 90,
+  archive: a?.archive !== false,
+  sealAt: a?.sealAt === "" ? "" : typeof a?.sealAt === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(a.sealAt) ? a.sealAt : "09:00",
+  unlockMinutes: typeof a?.unlockMinutes === "number" && Number.isFinite(a.unlockMinutes) ? Math.min(120, Math.max(1, Math.round(a.unlockMinutes))) : 10,
+});
+
 export interface MemoryConfig {
   /** The memory tree: small notes in folders the assistant shapes. Off means the older flat list of notes. */
   enabled: boolean;
@@ -913,6 +932,7 @@ const defaults = (dataDir: string): Config => ({
   ownerName: "",
   approvals: "manual",
   phoneApprovals: sanitizePhoneApprovals(undefined),
+  audit: sanitizeAudit(undefined),
   channels: sanitizeChannels(DEFAULT_CHANNELS),
   brokers: sanitizeBrokers({}),
   trading: { level: "read" },
@@ -995,6 +1015,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",
     approvals: stored.approvals === "edits" || stored.approvals === "auto" ? stored.approvals : "manual",
     phoneApprovals: sanitizePhoneApprovals(stored.phoneApprovals),
+    audit: sanitizeAudit(stored.audit),
     channels: sanitizeChannels(stored.channels),
     brokers: sanitizeBrokers(stored.brokers),
     trading: { level: "read" }, // any other level in the file is read as read: orders do not exist in this version

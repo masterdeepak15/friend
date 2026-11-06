@@ -24,6 +24,16 @@ export const SettingsPatch = z
     ownerName: z.string().trim().max(40),
     /** How much Friend asks before acting. Loosening it is a change that needs the PIN. */
     approvals: z.enum(["manual", "edits", "auto"]),
+    /** The audit trail. Owner-only. */
+    audit: z
+      .object({
+        keepDays: z.number().int().min(0).max(3650),
+        archive: z.boolean(),
+        sealAt: z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d)?$/),
+        unlockMinutes: z.number().int().min(1).max(120),
+      })
+      .partial()
+      .strict(),
     /** Asking on the phone when you are away from the screen. Owner-only; needs the PIN like every non-cosmetic setting. */
     phoneApprovals: z
       .object({
@@ -281,6 +291,8 @@ export interface SettingsView {
   approvals: Config["approvals"];
   /** Asking on the phone when you are away from the screen. */
   phoneApprovals: Config["phoneApprovals"];
+  /** The audit trail's settings. */
+  audit: Config["audit"];
   /** The tokens themselves are never sent to the screen. */
   channels: {
     telegram: { installed: boolean; enabled: boolean; tokenSet: boolean; linked: boolean };
@@ -351,6 +363,7 @@ export function settingsView(c: Config): SettingsView {
     ownerName: c.ownerName,
     approvals: c.approvals,
     phoneApprovals: { ...c.phoneApprovals },
+    audit: { ...c.audit },
     channels: {
       telegram: { installed: c.channels.telegram.installed, enabled: c.channels.telegram.enabled, tokenSet: !!c.channels.telegram.botToken, linked: c.channels.telegram.ownerChatId !== null },
       twilio: { installed: c.channels.twilio.installed, enabled: c.channels.twilio.enabled, accountSid: c.channels.twilio.accountSid, tokenSet: !!c.channels.twilio.authToken, smsFrom: c.channels.twilio.smsFrom, whatsappFrom: c.channels.twilio.whatsappFrom, ownerNumber: c.channels.twilio.ownerNumber },
@@ -432,6 +445,7 @@ export function refuseForAgent(raw: unknown): void {
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
   if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
   if (r.office && typeof r.office === "object" && "autonomy" in (r.office as object)) throw new SettingsError("How much of the workers' requests Friend answers itself can only be changed by the owner on the settings screen.");
+  if ("audit" in r) throw new SettingsError("The audit trail settings can only be changed by the owner on the settings screen.");
   if ("phoneApprovals" in r) throw new SettingsError("Whether approvals may be answered from the phone can only be changed by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
   if ("web" in r) throw new SettingsError("Web search settings (the source, its keys and addresses) can only be changed by the owner on the settings screen.");
@@ -609,6 +623,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
   }
   if (p.approvals) config.approvals = p.approvals;
   if (p.phoneApprovals) Object.assign(config.phoneApprovals, p.phoneApprovals);
+  if (p.audit) Object.assign(config.audit, p.audit);
   if (p.channels) {
     const { telegram, twilio } = p.channels;
     if (telegram) {

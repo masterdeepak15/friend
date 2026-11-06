@@ -24,6 +24,7 @@ import { PhoneApprovals, parseButton } from "./phoneApprovals";
 import { judgeAction } from "./office/judge";
 import { AssistantApprovals } from "./office/assistantApprovals";
 import { ensureRequest, runWithRequest } from "./auditContext";
+import { AuditQuery } from "./auditQuery";
 import { deliverToOwner, sendToPhone, type OwnerChannel } from "./reach";
 import { TurnQueue } from "./agent/turnQueue";
 import { Audit } from "./audit";
@@ -1337,6 +1338,7 @@ export async function createApp(opts: AppOptions) {
     system: systemApi,
     soul: soulApi,
     usage: usageLog,
+    auditQuery: new AuditQuery(db),
     session: {
       info: () => ({ supported: !!provider.resetSession, contextTokens: agent.contextTokens(), autoCompact: config.session.autoCompact, compactAtTokens: config.session.compactAtTokens }),
       compact: async () => {
