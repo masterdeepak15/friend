@@ -24,7 +24,7 @@ let decision: "approve" | "deny";
 let approvals: Approvals;
 let audit: Audit;
 let exec: ReturnType<typeof vi.fn>;
-let build: (provider: FakeProvider) => Agent;
+let build: (provider: FakeProvider, extra?: Record<string, unknown>) => Agent;
 
 const emit = (m: ServerMsg) => {
   emitted.push(m);
@@ -47,7 +47,7 @@ beforeEach(async () => {
   const config = loadConfig(dir);
   const policy = new PolicyEngine(db, config);
   approvals = new Approvals({ auth, policy, audit, db }, 500);
-  build = (provider) => new Agent({ provider, policy, approvals, devices: { exec, hasOnline: () => true, targetName: () => "pc" } as never, stage: new StageState(), db, audit, config, assistantName: () => "Jarvis" });
+  build = (provider, extra = {}) => new Agent({ provider, policy, approvals, devices: { exec, hasOnline: () => true, targetName: () => "pc" } as never, stage: new StageState(), db, audit, config, assistantName: () => "Jarvis", ...extra } as never);
 });
 
 describe("every tool call is recorded before and after it runs", () => {
@@ -124,5 +124,37 @@ describe("when the record cannot be written", () => {
     await run(agent, "info again");
     const [first] = entries("tool.start");
     expect(first!.detail.notRecorded).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("what is asked and what is sent on the owner's behalf is recorded", () => {
+  it("every turn writes the request with its words and where it came from, by who", async () => {
+    const turn = (trust: "owner" | "guest", source: string, say: string) => {
+      const provider = new FakeProvider([[text("ok"), done]]);
+      return runWithRequest({ prefix: "x" }, () => build(provider).runTurn(say, { trust, emit, ip: "9.9.9.9", source }));
+    };
+    await turn("owner", "chat", "good morning Maya");
+    await turn("guest", "voice", "who is there");
+    await turn("owner", "office", "[Office update] Dev finished ticket 3");
+    const [a, b, c] = entries("request");
+    expect(a).toMatchObject({ actorKind: "owner", outcome: "started", detail: { text: "good morning Maya", source: "chat", trust: "owner" } });
+    expect(b).toMatchObject({ actorKind: "outsider", detail: { source: "voice", trust: "guest" } });
+    expect(b!.detail.text).toBeUndefined(); // a guest's words are never kept
+    expect(b!.detail.chars).toBe("who is there".length);
+    expect(c).toMatchObject({ actorKind: "system", detail: { source: "office" } });
+  });
+
+  it("message.send is written with the channel, the recipient and the text", async () => {
+    const send = vi.fn(async () => ({ ok: true as const, summary: "Sent on Telegram." }));
+    const provider = new FakeProvider([[call("m1", "message.send", { channel: "telegram", to: "me", text: "Running late, start without me." }), done], [text("sent"), done]]);
+    await run(build(provider, { channels: { send, inbox: vi.fn(), sendFile: vi.fn() } }), "tell me I am late");
+    expect(entries("message.sent")[0]).toMatchObject({ actorKind: "assistant", target: "telegram:me", outcome: "done", detail: { channel: "telegram", to: "me", text: "Running late, start without me." } });
+  });
+
+  it("owner.notify is written with the words and where they went", async () => {
+    const notifyOwner = vi.fn(async () => "Sent to the owner's phone (telegram).");
+    const provider = new FakeProvider([[call("n1", "owner.notify", { text: "Your report is ready.", title: "Report" }), done], [text("told"), done]]);
+    await run(build(provider, { notifyOwner }), "tell me when it is ready");
+    expect(entries("owner.notified")[0]).toMatchObject({ actorKind: "assistant", outcome: "done", detail: { title: "Report", text: "Your report is ready.", where: "Sent to the owner's phone (telegram)." } });
   });
 });

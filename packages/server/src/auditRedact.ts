@@ -16,6 +16,9 @@ export function maskText(text: string): string {
   return out.replace(LONG_RUN, (m) => (/[0-9]/.test(m) && /[A-Z]/.test(m) && /[a-z]/.test(m) ? MASK : m));
 }
 
+/** Whether a name looks like it holds a secret (a password, a PIN, a key, a token). */
+export const isSecretKey = (name: string): boolean => SECRET_KEY.test(name);
+
 function mask(value: unknown, path: Set<object>): unknown {
   if (typeof value === "string") return maskText(value);
   if (!value || typeof value !== "object") return value;

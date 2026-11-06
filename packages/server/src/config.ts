@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { normalizeSites, VIDEO_LIMITS, VIDEO_OUTPUTS, VIDEO_YOUTUBE, type VideoOutput, type VideoYoutube } from "@friend/protocol";
 import { AUDIO_EXTENSIONS, DEFAULT_SOURCES, type DefaultSource, launcherProblem, MUSIC_OUTPUTS, type MusicOutput, programProblem, MAX_LAUNCHER, MUSIC_LIMITS, REPEAT_MODES, type LauncherItem, type RepeatMode } from "@friend/protocol";
 import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, type HudDensity, type HudLayout, type HudWidgetId } from "@friend/protocol";
@@ -929,10 +930,33 @@ export function configPath(dataDir: string): string {
   return join(dataDir, "config.json");
 }
 
+/** Set by the running Friend: its own saves keep the file's fingerprint current, so only a change made by something else shows. */
+let trackHash = false;
+export function trackConfigHash(on = true): void {
+  trackHash = on;
+}
+const hashFile = (dataDir: string): string => join(dataDir, "config.hash");
+const fingerprint = (dataDir: string): string => createHash("sha256").update(readFileSync(configPath(dataDir))).digest("hex");
+
+/** Compares the settings file with the fingerprint Friend last saved. baseline: there was none (it is made now). changed: edited since. */
+export function checkConfigFile(dataDir: string): { state: "baseline" | "same" | "changed"; from?: string; to: string } {
+  const to = fingerprint(dataDir);
+  let from: string | null = null;
+  try {
+    from = readFileSync(hashFile(dataDir), "utf8").trim();
+  } catch {
+    from = null;
+  }
+  writeFileSync(hashFile(dataDir), to);
+  if (from === null) return { state: "baseline", to };
+  return from === to ? { state: "same", to } : { state: "changed", from, to };
+}
+
 export function saveConfig(cfg: Partial<Config> & { dataDir: string }): void {
   const { dataDir, ...rest } = cfg;
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(configPath(dataDir), JSON.stringify(rest, null, 2));
+  if (trackHash) writeFileSync(hashFile(dataDir), fingerprint(dataDir));
   try {
     chmodSync(configPath(dataDir), 0o600);
   } catch {

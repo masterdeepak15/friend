@@ -398,7 +398,7 @@ export function createGateway(deps: GatewayDeps) {
         actorId: signedIn ? "owner" : req.ip,
         target: `${req.method} ${route ?? req.url.split("?")[0]!.slice(0, 120)}`,
         outcome: status < 400 ? "done" : "refused",
-        detail: { status, ip: req.ip },
+        detail: { status, ip: req.ip, userAgent: String(req.headers["user-agent"] ?? "").slice(0, 200) },
       });
     } catch {
       // the answer has already gone out; a failure to write it cannot undo that

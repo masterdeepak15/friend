@@ -71,7 +71,7 @@ import { Tasks } from "./tasks";
 import { Office, type BridgeFactory, type WorkerFactory } from "./office/office";
 import { OfficeStore } from "./office/store";
 import { join } from "node:path";
-import { loadConfig, sanitizeBrowser, sanitizeWeb, saveConfig, type Config } from "./config";
+import { checkConfigFile, loadConfig, sanitizeBrowser, sanitizeWeb, saveConfig, trackConfigHash, type Config } from "./config";
 import { openDb } from "./db";
 import { UsageLog, USAGE_KEEP_DAYS } from "./usage";
 import { safeFetch } from "./web/fetch";
@@ -88,7 +88,7 @@ import { StatsSampler, startStatsFeed } from "./hudStats";
 import { ClaudeCodeProvider } from "./provider/claude-code/provider";
 import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
-import { applySettings, clientLook, COSMETIC_KEYS, refuseForAgent, settingsView, SettingsError, type Applied } from "./settings";
+import { applySettings, clientLook, COSMETIC_KEYS, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
 import { OpenAiProvider } from "./provider/openai";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
@@ -518,6 +518,7 @@ export async function createApp(opts: AppOptions) {
   /** Validates, applies and saves a settings change, then tells the screens. Used by the settings screen and by the AI. */
   function commitSettings(patch: unknown, how: { actor: "owner" | "agent"; ip?: string; deferSwap?: boolean }): Applied {
     let applied: Applied;
+    let changes: ReturnType<typeof settingChanges> = [];
     let voiceBefore = config.voice.ttsVoice;
     let sttBefore = config.voice.sttModel;
     try {
@@ -529,13 +530,15 @@ export async function createApp(opts: AppOptions) {
       }
       voiceBefore = config.voice.ttsVoice;
       sttBefore = config.voice.sttModel;
+      const before = JSON.parse(JSON.stringify(config)) as unknown;
       applied = applySettings(config, patch);
+      changes = settingChanges(before, config, applied.changed);
       saveConfig(saved);
     } catch (e) {
       if (e instanceof SettingsError) throw new HttpError(400, e.message);
       throw e;
     }
-    audit.log(how.actor, "settings.changed", { changed: applied.changed, ...(how.ip ? { ip: how.ip } : {}) });
+    audit.log(how.actor, "settings.changed", { changed: applied.changed, changes, ...(how.ip ? { ip: how.ip } : {}) });
     if (applied.changed.some((k) => k.startsWith("channels"))) channelHub.apply();
     if (applied.changed.some((k) => k.startsWith("brokers"))) brokerHub.apply();
     if (applied.changed.some((k) => k.startsWith("music."))) void musicLibrary.scan().catch(() => {});
@@ -1277,7 +1280,20 @@ export async function createApp(opts: AppOptions) {
       auto: () => config.updates.auto,
       busy: () => agent.isBusy(),
       canApply: opts.system?.canApply ?? (() => process.env.FRIEND_DAEMON === "1"), // only Friend in the background can replace itself
-      apply: opts.system?.apply ?? (() => spawnUpgrade(self)),
+      apply: async (version: string) => {
+        const from = updater.state().current;
+        const note = (outcome: "started" | "done" | "failed") => {
+          try {
+            audit.record({ kind: "system.update", actorKind: "system", target: version, outcome, detail: { from, to: version, auto: config.updates.auto } });
+          } catch {
+            // the update goes on
+          }
+        };
+        note("started");
+        const ok = await (opts.system?.apply ?? (() => spawnUpgrade(self)))(version);
+        if (!ok) note("failed");
+        return ok;
+      },
       notify: (text) => broadcast({ type: "alert", level: "info", text }),
     },
     opts.system?.times,
@@ -1926,6 +1942,13 @@ export async function createApp(opts: AppOptions) {
       broadcast(statusMsg());
     },
     async start(): Promise<{ port: number }> {
+      trackConfigHash(true);
+      try {
+        const file = checkConfigFile(opts.dataDir);
+        if (file.state === "changed") audit.record({ kind: "config.external_change", actorKind: "system", outcome: "done", detail: { from: file.from, to: file.to } });
+      } catch {
+        // no settings file to look at yet
+      }
       heartbeat.start();
   proactive.start();
       // connectors that were on come back in the background; Friend does not wait for them. Chrome control comes back through its plugin,
@@ -1956,9 +1979,20 @@ export async function createApp(opts: AppOptions) {
       if (opts.system?.checkForUpdates) updater.start();
       const listening = await gateway.listen();
       listenPort = listening.port; // a browser on this PC is pointed at the port Friend really got
+      try {
+        audit.record({ kind: "system.start", actorKind: "system", outcome: "done", detail: { version: updater.state().current, port: listening.port, pid: process.pid } });
+      } catch {
+        // the log is not what keeps Friend from starting
+      }
       return listening;
     },
     async stop(): Promise<void> {
+      try {
+        audit.record({ kind: "system.stop", actorKind: "system", outcome: "done", detail: { version: updater.state().current } });
+      } catch {
+        // closing anyway
+      }
+      trackConfigHash(false);
       stopped = true;
       updater.stop();
       hostPlayer.dispose();

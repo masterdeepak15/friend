@@ -355,7 +355,7 @@ export class ChannelHub {
     // anyone else: kept as untrusted data for the owner to read, never run, never answered
     if (!this.allowed(`stranger:telegram:${chat}`, STRANGER_LIMIT)) return;
     this.record("telegram", "in", String(chat), name, text);
-    this.deps.audit.log("system", "channel.message_in", { channel: "telegram", from: name });
+    this.deps.audit.log("system", "channel.message_in", { channel: "telegram", from: name, untrusted: true, text: clip(text, 500) });
     this.deps.notify({ type: "alert", level: "info", text: `New Telegram message from ${name}: ${clip(plain(text), 80)}` });
   }
 
@@ -536,7 +536,7 @@ export class ChannelHub {
         const json = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
         if (!json.ok) throw new Error(json.description ?? `Telegram answered ${res.status}`);
         this.record("telegram", "out", String(t.ownerChatId), "", `[file: ${file.name}]${text ? " " + text : ""}`);
-        this.deps.audit.log("agent", "channel.file_out", { channel, kind: file.kind });
+        this.deps.audit.log("agent", "channel.file_out", { channel, kind: file.kind, name: file.name, size: file.size });
         return { ok: true, summary: "Sent the file on Telegram to the owner." };
       }
       const w = this.cfg.twilio;
@@ -549,7 +549,7 @@ export class ChannelHub {
       const token = this.stash(file);
       await this.twilioSend(w.ownerNumber, text, true, `${base}/api/channels/media/${token}`);
       this.record("whatsapp", "out", w.ownerNumber, "", `[file: ${file.name}]${text ? " " + text : ""}`);
-      this.deps.audit.log("agent", "channel.file_out", { channel, kind: file.kind });
+      this.deps.audit.log("agent", "channel.file_out", { channel, kind: file.kind, name: file.name, size: file.size });
       return { ok: true, summary: `Sent the file by WhatsApp to ${w.ownerNumber}.` };
     } catch (e) {
       return { ok: false, error: this.mask((e as Error).message).slice(0, 200) };
@@ -643,7 +643,7 @@ export class ChannelHub {
     }
     if (!this.allowed(`stranger:${channel}:${digits(number)}`, STRANGER_LIMIT)) return "ok";
     this.record(channel, "in", number, plain(number), text);
-    this.deps.audit.log("system", "channel.message_in", { channel, via: "contact" });
+    this.deps.audit.log("system", "channel.message_in", { channel, via: "contact", from: plain(number), untrusted: true, text: clip(text, 500) });
     this.deps.notify({ type: "alert", level: "info", text: `New ${CHANNEL_LABEL[channel]} message from ${plain(number)}: ${clip(plain(text), 80)}` });
     return "ok";
   }

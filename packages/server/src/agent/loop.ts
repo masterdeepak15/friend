@@ -288,6 +288,7 @@ export class Agent {
       return;
     }
     this.busy = true;
+    this.recordRequest(text, ctx);
     const spent = { input: 0, output: 0 };
     let reported = 0;
     this.seenUrls = ctx.trust === "owner" ? urlsIn(text) : new Set();
@@ -634,6 +635,24 @@ export class Agent {
     return { ok: false, text: `Unknown tool: ${name}` };
   }
 
+  /** Writes the request of a turn: its words, where it came from, and who asked. */
+  private recordRequest(text: string, ctx: TurnCtx): void {
+    const system = ctx.source === "office" || ctx.source === "task" || ctx.source === "proactive";
+    try {
+      this.deps.audit.record({
+        kind: "request",
+        actorKind: system ? "system" : ctx.trust === "owner" ? "owner" : "outsider",
+        actorId: system ? (ctx.source ?? "") : ctx.trust === "member" ? "member" : ctx.trust === "guest" ? "guest" : "owner",
+        target: ctx.source ?? "",
+        outcome: "started",
+        // what a household member or a guest says is never kept (the trail names nobody and holds none of their words): only that they spoke
+        detail: { ...(ctx.trust === "owner" ? { text } : { chars: text.length }), source: ctx.source ?? "other", trust: ctx.trust },
+      });
+    } catch {
+      // the turn goes on; the tools it calls are recorded one by one and refused if they cannot be
+    }
+  }
+
   /** How many reads went by since the record last worked, said on the next entry that is written. */
   private notRecorded = 0;
 
@@ -939,6 +958,11 @@ export class Agent {
       if (!d.notifyOwner) return fail("Telling the owner is not available.");
       const where = await d.notifyOwner(String(args.text), args.title ? String(args.title) : undefined);
       d.audit.log("agent", "tool.call", { tool: call.name, args: { title: args.title ? String(args.title).slice(0, 60) : undefined }, tier, ok: true });
+      try {
+        d.audit.record({ kind: "owner.notified", actorKind: "assistant", target: "owner", outcome: "done", detail: { title: args.title ? String(args.title).slice(0, 60) : "", text: String(args.text), where } });
+      } catch {
+        // the owner has been told; the gap is shown on the next entry
+      }
       return { text: where, isError: false };
     }
 
@@ -946,6 +970,11 @@ export class Agent {
       const { channel, to, text } = args as { channel: "telegram" | "sms" | "whatsapp"; to: string; text: string };
       const sent = await d.channels!.send(channel, to, text);
       d.audit.log("agent", "tool.call", { tool: call.name, args: { channel }, tier, ok: sent.ok });
+      try {
+        d.audit.record({ kind: "message.sent", actorKind: "assistant", target: `${channel}:${to}`, outcome: sent.ok ? "done" : "failed", detail: { channel, to, text, ...(sent.ok ? {} : { error: sent.error }) } });
+      } catch {
+        // the message has gone; the gap is shown on the next entry
+      }
       return sent.ok ? { text: sent.summary, isError: false } : fail(sent.error);
     }
 

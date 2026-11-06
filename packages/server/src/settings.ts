@@ -1,3 +1,4 @@
+import { isSecretKey, maskText } from "./auditRedact";
 import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, OfficeProject, OfficeRole, PresenceStyle, ViewPreset } from "@friend/protocol";
 import { z } from "zod";
 import type { Config } from "./config";
@@ -436,6 +437,21 @@ export function refuseForAgent(raw: unknown): void {
   if ("web" in r) throw new SettingsError("Web search settings (the source, its keys and addresses) can only be changed by the owner on the settings screen.");
   if ("apiKey" in r || "apiKey" in oa) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
   if ("command" in cc) throw new SettingsError("The Claude Code command can only be changed by the owner on the settings screen.");
+}
+
+const pathValue = (o: unknown, path: string): unknown => path.split(".").reduce<unknown>((v, k) => (v && typeof v === "object" ? (v as Record<string, unknown>)[k] : undefined), o);
+
+/** For the audit trail: each changed setting with what it was and what it is now. Anything secret (by its name, or by how its text looks) is masked on both sides; long values are cut. */
+export function settingChanges(before: unknown, after: unknown, keys: string[]): { setting: string; from: unknown; to: unknown }[] {
+  const show = (key: string, v: unknown): unknown => {
+    if (v === undefined || v === null || typeof v === "boolean") return v ?? null;
+    if (key.split(".").some(isSecretKey)) return "[redacted]";
+    if (typeof v === "number") return v;
+    const text = maskText(typeof v === "string" ? v : JSON.stringify(v));
+    if (text.length > 500) return `${text.slice(0, 500)}…`;
+    return typeof v === "string" ? text : (JSON.parse(text) as unknown);
+  };
+  return keys.map((setting) => ({ setting, from: show(setting, pathValue(before, setting)), to: show(setting, pathValue(after, setting)) }));
 }
 
 export interface Applied {
