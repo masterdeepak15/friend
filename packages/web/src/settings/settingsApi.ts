@@ -122,6 +122,7 @@ export interface PhoneApprovalsSettings {
   delaySec: number;
   buttons: boolean;
   allowRisky: boolean;
+  batchSec: number;
 }
 
 /** The audit trail's settings. */

@@ -40,6 +40,8 @@ export interface HubDeps {
   ask(text: string, via: ChannelId): Promise<string>;
   /** Turns a voice message into words, or says why it cannot. Left out when there is no voice engine. */
   transcribe?(audio: Buffer, mime: string): Promise<{ ok: true; text: string } | { ok: false; error: string }>;
+  /** A plain yes or no from the owner that answers a question Friend sent about its own work ("YES 2", "NO ALL"). Returns what to say back, or null when it is not one. It is asked before anything is queued, so an answer is never stuck behind the turn that is waiting for it. */
+  quickAnswer?(text: string): string | null;
   /** A tap on an Allow / Deny button the owner's chat was sent. Returns the short note Telegram shows. Left out when approvals do not go to the phone. */
   approvalButton?(data: string): string | null;
   /** Tells every open screen something (for example that a message arrived). */
@@ -132,6 +134,8 @@ export class ChannelHub {
   private tgGen = 0;
   private tgAbort: AbortController | null = null;
   private tgOffset = 0;
+  /** Ordinary messages from the owner run one after the other here, off the poll loop, so the loop is always free to take a tap or a YES. */
+  private tgChain: Promise<void> = Promise.resolve();
   private tgState: ChannelStatus["telegram"]["state"] = "off";
   private tgDetail = "";
   private tgBot: string | null = null;
@@ -262,10 +266,15 @@ export class ChannelHub {
         for (const u of updates) {
           this.tgOffset = Math.max(this.tgOffset, u.update_id + 1);
           try {
-            await this.onTelegram(u);
+            if (await this.onTelegramFast(u)) continue;
           } catch (e) {
             this.deps.audit.log("system", "channel.telegram_handler_failed", { message: this.mask((e as Error).message).slice(0, 200) });
+            continue;
           }
+          // the rest may take as long as a whole turn: it does not hold the loop
+          this.tgChain = this.tgChain
+            .then(() => this.onTelegram(u))
+            .catch((e: Error) => this.deps.audit.log("system", "channel.telegram_handler_failed", { message: this.mask(e.message).slice(0, 200) }));
         }
         if (updates.length === 0 && (this.deps.pollSeconds ?? 25) === 0) await this.sleep(10); // a test poll that returns at once must not spin
       } catch (e) {
@@ -309,11 +318,18 @@ export class ChannelHub {
   }
 
   /** Sends an approval question to the owner's Telegram, with Allow / Deny buttons when asked. Returns the message to edit later. */
-  async sendApproval(text: string, buttons: { id: string } | null): Promise<{ ok: boolean; ref?: number }> {
+  /** The Allow / Deny buttons for the questions in a message: one pair for a single question, one numbered pair on each row for several. */
+  private approvalKeyboard(buttons: { id: string; n?: number }[]): { inline_keyboard: { text: string; callback_data: string }[][] } {
+    const many = buttons.length > 1;
+    return { inline_keyboard: buttons.map((b) => [{ text: many ? `✅ Allow ${b.n ?? ""}`.trim() : "✅ Allow", callback_data: `fa:${b.id}:y` }, { text: many ? `⛔ Deny ${b.n ?? ""}`.trim() : "⛔ Deny", callback_data: `fa:${b.id}:n` }]) };
+  }
+
+  async sendApproval(text: string, given: { id: string; n?: number }[] | { id: string } | null): Promise<{ ok: boolean; ref?: number }> {
+    const buttons = given === null ? null : Array.isArray(given) ? given : [given];
     const t = this.cfg.telegram;
     if (!t.installed || !t.enabled || !t.botToken || t.ownerChatId === null) return { ok: false };
     try {
-      const markup = buttons ? { inline_keyboard: [[{ text: "✅ Allow", callback_data: `fa:${buttons.id}:y` }, { text: "⛔ Deny", callback_data: `fa:${buttons.id}:n` }]] } : undefined;
+      const markup = buttons?.length ? this.approvalKeyboard(buttons) : undefined;
       const sent = await this.tg<{ message_id: number }>("sendMessage", { chat_id: t.ownerChatId, text: text.slice(0, TELEGRAM_CHUNK), ...(markup ? { reply_markup: markup } : {}) });
       this.record("telegram", "out", String(t.ownerChatId), "", text);
       return { ok: true, ref: sent.message_id };
@@ -324,10 +340,27 @@ export class ChannelHub {
   }
 
   /** Replaces an earlier message of ours (the answer takes the place of the buttons). */
-  async editApproval(ref: number, text: string): Promise<void> {
+  /** Replaces an earlier message of ours; `buttons` are the questions in it that are still waiting (none: the buttons go away). */
+  async editApproval(ref: number, text: string, buttons?: { id: string; n?: number }[] | null): Promise<void> {
     const chat = this.cfg.telegram.ownerChatId;
     if (chat === null) return;
-    await this.tg("editMessageText", { chat_id: chat, message_id: ref, text: text.slice(0, TELEGRAM_CHUNK), reply_markup: { inline_keyboard: [] } });
+    await this.tg("editMessageText", { chat_id: chat, message_id: ref, text: text.slice(0, TELEGRAM_CHUNK), reply_markup: buttons?.length ? this.approvalKeyboard(buttons) : { inline_keyboard: [] } });
+  }
+
+  /** What must be answered at once: a tap on a button, and a plain yes or no from the owner for a waiting question. True when it was one. */
+  private async onTelegramFast(u: TelegramUpdate): Promise<boolean> {
+    if (u.callback_query) {
+      await this.onTelegramButton(u.callback_query);
+      return true;
+    }
+    const m = u.message;
+    const owner = this.cfg.telegram.ownerChatId;
+    if (!m || typeof m.text !== "string" || owner === null || m.chat.id !== owner) return false;
+    const said = this.deps.quickAnswer?.(m.text.trim().slice(0, 200));
+    if (said === null || said === undefined) return false;
+    this.record("telegram", "in", String(owner), "owner", m.text.trim().slice(0, 200));
+    await this.sendRaw("telegram", String(owner), said);
+    return true;
   }
 
   private async onTelegram(u: TelegramUpdate): Promise<void> {

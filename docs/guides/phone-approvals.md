@@ -74,3 +74,9 @@ Reaching you is part of your assistant in general, not only of the Office. Whene
 - No way reaches you: it waits on the screen for when you come back, and the log says so.
 
 The same goes for reminders (a reminder that falls due while nobody is at a screen goes to your phone) and for her own check-ins. Each request she gets says how you can be reached right now, so she knows what works. `message.send` stays for messages to other people.
+
+## Questions that pile up
+
+When several things need your OK at once (two workers asking, a long task), Friend does not send a message for each. Questions that come due together go as **one message**: a numbered list with a pair of Allow and Deny buttons for each, and the message is rewritten as you answer, so only what is still waiting keeps its buttons. While one question is already waiting on your phone, newer ones are gathered for a few seconds (3 by default, `phoneApprovals.batchSec`, 0 sends each by itself) and go together. By text you can answer each with `YES 2` / `NO 1`, or everything with `YES ALL` / `NO ALL`.
+
+Taps and YES/NO answers are handled at once, even while Friend is in the middle of a task that is waiting for that very answer.

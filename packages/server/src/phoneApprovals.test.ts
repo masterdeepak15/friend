@@ -12,8 +12,8 @@ const req = (over: Partial<ApprovalRequest> = {}): ApprovalRequest => ({ tool: "
 let cfg: PhoneApprovalsConfig;
 let screen: boolean;
 let linked: PhoneChannel[];
-let sent: { channel: PhoneChannel; text: string; buttons: { id: string } | null }[];
-let edits: { ref: number; text: string }[];
+let sent: { channel: PhoneChannel; text: string; buttons: { id: string; n: number }[] | null }[];
+let edits: { ref: number; text: string; buttons?: { id: string; n: number }[] | null }[];
 let responded: { id: string; approve: boolean }[];
 let phone: PhoneApprovals;
 let auditLog: { event: string; detail: Record<string, unknown> }[];
@@ -38,7 +38,7 @@ beforeEach(() => {
       sent.push({ channel, text, buttons });
       return { ok: true, ref: ++ref };
     },
-    edit: async (_c, r, text) => void edits.push({ ref: r, text }),
+    edit: async (_c, r, text, buttons) => void edits.push({ ref: r, text, buttons }),
     respond: async (id, approve, how) => void (responded.push({ id, approve }), hows.push(how)),
     audit: (event, detail) => void auditLog.push({ event, detail }),
   });
@@ -52,7 +52,7 @@ describe("when the phone is asked", () => {
     phone.offer(info(ID1), req());
     await flush();
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ channel: "telegram", buttons: { id: ID1 } });
+    expect(sent[0]).toMatchObject({ channel: "telegram", buttons: [{ id: ID1, n: 1 }] });
     expect(sent[0]!.text).toContain("Run: git status");
     expect(sent[0]!.text).toContain("YES 1");
   });
@@ -109,9 +109,10 @@ describe("when the phone is asked", () => {
   it("uses the chosen app, and prefers Telegram on auto", async () => {
     linked = ["whatsapp", "telegram"];
     phone.offer(info(ID1), req());
+    await flush();
     cfg.channel = "whatsapp";
     phone.offer(info(ID2), req());
-    await flush();
+    await vi.advanceTimersByTimeAsync(5_000);
     expect(sent.map((s) => s.channel)).toEqual(["telegram", "whatsapp"]);
     expect(sent[1]!.buttons).toBeNull();
     expect(sent[1]!.text).toContain("Reply YES 2");
@@ -192,12 +193,11 @@ describe("answering", () => {
     expect(edits.map((e) => e.text)).toEqual([expect.stringContaining("Answered on the screen: refused."), expect.stringContaining("Nobody answered in time")]);
   });
 
-  it("still marks the message when the screen answered while it was being sent", async () => {
+  it("a question the screen answered before it was due is never sent", async () => {
     phone.offer(info(ID1), req());
     phone.settled(ID1, "approve");
     await flush();
-    expect(sent).toHaveLength(1);
-    expect(edits.at(-1)!.text).toContain("Answered on the screen: allowed.");
+    expect(sent).toHaveLength(0);
     expect(phone.button(ID1, false)).toMatch(/no longer waiting/);
   });
 });
@@ -214,7 +214,7 @@ describe("the button data", () => {
 
 describe("the settings", () => {
   it("default to on, 20 seconds, buttons on, risky actions off, and clamp bad values", () => {
-    expect(sanitizePhoneApprovals(undefined)).toEqual({ enabled: true, channel: "auto", delaySec: 20, buttons: true, allowRisky: false });
+    expect(sanitizePhoneApprovals(undefined)).toEqual({ enabled: true, channel: "auto", delaySec: 20, buttons: true, allowRisky: false, batchSec: 3 });
     expect(sanitizePhoneApprovals({ delaySec: 9999 }).delaySec).toBe(110);
     expect(sanitizePhoneApprovals({ delaySec: -5 }).delaySec).toBe(0);
     expect(sanitizePhoneApprovals({ channel: "sms" as never }).channel).toBe("auto");
@@ -239,5 +239,102 @@ describe("what the phone side writes to the audit trail", () => {
     await flush();
     expect(responded).toEqual([{ id: ID1, approve: true }]);
     expect(hows).toEqual(["text"]);
+  });
+});
+
+describe("questions that pile up are asked together", () => {
+  const ID3 = "33333333-3333-4333-8333-333333333333";
+  const sentButtons = () => sent.map((m) => m.buttons);
+
+  it("several that come due together go out as one message with a numbered list and a button pair for each", async () => {
+    phone.offer(info(ID1, { summary: "Run: git status" }), req());
+    phone.offer(info(ID2, { summary: "Run: npm test" }), req());
+    phone.offer(info(ID3, { summary: "Write a.txt" }), req());
+    await flush();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toMatch(/needs your OK for 3 things/);
+    expect(sent[0]!.text).toMatch(/1\) Run: git status/);
+    expect(sent[0]!.text).toMatch(/2\) Run: npm test/);
+    expect(sent[0]!.text).toMatch(/3\) Write a\.txt/);
+    expect(sent[0]!.text).toMatch(/YES ALL/);
+    expect(sentButtons()[0]).toEqual([{ id: ID1, n: 1 }, { id: ID2, n: 2 }, { id: ID3, n: 3 }]);
+  });
+
+  it("one that comes alone is still the plain single message", async () => {
+    phone.offer(info(ID1), req());
+    await flush();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).not.toMatch(/things/);
+    expect(sentButtons()[0]).toEqual([{ id: ID1, n: 1 }]);
+  });
+
+  it("while one is waiting on the phone, newer ones wait for the grouping time and then go together", async () => {
+    cfg.batchSec = 3;
+    phone.offer(info(ID1), req());
+    await flush();
+    expect(sent).toHaveLength(1);
+    phone.offer(info(ID2), req());
+    await vi.advanceTimersByTimeAsync(1000);
+    phone.offer(info(ID3), req());
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(sent).toHaveLength(1); // still gathering
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]!.text).toMatch(/2 things/);
+    expect(sentButtons()[1]).toEqual([{ id: ID2, n: 2 }, { id: ID3, n: 3 }]);
+  });
+
+  it("with grouping time 0, each goes out by itself", async () => {
+    cfg.batchSec = 0;
+    phone.offer(info(ID1), req());
+    await flush();
+    phone.offer(info(ID2), req());
+    await flush();
+    expect(sent).toHaveLength(2);
+    expect(sent[1]!.text).not.toMatch(/things/);
+  });
+
+  it("one that was answered before it was sent is never sent", async () => {
+    phone.offer(info(ID1), req());
+    phone.offer(info(ID2), req());
+    phone.settled(ID1, "approve");
+    await flush();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).not.toMatch(/things/); // only one left: a plain message
+    expect(sentButtons()[0]).toEqual([{ id: ID2, n: 2 }]);
+  });
+
+  it("answering one edits the shared message: the answered line says so and only the others keep their buttons", async () => {
+    phone.offer(info(ID1), req());
+    phone.offer(info(ID2), req());
+    await flush();
+    expect(phone.button(ID1, true)).toBe("Allowed.");
+    await flush();
+    phone.settled(ID1, "approve");
+    await flush();
+    const e = edits.at(-1)!;
+    expect(e.text).toMatch(/1\) Run: git status.*Allowed/);
+    expect(e.buttons).toEqual([{ id: ID2, n: 2 }]);
+    phone.settled(ID2, "deny");
+    await flush();
+    expect(edits.at(-1)!.text).toMatch(/2\) .*(Refused|refused)/);
+    expect(edits.at(-1)!.buttons).toBeNull();
+  });
+
+  it("YES ALL and NO ALL answer everything that is waiting", async () => {
+    phone.offer(info(ID1), req());
+    phone.offer(info(ID2), req());
+    phone.offer(info(ID3), req());
+    await flush();
+    expect(phone.reply("YES ALL")).toBe("Allowed all 3.");
+    await flush();
+    expect(responded.map((r) => [r.id, r.approve])).toEqual([[ID1, true], [ID2, true], [ID3, true]]);
+  });
+
+  it("with several waiting a bare YES is still not guessed", async () => {
+    phone.offer(info(ID1), req());
+    phone.offer(info(ID2), req());
+    await flush();
+    expect(phone.reply("yes")).toMatch(/2 requests are waiting/);
   });
 });

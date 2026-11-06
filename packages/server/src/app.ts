@@ -258,6 +258,8 @@ export async function createApp(opts: AppOptions) {
     audit,
     notify: (m) => broadcast(m),
     publicBase: () => config.publicUrl ?? null,
+    // a plain yes or no for a question on the phone is answered at once, ahead of any turn that may be waiting for it
+    quickAnswer: (text) => (alexaHub.tryApprove(text) ? "Okay." : phoneApprovals.reply(text)),
     approvalButton: (data) => {
       const b = parseButton(data);
       return b ? phoneApprovals.button(b.id, b.approve) : null;
@@ -916,7 +918,7 @@ export async function createApp(opts: AppOptions) {
       const r = await channelHub.send(channel, "me", text);
       return { ok: r.ok };
     },
-    edit: (channel, ref, text) => (channel === "telegram" ? channelHub.editApproval(ref, text) : Promise.resolve()),
+    edit: (channel, ref, text, buttons) => (channel === "telegram" ? channelHub.editApproval(ref, text, buttons) : Promise.resolve()),
     respond: (id, approve, how) => approvals.respond({ id, decision: approve ? "approve" : "deny" }, "phone", how === "button" ? "phone-button" : "phone-reply"),
     audit: (event, detail) => audit.log(event === "approval.delivered" ? "system" : "owner", event, detail),
   });

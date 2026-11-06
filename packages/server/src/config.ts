@@ -725,6 +725,8 @@ export interface PhoneApprovalsConfig {
   buttons: boolean;
   /** Also let the phone answer the camera and the Office workers' requests. Off: those wait for the screen. */
   allowRisky: boolean;
+  /** Seconds to gather questions that come while another is already waiting on the phone, so they go as one message (0: each by itself). */
+  batchSec: number;
 }
 export const sanitizePhoneApprovals = (p: Partial<PhoneApprovalsConfig> | undefined): PhoneApprovalsConfig => ({
   enabled: p?.enabled !== false,
@@ -732,6 +734,7 @@ export const sanitizePhoneApprovals = (p: Partial<PhoneApprovalsConfig> | undefi
   delaySec: typeof p?.delaySec === "number" && Number.isFinite(p.delaySec) ? Math.min(110, Math.max(0, Math.round(p.delaySec))) : 20,
   buttons: p?.buttons !== false,
   allowRisky: p?.allowRisky === true,
+  batchSec: typeof p?.batchSec === "number" && Number.isFinite(p.batchSec) ? Math.min(30, Math.max(0, Math.round(p.batchSec))) : 3,
 });
 
 export interface AuditConfig {

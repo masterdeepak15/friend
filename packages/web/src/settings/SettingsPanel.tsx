@@ -539,6 +539,9 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
               <option value="whatsapp">WhatsApp only</option>
             </select>
           </Field>
+          <Field label="Group questions that pile up (seconds)" hint="0 to 30. While one question waits on your phone, newer ones are gathered for this long and sent as one message, so they come together. 0 sends each by itself.">
+            <input type="number" min={0} max={30} value={draft.phoneApprovals.batchSec} onChange={(e) => setPhone({ batchSec: Math.min(30, Math.max(0, Math.round(Number(e.target.value) || 0))) })} />
+          </Field>
           <Field label="Wait for the screen first (seconds)" hint="0 to 110. Used when a screen is open; with none open the phone is asked at once.">
             <input type="number" min={0} max={110} value={draft.phoneApprovals.delaySec} onChange={(e) => setPhone({ delaySec: Math.min(110, Math.max(0, Math.round(Number(e.target.value) || 0))) })} />
           </Field>

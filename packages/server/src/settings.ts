@@ -42,6 +42,7 @@ export const SettingsPatch = z
         delaySec: z.number().int().min(0).max(110),
         buttons: z.boolean(),
         allowRisky: z.boolean(),
+        batchSec: z.number().int().min(0).max(30),
       })
       .partial()
       .strict(),
