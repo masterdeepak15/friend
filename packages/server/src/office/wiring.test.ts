@@ -184,4 +184,23 @@ describe("the Office in the app", () => {
     expect(asked).toContain("Wrote notes.md");
     expect(asked).toContain("untrusted");
     expect(asked).toContain("office.report"); // and how to read the whole of it
-  });});
+  });
+
+  it("shows what Friend says about a finished ticket as a card on the screen, and tells Friend to check the work and write a note first", async () => {
+    const cookie = await boot(true, [[{ type: "text_delta", text: "Ada wrote notes.md; I read it and it looks right." }, { type: "done" }]]);
+    const { got } = await connect(cookie);
+    app!.office.hire({ role: "scribe", project: "site", name: "Ada" });
+    app!.office.assign({ worker: "Ada", title: "Write notes" });
+    await until(() => procs.length === 1);
+    procs[0]!.onEvent({ kind: "init", sessionId: "s", model: "m" });
+    procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
+    await until(() => got.some((m) => m.type === "stage" && m.command.cmd === "show" && m.command.object.id === "office-update"));
+    const card = got.find((m) => m.type === "stage" && m.command.cmd === "show" && m.command.object.id === "office-update") as unknown as { command: { object: { layer: string; type: string; props: { text: string } } } };
+    expect(card.command.object).toMatchObject({ type: "card", layer: "overlay", props: { text: "Ada wrote notes.md; I read it and it looks right." } });
+    expect(got.some((m) => m.type === "audio.chunk")).toBe(false); // nothing is spoken
+    const asked = JSON.stringify(provider.calls[0]!.messages);
+    expect(asked).toMatch(/First check the work/);
+    expect(asked).toMatch(/what was done, what you checked and found/);
+    expect(asked).toMatch(/not spoken/);
+  });
+});
