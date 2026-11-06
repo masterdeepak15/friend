@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
 import { LookPreview } from "./LookPreview";
+import { AuditTab } from "./AuditTab";
 import { HeartbeatTab, heartbeatBad } from "./HeartbeatTab";
 import { MemoryTab } from "./MemoryTab";
 import { OfficeTab, officeProblems } from "./OfficeTab";
@@ -568,6 +569,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       {tab === "memory" && draft.memory && <MemoryTab memory={draft.memory} onChange={(p) => setDraft({ ...draft, memory: { ...draft.memory!, ...p } })} />}
       {tab === "heartbeat" && draft.proactive && <HeartbeatTab proactive={draft.proactive} onChange={(p) => setDraft({ ...draft, proactive: { ...draft.proactive!, ...p } })} />}
       {tab === "soul" && <SoulTab />}
+      {tab === "audit" && <AuditTab {...(draft.audit ? { settings: draft.audit, onSettings: (p: Partial<NonNullable<typeof draft.audit>>) => setDraft({ ...draft, audit: { ...draft.audit!, ...p } }) } : {})} />}
       {tab === "usage" && <UsageTab />}
           {tab === "security" && <SecurityTab />}
     </>
