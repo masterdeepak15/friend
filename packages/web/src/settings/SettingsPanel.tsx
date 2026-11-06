@@ -547,7 +547,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           </label>
           <label className="settings-check">
             <input type="checkbox" checked={draft.phoneApprovals.allowRisky} onChange={(e) => setPhone({ allowRisky: e.target.checked })} />
-            <span>Also let the phone answer the camera, sending files and the Office's requests</span>
+            <span>Also let the phone answer the camera and the Office's requests</span>
           </label>
           <small className="auth-note">With no screen open the question goes to your phone at once; with one open, after the wait above. Whichever you answer first wins. Anything that needs your PIN is never asked on the phone, and "always allow" is only on the screen.</small>
         </div>

@@ -200,7 +200,7 @@ export const KEY_HELP: Record<string, string> = {
   "phoneApprovals.channel": "which linked app is asked: auto (Telegram, else WhatsApp), telegram or whatsapp",
   "phoneApprovals.delaySec": "0 to 110: seconds to wait for the screen before also asking the phone, when a screen is open (with none open, the phone is asked at once)",
   "phoneApprovals.buttons": "true or false: Telegram shows Allow / Deny buttons (false: reply YES or NO)",
-  "phoneApprovals.allowRisky": "true or false: the phone may also answer the camera, sending files and the Office's requests (false: those wait for the screen)",
+  "phoneApprovals.allowRisky": "true or false: the phone may also answer the camera and the Office's requests (false: those wait for the screen)",
   "voice.duck": "true or false: turn music and video down while you talk to Friend and while it speaks",
   "voice.duckPercent": "0 to 100: how loud music and video are then, as a percent of how loud they were (25 is a quarter)",
   "voice.accept": "0 to 1: a voice at or above this match is you",

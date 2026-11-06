@@ -1,7 +1,6 @@
 import type { PendingApproval } from "@friend/protocol";
 import type { ApprovalRequest, RemoteAsk } from "./approvals";
 import type { PhoneApprovalsConfig } from "./config";
-import { ASK_EVERY_TIME } from "./policy/engine";
 
 export type PhoneChannel = "telegram" | "whatsapp";
 
@@ -32,6 +31,9 @@ interface Entry {
   closed: string | null;
 }
 
+/** Kept on the screen unless the owner allows it: a picture from the camera, and an Office worker's request (it can be a command). Sending a file to the owner's own chat is not here: it only ever goes to them. */
+export const SCREEN_ONLY = new Set(["camera.snap", "office.action"]);
+
 const YES = new Set(["yes", "y", "yeah", "ok", "okay", "allow", "ha", "haan", "han", "हाँ", "हां", "हा"]);
 const NO = new Set(["no", "n", "nope", "deny", "nahi", "nahin", "नहीं", "ना"]);
 const normal = (t: string): string => t.trim().toLowerCase().replace(/^[\s.!?,।]+|[\s.!?,।]+$/g, "");
@@ -47,8 +49,8 @@ export const parseButton = (data: string): { id: string; approve: boolean } | nu
 
 /**
  * Asks the owner on their phone when an action needs approval and they are not at the screen (or have not answered it for a
- * while). The same approval stays open on the screen; whichever answers first wins. A request that needs the PIN, and the
- * always-ask actions unless the owner allows them, never go to the phone: a PIN is never typed in a chat.
+ * while). The same approval stays open on the screen; whichever answers first wins. A request that needs the PIN, and camera
+ * and Office requests unless the owner allows them, never go to the phone: a PIN is never typed in a chat.
  */
 export class PhoneApprovals implements RemoteAsk {
   private entries = new Map<string, Entry>();
@@ -59,7 +61,7 @@ export class PhoneApprovals implements RemoteAsk {
   offer(info: PendingApproval, req: ApprovalRequest): void {
     const c = this.d.config();
     if (!c.enabled || info.needsPin || req.needsPin) return;
-    if (ASK_EVERY_TIME.has(info.tool) && !c.allowRisky) return;
+    if (SCREEN_ONLY.has(info.tool) && !c.allowRisky) return;
     if (!this.pick(c)) return;
     const entry: Entry = { info, n: (this.counter = (this.counter % 99) + 1), timer: null, sent: null, byPhone: false, closed: null };
     this.entries.set(info.id, entry);

@@ -21,7 +21,7 @@ until the request times out and is refused.
 
 - **Anything that needs your PIN.** A PIN is never typed in a chat. Those wait for the screen.
 - **"Always allow".** Only the screen can add a rule.
-- **The always-ask actions** (a camera picture, sending a file, an Office worker's request), unless you turn that on.
+- **The camera and Office workers' requests**, unless you turn that on. (Sending a file to your own chat can be answered on the phone.)
 - A reply from anyone but your own linked chat is ignored, and so is a button tapped by anyone else.
 
 ## Settings
@@ -33,7 +33,7 @@ friend config set phoneApprovals.enabled false          # never ask on the phone
 friend config set phoneApprovals.channel telegram       # auto, telegram or whatsapp
 friend config set phoneApprovals.delaySec 0             # also ask the phone at once when a screen is open
 friend config set phoneApprovals.buttons false          # Telegram: reply YES or NO instead
-friend config set phoneApprovals.allowRisky true        # the phone may also answer the camera, files and Office
+friend config set phoneApprovals.allowRisky true        # the phone may also answer the camera and Office requests
 ```
 
 Alexa has its own version of this: a request from a speaker is sent to your phone as "reply YES" and is not asked twice.

@@ -717,7 +717,7 @@ export interface PhoneApprovalsConfig {
   delaySec: number;
   /** Telegram: Allow / Deny buttons under the message (off: reply YES or NO). */
   buttons: boolean;
-  /** Also let the phone answer the always-ask actions (camera pictures, sending files, Office actions). Off: those wait for the screen. */
+  /** Also let the phone answer the camera and the Office workers' requests. Off: those wait for the screen. */
   allowRisky: boolean;
 }
 export const sanitizePhoneApprovals = (p: Partial<PhoneApprovalsConfig> | undefined): PhoneApprovalsConfig => ({

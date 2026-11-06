@@ -86,6 +86,12 @@ describe("when the phone is asked", () => {
     expect(sent).toHaveLength(1);
   });
 
+  it("asks on the phone to send a file to the owner's own chat", async () => {
+    phone.offer(info(ID1, { tool: "message.send_file" }), req({ tool: "message.send_file" }));
+    await flush();
+    expect(sent).toHaveLength(1);
+  });
+
   it("is silent when switched off or when no app is linked", async () => {
     cfg.enabled = false;
     phone.offer(info(ID1), req());
