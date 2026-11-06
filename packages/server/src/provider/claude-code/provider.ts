@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Msg, Provider, ProviderEvent, StreamRequest, ToolSpec } from "../types";
 import { ToolBridge, encodeToolName, type BridgeCall } from "./bridge";
@@ -371,6 +371,9 @@ export class ClaudeCodeProvider implements Provider {
       this.bridge.setTools(req.tools);
     }
     const resume = conv.guest ? null : conv.sessionId;
+    // the instructions go in a file, not on the command line: with memory, the soul and every plugin's tools they can pass what a
+    // command line may hold (about 32,000 characters on Windows), and the program would not start ("spawn ENAMETOOLONG")
+    const systemFile = this.writeSystem(req.system);
     const model = this.opts.model ?? "sonnet";
     const web = !conv.guest && !!this.opts.webSearch;
     const args = [
@@ -378,7 +381,7 @@ export class ClaudeCodeProvider implements Provider {
       "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
       "--model", model,
       "--strict-mcp-config", "--disable-slash-commands", "--tools", web ? "WebSearch" : "", "--setting-sources", "local",
-      "--system-prompt", req.system,
+      "--system-prompt-file", systemFile,
       ...(conv.guest
         ? ["--no-session-persistence"]
         : ["--mcp-config", join(this.home, "mcp.json"), "--allowedTools", [...(web ? ["WebSearch"] : []), ...req.tools.map((t) => `mcp__friend__${encodeToolName(t.name)}`)].join(","), ...(resume ? ["--resume", resume] : [])]),
@@ -402,6 +405,29 @@ export class ClaudeCodeProvider implements Provider {
     conv.startedWithResume = !!resume;
     conv.hasContext = !!resume;
     conv.gotEvent = false;
+  }
+
+  private systemCount = 0;
+  private swept = false;
+
+  /** Writes the instructions for one Claude process to a file of its own and returns its path. Old ones are cleared when Friend starts. */
+  private writeSystem(text: string): string {
+    if (!this.swept) {
+      this.swept = true;
+      try {
+        for (const f of readdirSync(this.home)) if (/^system-\d+\.txt$/.test(f)) rmSync(join(this.home, f), { force: true });
+      } catch {
+        // nothing to clear
+      }
+    }
+    const file = join(this.home, `system-${++this.systemCount}.txt`);
+    writeFileSync(file, text);
+    try {
+      chmodSync(file, 0o600); // it holds what Friend knows about the owner
+    } catch {
+      // not everywhere
+    }
+    return file;
   }
 
   private endGuest(conv: Conv): void {

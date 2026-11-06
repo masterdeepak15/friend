@@ -39,6 +39,7 @@ const readLog = (): LogLine[] => (existsSync(join(dir, "log.jsonl")) ? readFileS
 const starts = () => readLog().filter((l) => l.start);
 const users = () => readLog().filter((l) => l.user);
 const flagValue = (argv: string[], f: string) => argv[argv.indexOf(f) + 1];
+const systemOf = (argv: string[]) => readFileSync(flagValue(argv, "--system-prompt-file")!, "utf8");
 
 const req = (messages: Msg[], over: Partial<StreamRequest> = {}): StreamRequest => ({ system: "SYS", messages, tools: TOOLS, signal: new AbortController().signal, ...over });
 async function run(p: ClaudeCodeProvider, r: StreamRequest): Promise<ProviderEvent[]> {
@@ -64,7 +65,7 @@ describe("what Friend runs, and what it cannot do", () => {
     expect(flagValue(a, "--tools")).toBe("");
     expect(flagValue(a, "--setting-sources")).toBe("local");
     expect(flagValue(a, "--model")).toBe("sonnet");
-    expect(flagValue(a, "--system-prompt")).toBe("SYS");
+    expect(systemOf(a)).toBe("SYS");
     expect(flagValue(a, "--allowedTools")).toBe("mcp__friend__fs__list,mcp__friend__camera__snap");
     // nothing that would lift the walls
     for (const bad of ["--bare", "--dangerously-skip-permissions", "--permission-mode", "--add-dir", "--allow-dangerously-skip-permissions"]) expect(a).not.toContain(bad);
@@ -236,8 +237,8 @@ describe("keeping the session healthy", () => {
     await run(p, req([text("a")], { system: "SYS-1" }));
     await run(p, req([text("a"), said("One."), text("b")], { system: "SYS-2" }));
     const [s1, s2] = starts();
-    expect(flagValue(s1!.argv!, "--system-prompt")).toBe("SYS-1");
-    expect(flagValue(s2!.argv!, "--system-prompt")).toBe("SYS-2");
+    expect(systemOf(s1!.argv!)).toBe("SYS-1");
+    expect(systemOf(s2!.argv!)).toBe("SYS-2");
     expect(flagValue(s2!.argv!, "--resume")).toBe("fake-session-1");
     expect(s1!.pid).not.toBe(s2!.pid);
     expect(users()[1]!.user![0]!.text).toBe("b"); // no seeding: it was resumed
@@ -347,7 +348,7 @@ describe("a guest never shares the owner's Claude", () => {
     expect(g).not.toContain("--mcp-config");
     expect(g).not.toContain("--resume");
     expect(flagValue(g, "--tools")).toBe("");
-    expect(flagValue(g, "--system-prompt")).toBe("GUEST-RULES");
+    expect(systemOf(g)).toBe("GUEST-RULES");
     // nothing from the owner reached the guest process, and nothing from the guest reached the owner's
     const ownerSaw = users().filter((u) => u.pid === ownerStart!.pid).map((u) => u.user![0]!.text);
     const guestSaw = users().filter((u) => u.pid === guestStart!.pid).map((u) => u.user!.map((b) => b.text).join(" "));
@@ -501,5 +502,18 @@ describe("searching the web", () => {
     await run(p, req([text("hi")], { session: "guest", tools: [] }));
     expect(flagValue(starts()[0]!.argv!, "--tools")).toBe("");
     expect(starts()[0]!.argv).toContain("--no-session-persistence");
+  });
+});
+
+describe("a long set of instructions", () => {
+  it("does not go on the command line (Windows refuses a long one: spawn ENAMETOOLONG)", async () => {
+    const long = "Remember this about the owner. ".repeat(3000); // about 93,000 characters
+    const p = setup([[{ text: "Hello." }]]);
+    const events = await run(p, req([text("hi")], { system: long }));
+    expect(textOf(events)).toBe("Hello.");
+    const a = starts()[0]!.argv!;
+    expect(a.join(" ").length).toBeLessThan(8000);
+    expect(a).not.toContain("--system-prompt");
+    expect(systemOf(a)).toBe(long);
   });
 });
