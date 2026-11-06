@@ -262,4 +262,23 @@ alter table office_workers add column manager_id text;`,
 );
 create index office_requests_status on office_requests (status);`,
   },
+  {
+    id: 16,
+    sql: `alter table audit_log add column actor_kind text not null default '';
+alter table audit_log add column actor_id text not null default '';
+alter table audit_log add column request_id text;
+alter table audit_log add column parent_id text;
+alter table audit_log add column target text not null default '';
+alter table audit_log add column outcome text not null default '';
+alter table audit_log add column truncated integer not null default 0;
+alter table audit_log add column legacy integer not null default 0;
+alter table audit_log add column prev_hash text not null default '';
+alter table audit_log add column hash text not null default '';
+update audit_log set legacy = 1;
+create index audit_log_request on audit_log (request_id);
+create index audit_log_ts on audit_log (ts);
+create index audit_log_actor_kind on audit_log (actor_kind);
+create index audit_log_kind on audit_log (kind);
+alter table office_tickets add column request_id text;`,
+  },
 ];
