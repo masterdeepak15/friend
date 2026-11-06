@@ -88,8 +88,8 @@ export class AuditQuery {
   }
 
   /** The newest seal entry (uses the kind index, never a text search). */
-  lastSeal(): AuditRow | null {
-    const r = this.db.prepare("select * from audit_log where kind = 'audit.seal' order by id desc limit 1").get();
+  lastSeal(o: { sent?: boolean } = {}): AuditRow | null {
+    const r = this.db.prepare(`select * from audit_log where kind = 'audit.seal'${o.sent ? " and outcome = 'done'" : ""} order by id desc limit 1`).get();
     return r ? toAuditRow(r as never) : null;
   }
 

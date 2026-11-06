@@ -1,6 +1,7 @@
 import { Audit } from "./audit";
 import type { Db } from "./db";
 
+const RETRY_MS = 30 * 60_000;
 const SEAL = /^Friend audit seal (\d{4}-\d{2}-\d{2}): rows 1-(\d+), hash ([0-9a-f]{64})$/;
 
 /** One line that says how far the log had got and the fingerprint of its last entry: sent to the owner's phone once a day. */
@@ -54,7 +55,9 @@ export async function sealNow(d: { db: Db; audit: Audit; send: (text: string) =>
 }
 
 /** Once a day, from the set time on; never when the seal is off (an empty time). */
-export function sealDue(now: Date, sealAt: string, lastSealDate: string | null): boolean {
+export function sealDue(now: Date, sealAt: string, lastSealDate: string | null, lastAttemptAt: number | null = null): boolean {
   if (!sealAt) return false;
+  // a seal that did not go out is tried again, but not every minute
+  if (lastAttemptAt !== null && now.getTime() - lastAttemptAt < RETRY_MS) return false;
   return localTime(now) >= sealAt && lastSealDate !== localDate(now);
 }

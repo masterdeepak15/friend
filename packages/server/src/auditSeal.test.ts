@@ -152,3 +152,22 @@ describe("finding the last seal", () => {
     expect(s?.detail.date).toBe("2026-11-06");
   });
 });
+
+describe("a seal that did not go out is tried again", () => {
+  it("sealDue waits half an hour after an attempt, then tries again the same day", () => {
+    const at = new Date(2026, 10, 6, 9, 30);
+    const attempt = at.getTime() - 10 * 60_000;
+    expect(sealDue(at, "09:00", null, attempt)).toBe(false);
+    expect(sealDue(at, "09:00", null, at.getTime() - 40 * 60_000)).toBe(true);
+    expect(sealDue(at, "09:00", null, null)).toBe(true);
+  });
+
+  it("lastSeal({ sent: true }) skips a seal that failed to go out", async () => {
+    const { AuditQuery } = await import("./auditQuery");
+    const { db, a } = log(3);
+    await sealNow({ db, audit: a, send: async () => "telegram", now: new Date(2026, 10, 5, 9, 0).getTime() });
+    await sealNow({ db, audit: a, send: async () => null, now: new Date(2026, 10, 6, 9, 0).getTime() });
+    expect(new AuditQuery(db).lastSeal()?.detail.date).toBe("2026-11-06");
+    expect(new AuditQuery(db).lastSeal({ sent: true })?.detail.date).toBe("2026-11-05");
+  });
+});

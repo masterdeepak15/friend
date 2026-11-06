@@ -1970,10 +1970,12 @@ export async function createApp(opts: AppOptions) {
       pruneTimer = setInterval(prune, 24 * 3600_000);
       pruneTimer.unref?.();
       // once a day, from the set time on, the seal of the log so far goes to the owner's phone
+      let lastSealAttempt: number | null = null;
       const seal = async () => {
         try {
-          const lastSeal = new AuditQuery(db).lastSeal();
-          if (!sealDue(new Date(), config.audit.sealAt, typeof lastSeal?.detail.date === "string" ? lastSeal.detail.date : null)) return;
+          const lastSeal = new AuditQuery(db).lastSeal({ sent: true });
+          if (!sealDue(new Date(), config.audit.sealAt, typeof lastSeal?.detail.date === "string" ? lastSeal.detail.date : null, lastSealAttempt)) return;
+          lastSealAttempt = Date.now();
           await sealNow({ db, audit, now: Date.now(), send: (text) => sendToPhone(phoneDeps(), text) });
         } catch {
           // tried again next minute

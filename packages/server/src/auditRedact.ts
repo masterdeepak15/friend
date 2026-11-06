@@ -20,7 +20,7 @@ export function maskText(text: string): string {
 export const isSecretKey = (name: string): boolean => SECRET_KEY.test(name);
 
 /** The trail's own fingerprints (a hash, a seal) are long hex runs but are not secrets: they are what proves the log is whole. */
-const isOwnHash = (key: string, v: unknown): boolean => typeof v === "string" && /(hash|seal)$/i.test(key) && (/^[0-9a-f]{64}$/i.test(v) || /^Friend audit seal \d{4}-\d{2}-\d{2}: rows 1-\d+, hash [0-9a-f]{64}$/.test(v));
+const isOwnHash = (key: string, v: unknown): boolean => typeof v === "string" && /^(hash|finalHash|seal)$/.test(key) && (/^[0-9a-f]{64}$/i.test(v) || /^Friend audit seal \d{4}-\d{2}-\d{2}: rows 1-\d+, hash [0-9a-f]{64}$/.test(v));
 
 function mask(value: unknown, path: Set<object>): unknown {
   if (typeof value === "string") return maskText(value);
@@ -75,7 +75,9 @@ export function redactDetail(detail: unknown): { json: string; truncated: boolea
   }
   if (bytes(json) > room) {
     // many small values: keep the start of the text only
-    json = JSON.stringify({ _cut: true, _preview: full.slice(0, 4000) });
+    let cut = 3000;
+    do json = JSON.stringify({ _cut: true, _preview: full.slice(0, (cut = Math.floor(cut / 2))) });
+    while (bytes(json) > room && cut > 1);
   }
   const withHash = JSON.stringify({ ...(JSON.parse(json) as Record<string, unknown>), _fullHash: fullHash });
   return { json: withHash, truncated: true, fullHash };

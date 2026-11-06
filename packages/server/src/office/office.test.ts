@@ -657,6 +657,16 @@ describe("what a worker may do", () => {
         // (the audit log masks the password itself: what is handed to it is the real input)
       });
 
+      it("a request the audit log cannot take is refused: the worker is told no", async () => {
+        const { t, bridge } = await running({ autonomy: "high" });
+        t.audit.record.mockImplementation(() => {
+          throw new Error("disk full");
+        });
+        const answer = await bridge.ask("Bash", { command: "echo hi" });
+        expect(JSON.stringify(answer)).toMatch(/deny/);
+        expect(JSON.stringify(answer)).toMatch(/recorded/);
+      });
+
       it("the finished ticket's status and the whole report are written", async () => {
         const { t, proc } = await running();
         proc.emit(resultEv({ text: "I wrote notes.md and ran the tests: all 12 passed." }));

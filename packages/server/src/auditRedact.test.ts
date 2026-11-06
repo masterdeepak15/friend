@@ -79,3 +79,20 @@ describe("masking secrets in what is logged", () => {
     expect(a.verify()).toMatchObject({ ok: true });
   });
 });
+
+describe("minor hardening", () => {
+  it("only the trail's own hash fields keep a long hex value; a password hash or a token seal is still masked", () => {
+    const h = "a".repeat(64);
+    const out = JSON.parse(redactDetail({ passwordHash: h, tokenSeal: h, finalHash: h, hash: h }).json) as Record<string, string>;
+    expect(out.passwordHash).toBe("[redacted]");
+    expect(out.tokenSeal).toBe("[redacted]");
+    expect(out.finalHash).toBe(h);
+    expect(out.hash).toBe(h);
+  });
+
+  it("the cut-down form of many small multi-byte values still fits 8 KB of bytes", () => {
+    const detail = Object.fromEntries(Array.from({ length: 1500 }, (_, i) => [`日${i}`, "日".repeat(4)]));
+    const { json } = redactDetail(detail);
+    expect(Buffer.byteLength(json)).toBeLessThanOrEqual(8192);
+  });
+});

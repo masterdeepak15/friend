@@ -7,6 +7,8 @@ export interface ExportMeta {
   to: number | null;
   generatedAt: number;
   verify: VerifyResult;
+  /** More entries matched than the export holds: the oldest were left out. */
+  capped?: boolean;
 }
 
 const NOTICE = "This file contains private content from Friend's audit trail (commands, messages, file names). Keep it safe and share it only with someone you trust. Secrets are masked.";
@@ -41,14 +43,14 @@ function toHtml(rows: AuditRow[], m: ExportMeta): string {
   const line = (r: AuditRow) => `<tr><td>${r.id}</td><td>${esc(iso(r.ts))}</td><td>${esc(r.actorKind)} ${esc(r.actorId)}</td><td>${esc(r.kind)}</td><td>${esc(r.target)}</td><td>${esc(r.outcome)}</td><td><code>${esc(JSON.stringify(r.detail)).slice(0, 600)}</code></td></tr>`;
   const table = (list: AuditRow[]) => `<table><thead><tr><th>#</th><th>Time (UTC)</th><th>Who</th><th>What</th><th>Target</th><th>Result</th><th>Details</th></tr></thead><tbody>${list.map(line).join("")}</tbody></table>`;
   const range = m.from || m.to ? `${m.from ? day(m.from) : "the beginning"} to ${m.to ? day(m.to) : "now"}` : "everything kept";
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Friend audit report</title><style>body{font:14px/1.5 system-ui,sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;vertical-align:top}code{word-break:break-all}.note{background:#fff3cd;border:1px solid #e0c36a;padding:8px 12px}@media print{.note{border-color:#000}}</style></head><body><h1>Friend audit report</h1><p class="note">${esc(NOTICE)}</p><p>Range: ${esc(range)}. Made ${esc(iso(m.generatedAt))}.</p><p>${rows.length} entries, ${rows.filter((r) => r.outcome === "refused").length} refused, ${rows.filter((r) => r.outcome === "failed").length} failed. ${esc(chainLine(m.verify))}.</p><h2>Needs attention</h2>${attention.length ? table(attention.slice(0, 500)) : "<p>Nothing was refused or failed in this range.</p>"}<h2>Timeline</h2>${table(rows.slice(0, HTML_ROWS))}${rows.length > HTML_ROWS ? `<p>Only the first ${HTML_ROWS} entries are shown here; the JSON export has all ${rows.length}.</p>` : ""}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Friend audit report</title><style>body{font:14px/1.5 system-ui,sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;vertical-align:top}code{word-break:break-all}.note{background:#fff3cd;border:1px solid #e0c36a;padding:8px 12px}@media print{.note{border-color:#000}}</style></head><body><h1>Friend audit report</h1><p class="note">${esc(NOTICE)}</p><p>Range: ${esc(range)}. Made ${esc(iso(m.generatedAt))}.</p><p>${rows.length} entries, ${rows.filter((r) => r.outcome === "refused").length} refused, ${rows.filter((r) => r.outcome === "failed").length} failed. ${esc(chainLine(m.verify))}.</p>${m.capped ? "<p class=\"note\">This range holds more entries than an export can: the oldest entries are not included. Narrow the range to see them.</p>" : ""}<h2>Needs attention</h2>${attention.length ? table(attention.slice(0, 500)) : "<p>Nothing was refused or failed in this range.</p>"}<h2>Timeline</h2>${table(rows.slice(0, HTML_ROWS))}${rows.length > HTML_ROWS ? `<p>Only the first ${HTML_ROWS} entries are shown here; the JSON export has all ${rows.length}.</p>` : ""}</body></html>`;
 }
 
 /** The report as a file: JSON (with the chain fields, checkable elsewhere), CSV, or a printable HTML page. */
 export function exportAudit(rows: AuditRow[], format: ExportFormat, meta: ExportMeta): { mime: string; filename: string; body: string } {
   const clear = rows.map(clean);
   const name = `friend-audit-${day(meta.generatedAt)}`;
-  if (format === "json") return { mime: "application/json", filename: `${name}.json`, body: JSON.stringify({ notice: NOTICE, generatedAt: iso(meta.generatedAt), range: { from: meta.from, to: meta.to }, verify: meta.verify, rows: clear }, null, 2) };
+  if (format === "json") return { mime: "application/json", filename: `${name}.json`, body: JSON.stringify({ notice: NOTICE, generatedAt: iso(meta.generatedAt), range: { from: meta.from, to: meta.to }, verify: meta.verify, capped: meta.capped === true, rows: clear }, null, 2) };
   if (format === "csv") return { mime: "text/csv", filename: `${name}.csv`, body: toCsv(clear) };
   return { mime: "text/html", filename: `${name}.html`, body: toHtml(clear, meta) };
 }

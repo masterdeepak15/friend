@@ -545,11 +545,12 @@ export class Office {
   }
 
   /** Writes one entry of a run to the audit trail, as the worker, in the run's own request. Never throws: the run goes on. */
-  private rec(run: Run, kind: string, outcome: Outcome, target: string, detail: object): void {
+  private rec(run: Run, kind: string, outcome: Outcome, target: string, detail: object): boolean {
     try {
       this.d.audit.record?.({ kind, actorKind: "worker", actorId: run.label, requestId: run.requestId, parentId: run.parentRequestId, target, outcome, detail });
+      return true;
     } catch {
-      // the audit log is not the worker's concern
+      return false; // the run goes on; a request is refused (see onCall)
     }
   }
 
@@ -563,7 +564,8 @@ export class Office {
     if (run.concluded) return answer({ behavior: "deny", message: "The worker was stopped." });
     const tool = a.tool_name;
     const input = a.input as Record<string, unknown>;
-    this.rec(run, "worker.request", "waiting", tool, { tool, input });
+    // a request that cannot be written down is not answered yes
+    if (!this.rec(run, "worker.request", "waiting", tool, { tool, input })) return answer({ behavior: "deny", message: "The request could not be recorded in the audit log, so it was not allowed." });
     const worker = this.d.store.getWorker(run.workerId);
     const project = worker && this.cfg.projects.find((p) => p.id === worker.projectId);
     if (!worker || !project) return answer({ behavior: "deny", message: "The project of this worker no longer exists." });

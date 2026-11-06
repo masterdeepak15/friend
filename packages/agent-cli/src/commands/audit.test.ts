@@ -125,3 +125,14 @@ describe("friend audit", () => {
     expect(t.calls).toHaveLength(0);
   });
 });
+
+describe("minor hardening", () => {
+  it("a newline or a bidi mark in a logged kind or target cannot fake another line", async () => {
+    const row = { id: 1, ts: 0, actorKind: "owner", actorId: "owner", kind: "x\n#999 owner login", target: "a‮b\u009b", outcome: "", detail: {} };
+    const t = setup({ "/api/audit": { json: { rows: [row], counts: { total: 1, refused: 0, failed: 0 } } } });
+    await auditCommand(["list"], t.io, t.deps);
+    const text = t.out.join("\n");
+    expect(text.split("\n").filter((l) => l.startsWith("#"))).toHaveLength(1);
+    expect(text).not.toMatch(/‮|\u009b/);
+  });
+});

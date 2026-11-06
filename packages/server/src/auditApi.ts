@@ -68,7 +68,7 @@ const ExportQuery = FilterQuery.extend({ format: z.enum(["json", "csv", "html"])
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 /** A request that came through a proxy or a tunnel looks like it came from this PC; these headers give it away. */
-const PROXIED = ["x-forwarded-for", "forwarded", "cf-connecting-ip", "x-real-ip", "true-client-ip"];
+const PROXIED = ["x-forwarded-for", "forwarded", "cf-connecting-ip", "x-real-ip", "true-client-ip", "via", "x-client-ip", "fastly-client-ip", "x-forwarded-host", "x-forwarded-proto"];
 
 /** Whether the owner's PIN may be given with the request itself (the command line, on this PC, with no proxy in between). */
 export const directPinAllowed = (ip: string, headers: Record<string, unknown>): boolean => LOOPBACK.has(ip) && !PROXIED.some((h) => headers[h] !== undefined);
@@ -178,9 +178,11 @@ export function registerAuditRoutes(d: AuditApiDeps): void {
     if (!p.success) return reply.code(400).send({ error: `Bad filter: ${p.error.issues[0]?.path.join(".") ?? "query"}` });
     const { format, ...rest } = p.data;
     const f = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)) as AuditFilter;
-    const rows = d.query.search({ ...f, limit: EXPORT_MAX }, EXPORT_MAX).reverse(); // oldest first, like a report
+    const found = d.query.search({ ...f, limit: EXPORT_MAX + 1 }, EXPORT_MAX + 1);
+    const capped = found.length > EXPORT_MAX;
+    const rows = found.slice(0, EXPORT_MAX).reverse(); // oldest first, like a report
     read("/api/audit/export", req);
-    const out = exportAudit(rows, format, { from: f.from ?? null, to: f.to ?? null, generatedAt: Date.now(), verify: d.audit.verify() });
+    const out = exportAudit(rows, format, { from: f.from ?? null, to: f.to ?? null, generatedAt: Date.now(), verify: d.audit.verify(), capped });
     reply.header("content-type", `${out.mime}; charset=utf-8`).header("content-disposition", `attachment; filename="${out.filename}"`).header("cache-control", "no-store").header("x-content-type-options", "nosniff");
     if (format === "html") reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'");
     return out.body;

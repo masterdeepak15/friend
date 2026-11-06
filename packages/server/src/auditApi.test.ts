@@ -164,3 +164,11 @@ describe("the audit settings", () => {
     expect(() => refuseForAgent({ audit: { keepDays: 0 } })).toThrow(/audit/);
   });
 });
+
+describe("minor hardening", () => {
+  it("any proxy-ish header stops the PIN being given with the request", async () => {
+    const { directPinAllowed } = await import("./auditApi");
+    expect(directPinAllowed("127.0.0.1", {})).toBe(true);
+    for (const h of ["via", "x-client-ip", "fastly-client-ip", "x-forwarded-host", "x-forwarded-proto"]) expect(directPinAllowed("127.0.0.1", { [h]: "x" }), h).toBe(false);
+  });
+});

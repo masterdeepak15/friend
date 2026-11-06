@@ -124,10 +124,8 @@ export class Audit {
 
   /** Walks the chain: every entry must link to the one before and hash to what it says. */
   verify(): VerifyResult {
-    const rows = this.db.prepare("select * from audit_log where legacy = 0 order by id").all() as Raw[];
     const checkpoints = new Map<string, { pruneId: number; toId: number; ts: number }>();
-    for (const r of rows) {
-      if (r.kind !== "audit.prune") continue;
+    for (const r of this.db.prepare("select * from audit_log where legacy = 0 and kind = 'audit.prune' order by id").all() as Raw[]) {
       try {
         const c = JSON.parse(r.detail_json) as { finalHash?: unknown; toId?: unknown };
         if (typeof c.finalHash === "string") checkpoints.set(c.finalHash, { pruneId: r.id, toId: typeof c.toId === "number" ? c.toId : 0, ts: r.ts });
@@ -137,7 +135,10 @@ export class Audit {
     }
     let prev: string | null = null;
     let startsAfter: { pruneId: number; toId: number; ts: number } | undefined;
-    for (const r of rows) {
+    let count = 0;
+    // one entry at a time: the whole log is never held in memory
+    for (const r of this.db.prepare("select * from audit_log where legacy = 0 order by id").iterate() as Iterable<Raw>) {
+      count++;
       if (prev === null && r.prev_hash !== "") startsAfter = checkpoints.get(r.prev_hash);
       const linked = prev === null ? r.prev_hash === "" || checkpoints.has(r.prev_hash) : r.prev_hash === prev;
       if (!linked) return { ok: false, brokenAt: r.id, reason: "link" };
@@ -145,7 +146,7 @@ export class Audit {
       if (h !== r.hash) return { ok: false, brokenAt: r.id, reason: "hash" };
       prev = r.hash;
     }
-    return { ok: true, rows: rows.length, lastHash: prev ?? "", ...(startsAfter ? { startsAfter } : {}) };
+    return { ok: true, rows: count, lastHash: prev ?? "", ...(startsAfter ? { startsAfter } : {}) };
   }
 
   /** The first entry of the chain, written once: it says how many earlier entries are outside it. */

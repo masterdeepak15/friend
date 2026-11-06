@@ -40,7 +40,7 @@ const plain = (s: unknown): string =>
   String(s)
     .replace(/\u001b\][^\u0007\u001b]*(\u0007|\u001b\\)?/g, "")
     .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
-    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ");
+    .replace(/[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/g, " ");
 
 const ACTORS = new Set(["owner", "assistant", "worker", "system", "outsider"]);
 const when = (ts: number) => new Date(ts).toISOString().replace("T", " ").slice(0, 19);

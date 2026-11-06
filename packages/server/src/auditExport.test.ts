@@ -93,3 +93,12 @@ describe("an export can be checked elsewhere", () => {
     for (const r of out.rows) expect(rowHash({ ts: r.ts, actorKind: r.actorKind, actorId: r.actorId, requestId: r.requestId, parentId: r.parentId, kind: r.kind, target: r.target, outcome: r.outcome, detailJson: JSON.stringify(r.detail), prevHash: r.prevHash })).toBe(r.hash);
   });
 });
+
+describe("a cut-short export says so", () => {
+  it("capped is in the JSON and the report", () => {
+    const m = { ...meta, capped: true };
+    expect(JSON.parse(exportAudit([row()], "json", m).body)).toMatchObject({ capped: true });
+    expect(exportAudit([row()], "html", m).body).toMatch(/oldest entries .* not included/i);
+    expect(JSON.parse(exportAudit([row()], "json", meta).body).capped).toBe(false);
+  });
+});
