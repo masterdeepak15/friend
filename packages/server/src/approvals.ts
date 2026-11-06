@@ -28,6 +28,9 @@ export interface ApprovalOutcome {
   reason?: string;
 }
 
+/** A web address or a search can be private: the web and browser tools never put their words in the audit trail. */
+const PRIVATE_TOOL = /^(web|browser)\./;
+
 /** How an answer reached Friend: for the audit trail. */
 export type AnsweredBy = "screen" | "phone-button" | "phone-reply" | "alexa";
 
@@ -69,7 +72,7 @@ export class Approvals {
     this.deps.db
       .prepare("insert into approvals (id, tool, summary, tier) values (?, ?, ?, ?)")
       .run(id, info.tool, info.summary, info.tier);
-    this.record({ kind: "approval.requested", actorKind: currentRequest()?.actorKind ?? "assistant", target: info.tool, outcome: "waiting", detail: { id, tool: info.tool, summary: info.summary, tier: info.tier, needsPin: info.needsPin } });
+    this.record({ kind: "approval.requested", actorKind: currentRequest()?.actorKind ?? "assistant", target: info.tool, outcome: "waiting", detail: { id, tool: info.tool, ...(PRIVATE_TOOL.test(info.tool) ? {} : { summary: info.summary }), tier: info.tier, needsPin: info.needsPin } });
     return new Promise<ApprovalOutcome>((resolve) => {
       const timer = setTimeout(() => this.finish(id, { approved: false, reason: "Approval timed out" }, "timeout"), this.timeoutMs);
       this.entries.set(id, { info, req, emit, resolve, timer });
