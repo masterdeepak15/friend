@@ -16,6 +16,8 @@ let sent: { channel: PhoneChannel; text: string; buttons: { id: string } | null 
 let edits: { ref: number; text: string }[];
 let responded: { id: string; approve: boolean }[];
 let phone: PhoneApprovals;
+let auditLog: { event: string; detail: Record<string, unknown> }[];
+let hows: string[];
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -25,6 +27,8 @@ beforeEach(() => {
   sent = [];
   edits = [];
   responded = [];
+  auditLog = [];
+  hows = [];
   let ref = 100;
   phone = new PhoneApprovals({
     config: () => cfg,
@@ -35,8 +39,8 @@ beforeEach(() => {
       return { ok: true, ref: ++ref };
     },
     edit: async (_c, r, text) => void edits.push({ ref: r, text }),
-    respond: async (id, approve) => void responded.push({ id, approve }),
-    audit: () => {},
+    respond: async (id, approve, how) => void (responded.push({ id, approve }), hows.push(how)),
+    audit: (event, detail) => void auditLog.push({ event, detail }),
   });
 });
 afterEach(() => vi.useRealTimers());
@@ -215,5 +219,25 @@ describe("the settings", () => {
     expect(sanitizePhoneApprovals({ delaySec: -5 }).delaySec).toBe(0);
     expect(sanitizePhoneApprovals({ channel: "sms" as never }).channel).toBe("auto");
     expect(sanitizePhoneApprovals({ allowRisky: "yes" as never }).allowRisky).toBe(false);
+  });
+});
+
+
+describe("what the phone side writes to the audit trail", () => {
+  it("says where a question was delivered", async () => {
+    phone.offer(info(ID1), req());
+    await flush();
+    expect(auditLog).toContainEqual({ event: "approval.delivered", detail: { id: ID1, via: "telegram" } });
+  });
+
+  it("says when delivery failed, and the answer comes back with how it was given", async () => {
+    linked = ["whatsapp"];
+    phone.offer(info(ID1), req());
+    await flush();
+    expect(auditLog.some((a) => a.event === "approval.delivered" && a.detail.via === "whatsapp")).toBe(true);
+    phone.reply("yes");
+    await flush();
+    expect(responded).toEqual([{ id: ID1, approve: true }]);
+    expect(hows).toEqual(["text"]);
   });
 });

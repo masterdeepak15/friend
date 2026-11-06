@@ -908,8 +908,8 @@ export async function createApp(opts: AppOptions) {
       return { ok: r.ok };
     },
     edit: (channel, ref, text) => (channel === "telegram" ? channelHub.editApproval(ref, text) : Promise.resolve()),
-    respond: (id, approve) => approvals.respond({ id, decision: approve ? "approve" : "deny" }, "phone"),
-    audit: (event, detail) => audit.log("owner", event, detail),
+    respond: (id, approve, how) => approvals.respond({ id, decision: approve ? "approve" : "deny" }, "phone", how === "button" ? "phone-button" : "phone-reply"),
+    audit: (event, detail) => audit.log(event === "approval.delivered" ? "system" : "owner", event, detail),
   });
   approvals.setRemote(phoneApprovals);
   tellFallback = (reason) => {

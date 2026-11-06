@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Approvals } from "./approvals";
 import { Audit } from "./audit";
+import { currentRequest, runWithRequest } from "./auditContext";
 import { Auth } from "./auth";
 import { loadConfig } from "./config";
 import { openDb } from "./db";
@@ -145,5 +146,60 @@ describe("Approvals", () => {
     approvals.setRemote({ offer, settled: () => {} });
     void approvals.request({ ...t2, remote: false }, emit);
     expect(offer).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("Approvals in the audit trail", () => {
+  const kinds = (k: string) => audit.list(50).filter((r) => r.kind === k).reverse();
+
+  it("writes the request with the card text, tier and whether a PIN is needed, inside the request that asked", async () => {
+    let asked = "";
+    const p = runWithRequest({ prefix: "chat" }, () => {
+      asked = currentRequest()!.requestId;
+      return approvals.request(t2, emit);
+    });
+    const [r] = kinds("approval.requested");
+    expect(r).toMatchObject({ target: "shell.run", outcome: "waiting", requestId: asked, detail: { id: requestMsg().id, tool: "shell.run", tier: "T2", needsPin: false } });
+    expect(String(r!.detail.summary)).toContain("git status");
+    await approvals.respond({ id: requestMsg().id, decision: "deny" }, "1.1.1.1");
+    await p;
+  });
+
+  it("writes who decided and how: the screen, the address, and whether a PIN was used (never the PIN)", async () => {
+    const p = approvals.request(t3, emit);
+    const id = requestMsg().id;
+    await approvals.respond({ id, decision: "approve", pin }, "2.2.2.2");
+    await p;
+    const [d] = kinds("approval.decided");
+    expect(d).toMatchObject({ actorKind: "owner", target: "shell.run", outcome: "done", detail: { id, decision: "approve", approved: true, by: "screen", ip: "2.2.2.2", pinUsed: true } });
+    expect(JSON.stringify(d!.detail)).not.toContain(pin);
+  });
+
+  it("a refusal is outcome refused, and the way in is taken from where it came from", async () => {
+    const p1 = approvals.request(t2, emit);
+    await approvals.respond({ id: requestMsg().id, decision: "deny" }, "phone", "phone-button");
+    await p1;
+    emitted = [];
+    const p2 = approvals.request(t2, emit);
+    await approvals.respond({ id: requestMsg().id, decision: "approve" }, "alexa");
+    await p2;
+    const [first, second] = kinds("approval.decided");
+    expect(first).toMatchObject({ outcome: "refused", detail: { by: "phone-button", pinUsed: false } });
+    expect(second).toMatchObject({ outcome: "done", detail: { by: "alexa" } });
+  });
+
+  it("a request nobody answers is an approval.timeout, not a decision", async () => {
+    vi.useFakeTimers();
+    const p = approvals.request(t2, emit);
+    await vi.advanceTimersByTimeAsync(120_001);
+    expect((await p).approved).toBe(false);
+    expect(kinds("approval.timeout")[0]).toMatchObject({ outcome: "refused", detail: { id: requestMsg().id, tool: "shell.run" } });
+    expect(kinds("approval.decided")).toHaveLength(0);
+  });
+
+  it("an answer for something no longer waiting is recorded as ignored", async () => {
+    await approvals.respond({ id: "00000000-0000-4000-8000-000000000000", decision: "approve" }, "3.3.3.3");
+    expect(kinds("approval.ignored")[0]).toMatchObject({ detail: { ip: "3.3.3.3" } });
   });
 });

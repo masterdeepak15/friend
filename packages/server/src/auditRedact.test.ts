@@ -15,6 +15,10 @@ describe("masking secrets in what is logged", () => {
     expect(out).toEqual({ password: "[redacted]", nested: { PIN: "[redacted]", list: [{ "x-api-key": "[redacted]" }, { Authorization: "[redacted]" }], cookie: "[redacted]" }, ok: "fine" });
   });
 
+  it("keeps a yes/no flag whose name mentions a secret (needsPin: false), and still masks every other kind of value", () => {
+    expect(parse({ needsPin: false, pinUsed: true, token: null, pin: 123456, secret: { a: 1 }, apiKey: "k" })).toEqual({ needsPin: false, pinUsed: true, token: null, pin: "[redacted]", secret: "[redacted]", apiKey: "[redacted]" });
+  });
+
   it("masks things that look like secrets inside text", () => {
     const text = "curl -H 'Authorization: Bearer abcDEF123456' https://x.test --key sk-ant-api03-AbCdEfGhIjKlMnOpQrStUv and bot 123456789:AAEhBP0abcdefghijklmnopqrstuvwxyz1 and 0123456789abcdef0123456789abcdef01234567 done";
     const masked = maskText(text);

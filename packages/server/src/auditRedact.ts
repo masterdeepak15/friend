@@ -23,7 +23,8 @@ function mask(value: unknown, path: Set<object>): unknown {
   path.add(value);
   try {
     if (Array.isArray(value)) return value.map((v) => mask(v, path));
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, SECRET_KEY.test(k) ? MASK : mask(v, path)]));
+    // a yes/no or an empty value under a secret-looking name (needsPin: false) holds no secret; text, numbers and objects do
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, SECRET_KEY.test(k) && typeof v !== "boolean" && v != null ? MASK : mask(v, path)]));
   } finally {
     path.delete(value);
   }

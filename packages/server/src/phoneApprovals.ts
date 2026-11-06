@@ -15,7 +15,7 @@ export interface PhoneApprovalsDeps {
   /** Rewrites a message sent earlier (Telegram only): the answer replaces the buttons. */
   edit(channel: PhoneChannel, ref: number, text: string): Promise<void>;
   /** Gives the owner's decision to the approvals (never "always": that stays on the screen). */
-  respond(id: string, approve: boolean): Promise<void>;
+  respond(id: string, approve: boolean, how: "text" | "button"): Promise<void>;
   audit(event: string, detail: Record<string, unknown>): void;
 }
 
@@ -124,7 +124,7 @@ export class PhoneApprovals implements RemoteAsk {
     e.byPhone = true;
     this.d.audit("approval.phone", { id: e.info.id, tool: e.info.tool, approve, how, channel: e.sent?.channel });
     try {
-      await this.d.respond(e.info.id, approve);
+      await this.d.respond(e.info.id, approve, how);
     } catch {
       // the approval was settled in the meantime; nothing to undo
     }
@@ -157,6 +157,7 @@ export class PhoneApprovals implements RemoteAsk {
       return; // the screen's own card is still there
     }
     e.sent = { channel, text, ...(r.ref !== undefined ? { ref: r.ref } : {}) };
+    this.d.audit("approval.delivered", { id: e.info.id, via: channel });
     if (e.closed) await this.mark(e, e.closed);
   }
 

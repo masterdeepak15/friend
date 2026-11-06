@@ -74,6 +74,7 @@ export class AlexaHub {
       waitMs: () => d.config.alexa.permissionSeconds * 1000,
       send: async (channel, to, text) => {
         const r = await d.channels.send(channel, to, text);
+        if (r.ok) d.audit.log("system", "approval.delivered", { via: channel, source: "alexa" });
         return { ok: r.ok };
       },
       linked: d.linked,

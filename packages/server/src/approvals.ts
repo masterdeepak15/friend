@@ -1,5 +1,6 @@
 import { describeCall, type ApprovalRespond, type PendingApproval, type ServerMsg, type Tier } from "@friend/protocol";
 import { randomUUID } from "node:crypto";
+import { currentRequest } from "./auditContext";
 import type { Audit } from "./audit";
 import { LockoutError, type Auth } from "./auth";
 import type { Db } from "./db";
@@ -26,6 +27,9 @@ export interface ApprovalOutcome {
   approved: boolean;
   reason?: string;
 }
+
+/** How an answer reached Friend: for the audit trail. */
+export type AnsweredBy = "screen" | "phone-button" | "phone-reply" | "alexa";
 
 interface Entry {
   info: PendingApproval;
@@ -65,6 +69,7 @@ export class Approvals {
     this.deps.db
       .prepare("insert into approvals (id, tool, summary, tier) values (?, ?, ?, ?)")
       .run(id, info.tool, info.summary, info.tier);
+    this.record({ kind: "approval.requested", actorKind: currentRequest()?.actorKind ?? "assistant", target: info.tool, outcome: "waiting", detail: { id, tool: info.tool, summary: info.summary, tier: info.tier, needsPin: info.needsPin } });
     return new Promise<ApprovalOutcome>((resolve) => {
       const timer = setTimeout(() => this.finish(id, { approved: false, reason: "Approval timed out" }, "timeout"), this.timeoutMs);
       this.entries.set(id, { info, req, emit, resolve, timer });
@@ -78,13 +83,15 @@ export class Approvals {
     return first.done ? null : first.value.info;
   }
 
-  async respond(msg: Pick<ApprovalRespond, "id" | "decision" | "pin">, ip: string): Promise<void> {
+  async respond(msg: Pick<ApprovalRespond, "id" | "decision" | "pin">, ip: string, by?: AnsweredBy): Promise<void> {
+    const how: AnsweredBy = by ?? (ip === "alexa" ? "alexa" : ip === "phone" ? "phone-reply" : "screen");
+    let pinUsed = false;
     const entry = this.entries.get(msg.id);
     if (!entry) {
       this.deps.audit.log("owner", "approval.ignored", { id: msg.id, ip });
       return;
     }
-    if (msg.decision === "deny") return this.finish(msg.id, { approved: false, reason: "Denied by owner" }, "deny");
+    if (msg.decision === "deny") return this.finish(msg.id, { approved: false, reason: "Denied by owner" }, "deny", { by: how, ip, pinUsed });
 
     if (entry.req.needsPin) {
       if (!msg.pin) {
@@ -105,11 +112,12 @@ export class Approvals {
         entry.emit({ type: "alert", level: "warn", text: "Incorrect PIN" });
         return;
       }
+      pinUsed = true;
     }
     if (!this.entries.has(msg.id)) return; // answered while the PIN was being checked
 
     if (msg.decision === "approve_always" && entry.req.tier === "T2" && !ASK_EVERY_TIME.has(entry.req.tool)) this.addRule(entry.req);
-    this.finish(msg.id, { approved: true }, msg.decision);
+    this.finish(msg.id, { approved: true }, msg.decision, { by: how, ip, pinUsed });
   }
 
   /** Denies every waiting request that matches, so its card leaves the screen (stopping one worker must not touch the others). Returns how many. */
@@ -137,13 +145,23 @@ export class Approvals {
     this.deps.policy.addRule(req.tool, { argEquals: args });
   }
 
-  private finish(id: string, outcome: ApprovalOutcome, decision: string): void {
+  /** Writes to the audit trail; the approval itself goes on if that fails. */
+  private record(i: Parameters<Deps["audit"]["record"]>[0]): void {
+    try {
+      this.deps.audit.record(i);
+    } catch {
+      // the question is still asked and answered
+    }
+  }
+
+  private finish(id: string, outcome: ApprovalOutcome, decision: string, who?: { by: AnsweredBy; ip: string; pinUsed: boolean }): void {
     const entry = this.entries.get(id);
     if (!entry) return;
     this.entries.delete(id);
     clearTimeout(entry.timer);
     this.deps.db.prepare("update approvals set decision = ?, decided_at = ? where id = ?").run(decision, Date.now(), id);
-    this.deps.audit.log("owner", "approval.decided", { id, tool: entry.info.tool, decision, approved: outcome.approved });
+    if (decision === "timeout") this.record({ kind: "approval.timeout", actorKind: "system", target: entry.info.tool, outcome: "refused", detail: { id, tool: entry.info.tool } });
+    else this.record({ kind: "approval.decided", actorKind: "owner", actorId: "owner", target: entry.info.tool, outcome: outcome.approved ? "done" : "refused", detail: { id, tool: entry.info.tool, decision, approved: outcome.approved, by: who?.by ?? "system", ip: who?.ip ?? "", pinUsed: who?.pinUsed ?? false, ...(outcome.reason ? { reason: outcome.reason } : {}) } });
     entry.emit({ type: "approval.resolved", id });
     this.tell(() => this.remote?.settled(id, decision));
     entry.resolve(outcome);
