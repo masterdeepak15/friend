@@ -787,6 +787,13 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "office.decide",
+    description: "Answer a worker's request that the Office put to you (\"[Office approval, ...]\"): allow it, deny it, or ask_owner when the choice is really the owner's. The worker is waiting for this. Give a short reason; a worker sees it.",
+    input: z.object({ id: z.number().int(), decision: z.enum(["allow", "deny", "ask_owner"]), reason: z.string().max(300).optional() }),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
     name: "office.review",
     description: "Accept or send back a ticket a worker has finished (it is in review).",
     input: z.object({ ticket: z.number().int(), accept: z.boolean(), note: z.string().max(500).optional() }),
@@ -998,6 +1005,8 @@ ${visible(clip(String(a.text ?? ""), 3000))}`;
       return `Give ${visible(String(a.worker ?? ""))} the ticket "${visible(clip(String(a.title ?? ""), 120))}" and start work`;
     case "office.say":
       return `Say to ${visible(String(a.worker ?? ""))}: ${visible(clip(String(a.text ?? ""), 160))}`;
+    case "office.decide":
+      return `${visible(String(a.decision ?? ""))} request #${visible(String(a.id ?? ""))}`;
     case "office.review":
       return `${a.accept ? "Accept" : "Send back"} ticket #${visible(String(a.ticket ?? ""))}`;
     case "office.action": // a worker's own question: what it wants to do is shown whole

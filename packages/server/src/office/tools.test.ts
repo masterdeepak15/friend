@@ -49,6 +49,7 @@ beforeEach(async () => {
     assign: vi.fn(() => ({ ok: true, ticket: { id: 7, projectId: "site", title: "Fix it", status: "doing", workerId: "w1" }, queued: false })),
     say: vi.fn(() => ({ ok: true })),
     review: vi.fn(() => ({ ok: true })),
+    decide: vi.fn(() => ({ ok: true })),
     stop: vi.fn(() => ({ stopped: 2 })),
     report: vi.fn(),
     fire: vi.fn(() => ({ ok: true, name: "Ada" })),

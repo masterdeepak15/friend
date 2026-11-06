@@ -18,6 +18,8 @@ const base = () => `http://127.0.0.1:${port}`;
 const j = { "content-type": "application/json" };
 const sockets: WebSocket[] = [];
 const procs: FakeProc[] = [];
+let bootAutonomy: "low" | "self" = "low";
+let workerCall: ((c: { name: string; args: unknown; respond: (r: { text: string; isError?: boolean }) => void }) => void) | null = null;
 
 class FakeProc implements WorkerLike {
   alive = true;
@@ -51,7 +53,7 @@ async function boot(officeOn = true, script: ConstructorParameters<typeof FakePr
       port: 0,
       roots: [],
       office: { enabled: officeOn, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, notifyFriend: true,
-    autonomy: "low", budget: { perWorkerTokens: 0, totalTokens: 0 }, roles: [{ id: "scribe", title: "Scribe", instructions: "Write.", model: "", permission: "default" }], projects: [{ id: "site", name: "Site", folder, goal: "", extraFolders: [] }], policy: { allowTools: ["Read"], denyCommands: [] } },
+    autonomy: bootAutonomy, decideTries: 3, budget: { perWorkerTokens: 0, totalTokens: 0 }, roles: [{ id: "scribe", title: "Scribe", instructions: "Write.", model: "", permission: "default" }], projects: [{ id: "site", name: "Site", folder, goal: "", extraFolders: [] }], policy: { allowTools: ["Read"], denyCommands: [] } },
     },
     pluginCatalogDir: join(dir, "none"),
     office: {
@@ -61,7 +63,10 @@ async function boot(officeOn = true, script: ConstructorParameters<typeof FakePr
         procs.push(p);
         return p;
       },
-      bridge,
+      bridge: (onCall) => {
+        workerCall = onCall as never;
+        return bridge();
+      },
     },
   });
   port = (await app.start()).port;
@@ -84,6 +89,8 @@ const until = async (cond: () => boolean, ms = 3000) => {
 afterEach(async () => {
   for (const s of sockets.splice(0)) s.close();
   procs.length = 0;
+  bootAutonomy = "low";
+  workerCall = null;
   await app?.stop();
   app = undefined;
 });
@@ -202,5 +209,27 @@ describe("the Office in the app", () => {
     expect(asked).toMatch(/First check the work/);
     expect(asked).toMatch(/what was done, what you checked and found/);
     expect(asked).toMatch(/not spoken/);
+  });
+
+  it("autonomy self: the worker waits, the assistant answers it in her own conversation with office.decide, and then the worker goes on", async () => {
+    bootAutonomy = "self";
+    const decide = (id: number) => [{ type: "tool_call" as const, id: "d1", name: "office.decide", args: { id, decision: "allow", reason: "Needed for the notes." } }, { type: "done" as const }];
+    const cookie = await boot(true, [decide(1), [{ type: "text_delta", text: "Done." }, { type: "done" }]]);
+    await connect(cookie);
+    app!.office.hire({ role: "scribe", project: "site", name: "Ada" });
+    app!.office.assign({ worker: "Ada", title: "Write notes" });
+    await until(() => procs.length === 1);
+    procs[0]!.onEvent({ kind: "init", sessionId: "s", model: "m" });
+    let reply: { text: string } | null = null;
+    workerCall!({ name: "approve", args: { tool_name: "Bash", input: { command: "npm install left-pad" } }, respond: (r) => (reply = r) });
+    await until(() => provider.calls.length > 0);
+    const asked = JSON.stringify(provider.calls[0]!.messages);
+    expect(asked).toContain("Office approval");
+    expect(asked).toContain("npm install left-pad");
+    expect(asked).toContain("untrusted-worker-action");
+    await until(() => reply !== null);
+    expect(JSON.parse(reply!.text)).toMatchObject({ behavior: "allow" });
+    const rows = new OfficeStore(app!.db).recentRequests();
+    expect(rows[0]).toMatchObject({ status: "allowed", reason: "Needed for the notes." });
   });
 });

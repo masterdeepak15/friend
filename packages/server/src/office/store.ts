@@ -7,6 +7,36 @@ export const MAX_EVENT_CHARS = 200;
 /** Only the newest lines of each worker are kept. */
 export const MAX_EVENTS_PER_WORKER = 500;
 
+export interface RequestRow {
+  id: number;
+  workerId: string;
+  ticketId: number | null;
+  tool: string;
+  summary: string;
+  danger: boolean;
+  status: "pending" | "allowed" | "denied" | "owner" | "cancelled";
+  decision: string | null;
+  reason: string;
+  tries: number;
+  createdAt: number;
+  decidedAt: number | null;
+}
+interface RRow {
+  id: number;
+  worker_id: string;
+  ticket_id: number | null;
+  tool: string;
+  summary: string;
+  danger: number;
+  status: RequestRow["status"];
+  decision: string | null;
+  reason: string;
+  tries: number;
+  created_at: number;
+  decided_at: number | null;
+}
+const toRequest = (r: RRow): RequestRow => ({ id: r.id, workerId: r.worker_id, ticketId: r.ticket_id, tool: r.tool, summary: r.summary, danger: r.danger === 1, status: r.status, decision: r.decision, reason: r.reason, tries: r.tries, createdAt: r.created_at, decidedAt: r.decided_at });
+
 export interface WorkerRow {
   id: string;
   name: string;
@@ -175,8 +205,48 @@ export class OfficeStore {
     return rows.reverse().map((r) => ({ id: r.id, workerId: r.worker_id, at: r.at, kind: r.kind, text: r.text }));
   }
 
+  // ---- the requests a worker makes that the assistant herself answers (kept, so none is lost or forgotten) ----
+
+  createRequest(r: { workerId: string; ticketId: number | null; tool: string; summary: string; danger: boolean }): RequestRow {
+    const info = this.db.prepare("insert into office_requests (worker_id, ticket_id, tool, summary, danger, created_at) values (?, ?, ?, ?, ?, ?)").run(r.workerId, r.ticketId, r.tool, r.summary.slice(0, 2000), r.danger ? 1 : 0, this.now());
+    return this.getRequest(Number(info.lastInsertRowid))!;
+  }
+
+  getRequest(id: number): RequestRow | undefined {
+    const r = this.db.prepare("select * from office_requests where id = ?").get(id) as RRow | undefined;
+    return r && toRequest(r);
+  }
+
+  /** Still waiting for an answer, oldest first. */
+  pendingRequests(): RequestRow[] {
+    return (this.db.prepare("select * from office_requests where status = 'pending' order by id").all() as RRow[]).map(toRequest);
+  }
+
+  /** How many times the assistant was asked about it, after this one. */
+  countTry(id: number): number {
+    this.db.prepare("update office_requests set tries = tries + 1 where id = ?").run(id);
+    return this.getRequest(id)?.tries ?? 0;
+  }
+
+  /** Records the answer once; false when it was already answered (or does not exist). */
+  settleRequest(id: number, status: "allowed" | "denied" | "owner" | "cancelled", decision: string | null, reason: string): boolean {
+    const r = this.db.prepare("update office_requests set status = ?, decision = ?, reason = ?, decided_at = ? where id = ? and status = 'pending'").run(status, decision, reason.slice(0, 500), this.now(), id);
+    return r.changes === 1;
+  }
+
+  /** The newest requests, newest first. */
+  recentRequests(limit = 20): RequestRow[] {
+    return (this.db.prepare("select * from office_requests order by id desc limit ?").all(limit) as RRow[]).map(toRequest);
+  }
+
+  /** At start: a question that was waiting when Friend stopped has no worker left to answer (it is stopped), so it is closed. */
+  abandonRequests(): void {
+    this.db.prepare("update office_requests set status = 'cancelled', reason = 'Friend restarted', decided_at = ? where status = 'pending'").run(this.now());
+  }
+
   /** At start: whatever a crash left running is stopped, and its ticket goes back to the list. */
   resetRunning(): void {
+    this.abandonRequests();
     this.db.transaction(() => {
       this.db.prepare("update office_workers set status = 'stopped' where status in ('starting', 'running', 'waiting')").run();
       this.db.prepare("update office_tickets set status = 'todo', updated_at = ? where status = 'doing'").run(this.now());

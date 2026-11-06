@@ -322,6 +322,8 @@ export interface OfficeConfig {
   notifyFriend: boolean;
   /** How much of what workers ask to do the assistant decides itself: low asks the owner every time, medium decides what is not risky, high decides everything the gate does not refuse. */
   autonomy: OfficeAutonomy;
+  /** At autonomy self: how many times the assistant is asked about one request of a worker before the owner is asked instead. */
+  decideTries: number;
   /** Tokens a worker may use, and all workers together; 0 means no limit. */
   budget: { perWorkerTokens: number; totalTokens: number };
   roles: OfficeRole[];
@@ -329,7 +331,7 @@ export interface OfficeConfig {
   policy: OfficePolicy;
 }
 
-export const OFFICE_AUTONOMY = ["low", "medium", "high", "judge"] as const;
+export const OFFICE_AUTONOMY = ["low", "medium", "high", "judge", "self"] as const;
 export type OfficeAutonomy = (typeof OFFICE_AUTONOMY)[number];
 
 /** Starter data, not rules: the owner edits, replaces or deletes all of it, and a saved empty list stays empty. */
@@ -392,6 +394,7 @@ export function sanitizeOffice(raw: unknown): OfficeConfig {
     pauseAtWindow: num(r.pauseAtWindow, 0, 1, 0.9, false),
     notifyFriend: r.notifyFriend !== false,
     autonomy: OFFICE_AUTONOMY.find((l) => l === r.autonomy) ?? "low",
+    decideTries: num(r.decideTries, 1, 10, 3),
     budget: { perWorkerTokens: num(b.perWorkerTokens, 0, 1_000_000_000, 0), totalTokens: num(b.totalTokens, 0, 1_000_000_000, 0) },
     roles,
     projects,

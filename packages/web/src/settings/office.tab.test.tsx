@@ -8,7 +8,7 @@ afterEach(cleanup);
 
 const role = { id: "scribe", title: "Scribe", instructions: "Write docs.", model: "", permission: "default" as const };
 const project = { id: "site", name: "Site", folder: "C:\\work\\site", goal: "Ship v2", extraFolders: ["C:\\shared"] };
-const base = (over: Partial<OfficeSettings> = {}): OfficeSettings => ({ enabled: false, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, notifyFriend: true, autonomy: "low" as const, budget: { perWorkerTokens: 1000, totalTokens: 5000 }, roles: [role], projects: [project], policy: { allowTools: ["Read", "Grep"], denyCommands: ["git\\s+push"] }, ...over });
+const base = (over: Partial<OfficeSettings> = {}): OfficeSettings => ({ enabled: false, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, notifyFriend: true, decideTries: 3, autonomy: "low" as const, budget: { perWorkerTokens: 1000, totalTokens: 5000 }, roles: [role], projects: [project], policy: { allowTools: ["Read", "Grep"], denyCommands: ["git\\s+push"] }, ...over });
 
 function mount(over: Partial<OfficeSettings> = {}) {
   const onChange = vi.fn();

@@ -9,6 +9,7 @@ import { ToolBridge, type BridgeCall, type BridgeTool } from "../provider/claude
 import type { WorkerEvent } from "./events";
 import { summarizeToolCall } from "./events";
 import { assistantDecides, decideAction } from "./gate";
+import type { AskInput, AssistantDecision } from "./assistantApprovals";
 import type { JudgeAsk, Judgement } from "./judge";
 import { WorkerProc, buildWorkerArgs, type WorkerExit } from "./runner";
 import type { OfficeStore, TicketRow, WorkerRow } from "./store";
@@ -42,6 +43,8 @@ export interface OfficeDeps {
   /** Told when a ticket ends in review or blocked, so Friend can report it and go on with the plan. */
   notify?: (e: { worker: string; jobTitle: string; manager: string | null; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => void;
   emit: (m: ServerMsg) => void;
+  /** At autonomy "self": the assistant herself, in her own conversation, answers each request (the worker waits, nothing is dropped). */
+  assistant?: { request: (a: AskInput) => Promise<AssistantDecision>; cancelWorker: (workerId: string) => void; decide: (id: number, decision: "allow" | "deny" | "ask_owner", reason: string) => { ok: true } | { ok: false; error: string } };
   /** At autonomy "judge": the assistant weighs one request. Null when it could not answer, and then the owner is asked. */
   judge?: (a: JudgeAsk) => Promise<Judgement | null>;
   spawn?: WorkerFactory;
@@ -101,7 +104,7 @@ function describeAction(tool: string, input: Record<string, unknown>): string {
  * it does is read from settings at the moment it does it.
  */
 /** What Friend's own tools use of the Office. */
-export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "stop" | "fire" | "status" | "report">;
+export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "decide" | "stop" | "fire" | "status" | "report">;
 
 export class Office {
   private runs = new Map<string, Run>();
@@ -200,6 +203,11 @@ export class Office {
     }
     const r = this.assign({ worker: worker.id, title: `Message: ${clip(text, 60)}`, description: text });
     return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
+
+  /** The assistant's answer to a worker's request (the office.decide tool). */
+  decide(id: number, decision: "allow" | "deny" | "ask_owner", reason: string): { ok: true } | { ok: false; error: string } {
+    return this.d.assistant ? this.d.assistant.decide(id, decision, reason) : { ok: false, error: "Answering workers' requests is not available." };
   }
 
   review(ticketId: number, accept: boolean, note?: string): { ok: boolean; error?: string } {
@@ -501,6 +509,7 @@ export class Office {
     if (o.ticket) this.d.store.patchTicket(run.ticketId, { status: o.ticket });
     if (o.feed) this.feed(run.workerId, o.feed.kind, o.feed.text);
     this.d.approvals.denyWhere((r) => (r.args as { workerId?: string } | null)?.workerId === run.workerId, "The worker was stopped.");
+    this.d.assistant?.cancelWorker(run.workerId);
     try {
       run.proc?.kill();
     } catch {
@@ -546,6 +555,27 @@ export class Office {
       this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: "allow", by: "assistant", level: this.cfg.autonomy, danger: verdict.danger });
       this.feed(worker.id, "approval", `Allowed by the assistant (${this.cfg.autonomy}): ${summary}`);
       return answer({ behavior: "allow", updatedInput: input });
+    }
+
+    if (this.cfg.autonomy === "self" && this.d.assistant) {
+      const ticket = this.d.store.getTicket(run.ticketId);
+      run.pending++;
+      this.d.store.patchWorker(worker.id, { status: "waiting", detail: clip(`Waiting for the assistant: ${summary}`, DETAIL_CHARS) });
+      this.feed(worker.id, "approval", `Asked the assistant: ${summary}`);
+      this.changed();
+      const d = await this.d.assistant.request({ workerId: worker.id, worker: worker.name, job: worker.title, ticketId: ticket?.id ?? null, ticket: ticket ? `${ticket.title}\n${ticket.description}` : "", goal: project.goal, tool, action: describeAction(tool, input), danger: verdict.danger });
+      run.pending--;
+      if (run.concluded) return answer({ behavior: "deny", message: "The worker was stopped." });
+      if (!run.concluded && run.pending === 0 && this.d.store.getWorker(worker.id)?.status === "waiting") {
+        this.d.store.patchWorker(worker.id, { status: "running", detail: "" });
+        this.changed();
+      }
+      if (d.kind !== "owner") {
+        this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: d.kind, by: "assistant-self", danger: verdict.danger, reason: d.reason });
+        this.feed(worker.id, "approval", `${d.kind === "allow" ? "Allowed" : "Refused"} by the assistant: ${summary} (${d.reason})`);
+        return answer(d.kind === "allow" ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: `The assistant refused: ${d.reason}` });
+      }
+      this.feed(worker.id, "approval", `The assistant passed it to the owner: ${summary} (${d.reason})`);
     }
 
     if (this.cfg.autonomy === "judge" && this.d.judge) {

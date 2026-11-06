@@ -45,3 +45,13 @@ You do not have to answer the requests of your hired workers yourself. Settings,
 
 - **Your assistant decides**: for each request the assistant weighs the worker's job, the ticket, the project goal and the exact action, like a careful senior engineer. It allows what the ticket needs and refuses what could harm, tells the worker why, and writes its reason in the Office feed and the audit log. If it cannot decide (the model is down or unclear), you are asked, on your phone if away. It is never a silent "yes".
 - The fixed refusals stay in every level: anything outside the project folders, the files that control a worker, and the commands you listed as refused. The assistant is not asked about those.
+
+### "Your assistant, herself"
+
+The third Office level makes your assistant answer each worker request in her own conversation, with everything she knows about you and your projects (it is the way a team lead would answer, not a separate quick check).
+
+- The request is written down first (see the table `office_requests` and the audit log), the worker is paused, and your assistant is asked as soon as she is free. If she is in the middle of something, the worker waits; she is never interrupted and nothing is skipped or dropped, even when several requests (and finished tickets) pile up.
+- She answers with `office.decide`: allow, deny, or ask you (you are asked on your phone if you are away). Her reason goes to the worker and into the Office feed.
+- A request she leaves unanswered is put to her again, up to "Times the assistant is asked" (3 by default). After that it goes to you as a normal approval card. Silence never means yes.
+- The fixed refusals (outside the project folders, files that control a worker, commands you refuse) are decided before and never reach her.
+- If Friend restarts, the workers stop and what they were waiting for is closed.

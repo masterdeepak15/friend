@@ -96,6 +96,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
   const usage = vi.fn();
   const notify = vi.fn();
   const audit = { log: vi.fn() };
+  const assistant = { request: vi.fn(async (_a: unknown): Promise<{ kind: "allow" | "deny" | "owner"; reason: string }> => ({ kind: "owner", reason: "not answered" })), cancelWorker: vi.fn(), decide: vi.fn() };
   const judge = vi.fn(async (_a: unknown): Promise<{ allow: boolean; reason: string } | null> => null);
   const resolvers: { req: { tool: string; args: any; tier: string; needsPin: boolean }; resolve: (o: { approved: boolean; reason?: string }) => void }[] = [];
   const approvals = {
@@ -114,6 +115,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
     usage,
     notify,
     judge: judge as never,
+    assistant: assistant as never,
     emit: (m) => emitted.push(m),
     spawn: (o, onEvent, onExit) => {
       const p = new FakeProc(o, onEvent, onExit);
@@ -134,7 +136,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
   };
   const feeds = () => emitted.filter((m): m is Extract<ServerMsg, { type: "office.feed" }> => m.type === "office.feed");
   const alerts = () => emitted.filter((m) => m.type === "alert");
-  return { dir, projectDir, config, store, office, notify, procs, bridges, emitted, usage, audit, approvals, resolvers, hire, feeds, alerts, judge };
+  return { dir, projectDir, config, store, office, notify, procs, bridges, emitted, usage, audit, approvals, resolvers, hire, feeds, alerts, judge, assistant };
 }
 
 describe("hiring", () => {
@@ -490,6 +492,68 @@ describe("what a worker may do", () => {
       expect(await bridge.ask("Bash", { command: "git push origin main" })).toMatchObject({ behavior: "deny" });
       expect(await bridge.ask("Write", { file_path: join(t.projectDir, ".claude", "settings.json"), content: "{}" })).toMatchObject({ behavior: "deny" });
       expect(t.approvals.request).not.toHaveBeenCalled();
+    });
+
+    it("self: the assistant herself is asked, with the worker, ticket and action, and the worker waits for her answer", async () => {
+      const { t, w, bridge } = await running({ autonomy: "self" });
+      let answer!: (d: { kind: "allow"; reason: string }) => void;
+      t.assistant.request.mockImplementationOnce(() => new Promise((r) => (answer = r as never)));
+      const pending = bridge.ask("Bash", { command: "npm install left-pad" });
+      await settle();
+      expect(t.assistant.request).toHaveBeenCalledWith(expect.objectContaining({ workerId: w.id, worker: w.name, goal: "Ship it", danger: false, action: expect.stringMatching(/npm install left-pad/), ticket: expect.stringMatching(/^x/) }));
+      expect(t.store.getWorker(w.id)!.status).toBe("waiting");
+      expect(t.feeds().some((f) => /Asked the assistant/.test(f.text))).toBe(true);
+      let settled = false;
+      void pending.then(() => (settled = true));
+      await settle();
+      expect(settled).toBe(false); // still waiting for her
+      answer({ kind: "allow", reason: "Needed for the tests." });
+      await expect(pending).resolves.toMatchObject({ behavior: "allow" });
+      expect(t.store.getWorker(w.id)!.status).toBe("running");
+      expect(t.approvals.request).not.toHaveBeenCalled();
+      expect(t.audit.log).toHaveBeenCalledWith("agent", "office.approval", expect.objectContaining({ verdict: "allow", by: "assistant-self", reason: "Needed for the tests." }));
+    });
+
+    it("self: her refusal reaches the worker with the reason", async () => {
+      const { t, bridge } = await running({ autonomy: "self" });
+      t.assistant.request.mockResolvedValueOnce({ kind: "deny", reason: "Not needed for this ticket." });
+      expect(await bridge.ask("Bash", { command: "rm -rf build" })).toMatchObject({ behavior: "deny", message: expect.stringMatching(/The assistant refused: Not needed/) });
+      expect(t.assistant.request).toHaveBeenCalledWith(expect.objectContaining({ danger: true }));
+      expect(t.approvals.request).not.toHaveBeenCalled();
+    });
+
+    it("self: when she passes it on or cannot answer, the owner is asked as a card", async () => {
+      const { t, bridge } = await running({ autonomy: "self" });
+      const pending = bridge.ask("Bash", { command: "npm install left-pad" });
+      await settle();
+      expect(t.assistant.request).toHaveBeenCalledTimes(1);
+      expect(t.approvals.request).toHaveBeenCalledTimes(1);
+      t.resolvers[0]!.resolve({ approved: true });
+      await expect(pending).resolves.toMatchObject({ behavior: "allow" });
+    });
+
+    it("self: what the gate refuses never reaches her", async () => {
+      const { t, bridge } = await running({ autonomy: "self" });
+      expect(await bridge.ask("Read", { file_path: "C:\\Windows\\win.ini" })).toMatchObject({ behavior: "deny" });
+      expect(await bridge.ask("Bash", { command: "git push origin main" })).toMatchObject({ behavior: "deny" });
+      expect(t.assistant.request).not.toHaveBeenCalled();
+    });
+
+    it("self: stopping the worker closes what it was waiting for", async () => {
+      const { t, w, bridge } = await running({ autonomy: "self" });
+      t.assistant.request.mockImplementationOnce(() => new Promise(() => {}));
+      const pending = bridge.ask("Bash", { command: "npm install left-pad" });
+      await settle();
+      t.office.stop(w.id);
+      await settle();
+      expect(t.assistant.cancelWorker).toHaveBeenCalledWith(w.id);
+      void pending;
+    });
+
+    it("the other levels never ask her in her own conversation", async () => {
+      const { t, bridge } = await running({ autonomy: "high" });
+      await bridge.ask("Bash", { command: "npm install left-pad" });
+      expect(t.assistant.request).not.toHaveBeenCalled();
     });
 
     it("judge: the assistant allows what it finds right, with the worker, ticket and action in front of it, and the owner is not asked", async () => {

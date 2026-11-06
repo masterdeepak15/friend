@@ -45,6 +45,10 @@ export function officeTool(office: OfficeApi, name: string, args: Record<string,
       const r = office.say(String(args.worker), String(args.text));
       return r.ok ? ok("Said.") : fail(r.error ?? "Could not reach the worker.");
     }
+    case "office.decide": {
+      const r = office.decide(Number(args.id), args.decision === "allow" ? "allow" : args.decision === "ask_owner" ? "ask_owner" : "deny", args.reason ? String(args.reason) : "");
+      return r.ok ? ok(args.decision === "allow" ? "Allowed. The worker goes on." : args.decision === "ask_owner" ? "The owner will be asked." : "Denied. The worker is told why.") : fail(r.error);
+    }
     case "office.review": {
       const r = office.review(Number(args.ticket), args.accept === true, args.note ? String(args.note) : undefined);
       return r.ok ? ok(args.accept === true ? "Accepted." : "Sent back.") : fail(r.error ?? "Could not review the ticket.");

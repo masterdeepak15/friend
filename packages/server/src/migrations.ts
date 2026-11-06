@@ -244,4 +244,22 @@ alter table office_workers add column model text not null default '';
 alter table office_workers add column permission text not null default 'default';
 alter table office_workers add column manager_id text;`,
   },
+  {
+    id: 15,
+    sql: `create table office_requests (
+  id integer primary key autoincrement,
+  worker_id text not null,
+  ticket_id integer,
+  tool text not null,
+  summary text not null,
+  danger integer not null default 0,
+  status text not null default 'pending',
+  decision text,
+  reason text not null default '',
+  tries integer not null default 0,
+  created_at integer not null,
+  decided_at integer
+);
+create index office_requests_status on office_requests (status);`,
+  },
 ];

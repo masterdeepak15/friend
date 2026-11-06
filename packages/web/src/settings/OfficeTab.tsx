@@ -109,6 +109,7 @@ const LEVELS: { id: OfficeSettings["autonomy"]; name: string; text: string }[] =
   { id: "low", name: "Low", text: "Friend asks you for every request a worker makes that is not on your let-through list." },
   { id: "medium", name: "Medium", text: "Friend answers the ordinary requests itself. Anything that looks dangerous (deleting files, installing, force pushes) still asks you, with your PIN." },
   { id: "judge", name: "Your assistant decides", text: "Friend weighs each request like a careful senior engineer: it allows what the ticket needs and refuses what could harm, and the feed shows its reason. If it cannot decide, you are asked. The refusals below still hold." },
+  { id: "self", name: "Your assistant, herself", text: "Your assistant answers each request in her own conversation, with all she knows about you and your projects. A worker waits until she answers; if she is busy it waits for her to be free, and nothing is skipped. If she cannot answer after the tries below, you are asked." },
   { id: "high", name: "High", text: "Friend answers every request itself, even dangerous ones, so you are not asked. The refusals below still hold." },
 ];
 
@@ -164,6 +165,9 @@ export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChan
           </Field>
           <Field label="Start timeout (seconds)" hint="How long a worker may take to start before it is given up on. From 10 to 600.">
             <input type="number" min={10} max={600} value={office.startTimeoutSec} onChange={(e) => onChange({ startTimeoutSec: num(e.target.value) })} />
+          </Field>
+          <Field label="Times the assistant is asked" hint="With 'Your assistant, herself': how many times she is asked about one request before you are asked instead. From 1 to 10.">
+            <input type="number" min={1} max={10} value={office.decideTries} onChange={(e) => onChange({ decideTries: Math.min(10, Math.max(1, num(e.target.value))) })} />
           </Field>
           <Field label="Pause at (% of the five-hour window)" hint="When your Claude subscription window is this full, workers wait until it resets. 0 means never pause.">
             <input type="number" min={0} max={100} value={Math.round(office.pauseAtWindow * 100)} onChange={(e) => onChange({ pauseAtWindow: Math.min(100, Math.max(0, num(e.target.value))) / 100 })} />
