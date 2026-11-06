@@ -208,7 +208,8 @@ describe("the Office in the app", () => {
     const asked = JSON.stringify(provider.calls[0]!.messages);
     expect(asked).toMatch(/First check the work/);
     expect(asked).toMatch(/what was done, what you checked and found/);
-    expect(asked).toMatch(/not spoken/);
+    expect(asked).toMatch(/does not speak/);
+    expect(asked).toMatch(/do not put it on the screen yourself with the stage tools/); // no second copy of the note
   });
 
   it("autonomy self: the worker waits, the assistant answers it in her own conversation with office.decide, and then the worker goes on", async () => {
