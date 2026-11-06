@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { Audit } from "./audit";
 import { type AuditFilter, type AuditQuery } from "./auditQuery";
+import { localDate, sealText, verifySeal } from "./auditSeal";
 import { LockoutError, type Auth } from "./auth";
 import type { AuditConfig } from "./config";
 
@@ -153,10 +154,24 @@ export function registerAuditRoutes(d: AuditApiDeps): void {
     return d.audit.verify();
   });
 
+  app.get("/api/audit/seal", { onRequest: guard }, async (req, reply) => {
+    const last = d.audit.last();
+    if (!last) return reply.code(404).send({ error: "Nothing to seal yet" });
+    read("/api/audit/seal", req);
+    return { text: sealText(localDate(new Date()), last.id, last.hash) };
+  });
+
+  app.post("/api/audit/verify-seal", { onRequest: guard }, async (req, reply) => {
+    const text = (req.body as { text?: unknown } | null)?.text;
+    if (typeof text !== "string" || text.length > 300) return reply.code(400).send({ error: "Give the seal text" });
+    read("/api/audit/verify-seal", req);
+    return verifySeal(d.query.db, text);
+  });
+
   app.get("/api/audit/status", { onRequest: guard }, async (req) => {
     read("/api/audit/status", req);
     const last = d.audit.last();
     const seal = d.query.search({ q: "audit.seal", limit: 50 }).find((r) => r.kind === "audit.seal");
-    return { rows: d.query.counts({}).total, lastId: last?.id ?? null, lastSeal: seal ? { at: seal.ts, text: seal.detail.text ?? null } : null, keepDays: d.config().keepDays, workers: d.query.workers() };
+    return { rows: d.query.counts({}).total, lastId: last?.id ?? null, lastSeal: seal ? { at: seal.ts, text: seal.detail.seal ?? null } : null, keepDays: d.config().keepDays, workers: d.query.workers() };
   });
 }

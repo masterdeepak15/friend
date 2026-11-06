@@ -72,6 +72,19 @@ describe("the audit routes need the owner and the PIN", () => {
     expect(await (await fetch(base() + "/api/audit/request/chat-none", { headers: h })).json()).toEqual({ tree: [] });
   });
 
+  it("gives the current seal and checks one: a real one passes, one with another fingerprint fails", async () => {
+    const cookie = await boot();
+    const { token } = (await (await unlock(cookie)).json()) as { token: string };
+    const h = { ...j, cookie, "x-audit-unlock": token };
+    const { text } = (await (await fetch(base() + "/api/audit/seal", { headers: h })).json()) as { text: string };
+    expect(text).toMatch(/^Friend audit seal \d{4}-\d{2}-\d{2}: rows 1-\d+, hash [0-9a-f]{64}$/);
+    const ok = await fetch(base() + "/api/audit/verify-seal", { method: "POST", headers: h, body: JSON.stringify({ text }) });
+    expect(await ok.json()).toEqual({ ok: true });
+    const bad = await fetch(base() + "/api/audit/verify-seal", { method: "POST", headers: h, body: JSON.stringify({ text: text.replace(/hash [0-9a-f]{4}/, "hash ffff") }) });
+    expect(await bad.json()).toMatchObject({ ok: false });
+    expect((await fetch(base() + "/api/audit/verify-seal", { method: "POST", headers: h, body: JSON.stringify({}) })).status).toBe(400);
+  });
+
   it("filters come from the query string, and a bad value is refused", async () => {
     const cookie = await boot();
     const { token } = (await (await unlock(cookie)).json()) as { token: string };

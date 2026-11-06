@@ -55,7 +55,7 @@ function groupSql(group: KindGroup): { sql: string; args: string[] } {
 
 /** Reading the trail: filters, one request's whole story, what needs attention. Parameterized SQL only. */
 export class AuditQuery {
-  constructor(private db: Db) {}
+  constructor(readonly db: Db) {}
 
   private where(f: AuditFilter): { sql: string; args: unknown[] } {
     const c: string[] = [];

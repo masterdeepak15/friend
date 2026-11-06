@@ -26,6 +26,7 @@ import { AssistantApprovals } from "./office/assistantApprovals";
 import { ensureRequest, runWithRequest } from "./auditContext";
 import { AuditQuery } from "./auditQuery";
 import { pruneAudit } from "./auditRetention";
+import { sealDue, sealNow } from "./auditSeal";
 import { deliverToOwner, sendToPhone, type OwnerChannel } from "./reach";
 import { TurnQueue } from "./agent/turnQueue";
 import { Audit } from "./audit";
@@ -292,6 +293,7 @@ export async function createApp(opts: AppOptions) {
   const brokerHub = new BrokerHub({ config, dataDir: opts.dataDir, db, audit, channels: channelHub, fetch: opts.brokerFetch, publicBase: () => config.publicUrl ?? null });
   brokerHub.apply();
   let pruneTimer: ReturnType<typeof setInterval> | undefined;
+  let sealTimer: ReturnType<typeof setInterval> | undefined;
   let brokerTimer: ReturnType<typeof setInterval> | undefined;
   let statsStop: (() => void) | undefined;
   // The owner's music: the folder is a setting; the player itself runs in the browser and the assistant controls it through the hub.
@@ -1964,6 +1966,18 @@ export async function createApp(opts: AppOptions) {
       prune();
       pruneTimer = setInterval(prune, 24 * 3600_000);
       pruneTimer.unref?.();
+      // once a day, from the set time on, the seal of the log so far goes to the owner's phone
+      const seal = async () => {
+        try {
+          const lastSeal = new AuditQuery(db).search({ q: "audit.seal", limit: 20 }).find((r) => r.kind === "audit.seal");
+          if (!sealDue(new Date(), config.audit.sealAt, typeof lastSeal?.detail.date === "string" ? lastSeal.detail.date : null)) return;
+          await sealNow({ db, audit, now: Date.now(), send: (text) => sendToPhone(phoneDeps(), text) });
+        } catch {
+          // tried again next minute
+        }
+      };
+      sealTimer = setInterval(() => void seal(), 60_000);
+      sealTimer.unref?.();
       heartbeat.start();
   proactive.start();
       // connectors that were on come back in the background; Friend does not wait for them. Chrome control comes back through its plugin,
@@ -2009,6 +2023,7 @@ export async function createApp(opts: AppOptions) {
       }
       trackConfigHash(false);
       if (pruneTimer) clearInterval(pruneTimer);
+      if (sealTimer) clearInterval(sealTimer);
       stopped = true;
       updater.stop();
       hostPlayer.dispose();
