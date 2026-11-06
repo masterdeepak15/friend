@@ -38,6 +38,9 @@ export interface RecordInput {
   parentId?: string | null;
 }
 
+/** An entry could not be written. */
+export class AuditWriteError extends Error {}
+
 export type VerifyResult = { ok: true; rows: number; lastHash: string } | { ok: false; brokenAt: number; reason: "hash" | "link" | "gap" };
 
 /** What an entry's hash covers: everything but its id, so the order is only the chain's own links. */
@@ -150,7 +153,11 @@ export class Audit {
   }
 
   private append(i: RecordInput, actor: string): number {
-    return this.db.transaction(() => this.insert(i, actor)).immediate();
+    try {
+      return this.db.transaction(() => this.insert(i, actor)).immediate();
+    } catch (e) {
+      throw new AuditWriteError(`The audit log could not be written: ${(e as Error).message}`);
+    }
   }
 
   /** Reads the last hash and writes the next entry; always called inside one immediate transaction. */

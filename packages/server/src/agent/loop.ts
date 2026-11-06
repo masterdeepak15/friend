@@ -34,6 +34,7 @@ import { getToolDef, lexicalInsideRoots, pathArg, toolSpecs } from "../tools/reg
 import { conversationText, summarize } from "./compact";
 import { loadHistory, repairDangling, saveMessage } from "./history";
 import { devanagariLanguage, languageNote, voiceGender } from "../voice/lang";
+import type { Outcome } from "../audit";
 import { promptParts } from "./prompt";
 import { officeBrief } from "../office/brief";
 import { officeTool } from "../office/tools";
@@ -633,10 +634,54 @@ export class Agent {
     return { ok: false, text: `Unknown tool: ${name}` };
   }
 
-  private async executeTool(
+  /** How many reads went by since the record last worked, said on the next entry that is written. */
+  private notRecorded = 0;
+
+  /**
+   * Runs one tool call and records it: an entry before it runs (so a crash leaves evidence) and one after, with how it ended. When the
+   * entry before cannot be written, a tool that changes something is not run, and the owner is told; a read-only tool still runs and the
+   * gap is counted on the next entry.
+   */
+  private async executeTool(call: ToolCall, ctx: TurnCtx, signal: AbortSignal): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string } }> {
+    const d = this.deps;
+    const readOnly = getToolDef(call.name)?.readOnly === true;
+    // a web address or a search can be private: the web and browser tools log only their own site, never the words or the page
+    const quiet = call.name.startsWith("web.") || call.name.startsWith("browser.");
+    try {
+      d.audit.record({ kind: "tool.start", actorKind: "assistant", target: call.name, outcome: "started", detail: { tool: call.name, ...(quiet ? {} : { args: call.args ?? {} }), ...(this.notRecorded ? { notRecorded: this.notRecorded } : {}) } });
+      this.notRecorded = 0;
+    } catch {
+      if (!readOnly) {
+        ctx.emit({ type: "alert", level: "error", text: `The action ${call.name} was refused because it could not be recorded in the audit log.` });
+        return { text: `Error: The action was refused because it could not be recorded in the audit log. Tell the owner.`, isError: true };
+      }
+      this.notRecorded++;
+    }
+    const rec: { outcome?: Outcome } = {};
+    const began = Date.now();
+    const end = (outcome: Outcome, text: string) => {
+      try {
+        d.audit.record({ kind: "tool.end", actorKind: "assistant", target: call.name, outcome, detail: { tool: call.name, ...(quiet ? {} : { result: text.slice(0, 300) }), durationMs: Date.now() - began } });
+      } catch {
+        this.notRecorded++; // the tool has already run; the gap is shown on the next entry
+      }
+    };
+    let r: { text: string; isError: boolean; image?: { mime: string; data: string } };
+    try {
+      r = await this.runTool(call, ctx, signal, rec);
+    } catch (e) {
+      end("failed", (e as Error).message);
+      throw e;
+    }
+    end(rec.outcome ?? (r.isError ? "failed" : "done"), r.text);
+    return r;
+  }
+
+  private async runTool(
     call: ToolCall,
     ctx: TurnCtx,
     signal: AbortSignal,
+    rec: { outcome?: Outcome },
   ): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string } }> {
     const d = this.deps;
     const fail = (error: string) => ({ text: `Error: ${error}`, isError: true });
@@ -667,6 +712,7 @@ export class Agent {
     let approvedOutside = false;
     const device = def.target === "device" ? d.devices.targetName() : null;
     if (decision === "deny") {
+      rec.outcome = "refused";
       d.audit.log("agent", "tool.denied", { tool: call.name, args: call.name.startsWith("web.") ? {} : clipArgs(args), trust: ctx.trust }); // a web address or a search can be private: only the web tools' own entries say anything about them
       return fail("This action is not allowed.");
     }
@@ -704,6 +750,7 @@ export class Agent {
         ctx.emit,
       );
       if (!outcome.approved) {
+        rec.outcome = "refused";
         d.audit.log("agent", "tool.not_approved", { tool: call.name, args: call.name.startsWith("web.") ? {} : clipArgs(args), reason: outcome.reason });
         return fail(`The owner did not approve this action (${outcome.reason ?? "denied"}).`);
       }

@@ -9,6 +9,8 @@ export interface ToolDef {
   input: ZodTypeAny;
   baseTier: Tier;
   target: "device" | "gateway";
+  /** The tool neither writes, sends, runs nor changes anything of the owner's: if it cannot be recorded it may still run. Unmarked tools change something. */
+  readOnly?: boolean;
 }
 
 export type ToolResult =
@@ -823,6 +825,14 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
 ];
+
+const READ_ONLY_TOOLS = new Set([
+  "fs.list", "fs.read", "system.info", "process.list", "weather.get", "web.search", "web.read", "market.get", "market.scan", "market.replay",
+  "memory.read", "memory.search", "soul.read", "task.list", "plugins.catalog", "plugins.list", "integrations.status", "portfolio.status",
+  "portfolio.summary", "portfolio.holdings", "portfolio.positions", "portfolio.funds", "portfolio.orders", "reports.list", "music.search",
+  "music.nowplaying", "video.check", "settings.get", "connectors.list", "stage.check", "stage.guide", "office.status", "office.report",
+]);
+for (const def of TOOL_DEFS) if (READ_ONLY_TOOLS.has(def.name)) def.readOnly = true;
 
 const clip = (s: string, n = 300) => (s.length > n ? s.slice(0, n) + "…" : s);
 
