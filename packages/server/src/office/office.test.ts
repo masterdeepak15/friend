@@ -97,7 +97,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
   const notify = vi.fn();
   const audit = { log: vi.fn() };
   const assistant = { request: vi.fn(async (_a: unknown): Promise<{ kind: "allow" | "deny" | "owner"; reason: string }> => ({ kind: "owner", reason: "not answered" })), cancelWorker: vi.fn(), decide: vi.fn() };
-  const judge = vi.fn(async (_a: unknown): Promise<{ allow: boolean; reason: string } | null> => null);
+  const judge = vi.fn(async (_a: unknown): Promise<{ allow: boolean; reason: string; unsure?: boolean } | null> => null);
   const resolvers: { req: { tool: string; args: any; tier: string; needsPin: boolean }; resolve: (o: { approved: boolean; reason?: string }) => void }[] = [];
   const approvals = {
     request: vi.fn((req: any) => new Promise<{ approved: boolean; reason?: string }>((resolve) => resolvers.push({ req, resolve }))),
@@ -548,6 +548,78 @@ describe("what a worker may do", () => {
       await settle();
       expect(t.assistant.cancelWorker).toHaveBeenCalledWith(w.id);
       void pending;
+    });
+
+    it("hybrid: a clearly fine request is answered by the quick check, and she is not asked", async () => {
+      const { t, bridge } = await running({ autonomy: "hybrid" });
+      t.judge.mockResolvedValueOnce({ allow: true, reason: "Runs the tests." });
+      await expect(bridge.ask("Bash", { command: "npm test" })).resolves.toMatchObject({ behavior: "allow" });
+      expect(t.judge).toHaveBeenCalledWith(expect.objectContaining({ triage: true, danger: false }));
+      expect(t.assistant.request).not.toHaveBeenCalled();
+      expect(t.audit.log).toHaveBeenCalledWith("agent", "office.approval", expect.objectContaining({ by: "assistant-judge", level: "hybrid", verdict: "allow" }));
+      expect(t.feeds().some((f) => /Allowed by the quick check/.test(f.text))).toBe(true);
+    });
+
+    it("hybrid: a refusal, an unsure answer or no answer from the quick check goes to her", async () => {
+      const { t, bridge } = await running({ autonomy: "hybrid" });
+      t.judge.mockResolvedValueOnce({ allow: false, reason: "Not needed." });
+      t.assistant.request.mockResolvedValueOnce({ kind: "allow", reason: "I asked for this one." });
+      await expect(bridge.ask("Bash", { command: "npm install left-pad" })).resolves.toMatchObject({ behavior: "allow" });
+      t.judge.mockResolvedValueOnce({ allow: false, unsure: true, reason: "Need context." });
+      t.assistant.request.mockResolvedValueOnce({ kind: "deny", reason: "No." });
+      await expect(bridge.ask("Bash", { command: "npm run lint" })).resolves.toMatchObject({ behavior: "deny" });
+      t.judge.mockResolvedValueOnce(null);
+      t.assistant.request.mockResolvedValueOnce({ kind: "allow", reason: "ok" });
+      await expect(bridge.ask("Bash", { command: "npm run build" })).resolves.toMatchObject({ behavior: "allow" });
+      expect(t.assistant.request).toHaveBeenCalledTimes(3);
+    });
+
+    it("hybrid: a dangerous request goes straight to her, without the quick check", async () => {
+      const { t, bridge } = await running({ autonomy: "hybrid" });
+      t.assistant.request.mockResolvedValueOnce({ kind: "deny", reason: "No deleting." });
+      await bridge.ask("Bash", { command: "rm -rf build" });
+      expect(t.judge).not.toHaveBeenCalled();
+      expect(t.assistant.request).toHaveBeenCalledWith(expect.objectContaining({ danger: true }));
+    });
+
+    it("hybrid: if neither can answer, the owner is asked as a card", async () => {
+      const { t, bridge } = await running({ autonomy: "hybrid" });
+      const pending = bridge.ask("Bash", { command: "npm install left-pad" });
+      await settle();
+      expect(t.approvals.request).toHaveBeenCalledTimes(1);
+      t.resolvers[0]!.resolve({ approved: false });
+      await pending;
+    });
+
+    it("the same request again for the same ticket gets the same answer without asking anyone", async () => {
+      const { t, bridge } = await running({ autonomy: "hybrid" });
+      t.judge.mockResolvedValueOnce({ allow: true, reason: "Runs the tests." });
+      await bridge.ask("Bash", { command: "npm test", description: "run" });
+      const again = await bridge.ask("Bash", { description: "run", command: "npm test" }); // same fields in another order
+      expect(again).toMatchObject({ behavior: "allow" });
+      expect(t.judge).toHaveBeenCalledTimes(1);
+      expect(t.audit.log).toHaveBeenCalledWith("agent", "office.approval", expect.objectContaining({ by: "memory", verdict: "allow" }));
+      expect(t.feeds().some((f) => /again \(same as before\)/.test(f.text))).toBe(true);
+      t.judge.mockResolvedValueOnce({ allow: true, reason: "ok" });
+      await bridge.ask("Bash", { command: "npm test -- --watch" }); // a different request is a new question
+      expect(t.judge).toHaveBeenCalledTimes(2);
+    });
+
+    it("self remembers a refusal too, and the owner's own answers are not remembered", async () => {
+      const { t, bridge } = await running({ autonomy: "self" });
+      t.assistant.request.mockResolvedValueOnce({ kind: "deny", reason: "Not needed." });
+      await bridge.ask("Bash", { command: "curl https://example.com" });
+      expect(await bridge.ask("Bash", { command: "curl https://example.com" })).toMatchObject({ behavior: "deny", message: expect.stringMatching(/Not needed/) });
+      expect(t.assistant.request).toHaveBeenCalledTimes(1);
+      const pending = bridge.ask("Bash", { command: "npm install a" });
+      await settle();
+      t.resolvers[0]!.resolve({ approved: true });
+      await pending;
+      const second = bridge.ask("Bash", { command: "npm install a" });
+      await settle();
+      expect(t.assistant.request).toHaveBeenCalledTimes(3); // asked again: the owner's yes was not kept
+      t.resolvers[1]!.resolve({ approved: false });
+      await second;
     });
 
     it("the other levels never ask her in her own conversation", async () => {

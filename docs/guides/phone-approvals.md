@@ -55,3 +55,12 @@ The third Office level makes your assistant answer each worker request in her ow
 - A request she leaves unanswered is put to her again, up to "Times the assistant is asked" (3 by default). After that it goes to you as a normal approval card. Silence never means yes.
 - The fixed refusals (outside the project folders, files that control a worker, commands you refuse) are decided before and never reach her.
 - If Friend restarts, the workers stop and what they were waiting for is closed.
+
+### "Quick check, then your assistant" (cheaper)
+
+Letting your assistant answer everything costs a full turn of hers for every request. This level keeps her for what needs her:
+
+- An ordinary request first goes to a quick, separate check with a tiny prompt (it costs almost nothing). If it clearly allows it, that is the answer.
+- A dangerous request (delete, install, push, download), or one the check refuses, is unsure about or cannot answer, goes to your assistant herself, exactly as in "herself" above. If she cannot answer, you are asked.
+- The same request repeated for the same ticket gets the same answer without asking anyone again (it must be exactly the same action). Your own answers on the card are never remembered.
+- Her answers and the quick check's answers are all in the Office feed and the audit log, with the reason.

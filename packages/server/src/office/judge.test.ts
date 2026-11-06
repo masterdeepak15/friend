@@ -57,3 +57,15 @@ describe("judgeAction", () => {
     expect(Date.now() - started).toBeLessThan(150);
   });
 });
+
+describe("the quick first look (triage)", () => {
+  it("may say unsure, and only then", () => {
+    expect(parseJudgement('{"decision":"unsure","reason":"Need context."}', true)).toEqual({ allow: false, unsure: true, reason: "Need context." });
+    expect(parseJudgement('{"decision":"unsure","reason":"x"}')).toBeNull();
+    expect(parseJudgement('{"decision":"allow","reason":"ok"}', true)).toEqual({ allow: true, reason: "ok" });
+  });
+  it("is told it is only the first look", () => {
+    expect(judgePrompt({ ...ask, triage: true }).system).toMatch(/quick first look/);
+    expect(judgePrompt(ask).system).not.toMatch(/quick first look/);
+  });
+});

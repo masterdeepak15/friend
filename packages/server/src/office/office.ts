@@ -53,6 +53,10 @@ export interface OfficeDeps {
   dataDir: string;
 }
 
+const MEMO_MAX = 500;
+/** The same request always gives the same text: keys sorted. */
+const stable = (v: unknown): string => JSON.stringify(v, (_k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([p], [q]) => (p < q ? -1 : 1))) : x));
+
 type FeedKind = Extract<ServerMsg, { type: "office.feed" }>["kind"];
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -108,6 +112,8 @@ export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "dec
 
 export class Office {
   private runs = new Map<string, Run>();
+  /** What was decided about an exact action of a ticket, so the same request is not put to the assistant twice. */
+  private memo = new Map<string, { allow: boolean; reason: string }>();
   private queue: QueueEntry[] = [];
   private quota: OfficeQuota = { fiveHour: null, sevenDay: null };
   private pauseAlerted = false;
@@ -557,20 +563,44 @@ export class Office {
       return answer({ behavior: "allow", updatedInput: input });
     }
 
-    if (this.cfg.autonomy === "self" && this.d.assistant) {
+    if ((this.cfg.autonomy === "self" || this.cfg.autonomy === "hybrid") && this.d.assistant) {
       const ticket = this.d.store.getTicket(run.ticketId);
+      const key = `${run.ticketId}|${tool}|${stable(input)}`;
+      const known = this.memo.get(key);
+      if (known) {
+        this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: known.allow ? "allow" : "deny", by: "memory", reason: known.reason });
+        this.feed(worker.id, "approval", `${known.allow ? "Allowed" : "Refused"} again (same as before): ${summary}`);
+        return answer(known.allow ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: `The assistant refused: ${known.reason}` });
+      }
+      const remember = (allow: boolean, reason: string) => {
+        if (this.memo.size >= MEMO_MAX) this.memo.delete(this.memo.keys().next().value as string);
+        this.memo.set(key, { allow, reason });
+      };
+      const ask = { worker: worker.name, job: worker.title, ticket: ticket ? `${ticket.title}\n${ticket.description}` : "", goal: project.goal, action: describeAction(tool, input), danger: verdict.danger };
+      // hybrid: a quick separate check first for an ordinary request; only a clear "allow" ends it there
+      if (this.cfg.autonomy === "hybrid" && !verdict.danger && this.d.judge) {
+        const j = await this.d.judge({ ...ask, triage: true }).catch(() => null);
+        if (run.concluded) return answer({ behavior: "deny", message: "The worker was stopped." });
+        if (j?.allow) {
+          remember(true, j.reason);
+          this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: "allow", by: "assistant-judge", level: "hybrid", danger: false, reason: j.reason });
+          this.feed(worker.id, "approval", `Allowed by the quick check: ${summary} (${j.reason})`);
+          return answer({ behavior: "allow", updatedInput: input });
+        }
+      }
       run.pending++;
       this.d.store.patchWorker(worker.id, { status: "waiting", detail: clip(`Waiting for the assistant: ${summary}`, DETAIL_CHARS) });
       this.feed(worker.id, "approval", `Asked the assistant: ${summary}`);
       this.changed();
-      const d = await this.d.assistant.request({ workerId: worker.id, worker: worker.name, job: worker.title, ticketId: ticket?.id ?? null, ticket: ticket ? `${ticket.title}\n${ticket.description}` : "", goal: project.goal, tool, action: describeAction(tool, input), danger: verdict.danger });
+      const d = await this.d.assistant.request({ workerId: worker.id, ticketId: ticket?.id ?? null, tool, ...ask });
       run.pending--;
       if (run.concluded) return answer({ behavior: "deny", message: "The worker was stopped." });
-      if (!run.concluded && run.pending === 0 && this.d.store.getWorker(worker.id)?.status === "waiting") {
+      if (run.pending === 0 && this.d.store.getWorker(worker.id)?.status === "waiting") {
         this.d.store.patchWorker(worker.id, { status: "running", detail: "" });
         this.changed();
       }
       if (d.kind !== "owner") {
+        remember(d.kind === "allow", d.reason);
         this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: d.kind, by: "assistant-self", danger: verdict.danger, reason: d.reason });
         this.feed(worker.id, "approval", `${d.kind === "allow" ? "Allowed" : "Refused"} by the assistant: ${summary} (${d.reason})`);
         return answer(d.kind === "allow" ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: `The assistant refused: ${d.reason}` });

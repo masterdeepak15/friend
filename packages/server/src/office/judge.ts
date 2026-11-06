@@ -11,8 +11,10 @@ export interface JudgeAsk {
   action: string;
   /** Whether the gate marked it as dangerous (deleting, installing, force pushing). */
   danger: boolean;
+  /** The quick check goes first and may say it is unsure, so that the assistant herself decides. */
+  triage?: boolean;
 }
-export type Judgement = { allow: boolean; reason: string };
+export type Judgement = { allow: boolean; reason: string; unsure?: boolean };
 
 const SYSTEM =
   "You are the assistant of a software developer. A worker you hired is doing a ticket in the developer's project and asks your permission for one action. " +
@@ -24,6 +26,9 @@ const SYSTEM =
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
+const TRIAGE =
+  " You are only the quick first look: when the action is not clearly fine and clearly within the ticket, or you would want more context about the owner or the project, answer \"unsure\" (the assistant herself then decides). Answer {\"decision\":\"allow\" or \"deny\" or \"unsure\",\"reason\":\"one short sentence\"}.";
+
 export function judgePrompt(a: JudgeAsk): { system: string; user: string } {
   const user = [
     `Worker: ${clip(a.worker, 60)} (${clip(a.job, 80)})`,
@@ -32,15 +37,16 @@ export function judgePrompt(a: JudgeAsk): { system: string; user: string } {
     `The action asked for${a.danger ? " (the safety check marks this as DANGEROUS)" : ""}:`,
     clip(a.action, 1500),
   ].join("\n");
-  return { system: SYSTEM, user };
+  return { system: a.triage ? SYSTEM + TRIAGE : SYSTEM, user };
 }
 
 /** The first JSON object in the model's words, or null if it is not a clear allow or deny. */
-export function parseJudgement(text: string): Judgement | null {
+export function parseJudgement(text: string, triage = false): Judgement | null {
   const m = /\{[^{}]*\}/.exec(text);
   if (!m) return null;
   try {
     const j = JSON.parse(m[0]) as { decision?: unknown; reason?: unknown };
+    if (triage && j.decision === "unsure") return { allow: false, unsure: true, reason: typeof j.reason === "string" ? j.reason.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 240) || "Not clear enough." : "Not clear enough." };
     if (j.decision !== "allow" && j.decision !== "deny") return null;
     const reason = typeof j.reason === "string" ? j.reason.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 240) : "";
     return { allow: j.decision === "allow", reason: reason || (j.decision === "allow" ? "Needed for the ticket." : "Not needed for the ticket.") };
@@ -68,5 +74,5 @@ export async function judgeAction(provider: Provider, ask: JudgeAsk, timeoutMs =
   } finally {
     clearTimeout(timer);
   }
-  return parseJudgement(out);
+  return parseJudgement(out, ask.triage === true);
 }

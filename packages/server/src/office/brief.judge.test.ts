@@ -23,3 +23,12 @@ describe("the assistant is told what 'herself' means", () => {
     expect(brief).toMatch(/put to you again, and after a few tries goes to the owner/);
   });
 });
+
+describe("the assistant is told what 'hybrid' means", () => {
+  const brief = officeBrief(sanitizeOffice({ enabled: true, autonomy: "hybrid", projects: [] }));
+  it("knows the quick check goes first, what reaches her, and that repeats are not asked twice", () => {
+    expect(brief).toMatch(/Autonomy is HYBRID/);
+    expect(brief).toMatch(/dangerous request \(delete, install, push, download\)/);
+    expect(brief).toMatch(/identical, for the same ticket, gets the same answer/);
+  });
+});

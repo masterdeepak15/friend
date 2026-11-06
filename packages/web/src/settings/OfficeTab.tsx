@@ -109,6 +109,7 @@ const LEVELS: { id: OfficeSettings["autonomy"]; name: string; text: string }[] =
   { id: "low", name: "Low", text: "Friend asks you for every request a worker makes that is not on your let-through list." },
   { id: "medium", name: "Medium", text: "Friend answers the ordinary requests itself. Anything that looks dangerous (deleting files, installing, force pushes) still asks you, with your PIN." },
   { id: "judge", name: "Your assistant decides", text: "Friend weighs each request like a careful senior engineer: it allows what the ticket needs and refuses what could harm, and the feed shows its reason. If it cannot decide, you are asked. The refusals below still hold." },
+  { id: "hybrid", name: "Quick check, then your assistant", text: "Cheaper than letting her answer everything. A quick separate check allows the clearly fine requests (it costs almost nothing); anything dangerous, refused or unsure goes to your assistant herself, who answers with all she knows. A request repeated for the same ticket gets the same answer. If she cannot answer, you are asked." },
   { id: "self", name: "Your assistant, herself", text: "Your assistant answers each request in her own conversation, with all she knows about you and your projects. A worker waits until she answers; if she is busy it waits for her to be free, and nothing is skipped. If she cannot answer after the tries below, you are asked." },
   { id: "high", name: "High", text: "Friend answers every request itself, even dangerous ones, so you are not asked. The refusals below still hold." },
 ];
