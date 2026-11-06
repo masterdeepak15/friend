@@ -109,3 +109,48 @@ describe("Heartbeat timer", () => {
     expect(tick).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("Heartbeat.tick with nobody at a screen", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 5));
+
+  it("sends the reminder to the phone, once, and then it is done", async () => {
+    const away = vi.fn(async (_t: TaskRow) => true);
+    beat = new Heartbeat({ tasks, clients: () => clients, busy: () => busy, notify: (t) => void notified.push(t), away, intervalMs: 15_000 });
+    clients = 0;
+    tasks.add({ title: "call the bank", dueAt: now + MIN });
+    now += MIN;
+    beat.tick();
+    beat.tick(); // the first is still being sent: not a second time
+    await flush();
+    beat.tick();
+    await flush();
+    expect(away).toHaveBeenCalledTimes(1);
+    expect(away.mock.calls[0]![0].title).toBe("call the bank");
+    expect(notified).toEqual([]); // not on a screen
+    clients = 1;
+    beat.tick();
+    expect(notified).toEqual([]); // already told
+  });
+
+  it("when no phone way worked, it stays due and is shown when a screen opens", async () => {
+    const away = vi.fn(async () => false);
+    beat = new Heartbeat({ tasks, clients: () => clients, busy: () => busy, notify: (t) => void notified.push(t), away, intervalMs: 15_000 });
+    clients = 0;
+    tasks.add({ title: "stand up", dueAt: now + MIN });
+    now += MIN;
+    beat.tick();
+    await flush();
+    expect(away).toHaveBeenCalled();
+    clients = 1;
+    beat.tick();
+    expect(notified.map((t) => t.title)).toEqual(["stand up"]);
+  });
+
+  it("without a phone way, behaves as before: waits for a screen", () => {
+    clients = 0;
+    tasks.add({ title: "stand up", dueAt: now + MIN });
+    now += MIN;
+    beat.tick();
+    expect(notified).toEqual([]);
+  });
+});

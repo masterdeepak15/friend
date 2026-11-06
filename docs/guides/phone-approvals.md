@@ -64,3 +64,13 @@ Letting your assistant answer everything costs a full turn of hers for every req
 - A dangerous request (delete, install, push, download), or one the check refuses, is unsure about or cannot answer, goes to your assistant herself, exactly as in "herself" above. If she cannot answer, you are asked.
 - The same request repeated for the same ticket gets the same answer without asking anyone again (it must be exactly the same action). Your own answers on the card are never remembered.
 - Her answers and the quick check's answers are all in the Office feed and the audit log, with the reason.
+
+## Your assistant can always reach you
+
+Reaching you is part of your assistant in general, not only of the Office. Whenever she has something to tell you and she is not in the middle of talking with you (finished work, a result you waited for, a question that needs your answer, a reminder), she uses `owner.notify`:
+
+- A Friend screen is open: it is shown there, as a card in the middle. It is not spoken (only answers to what you ask are spoken).
+- No screen is open: it is sent to the first phone app that works: Telegram, then WhatsApp, then SMS (only the ones you set up).
+- No way reaches you: it waits on the screen for when you come back, and the log says so.
+
+The same goes for reminders (a reminder that falls due while nobody is at a screen goes to your phone) and for her own check-ins. Each request she gets says how you can be reached right now, so she knows what works. `message.send` stays for messages to other people.

@@ -201,14 +201,15 @@ describe("the Office in the app", () => {
     await until(() => procs.length === 1);
     procs[0]!.onEvent({ kind: "init", sessionId: "s", model: "m" });
     procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
-    await until(() => got.some((m) => m.type === "stage" && m.command.cmd === "show" && m.command.object.id === "office-update"));
-    const card = got.find((m) => m.type === "stage" && m.command.cmd === "show" && m.command.object.id === "office-update") as unknown as { command: { object: { layer: string; type: string; props: { text: string } } } };
+    await until(() => got.some((m) => m.type === "stage" && m.command.cmd === "show" && m.command.object.id === "note-office-update"));
+    const card = got.find((m) => m.type === "stage" && m.command.cmd === "show" && m.command.object.id === "note-office-update") as unknown as { command: { object: { layer: string; type: string; props: { text: string } } } };
     expect(card.command.object).toMatchObject({ type: "card", layer: "overlay", props: { text: "Ada wrote notes.md; I read it and it looks right." } });
     expect(got.some((m) => m.type === "audio.chunk")).toBe(false); // nothing is spoken
     const asked = JSON.stringify(provider.calls[0]!.messages);
     expect(asked).toMatch(/First check the work/);
     expect(asked).toMatch(/what was done, what you checked and found/);
     expect(asked).toMatch(/does not speak/);
+    expect(asked).toMatch(/a Friend screen is open, so your note is shown there/);
     expect(asked).toMatch(/do not put it on the screen yourself with the stage tools/); // no second copy of the note
   });
 
@@ -232,5 +233,21 @@ describe("the Office in the app", () => {
     expect(JSON.parse(reply!.text)).toMatchObject({ behavior: "allow" });
     const rows = new OfficeStore(app!.db).recentRequests();
     expect(rows[0]).toMatchObject({ status: "allowed", reason: "Needed for the notes." });
+  });
+
+  it("with no screen open, tells Friend the note goes to the phone, and keeps it on the screen when no phone app is set up", async () => {
+    const cookie = await boot(true, [[{ type: "text_delta", text: "Ada wrote notes.md; it looks right." }, { type: "done" }]]);
+    void cookie; // nobody connects a screen
+    app!.office.hire({ role: "scribe", project: "site", name: "Ada" });
+    app!.office.assign({ worker: "Ada", title: "Write notes" });
+    await until(() => procs.length === 1);
+    procs[0]!.onEvent({ kind: "init", sessionId: "s", model: "m" });
+    procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
+    await until(() => provider.calls.length > 0);
+    const asked = JSON.stringify(provider.calls[0]!.messages);
+    expect(asked).toMatch(/no screen is open, so your note is sent to their phone \(no phone app is set up, so it waits on the screen\)/);
+    expect(asked).toMatch(/message\.send/);
+    await until(() => (app!.db.prepare("select count(*) n from audit_log where kind = 'owner.unreached'").get() as { n: number }).n > 0);
+    expect((app!.db.prepare("select count(*) n from audit_log where kind = 'owner.unreached'").get() as { n: number }).n).toBe(1);
   });
 });

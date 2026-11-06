@@ -4,6 +4,8 @@ export interface HeartbeatDeps {
   tasks: Tasks;
   /** How many owner screens are connected right now. */
   clients: () => number;
+  /** A reminder fell due and no screen is open: tries to tell the owner another way (their phone). True when it did, so the task is done. */
+  away?: (task: TaskRow) => Promise<boolean>;
   /** The agent is in the middle of a conversation. */
   busy: () => boolean;
   /** Tell the owner. If it throws, the task stays due and is tried again on the next beat. */
@@ -31,9 +33,25 @@ export class Heartbeat {
     this.timer = null;
   }
 
+  private sending = new Set<number>();
+
   tick(): void {
     const d = this.deps;
-    if (d.clients() === 0 || d.busy()) return; // nobody to tell, or not a good moment: it stays due
+    if (d.clients() === 0) {
+      // nobody at a screen: tell the owner another way if there is one; otherwise it stays due until a screen opens
+      if (!d.away) return;
+      for (const task of d.tasks.due()) {
+        if (this.sending.has(task.id)) continue;
+        this.sending.add(task.id);
+        void d
+          .away(task)
+          .then((ok) => ok && d.tasks.markFired(task.id))
+          .catch(() => {})
+          .finally(() => this.sending.delete(task.id));
+      }
+      return;
+    }
+    if (d.busy()) return; // not a good moment: it stays due
     for (const task of d.tasks.due()) {
       try {
         d.notify(task);

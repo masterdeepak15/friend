@@ -207,3 +207,34 @@ describe("message.send_file", () => {
     expect(ask()).toEqual([]);
   });
 });
+
+describe("owner.notify: the assistant tells the owner something, whatever it is about", () => {
+  it("goes through the general way, needs no approval, and the assistant is told where it went", async () => {
+    const notifyOwner = vi.fn(async (_t: string, _title?: string) => "Sent to the owner's phone (telegram).");
+    const provider = new FakeProvider([[call("n1", "owner.notify", { text: "Your report is ready.", title: "Report" }), done], [text("Told."), done]] as ProviderEvent[][]);
+    const agent = new Agent({
+      provider,
+      policy: new PolicyEngine(openDb(mkdtempSync(join(tmpdir(), "friend-notify-"))), config),
+      approvals,
+      devices: { exec: vi.fn(), hasOnline: () => true, targetName: () => "pc" } as never,
+      stage: new StageState(),
+      db: openDb(mkdtempSync(join(tmpdir(), "friend-notify2-"))),
+      audit: new Audit(openDb(mkdtempSync(join(tmpdir(), "friend-notify3-")))),
+      config,
+      assistantName: () => "Jarvis",
+      notifyOwner,
+      ownerReach: () => "How the owner can be reached: no screen is open; phone: telegram.",
+    });
+    await agent.runTurn("tell me when the report is ready", ctx);
+    expect(notifyOwner).toHaveBeenCalledWith("Your report is ready.", "Report");
+    expect(ask()).toHaveLength(0);
+    expect(lastTool(provider)).toContain("Sent to the owner's phone (telegram).");
+    expect(JSON.stringify(provider.calls[0])).toContain("How the owner can be reached: no screen is open; phone: telegram.");
+  });
+
+  it("says so plainly when telling the owner is not available", async () => {
+    const provider = new FakeProvider([[call("n1", "owner.notify", { text: "hi" }), done], [text("Ok."), done]] as ProviderEvent[][]);
+    await build(provider).runTurn("tell me", ctx);
+    expect(lastTool(provider)).toContain("Telling the owner is not available.");
+  });
+});

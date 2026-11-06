@@ -84,6 +84,10 @@ export interface AgentDeps {
   media?: Pick<MediaStore, "present" | "sendable">;
   /** Sends messages and reads the inbox. Without it the message tools report they are unavailable. */
   channels?: Pick<ChannelHub, "send" | "sendFile" | "inbox">;
+  /** Tells the owner something: on the screen when one is open, otherwise their phone. Resolves with where it went. */
+  notifyOwner?: (text: string, title?: string) => Promise<string>;
+  /** One line about how the owner can be reached right now (a screen open, which phone apps are set up), for the model's context. */
+  ownerReach?: () => string;
   /** The owner's stock broker (Zerodha), read only. Without it the portfolio and report tools report they are unavailable. */
   brokers?: Pick<BrokerHub, "status" | "snapshot" | "report" | "schedules" | "loginLink">;
   /** The music player on the owner's screen. Without it the music tools report they are unavailable. */
@@ -359,7 +363,7 @@ export class Agent {
           notes,
           localIso(new Date(d.tasks?.now() ?? Date.now())),
           isolated ? undefined : d.plugins?.skills(),
-          isolated ? undefined : [d.mcp?.summary(), d.integrations?.summary(), officeBrief(d.config.office)].filter(Boolean).join("\n") || undefined,
+          isolated ? undefined : [d.mcp?.summary(), d.integrations?.summary(), d.ownerReach?.(), officeBrief(d.config.office)].filter(Boolean).join("\n") || undefined,
           member ? ctx.person!.name : undefined,
           languageNote(text, ctx.spoken, voiceGender(devanagariLanguage(text) === "mr" || ctx.spoken?.toLowerCase().startsWith("mr") ? "mr" : "hi", { main: d.config.voice.ttsVoice, hindi: d.config.voice.hindiVoice || undefined, marathi: d.config.voice.marathiVoice || undefined })),
           memoryIndex,
@@ -882,6 +886,13 @@ export class Agent {
       const out = await this.runBrokerTool(call.name, args, ctx.trust === "owner" ? "owner" : "other");
       d.audit.log("agent", "tool.call", { tool: call.name, args: call.name === "reports.schedule" ? { kind: args.kind, time: args.time, channel: args.channel } : {}, tier, ok: out.ok });
       return out.ok ? { text: out.text, isError: false } : fail(out.text);
+    }
+
+    if (call.name === "owner.notify") {
+      if (!d.notifyOwner) return fail("Telling the owner is not available.");
+      const where = await d.notifyOwner(String(args.text), args.title ? String(args.title) : undefined);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { title: args.title ? String(args.title).slice(0, 60) : undefined }, tier, ok: true });
+      return { text: where, isError: false };
     }
 
     if (call.name === "message.send") {
