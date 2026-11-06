@@ -668,7 +668,7 @@ export class Agent {
     const d = this.deps;
     const readOnly = getToolDef(call.name)?.readOnly === true;
     // a web address or a search can be private: the web and browser tools log only their own site, never the words or the page
-    const quiet = call.name.startsWith("web.") || call.name.startsWith("browser.");
+    const quiet = call.name.startsWith("web.") || call.name.startsWith("browser.") || ctx.trust === "guest" || ctx.trust === "member";
     try {
       d.audit.record({ kind: "tool.start", actorKind: "assistant", target: call.name, outcome: "started", detail: { tool: call.name, ...(quiet ? {} : { args: call.args ?? {} }), ...(this.notRecorded ? { notRecorded: this.notRecorded } : {}) } });
       this.notRecorded = 0;

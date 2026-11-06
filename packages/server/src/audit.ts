@@ -41,7 +41,8 @@ export interface RecordInput {
 /** An entry could not be written. */
 export class AuditWriteError extends Error {}
 
-export type VerifyResult = { ok: true; rows: number; lastHash: string } | { ok: false; brokenAt: number; reason: "hash" | "link" | "gap" };
+/** `startsAfter`: the log no longer starts at its first entry; a retention checkpoint (entry `pruneId`) says entries up to `toId` were removed. */
+export type VerifyResult = { ok: true; rows: number; lastHash: string; startsAfter?: { pruneId: number; toId: number; ts: number } } | { ok: false; brokenAt: number; reason: "hash" | "link" | "gap" };
 
 /** What an entry's hash covers: everything but its id, so the order is only the chain's own links. */
 export function rowHash(f: { ts: number; actorKind: string; actorId: string; requestId: string | null; parentId: string | null; kind: string; target: string; outcome: string; detailJson: string; prevHash: string }): string {
@@ -124,25 +125,27 @@ export class Audit {
   /** Walks the chain: every entry must link to the one before and hash to what it says. */
   verify(): VerifyResult {
     const rows = this.db.prepare("select * from audit_log where legacy = 0 order by id").all() as Raw[];
-    const checkpoints = new Set<string>();
+    const checkpoints = new Map<string, { pruneId: number; toId: number; ts: number }>();
     for (const r of rows) {
       if (r.kind !== "audit.prune") continue;
       try {
-        const f = (JSON.parse(r.detail_json) as { finalHash?: unknown }).finalHash;
-        if (typeof f === "string") checkpoints.add(f);
+        const c = JSON.parse(r.detail_json) as { finalHash?: unknown; toId?: unknown };
+        if (typeof c.finalHash === "string") checkpoints.set(c.finalHash, { pruneId: r.id, toId: typeof c.toId === "number" ? c.toId : 0, ts: r.ts });
       } catch {
         // a checkpoint that cannot be read vouches for nothing
       }
     }
     let prev: string | null = null;
+    let startsAfter: { pruneId: number; toId: number; ts: number } | undefined;
     for (const r of rows) {
+      if (prev === null && r.prev_hash !== "") startsAfter = checkpoints.get(r.prev_hash);
       const linked = prev === null ? r.prev_hash === "" || checkpoints.has(r.prev_hash) : r.prev_hash === prev;
       if (!linked) return { ok: false, brokenAt: r.id, reason: "link" };
       const h = rowHash({ ts: r.ts, actorKind: r.actor_kind, actorId: r.actor_id, requestId: r.request_id, parentId: r.parent_id, kind: r.kind, target: r.target, outcome: r.outcome, detailJson: r.detail_json, prevHash: r.prev_hash });
       if (h !== r.hash) return { ok: false, brokenAt: r.id, reason: "hash" };
       prev = r.hash;
     }
-    return { ok: true, rows: rows.length, lastHash: prev ?? "" };
+    return { ok: true, rows: rows.length, lastHash: prev ?? "", ...(startsAfter ? { startsAfter } : {}) };
   }
 
   /** The first entry of the chain, written once: it says how many earlier entries are outside it. */

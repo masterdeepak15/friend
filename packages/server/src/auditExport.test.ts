@@ -70,3 +70,26 @@ describe("exporting the trail", () => {
     expect(html).toMatch(/BROKEN at entry 7/);
   });
 });
+
+describe("an export can be checked elsewhere", () => {
+  it("keeps the hashes of a prune checkpoint and a seal, so every row still hashes to what it says", async () => {
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { Audit, rowHash } = await import("./audit");
+    const { pruneAudit } = await import("./auditRetention");
+    const { sealNow } = await import("./auditSeal");
+    const { openDb } = await import("./db");
+    const db = openDb(mkdtempSync(join(tmpdir(), "friend-exp-")));
+    let t = 1000;
+    const a = new Audit(db, () => (t += 1000));
+    for (let i = 0; i < 5; i++) a.record({ kind: `k${i}`, actorKind: "owner", detail: { i } });
+    pruneAudit(db, { keepDays: 1, archive: false, dir: "", now: 2_000_000_000 });
+    await sealNow({ db, audit: a, send: async () => "telegram", now: 2_000_000_000 });
+    const rows = a.list(50).reverse().filter((r) => !r.legacy);
+    const out = JSON.parse(exportAudit(rows, "json", meta).body) as { rows: AuditRow[] };
+    expect(out.rows.some((r) => r.kind === "audit.prune")).toBe(true);
+    expect(out.rows.some((r) => r.kind === "audit.seal")).toBe(true);
+    for (const r of out.rows) expect(rowHash({ ts: r.ts, actorKind: r.actorKind, actorId: r.actorId, requestId: r.requestId, parentId: r.parentId, kind: r.kind, target: r.target, outcome: r.outcome, detailJson: JSON.stringify(r.detail), prevHash: r.prevHash })).toBe(r.hash);
+  });
+});

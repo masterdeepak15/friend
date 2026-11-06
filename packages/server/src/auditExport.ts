@@ -1,5 +1,5 @@
 import type { AuditRow, VerifyResult } from "./audit";
-import { maskText } from "./auditRedact";
+import { maskText, redactDetail } from "./auditRedact";
 
 export type ExportFormat = "json" | "csv" | "html";
 export interface ExportMeta {
@@ -18,7 +18,7 @@ const chainLine = (v: VerifyResult): string => (v.ok ? `Chain: OK (${v.rows} cha
 /** Masks again what was stored: an old entry, or a bug, may have let a secret through. */
 function clean(row: AuditRow): AuditRow {
   const mask = (s: string) => maskText(s);
-  return { ...row, actorId: mask(row.actorId), target: mask(row.target), detail: JSON.parse(mask(JSON.stringify(row.detail))) as Record<string, unknown> };
+  return { ...row, actorId: mask(row.actorId), target: mask(row.target), detail: JSON.parse(redactDetail(row.detail).json) as Record<string, unknown> };
 }
 
 const esc = (s: unknown): string => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");

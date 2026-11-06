@@ -128,8 +128,8 @@ export async function auditCommand(args: string[], io: IO, deps: AuditCliDeps = 
   } else if (sub === "verify") {
     path = "/api/audit/verify";
     afterwards = async (res) => {
-      const r = (await res.json()) as { ok: boolean; rows?: number; brokenAt?: number; reason?: string };
-      if (r.ok) io.out(`OK (${r.rows} rows)`);
+      const r = (await res.json()) as { ok: boolean; rows?: number; brokenAt?: number; reason?: string; startsAfter?: { toId: number; ts: number } };
+      if (r.ok) io.out(`OK (${r.rows} rows)${r.startsAfter ? `. Entries up to #${r.startsAfter.toId} were removed by retention on ${when(r.startsAfter.ts).slice(0, 10)}: check that against your archive.` : ""}`);
       else io.err(`BROKEN at ${r.brokenAt} (${plain(r.reason ?? "")}). Something changed the log.`);
       return r.ok ? 0 : 1;
     };

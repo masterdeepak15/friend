@@ -158,3 +158,14 @@ describe("what is asked and what is sent on the owner's behalf is recorded", () 
     expect(entries("owner.notified")[0]).toMatchObject({ actorKind: "assistant", outcome: "done", detail: { title: "Report", text: "Your report is ready.", where: "Sent to the owner's phone (telegram)." } });
   });
 });
+
+describe("a household member's or guest's words never reach the log through tool arguments", () => {
+  it("a refused tool call by a member or guest records no arguments and no result", async () => {
+    for (const trust of ["member", "guest"] as const) {
+      const provider = new FakeProvider([[call("t1", "task.add", { text: "Call Dr Rao about my biopsy" }), done], [text("no"), done]]);
+      await runWithRequest({ prefix: "x" }, () => build(provider).runTurn("remind me", { trust, emit, ip: "9.9.9.9", source: "voice" } as never));
+    }
+    const all = JSON.stringify(audit.list(200));
+    expect(all).not.toMatch(/biopsy|Dr Rao/);
+  });
+});

@@ -72,7 +72,7 @@ describe("verifying a seal", () => {
     expect(verifySeal(db, sealText("2026-11-06", 9999, H))).toMatchObject({ ok: false, reason: expect.stringMatching(/not in the log|missing/i) });
   });
 
-  it("passes for an entry that was pruned with a checkpoint (the checkpoint holds its hash), and cannot vouch for one inside the pruned range", () => {
+  it("never vouches for a pruned entry, only points at the archive", () => {
     const { db, a } = log(6);
     const rows = a.list(20);
     const sealAtEnd = sealText("2026-11-06", rows[0]!.id, rows[0]!.hash);
@@ -83,7 +83,7 @@ describe("verifying a seal", () => {
     const checkpoint = a.list(20).find((x) => x.kind === "audit.prune")!;
     const toId = checkpoint.detail.toId as number;
     const finalHash = checkpoint.detail.finalHash as string;
-    expect(verifySeal(db, sealText("2026-11-06", toId, finalHash))).toEqual({ ok: true });
+    expect(verifySeal(db, sealText("2026-11-06", toId, finalHash))).toMatchObject({ ok: false, reason: expect.stringMatching(/archive/) });
     expect(verifySeal(db, sealText("2026-11-06", mid.id, mid.hash))).toMatchObject({ ok: false, reason: expect.stringMatching(/pruned/) });
     void sealAtEnd;
   });
@@ -118,5 +118,37 @@ describe("when the seal is due", () => {
     expect(sealDue(at(15, 30), "09:00", "2026-11-05")).toBe(true);
     expect(sealDue(at(15, 30), "09:00", "2026-11-06")).toBe(false);
     expect(sealDue(at(23, 59), "", null)).toBe(false);
+  });
+});
+
+describe("a forged checkpoint cannot vouch for a seal", () => {
+  it("rows removed by hand and a made-up checkpoint holding the sealed hash do not make the seal pass", () => {
+    const { db, a } = log(6);
+    const last = a.last()!;
+    const seal = sealText("2026-11-06", last.id, last.hash);
+    tamper(db, "delete from audit_log where id <= ?", last.id);
+    a.record({ kind: "audit.prune", actorKind: "system", detail: { fromId: 1, toId: last.id, finalHash: last.hash, keepDays: 1 } });
+    const r = verifySeal(db, seal);
+    expect(r.ok).toBe(false);
+    expect((r as { reason: string }).reason).toMatch(/archive|pruned/);
+  });
+
+  it("verify says which checkpoint the log starts after", () => {
+    const { db, a } = log(6);
+    pruneAudit(db, { keepDays: 1, archive: false, dir: "", now: 86_400_000 + 4500 });
+    const v = a.verify();
+    expect(v).toMatchObject({ ok: true, startsAfter: { toId: expect.any(Number) } });
+  });
+});
+
+describe("finding the last seal", () => {
+  it("lastSeal gives the newest seal entry even when many reads mention the word", async () => {
+    const { AuditQuery } = await import("./auditQuery");
+    const { db, a } = log(3);
+    await sealNow({ db, audit: a, send: async () => "telegram", now: new Date(2026, 10, 6, 9, 0).getTime() });
+    for (let i = 0; i < 30; i++) a.record({ kind: "audit.read", actorKind: "owner", detail: { query: "audit.seal" } });
+    const s = new AuditQuery(db).lastSeal();
+    expect(s?.kind).toBe("audit.seal");
+    expect(s?.detail.date).toBe("2026-11-06");
   });
 });

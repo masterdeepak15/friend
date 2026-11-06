@@ -1972,7 +1972,7 @@ export async function createApp(opts: AppOptions) {
       // once a day, from the set time on, the seal of the log so far goes to the owner's phone
       const seal = async () => {
         try {
-          const lastSeal = new AuditQuery(db).search({ q: "audit.seal", limit: 20 }).find((r) => r.kind === "audit.seal");
+          const lastSeal = new AuditQuery(db).lastSeal();
           if (!sealDue(new Date(), config.audit.sealAt, typeof lastSeal?.detail.date === "string" ? lastSeal.detail.date : null)) return;
           await sealNow({ db, audit, now: Date.now(), send: (text) => sendToPhone(phoneDeps(), text) });
         } catch {

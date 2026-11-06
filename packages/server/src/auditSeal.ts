@@ -28,7 +28,8 @@ export function verifySeal(db: Db, text: string): { ok: true } | { ok: false; re
   if (row) return row.hash === s.hash ? { ok: true } : { ok: false, reason: `Entry ${s.lastId} has a different fingerprint than the seal: the log was rewritten.` };
   const checkpoints = (db.prepare("select detail_json from audit_log where kind = 'audit.prune'").all() as { detail_json: string }[]).map((r) => JSON.parse(r.detail_json) as { fromId?: number; toId?: number; finalHash?: string });
   const covering = checkpoints.find((c) => typeof c.fromId === "number" && typeof c.toId === "number" && s.lastId >= c.fromId && s.lastId <= c.toId);
-  if (covering) return s.lastId === covering.toId && covering.finalHash === s.hash ? { ok: true } : { ok: false, reason: `Entry ${s.lastId} was pruned (archived) and cannot be checked here; check it against the archive.` };
+  // a checkpoint is written by the log itself, so someone who edits the log can write one too: it never vouches for a seal
+  if (covering) return { ok: false, reason: `Entry ${s.lastId} was pruned (removed by retention, archived) and cannot be checked here; check it against the archive.` };
   return { ok: false, reason: `Entry ${s.lastId} is not in the log: entries were removed.` };
 }
 

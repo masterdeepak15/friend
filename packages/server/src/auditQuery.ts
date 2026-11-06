@@ -87,6 +87,12 @@ export class AuditQuery {
     return (this.db.prepare(`select * from audit_log ${w.sql} order by id desc limit ?`).all(...w.args, limit) as never[]).map(toAuditRow);
   }
 
+  /** The newest seal entry (uses the kind index, never a text search). */
+  lastSeal(): AuditRow | null {
+    const r = this.db.prepare("select * from audit_log where kind = 'audit.seal' order by id desc limit 1").get();
+    return r ? toAuditRow(r as never) : null;
+  }
+
   counts(f: AuditFilter = {}): { total: number; refused: number; failed: number } {
     const w = this.where({ ...f, limit: undefined });
     const n = (extra: string) => (this.db.prepare(`select count(*) n from audit_log ${w.sql}${w.sql ? " and " : "where "}${extra}`).get(...w.args) as { n: number }).n;

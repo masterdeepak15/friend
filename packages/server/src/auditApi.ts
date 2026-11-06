@@ -189,7 +189,7 @@ export function registerAuditRoutes(d: AuditApiDeps): void {
   app.get("/api/audit/status", { onRequest: guard }, async (req) => {
     read("/api/audit/status", req);
     const last = d.audit.last();
-    const seal = d.query.search({ q: "audit.seal", limit: 50 }).find((r) => r.kind === "audit.seal");
+    const seal = d.query.lastSeal();
     return { rows: d.query.counts({}).total, lastId: last?.id ?? null, lastSeal: seal ? { at: seal.ts, text: seal.detail.seal ?? null } : null, keepDays: d.config().keepDays, workers: d.query.workers() };
   });
 }
