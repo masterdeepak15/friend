@@ -389,3 +389,9 @@
 /* the small labels and values of the library's rows (CPU, RAM, DOWN, UP) in a size that can be read */
 .ob-jlive :is(span, div, b, p) { font-size: 12px; letter-spacing: 0.05em; }
 .ob-jlive .j-hfc-title { font-size: 12px; }
+
+/* On a phone all the launcher chips fit in the row (the last one, Settings, was cut off and needed a sideways scroll). */
+@media (max-width: 480px) {
+  .orbital[data-mode="compact"] .ob-chips { gap: 4px; }
+  .orbital[data-mode="compact"] .ob-chip { font-size: 11px; padding: 6px 7px; }
+}

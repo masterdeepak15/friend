@@ -45,8 +45,9 @@ button { cursor: pointer; }
 }
 
 .objects { position: absolute; inset: 0; pointer-events: none; }
+/* The stack fills the screen above the HUD, so it must not take the pointer itself (it hid the launcher chips and the instruments under it): only the objects in it do, and a touch on one still scrolls the stack. */
 .objects-stack {
-  display: flex; flex-direction: column; gap: 12px; overflow-y: auto; pointer-events: auto;
+  display: flex; flex-direction: column; gap: 12px; overflow-y: auto; pointer-events: none;
   padding: max(56px, env(safe-area-inset-top)) 14px 140px;
 }
 
@@ -58,6 +59,7 @@ button { cursor: pointer; }
   padding: max(24px, env(safe-area-inset-top)) 24px 24px clamp(120px, 20vw, 230px);
 }
 .auto-grid > .obj { pointer-events: auto; }
+.objects-stack > .obj { pointer-events: auto; }
 .objects-stack > .auto-grid { position: static; padding: 0; overflow: visible; display: flex; flex-direction: column; }
 .obj.leaving { animation: leave 0.35s ease forwards; pointer-events: none; }
 @keyframes leave { to { opacity: 0; transform: scale(0.96) translateY(-6px); } }
@@ -520,3 +522,6 @@ input, textarea, select, .connector-command { -webkit-user-select: text; user-se
 .obj-bare .obj-close { z-index: 5; }
 .obj-bare .obj-resize { z-index: 5; opacity: 0.7; }
 .obj-bare .obj-jarvis { padding-top: 28px; box-sizing: border-box; }
+
+/* The corner long-press that opens the menu sits over the first launcher chip on a phone or a narrow window; there the menu button (touch) or Esc opens it instead. */
+@media (pointer: coarse), (max-width: 720px) { .owner-hotspot { display: none; } }
