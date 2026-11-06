@@ -160,6 +160,8 @@ export class Audit {
 
   private append(i: RecordInput, actor: string): number {
     try {
+      // inside the caller's own transaction (the retention step) the entry joins it
+      if (this.db.inTransaction) return this.insert(i, actor);
       return this.db.transaction(() => this.insert(i, actor)).immediate();
     } catch (e) {
       throw new AuditWriteError(`The audit log could not be written: ${(e as Error).message}`);

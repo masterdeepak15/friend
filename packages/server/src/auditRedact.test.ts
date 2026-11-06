@@ -19,6 +19,12 @@ describe("masking secrets in what is logged", () => {
     expect(parse({ needsPin: false, pinUsed: true, token: null, pin: 123456, secret: { a: 1 }, apiKey: "k" })).toEqual({ needsPin: false, pinUsed: true, token: null, pin: "[redacted]", secret: "[redacted]", apiKey: "[redacted]" });
   });
 
+  it("keeps the trail's own fingerprints (a hash, a seal) but still masks the same text under another name", () => {
+    const h = "a".repeat(64);
+    const seal = `Friend audit seal 2026-11-06: rows 1-42, hash ${h}`;
+    expect(parse({ finalHash: h, hash: h, seal, note: h, text: seal })).toEqual({ finalHash: h, hash: h, seal, note: "[redacted]", text: seal.replace(h, "[redacted]") });
+  });
+
   it("masks things that look like secrets inside text", () => {
     const text = "curl -H 'Authorization: Bearer abcDEF123456' https://x.test --key sk-ant-api03-AbCdEfGhIjKlMnOpQrStUv and bot 123456789:AAEhBP0abcdefghijklmnopqrstuvwxyz1 and 0123456789abcdef0123456789abcdef01234567 done";
     const masked = maskText(text);

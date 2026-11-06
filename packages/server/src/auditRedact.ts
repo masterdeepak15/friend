@@ -19,6 +19,9 @@ export function maskText(text: string): string {
 /** Whether a name looks like it holds a secret (a password, a PIN, a key, a token). */
 export const isSecretKey = (name: string): boolean => SECRET_KEY.test(name);
 
+/** The trail's own fingerprints (a hash, a seal) are long hex runs but are not secrets: they are what proves the log is whole. */
+const isOwnHash = (key: string, v: unknown): boolean => typeof v === "string" && /(hash|seal)$/i.test(key) && (/^[0-9a-f]{64}$/i.test(v) || /^Friend audit seal \d{4}-\d{2}-\d{2}: rows 1-\d+, hash [0-9a-f]{64}$/.test(v));
+
 function mask(value: unknown, path: Set<object>): unknown {
   if (typeof value === "string") return maskText(value);
   if (!value || typeof value !== "object") return value;
@@ -27,7 +30,7 @@ function mask(value: unknown, path: Set<object>): unknown {
   try {
     if (Array.isArray(value)) return value.map((v) => mask(v, path));
     // a yes/no or an empty value under a secret-looking name (needsPin: false) holds no secret; text, numbers and objects do
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, SECRET_KEY.test(k) && typeof v !== "boolean" && v != null ? MASK : mask(v, path)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, isOwnHash(k, v) ? v : SECRET_KEY.test(k) && typeof v !== "boolean" && v != null ? MASK : mask(v, path)]));
   } finally {
     path.delete(value);
   }

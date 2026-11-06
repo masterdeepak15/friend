@@ -25,6 +25,7 @@ import { judgeAction } from "./office/judge";
 import { AssistantApprovals } from "./office/assistantApprovals";
 import { ensureRequest, runWithRequest } from "./auditContext";
 import { AuditQuery } from "./auditQuery";
+import { pruneAudit } from "./auditRetention";
 import { deliverToOwner, sendToPhone, type OwnerChannel } from "./reach";
 import { TurnQueue } from "./agent/turnQueue";
 import { Audit } from "./audit";
@@ -290,6 +291,7 @@ export async function createApp(opts: AppOptions) {
   // Stock brokers (Zerodha first): the daily login, reading the account, and the scheduled reports.
   const brokerHub = new BrokerHub({ config, dataDir: opts.dataDir, db, audit, channels: channelHub, fetch: opts.brokerFetch, publicBase: () => config.publicUrl ?? null });
   brokerHub.apply();
+  let pruneTimer: ReturnType<typeof setInterval> | undefined;
   let brokerTimer: ReturnType<typeof setInterval> | undefined;
   let statsStop: (() => void) | undefined;
   // The owner's music: the folder is a setting; the player itself runs in the browser and the assistant controls it through the hub.
@@ -1951,6 +1953,17 @@ export async function createApp(opts: AppOptions) {
       } catch {
         // no settings file to look at yet
       }
+      const prune = () => {
+        try {
+          const r = pruneAudit(db, { keepDays: config.audit.keepDays, archive: config.audit.archive, dir: join(opts.dataDir, "audit-archive"), now: Date.now() });
+          if (r.removed) audit.log("system", "audit.pruned", { removed: r.removed, archive: r.archivePath });
+        } catch (e) {
+          audit.log("system", "audit.prune_failed", { message: (e as Error).message.slice(0, 200) });
+        }
+      };
+      prune();
+      pruneTimer = setInterval(prune, 24 * 3600_000);
+      pruneTimer.unref?.();
       heartbeat.start();
   proactive.start();
       // connectors that were on come back in the background; Friend does not wait for them. Chrome control comes back through its plugin,
@@ -1995,6 +2008,7 @@ export async function createApp(opts: AppOptions) {
         // closing anyway
       }
       trackConfigHash(false);
+      if (pruneTimer) clearInterval(pruneTimer);
       stopped = true;
       updater.stop();
       hostPlayer.dispose();

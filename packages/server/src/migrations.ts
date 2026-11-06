@@ -281,4 +281,9 @@ create index audit_log_actor_kind on audit_log (actor_kind);
 create index audit_log_kind on audit_log (kind);
 alter table office_tickets add column request_id text;`,
   },
+  {
+    id: 17,
+    sql: `create trigger audit_no_update before update on audit_log begin select raise(abort, 'audit_log is append-only'); end;
+create trigger audit_no_delete before delete on audit_log begin select raise(abort, 'audit_log is append-only'); end;`,
+  },
 ];
