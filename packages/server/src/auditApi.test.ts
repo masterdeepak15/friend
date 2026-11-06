@@ -85,6 +85,28 @@ describe("the audit routes need the owner and the PIN", () => {
     expect((await fetch(base() + "/api/audit/verify-seal", { method: "POST", headers: h, body: JSON.stringify({}) })).status).toBe(400);
   });
 
+  it("exports a range as JSON, CSV and HTML, as a download, and refuses an unknown format", async () => {
+    const cookie = await boot();
+    const { token } = (await (await unlock(cookie)).json()) as { token: string };
+    const h = { cookie, "x-audit-unlock": token };
+    const json = await fetch(base() + "/api/audit/export?format=json", { headers: h });
+    expect(json.status).toBe(200);
+    expect(json.headers.get("content-disposition")).toMatch(/^attachment; filename="friend-audit-\d{4}-\d{2}-\d{2}\.json"$/);
+    expect(json.headers.get("cache-control")).toBe("no-store");
+    const body = (await json.json()) as { verify: { ok: boolean }; rows: { id: number }[] };
+    expect(body.verify.ok).toBe(true);
+    expect(body.rows.length).toBeGreaterThan(0);
+    expect(body.rows.map((r) => r.id)).toEqual([...body.rows.map((r) => r.id)].sort((a, b) => a - b)); // oldest first
+    const csv = await fetch(base() + "/api/audit/export?format=csv&group=logins", { headers: h });
+    expect(csv.headers.get("content-type")).toMatch(/^text\/csv/);
+    expect((await csv.text()).split(/\r?\n/)[1]).toMatch(/^id,time,/);
+    const html = await fetch(base() + "/api/audit/export?format=html", { headers: h });
+    expect(html.headers.get("content-security-policy")).toContain("default-src 'none'");
+    expect(await html.text()).toContain("Friend audit report");
+    expect((await fetch(base() + "/api/audit/export?format=pdf", { headers: h })).status).toBe(400);
+    expect((await fetch(base() + "/api/audit/export", { headers: h })).status).toBe(400);
+  });
+
   it("filters come from the query string, and a bad value is refused", async () => {
     const cookie = await boot();
     const { token } = (await (await unlock(cookie)).json()) as { token: string };

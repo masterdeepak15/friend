@@ -80,9 +80,10 @@ export class AuditQuery {
     return { sql: c.length ? `where ${c.join(" and ")}` : "", args };
   }
 
-  search(f: AuditFilter = {}): AuditRow[] {
+  /** Newest first. The screen asks for at most 500 at a time; an export may ask for more (`max`). */
+  search(f: AuditFilter = {}, max = MAX_LIMIT): AuditRow[] {
     const w = this.where(f);
-    const limit = Math.min(Math.max(Math.floor(f.limit ?? 100), 1), MAX_LIMIT);
+    const limit = Math.min(Math.max(Math.floor(f.limit ?? 100), 1), max);
     return (this.db.prepare(`select * from audit_log ${w.sql} order by id desc limit ?`).all(...w.args, limit) as never[]).map(toAuditRow);
   }
 

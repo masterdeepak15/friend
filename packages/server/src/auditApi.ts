@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { Audit } from "./audit";
 import { type AuditFilter, type AuditQuery } from "./auditQuery";
+import { exportAudit } from "./auditExport";
 import { localDate, sealText, verifySeal } from "./auditSeal";
 import { LockoutError, type Auth } from "./auth";
 import type { AuditConfig } from "./config";
@@ -61,6 +62,9 @@ export const FilterQuery = z
     limit: int.max(100_000).optional(),
   })
   .strict();
+
+export const EXPORT_MAX = 50_000;
+const ExportQuery = FilterQuery.extend({ format: z.enum(["json", "csv", "html"]) }).strict();
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 /** A request that came through a proxy or a tunnel looks like it came from this PC; these headers give it away. */
@@ -166,6 +170,20 @@ export function registerAuditRoutes(d: AuditApiDeps): void {
     if (typeof text !== "string" || text.length > 300) return reply.code(400).send({ error: "Give the seal text" });
     read("/api/audit/verify-seal", req);
     return verifySeal(d.query.db, text);
+  });
+
+  /** A day, a week or a ticket as a file (up to 50,000 entries): JSON with the chain fields, CSV, or a printable HTML report. */
+  app.get("/api/audit/export", { onRequest: guard }, async (req, reply) => {
+    const p = ExportQuery.safeParse(req.query ?? {});
+    if (!p.success) return reply.code(400).send({ error: `Bad filter: ${p.error.issues[0]?.path.join(".") ?? "query"}` });
+    const { format, ...rest } = p.data;
+    const f = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)) as AuditFilter;
+    const rows = d.query.search({ ...f, limit: EXPORT_MAX }, EXPORT_MAX).reverse(); // oldest first, like a report
+    read("/api/audit/export", req);
+    const out = exportAudit(rows, format, { from: f.from ?? null, to: f.to ?? null, generatedAt: Date.now(), verify: d.audit.verify() });
+    reply.header("content-type", `${out.mime}; charset=utf-8`).header("content-disposition", `attachment; filename="${out.filename}"`).header("cache-control", "no-store").header("x-content-type-options", "nosniff");
+    if (format === "html") reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'");
+    return out.body;
   });
 
   app.get("/api/audit/status", { onRequest: guard }, async (req) => {
