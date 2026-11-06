@@ -785,6 +785,7 @@ export async function createApp(opts: AppOptions) {
   const tidyAtStart = setTimeout(() => void memoryOrganizer.maybeRun(), 45_000);
   tidyAtStart.unref();
   const agent = new Agent({
+    auditQuery: new AuditQuery(db),
     notifyOwner: (text, title) => tellOwner(text, title),
     ownerReach,
     settings: agentSettings,
