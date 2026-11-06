@@ -368,6 +368,20 @@ export function createGateway(deps: GatewayDeps) {
     }
   });
 
+  // what every browser should apply to what Friend sends: no guessing of types, no framing by other sites, no referrer leaks, no
+  // plug-ins; over https the browser is also told to keep using https. A route that set its own (a stricter one for a picture) keeps it.
+  app.addHook("onSend", async (req, reply, payload) => {
+    const set = (name: string, value: string) => {
+      if (!reply.hasHeader(name)) reply.header(name, value);
+    };
+    set("x-content-type-options", "nosniff");
+    set("x-frame-options", "SAMEORIGIN");
+    set("referrer-policy", "no-referrer");
+    set("content-security-policy", "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'");
+    if (isSecure(req)) set("strict-transport-security", "max-age=15552000");
+    return payload;
+  });
+
   // ---- the audit trail: every request that changes something, by whom, from where, and how it ended ----
   const MISSES_PER_MINUTE = 30;
   const misses = new Map<string, { start: number; n: number; flooded: boolean }>();

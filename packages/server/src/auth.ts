@@ -21,25 +21,48 @@ export const LOGIN_TRIES = 3;
 const PAIR_TTL_MS = 5 * 60 * 1000;
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
-function scryptAsync(secret: string, salt: Buffer): Promise<Buffer> {
+/** The cost of guessing a password or PIN offline: today's recommended minimum (2^17). Older hashes (2^14) still work and are upgraded at the next login. */
+const SCRYPT_N = 131072;
+const LEGACY_N = 16384;
+/** The cost used for new hashes. Only the tests lower it (a hash this strong takes about a second, and hundreds are made in a test run). */
+let cost = SCRYPT_N;
+export function setScryptCostForTests(n: number | null): void {
+  if (!process.env.VITEST) throw new Error("The hashing cost can only be lowered by the tests.");
+  cost = n ?? SCRYPT_N;
+}
+
+function scryptAsync(secret: string, salt: Buffer, N: number): Promise<Buffer> {
   return new Promise((res, rej) =>
-    scrypt(secret, salt, 64, { N: 16384, r: 8, p: 1 }, (err, key) => (err ? rej(err) : res(key))),
+    scrypt(secret, salt, 64, { N, r: 8, p: 1, maxmem: 256 * 1024 * 1024 }, (err, key) => (err ? rej(err) : res(key))),
   );
 }
 
 export async function hashSecret(secret: string): Promise<string> {
   const salt = randomBytes(16);
-  const key = await scryptAsync(secret, salt);
-  return `scrypt$${salt.toString("hex")}$${key.toString("hex")}`;
+  const key = await scryptAsync(secret, salt, cost);
+  return `scrypt2$${cost}$${salt.toString("hex")}$${key.toString("hex")}`;
 }
 
 export async function verifySecret(secret: string, stored: string): Promise<boolean> {
-  const [alg, saltHex, keyHex] = stored.split("$");
-  if (alg !== "scrypt" || !saltHex || !keyHex) return false;
+  const parts = stored.split("$");
+  let N: number;
+  let saltHex: string | undefined;
+  let keyHex: string | undefined;
+  if (parts[0] === "scrypt" && parts.length === 3) {
+    N = LEGACY_N;
+    [, saltHex, keyHex] = parts;
+  } else if (parts[0] === "scrypt2" && parts.length === 4 && (Number(parts[1]) === SCRYPT_N || Number(parts[1]) === cost)) {
+    N = Number(parts[1]);
+    [, , saltHex, keyHex] = parts;
+  } else return false;
+  if (!saltHex || !keyHex) return false;
   const expected = Buffer.from(keyHex, "hex");
-  const actual = await scryptAsync(secret, Buffer.from(saltHex, "hex"));
+  const actual = await scryptAsync(secret, Buffer.from(saltHex, "hex"), N);
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
+
+/** Whether a stored hash was made with an older, cheaper setting. */
+const outdated = (stored: string): boolean => !stored.startsWith(`scrypt2$${cost}$`);
 
 export class Auth {
   private limiter: RateLimiter;
@@ -99,6 +122,7 @@ export class Auth {
       throw new Error("Invalid credentials");
     }
     succeeded();
+    if (row && outdated(row.h)) this.db.prepare("update owner set password_hash = ? where id = 1").run(await hashSecret(password));
     const token = randomBytes(32).toString("hex");
     const expiresAt = this.clock() + SESSION_TTL_MS;
     this.db
@@ -137,8 +161,10 @@ export class Auth {
     const succeeded = this.begin("pin", ip);
     const row = this.db.prepare("select pin_hash h from owner where id = 1").get() as { h: string } | undefined;
     const ok = row ? await verifySecret(pin, row.h) : false;
-    if (ok) succeeded();
-    else this.audit.log("owner", "pin.fail", { ip });
+    if (ok) {
+      succeeded();
+      if (row && outdated(row.h)) this.db.prepare("update owner set pin_hash = ? where id = 1").run(await hashSecret(pin));
+    } else this.audit.log("owner", "pin.fail", { ip });
     return ok;
   }
 

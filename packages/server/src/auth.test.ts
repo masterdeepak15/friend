@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Audit } from "./audit";
-import { Auth, LockoutError, hashSecret, verifySecret } from "./auth";
+import { Auth, LockoutError, hashSecret, setScryptCostForTests, verifySecret } from "./auth";
 import { openDb } from "./db";
 
 let now = 1_000_000;
@@ -137,5 +137,39 @@ describe("audit", () => {
     const row = audit.list(1)[0]!;
     expect(JSON.stringify(row)).not.toContain("hunter2");
     expect(JSON.stringify(row)).toContain('"ok":1');
+  });
+});
+
+describe("stronger hashing, without locking anyone out", () => {
+  const legacy = async (secret: string) => {
+    const { scrypt, randomBytes } = await import("node:crypto");
+    const salt = randomBytes(16);
+    const key = await new Promise<Buffer>((res, rej) => scrypt(secret, salt, 64, { N: 16384, r: 8, p: 1 }, (e, k) => (e ? rej(e) : res(k))));
+    return `scrypt$${salt.toString("hex")}$${key.toString("hex")}`;
+  };
+
+  it("new hashes use the stronger setting and say so", async () => {
+    setScryptCostForTests(null); // the real cost, not the quick one the tests use
+    const h = await hashSecret("abc12345");
+    setScryptCostForTests(1024);
+    expect(h).toMatch(/^scrypt2\$131072\$/);
+    expect(await verifySecret("abc12345", h)).toBe(true);
+    expect(await verifySecret("abc12346", h)).toBe(false);
+  });
+
+  it("an older hash still verifies", async () => {
+    expect(await verifySecret("abc12345", await legacy("abc12345"))).toBe(true);
+    expect(await verifySecret("nope", await legacy("abc12345"))).toBe(false);
+  });
+
+  it("a login with an older password hash upgrades it, and the PIN likewise", async () => {
+    await auth.setupOwner(owner);
+    db.prepare("update owner set password_hash = ?, pin_hash = ? where id = 1").run(await legacy(owner.password), await legacy(owner.pin));
+    await auth.login(owner.password, "1.1.1.1");
+    expect(await auth.verifyPin(owner.pin, "1.1.1.1")).toBe(true);
+    const row = db.prepare("select password_hash p, pin_hash n from owner where id = 1").get() as { p: string; n: string };
+    expect(row.p).toMatch(/^scrypt2\$/);
+    expect(row.n).toMatch(/^scrypt2\$/);
+    await auth.login(owner.password, "1.1.1.1"); // and still works
   });
 });
