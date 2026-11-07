@@ -930,6 +930,27 @@ const clip = (s: string, n = 300) => (s.length > n ? s.slice(0, n) + "…" : s);
 const INVISIBLE = /[\u0000-\u0008\u000B\u000C\u000D-\u001F\u007F-\u009F​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
 const visible = (s: string) => s.replace(INVISIBLE, (c) => `\\u{${c.codePointAt(0)!.toString(16).toUpperCase()}}`);
 
+const DOWNLOADS = /\b(curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b/i;
+const RUNS_INPUT = /\|\s*(sudo\s+)?(sh|bash|zsh|dash|iex|Invoke-Expression|powershell|pwsh|python3?|node|perl|ruby)\b/i;
+
+/**
+ * Plain-words warnings for the shapes of command that do the most damage, shown on the approval card of a command the assistant took
+ * from text on the internet (a README). A command with none of these is not safe, only not one of these: the owner still approves it.
+ */
+export function riskOf(command: string): string[] {
+  const out: string[] = [];
+  const add = (w: string) => out.includes(w) || out.push(w);
+  const c = command;
+  if ((DOWNLOADS.test(c) && RUNS_INPUT.test(c)) || /\b(iex|Invoke-Expression)\b[^\n]*\b(iwr|irm|Invoke-WebRequest|Invoke-RestMethod|DownloadString)\b/i.test(c)) add("It downloads something and runs it straight away, without anyone reading it first.");
+  if (/(^|\s)-(enc|encodedcommand)\b/i.test(c) || /\bbase64\s+(-d|--decode)\b[^\n]*\|\s*(sh|bash|iex)/i.test(c)) add("It hides what it runs (the command is encoded).");
+  if (/\bsudo\b|\brunas\b|\bStart-Process\b[^\n]*-Verb\s+RunAs/i.test(c)) add("It runs with administrator rights.");
+  if (/\brm\s+(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b/.test(c) || /\bRemove-Item\b[^\n]*-Recurse/i.test(c) || /\b(rd|rmdir|del)\s+[^\n]*\/s\b/i.test(c)) add("It deletes folders and everything in them.");
+  if (/\breg(\.exe)?\s+(add|delete|import)\b/i.test(c) || /\b(Set|New|Remove)-ItemProperty\b[^\n]*\bHK(LM|CU|CR|U)\b/i.test(c)) add("It changes the Windows registry.");
+  if (/\bchmod\s+(-R\s+)?[0-7]?777\b|\bchmod\s+-R\b/.test(c)) add("It opens file permissions widely.");
+  if (/(>|\btee\b|\bcp\b|\bmv\b|\binstall\b|\bln\b)[^\n]*\s\/(etc|usr|bin|sbin|boot|lib|var|opt)\b/.test(c) || />\s*\/(etc|usr|bin|sbin|boot|lib)\b/.test(c) || /\b(C:[\\/]+Windows|System32|Program Files)\b/i.test(c)) add("It writes to system folders.");
+  return out;
+}
+
 /**
  * Human-readable summary built from the real arguments, used on approval cards.
  * What the owner approves is never truncated: a shell command is shown in full.

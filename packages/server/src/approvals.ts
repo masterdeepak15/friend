@@ -16,6 +16,10 @@ export interface ApprovalRequest {
   device?: string | null;
   /** False when the question is already going to the owner's phone another way (a speaker device); default true. */
   remote?: boolean;
+  /** Where the text that a command follows came from (a README), when it did. */
+  origin?: string;
+  /** Plain-words warnings about what the command could do. */
+  warnings?: string[];
 }
 
 /** Asks the owner somewhere other than the screen (their phone). Must never throw into the approval. */
@@ -62,12 +66,16 @@ export class Approvals {
 
   request(req: ApprovalRequest, emit: (m: ServerMsg) => void): Promise<ApprovalOutcome> {
     const id = randomUUID();
+    // what a person would want to know before saying yes is in the summary itself, so every place the question is asked (screen, phone, speaker) says it
+    const notes = [...(req.origin ? [`This command follows text from ${req.origin}. Nobody at Friend wrote it.`] : []), ...(req.warnings ?? [])];
     const info: PendingApproval = {
       id,
       tool: req.tool,
-      summary: describeCall(req.tool, req.args, req.device ?? undefined),
+      summary: describeCall(req.tool, req.args, req.device ?? undefined) + (notes.length ? `\n\n${notes.map((n) => `⚠ ${n}`).join("\n")}` : ""),
       tier: req.tier,
       needsPin: req.needsPin,
+      ...(req.origin ? { origin: req.origin } : {}),
+      ...(req.warnings?.length ? { warnings: req.warnings } : {}),
     };
     this.deps.db
       .prepare("insert into approvals (id, tool, summary, tier) values (?, ?, ?, ?)")

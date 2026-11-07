@@ -39,6 +39,10 @@ export const PendingApproval = z.object({
   summary: z.string(),
   tier: Tier,
   needsPin: z.boolean(),
+  /** Set when the command follows text from the internet (a README): where that text came from. */
+  origin: z.string().optional(),
+  /** Plain-words warnings about what the command could do. */
+  warnings: z.array(z.string()).optional(),
 });
 export type PendingApproval = z.infer<typeof PendingApproval>;
 
