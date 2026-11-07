@@ -43,6 +43,8 @@ const ManifestSchema = z
     name: z.string().min(1).max(80),
     version: z.string().min(1).max(40),
     description: z.string().max(500).default(""),
+    /** Where an imported plugin came from ("github.com/owner/repo@commit"); unset for plugins written here or bundled. */
+    source: z.string().max(200).optional(),
     skills: z.array(SkillSchema).max(MAX_ITEMS, { message: `A plugin can have at most ${MAX_ITEMS} skills.` }).default([]),
     tools: z.array(ToolSchema).max(MAX_ITEMS, { message: `A plugin can have at most ${MAX_ITEMS} tools.` }).default([]),
   })
@@ -69,6 +71,8 @@ export interface PluginInfo {
   enabled: boolean;
   /** Why the plugin cannot be used, or null. */
   error: string | null;
+  /** Where it was imported from, when it was. */
+  source?: string;
   skills: { name: string; description: string }[];
   tools: { name: string; description: string }[];
 }
@@ -300,6 +304,7 @@ export class Plugins {
         description: m.description,
         enabled,
         error: null,
+        ...(m.source ? { source: m.source } : {}),
         skills: m.skills.map((s) => ({ name: s.name, description: s.description })),
         tools: m.tools.map((t) => ({ name: t.name, description: t.description })),
       };
