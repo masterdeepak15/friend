@@ -226,3 +226,44 @@ export function restoreScreen(id: string, st: ComposeState): ComposeResult {
   const role: ObjectRole = o.role === "focus" ? "focus" : "beside";
   return composeScreen([{ id, type: o.type, props: o.props, role, ...(o.label ? { label: o.label } : {}) }], "add", st);
 }
+
+const plainWords = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** What is counted as a thing on the screen: not a pinned widget (the owner's), not a passing note, not something put away. */
+const counted = (o: StageObject) => !o.pinned && !o.docked && o.layer !== "overlay";
+
+/** Design problems of the screen as it is, in short sentences the assistant can act on. Empty when the screen is fine. */
+export function designFindings(objects: StageObject[], screen: ScreenInfo | null): string[] {
+  const out: string[] = [];
+  const kind = kindOf(screen);
+  const cap = zonesFor(screen).beside.length || 1;
+  const shown = objects.filter(counted);
+  if (shown.length >= 2 && !shown.some((o) => o.role === "focus" || o.role === "alert")) {
+    out.push(`There is no focus: ${shown.length} things are shown and none is the main thing. Make the one the owner asked for the focus (screen.compose, role focus) and put the others beside it or away.`);
+  }
+  if (shown.length > 1 + cap) {
+    out.push(`${plainWords(shown.length, "thing is", "things are")} on the screen but a ${kind} shows ${1 + cap} well. Put the rest away (stage.hide) or use screen.compose so they become chips.`);
+  }
+  for (const f of shown.filter((o) => o.role === "focus" && typeof o.placement === "object")) {
+    const w = (f.placement as { w: number }).w;
+    if (w < 0.33 && shown.length > 1) out.push(`The focus "${f.id}" is small (${Math.round(w * 100)}% of the width) next to the others. Give the main thing more room.`);
+  }
+  return out;
+}
+
+/** The zones of the screen for the request's screen line: what is free, and what is put away. */
+export function describeZones(st: ComposeState): string {
+  const zones = zonesFor(
+    st.screen,
+    { panels: st.panels.map((p) => PANEL_RECTS[p]), instruments: st.instruments.filter((i) => i !== "usage").map((i) => INSTRUMENT_RECTS[i]) },
+    st.maxChips,
+  );
+  const docked = st.current.filter((o) => o.docked);
+  const chips = docked.length ? docked.map((o) => { const c = chipOf(o); return c.value ? `${c.label} ${c.value}` : c.label; }).join(", ") : "none";
+  const strip = `chips (${docked.length} of ${zones.chipMax}): ${chips}`;
+  const shown = st.current.filter(counted);
+  const focusTaken = shown.some((o) => o.role === "focus" || o.role === "alert");
+  if (zones.stack) return `zones: stacked (one card at a time under the main thing); ${strip}`;
+  const used = shown.filter((o) => o.role === "beside").length;
+  return `zones: focus ${focusTaken ? "taken" : "free"}, beside ${Math.max(0, zones.beside.length - used)} of ${zones.beside.length} free; ${strip}`;
+}

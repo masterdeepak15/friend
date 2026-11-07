@@ -16,7 +16,7 @@ import {
 } from "@friend/protocol";
 
 import { GUIDE_TOPICS, screenGuide, type GuideTopic } from "./agent/guide";
-import { composeScreen, restoreScreen, type ComposeItem, type ComposeResult, type ComposeState } from "./agent/compose";
+import { composeScreen, describeZones, restoreScreen, type ComposeItem, type ComposeResult, type ComposeState } from "./agent/compose";
 import { describeScreen, placeObject, type PanelName } from "./agent/layout";
 import type { LookConfig, TidyConfig } from "./config";
 
@@ -404,7 +404,7 @@ export class StageState {
 
   /** What the model is told about the screen with each request: what is where, how long it stays, and what is free. */
   summary(now: number = Date.now()): string {
-    return describeScreen(this.scene, this.presence.state, [...this.objects.values()].map((e) => ({ object: e.obj, expiresAt: e.expiresAt })), now, this.panels, this.screen, this.view?.(), this.mood.accent);
+    return `${describeScreen(this.scene, this.presence.state, [...this.objects.values()].map((e) => ({ object: e.obj, expiresAt: e.expiresAt })), now, this.panels, this.screen, this.view?.(), this.mood.accent)}; ${describeZones(this.composeState())}`;
   }
 
   /** After objects left on their own (their time ran out): the commands that put the screen back to the bare presence. */

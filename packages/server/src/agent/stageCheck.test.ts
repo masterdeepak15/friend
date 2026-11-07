@@ -86,3 +86,14 @@ describe("stage.check in the agent loop", () => {
     expect(JSON.stringify(provider.calls[1]!.messages.at(-1))).toMatch(/not available/i);
   });
 });
+
+describe("stage.check adds design findings", () => {
+  it("says what a designer would say about the whole layout, after what the screen measured", async () => {
+    const show = (id: string, placement: string) => call(`s-${id}`, "stage.show", { object: { id, type: "card", props: { text: id }, placement } });
+    const provider = new FakeProvider([[show("a", "left"), show("b", "right"), call("c1", "stage.check"), done], [text("ok"), done]]);
+    await build(provider).runTurn("draw", ctx);
+    const all = JSON.stringify(provider.calls[1]!.messages);
+    expect(all).toContain("is cut off"); // what the screen measured
+    expect(all).toMatch(/no focus/i); // what the layout says
+  });
+});
