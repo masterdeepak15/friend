@@ -68,6 +68,21 @@ function walk(v: unknown, path: string, visit: (obj: Record<string, unknown>, k:
   }
 }
 
+/** One piece of text sealed with the data folder's key (for example a list of face numbers). */
+export function sealText(text: string, dataDir: string): string {
+  return seal(text, masterKey(dataDir));
+}
+
+/** The text back, or null when it is not sealed, was damaged, or was sealed with another key. */
+export function unsealText(text: string, dataDir: string): string | null {
+  if (!text.startsWith(PREFIX)) return null;
+  try {
+    return open(text, masterKey(dataDir));
+  } catch {
+    return null;
+  }
+}
+
 /** A copy with every secret-looking text value encrypted. `changed` says whether any plain value was found. */
 export function sealSecrets<T>(value: T, dataDir: string): { value: T; changed: boolean } {
   const copy = JSON.parse(JSON.stringify(value)) as T;

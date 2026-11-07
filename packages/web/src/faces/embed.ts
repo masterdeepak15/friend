@@ -1,3 +1,4 @@
+import { FACE_SIMILARITY_THRESHOLD } from "@friend/protocol";
 import type { Face, Img, OrtLike, OrtSession } from "./types";
 
 /** Where the two eyes, the nose and the two mouth corners sit in the 112 x 112 face SFace was trained on. */
@@ -9,11 +10,8 @@ const TEMPLATE: [number, number][] = [
   [70.7299, 92.2041],
 ];
 export const FACE_SIZE = 112;
-/**
- * Two faces count as the same person at or above this cosine similarity. OpenCV publishes 0.363, but on our photos two different
- * older men reached 0.367 while the same person scored 0.75 to 0.80, so it is set well above: a wrong name is worse than a missed one.
- */
-export const SIMILARITY_THRESHOLD = 0.55;
+/** The server decides who someone is; the browser uses the same number only for its own checks. */
+export const SIMILARITY_THRESHOLD = FACE_SIMILARITY_THRESHOLD;
 
 /** The best turn, scale and shift that bring the five found points onto the template (least squares), as [a, b, tx, ty]. */
 export function similarity(points: [number, number][]): [number, number, number, number] {

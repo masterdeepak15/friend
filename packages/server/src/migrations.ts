@@ -286,4 +286,22 @@ alter table office_tickets add column request_id text;`,
     sql: `create trigger audit_no_update before update on audit_log begin select raise(abort, 'audit_log is append-only'); end;
 create trigger audit_no_delete before delete on audit_log begin select raise(abort, 'audit_log is append-only'); end;`,
   },
+  {
+    id: 18,
+    sql: `create table people (
+  id integer primary key autoincrement,
+  name text not null,
+  relation text not null default '',
+  note text not null default '',
+  created_at integer not null
+);
+create unique index people_name on people (lower(name));
+create table person_faces (
+  id integer primary key autoincrement,
+  person_id integer not null references people (id) on delete cascade,
+  vec text not null,
+  created_at integer not null
+);
+create index person_faces_person on person_faces (person_id);`,
+  },
 ];
