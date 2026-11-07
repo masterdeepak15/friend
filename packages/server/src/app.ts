@@ -219,6 +219,7 @@ export async function createApp(opts: AppOptions) {
   const stage = new StageState();
   stage.useStore(dbWidgetStore(db)); // the owner's pinned widgets come back
   stage.trackView(() => config.view);
+  stage.trackTidy(() => config.hud.tidy);
   // the layout keeps clear of the live instruments that are on the home screen (the owner's switches and the ones the assistant brought up)
   stage.trackInstruments(() => {
     if (config.hud.layout !== "orbital") return [];
@@ -989,7 +990,7 @@ export async function createApp(opts: AppOptions) {
     look: clientLook(config.look),
     ownerName: config.ownerName,
     assistantName: auth.assistantName(),
-    hud: { terminalLabel: config.hud.terminalLabel, clock: { ...config.hud.clock }, launcher: config.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })), animations: config.hud.animations, layout: config.hud.layout, density: config.hud.density, widgets: { ...config.hud.widgets }, preview: config.hud.preview },
+    hud: { terminalLabel: config.hud.terminalLabel, clock: { ...config.hud.clock }, launcher: config.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })), animations: config.hud.animations, layout: config.hud.layout, density: config.hud.density, widgets: { ...config.hud.widgets }, preview: config.hud.preview, tidy: { ...config.hud.tidy } },
     music: { folderSet: config.music.folder !== "", volume: config.music.volume, shuffle: config.music.shuffle, repeat: config.music.repeat, visualizer: config.music.visualizer, startView: config.music.startView, output: config.music.output },
   });
   const statusMsg = (): ServerMsg => ({
@@ -2083,6 +2084,7 @@ export async function createApp(opts: AppOptions) {
       languageWarm = setTimeout(warmLanguagesQuietly, opts.warmLanguagesAfterMs ?? 20_000);
       timer = setInterval(() => {
         const gone = stage.expire();
+        for (const command of stage.tidy(Date.now(), config.hud.tidy)) broadcast({ type: "stage", command });
         for (const id of gone) broadcast({ type: "stage", command: { cmd: "hide", id } });
         if (gone.length) for (const follow of stage.settleNow()) broadcast({ type: "stage", command: follow });
       }, opts.expireIntervalMs ?? 1000);

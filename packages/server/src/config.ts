@@ -171,6 +171,17 @@ export interface HudConfig {
   widgets: Partial<Record<HudWidgetId, boolean>>;
   /** Show sample content in the orbital screen (to preview the look before workers exist); it is labelled as sample. */
   preview: boolean;
+  /** How the assistant's cards are tidied away into chips. */
+  tidy: TidyConfig;
+}
+
+/** A card the assistant put beside the main thing is put away as a chip after this long (never before its text could be read). */
+export interface TidyConfig {
+  /** Seconds; 0 keeps cards until they are replaced or dismissed. */
+  dockAfterSeconds: number;
+  /** How many chips the strip holds; null follows the screen (desktop 7, tablet and phone 5). */
+  maxChips: number | null;
+  autoTidy: boolean;
 }
 
 export interface AlexaConfig {
@@ -292,6 +303,19 @@ const sanitizeWidgets = (raw: unknown): Partial<Record<HudWidgetId, boolean>> =>
   return out;
 };
 
+const finite = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+
+export function sanitizeTidy(raw: unknown): TidyConfig {
+  const t = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const secs = finite(t.dockAfterSeconds);
+  const chips = finite(t.maxChips);
+  return {
+    dockAfterSeconds: secs === undefined ? 40 : Math.min(3600, Math.max(0, Math.round(secs))),
+    maxChips: chips === undefined ? null : Math.min(12, Math.max(1, Math.round(chips))),
+    autoTidy: t.autoTidy !== false,
+  };
+}
+
 export function sanitizeHud(raw: unknown): HudConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const c = (r.clock && typeof r.clock === "object" ? r.clock : {}) as Record<string, unknown>;
@@ -314,6 +338,7 @@ export function sanitizeHud(raw: unknown): HudConfig {
     density: (HUD_DENSITIES as readonly unknown[]).includes(r.density) ? (r.density as HudDensity) : "standard",
     widgets: sanitizeWidgets(r.widgets),
     preview: r.preview === true,
+    tidy: sanitizeTidy(r.tidy),
   };
 }
 

@@ -161,6 +161,7 @@ export const SettingsPatch = z
         density: z.enum(HUD_DENSITIES),
         widgets: z.object(Object.fromEntries(HUD_WIDGET_IDS.map((id) => [id, z.boolean()]))).partial().strict(),
         preview: z.boolean(),
+        tidy: z.object({ dockAfterSeconds: z.number().min(0).max(3600), maxChips: z.number().int().min(1).max(12).nullable(), autoTidy: z.boolean() }).partial().strict(),
       })
       .partial()
       .strict(),
@@ -395,7 +396,7 @@ export function settingsView(c: Config): SettingsView {
     music: { ...c.music, extensions: [...c.music.extensions], spotify: { ...c.music.spotify }, soundcloud: { ...c.music.soundcloud }, audius: { ...c.music.audius } },
     video: { ...c.video, allowedSites: [...c.video.allowedSites] },
     browser: { ...c.browser },
-    hud: { ...c.hud, clock: { ...c.hud.clock }, widgets: { ...c.hud.widgets }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
+    hud: { ...c.hud, tidy: { ...c.hud.tidy }, clock: { ...c.hud.clock }, widgets: { ...c.hud.widgets }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
     office: structuredClone(c.office),
     alexa: {
       installed: c.alexa.installed,
@@ -625,8 +626,9 @@ export function applySettings(config: Config, raw: unknown): Applied {
     if (policy) Object.assign(config.office.policy, policy);
   }
   if (p.hud) {
-    const { clock, launcher, widgets, ...rest } = p.hud;
+    const { clock, launcher, widgets, tidy, ...rest } = p.hud;
     Object.assign(config.hud, rest);
+    if (tidy) Object.assign(config.hud.tidy, tidy);
     if (widgets) Object.assign(config.hud.widgets, widgets);
     if (clock) Object.assign(config.hud.clock, clock);
     if (launcher) config.hud.launcher = sanitizeHud({ launcher }).launcher;

@@ -45,6 +45,7 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
       .catch((e: Error) => setHostNote(e.message))
       .finally(() => setChecking(false));
   };
+  const tidy = hud.tidy ?? { dockAfterSeconds: 40, maxChips: null, autoTidy: true };
   const launcher = hud.launcher;
   const setItem = (i: number, p: Partial<Item>) => onHud({ launcher: launcher.map((l, j) => (j === i ? { ...l, ...p } : l)) });
   const move = (i: number, by: number) => {
@@ -191,6 +192,26 @@ export function WidgetsTab({ music, hud, onMusic, onHud, checkHost = httpHostChe
       <label className="settings-check">
         <input type="checkbox" data-testid="hud-preview" disabled={hud.layout !== "orbital"} checked={hud.preview === true} onChange={(e) => onHud({ preview: e.target.checked })} />
         <span>Show sample data (workers, tickets, budget and feed filled in, labelled SAMPLE, to preview the look)</span>
+      </label>
+
+      <h3>Screen tidy</h3>
+      <label className="settings-check">
+        <input type="checkbox" checked={tidy.autoTidy} onChange={(e) => onHud({ tidy: { ...tidy, autoTidy: e.target.checked } })} />
+        <span>Tidy the screen by itself (put finished cards away as small chips)</span>
+      </label>
+      <label className="settings-field">
+        <span>Put cards away after (seconds, 0 keeps them)</span>
+        <input type="number" min={0} max={3600} value={tidy.dockAfterSeconds} disabled={!tidy.autoTidy} onChange={(e) => onHud({ tidy: { ...tidy, dockAfterSeconds: Number(e.target.value) } })} />
+        <small className="auth-note">A card is never put away before there was time to read it. A chip comes back as a card when you tap it.</small>
+      </label>
+      <label className="settings-field">
+        <span>Most chips in the strip</span>
+        <select value={tidy.maxChips === null ? "auto" : String(tidy.maxChips)} onChange={(e) => onHud({ tidy: { ...tidy, maxChips: e.target.value === "auto" ? null : Number(e.target.value) } })}>
+          <option value="auto">By screen (desktop 7, tablet and phone 5)</option>
+          {[3, 4, 5, 6, 7, 8, 10, 12].map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
       </label>
 
       <h3>Screen widgets</h3>

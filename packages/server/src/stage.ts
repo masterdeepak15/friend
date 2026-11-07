@@ -6,6 +6,7 @@ import {
   TOOL_DEFS,
   type HudInstrument,
   type HudWidgetId,
+  readSeconds,
   type SceneMode,
   type ScreenInfo,
   type ServerMsg,
@@ -17,7 +18,7 @@ import {
 import { GUIDE_TOPICS, screenGuide, type GuideTopic } from "./agent/guide";
 import { composeScreen, restoreScreen, type ComposeItem, type ComposeResult, type ComposeState } from "./agent/compose";
 import { describeScreen, placeObject, type PanelName } from "./agent/layout";
-import type { LookConfig } from "./config";
+import type { LookConfig, TidyConfig } from "./config";
 
 const MAX_OBJECTS = 12;
 /** How long an overlay stays when the AI gives no time. */
@@ -141,6 +142,28 @@ export class StageState {
   private ownerPlaced = new Set<string>();
   /** Things put away (or shown as chips) only because there was no room: they come back when there is. */
   private squeezed = new Set<string>();
+  private shownAt = new Map<string, number>();
+  private tidyCfg: (() => TidyConfig) | null = null;
+
+  /** Where to read the owner's tidy settings (the chip limit) from. */
+  trackTidy(read: () => TidyConfig): void {
+    this.tidyCfg = read;
+  }
+
+  /** Puts away what the assistant put beside the main thing once its time is up (and its text could be read). Returns the commands the screens need. */
+  tidy(now: number, cfg: Pick<TidyConfig, "dockAfterSeconds" | "autoTidy">): StageCommand[] {
+    if (!cfg.autoTidy || cfg.dockAfterSeconds <= 0) return [];
+    const out: StageCommand[] = [];
+    for (const [id, e] of this.objects) {
+      const o = e.obj;
+      if (o.role !== "beside" || o.docked || o.pinned || o.layer === "overlay" || this.ownerPlaced.has(id)) continue;
+      const hold = Math.max(cfg.dockAfterSeconds, readSeconds(o));
+      if (now - (this.shownAt.get(id) ?? now) < hold * 1000) continue;
+      const command: StageCommand = { cmd: "dock", id, docked: true };
+      if (this.apply(command, now).ok) out.push(command);
+    }
+    return out;
+  }
 
   /** Where to read which live instruments are on the home screen (the layout keeps clear of them). */
   trackInstruments(read: () => HudWidgetId[]): void {
@@ -154,6 +177,7 @@ export class StageState {
       instruments: this.instruments ? this.instruments() : [...this.widgets],
       current: [...this.objects.values()].map((e) => e.obj),
       ownerPlaced: this.ownerPlaced,
+      ...(this.tidyCfg?.().maxChips ? { maxChips: this.tidyCfg().maxChips! } : {}),
     };
   }
 
@@ -269,6 +293,7 @@ export class StageState {
         const overlay = !pinned && cmd.object.layer === "overlay";
         const expiresAt = !pinned && (cmd.object.ttl || overlay) ? now + (cmd.object.ttl ?? OVERLAY_TTL_S) * 1000 : null;
         this.objects.set(obj.id, { obj, expiresAt });
+        this.shownAt.set(obj.id, now);
         if (pinned) this.persist();
         return { ok: true };
       }
@@ -278,6 +303,7 @@ export class StageState {
         const bad = propsError(e.obj.type, cmd.props, false);
         if (bad) return { ok: false, error: bad };
         e.obj = { ...e.obj, props: { ...e.obj.props, ...cmd.props } };
+        this.shownAt.set(cmd.id, now);
         if (e.obj.pinned) this.persist();
         return { ok: true };
       }
@@ -288,6 +314,7 @@ export class StageState {
         this.objects.delete(cmd.id);
         this.ownerPlaced.delete(cmd.id);
         this.squeezed.delete(cmd.id);
+        this.shownAt.delete(cmd.id);
         if (e.obj.pinned) this.persist();
         const follow = this.settle();
         return follow.length ? { ok: true, follow } : { ok: true };
@@ -297,6 +324,7 @@ export class StageState {
         if (!e) return { ok: false, error: `No object with id "${cmd.id}" is on screen` };
         if (e.obj.pinned && !byOwner) return { ok: false, error: `"${cmd.id}" is a pinned widget that the owner keeps. Leave it.` };
         e.obj = cmd.docked ? { ...e.obj, docked: true } : (({ docked: _d, ...rest }) => rest)(e.obj);
+        if (!cmd.docked) this.shownAt.set(cmd.id, now);
         return { ok: true };
       }
       case "clear": {

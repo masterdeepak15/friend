@@ -100,6 +100,8 @@ export const HudView = z.object({
   widgets: z.object(Object.fromEntries(HUD_WIDGET_IDS.map((id) => [id, z.boolean().optional()])) as Record<HudWidgetId, z.ZodOptional<z.ZodBoolean>>),
   /** The orbital screen shows the approved mockup's sample content (workers, tickets, budget, feed) instead of empty slots. */
   preview: z.boolean().optional(),
+  /** How the assistant's cards are put away as chips. */
+  tidy: z.object({ dockAfterSeconds: z.number().min(0).max(3600), maxChips: z.number().int().min(1).max(12).nullable(), autoTidy: z.boolean() }).optional(),
 });
 export type HudView = z.infer<typeof HudView>;
 
