@@ -170,3 +170,32 @@ describe("restoreScreen", () => {
     expect(() => restoreScreen("zz", state())).toThrow(/zz/);
   });
 });
+
+describe("review fixes", () => {
+  it("an alert stays shown when more is added: not shrunk into a side card, not put away", () => {
+    const phone = composeScreen([item("bad", "alert")], "replace", state({ screen: PHONE }));
+    const withAlert = phone.show;
+    const r = composeScreen([item("b", "beside")], "add", state({ screen: PHONE, current: withAlert }));
+    expect(r.dock).not.toContain("bad");
+    const desk = composeScreen([item("bad", "alert")], "replace", state());
+    const again = composeScreen([item("b", "beside")], "add", state({ current: desk.show }));
+    const kept = again.show.find((o) => o.id === "bad");
+    if (kept) expect(box(kept)[2]).toBeGreaterThan(40);
+    expect(again.dock).not.toContain("bad");
+  });
+
+  it("a big focus never sits on a card beside it", () => {
+    for (const s of [DESKTOP, screen(1024, 768, "tablet", true)]) {
+      const r = composeScreen([{ id: "p", type: "sandbox", props: { html: "<p>x</p>" }, role: "focus" }, item("b", "beside")], "replace", state({ screen: s }));
+      const f = box(shown(r, "p")!);
+      const b = shown(r, "b")!;
+      if (!b.docked) expect(overlap(f, box(b))).toBeLessThan(0.01);
+    }
+  });
+
+  it("with the chip limit switched off (a screen change) no chip is dropped", () => {
+    const current = ["c1", "c2", "c3"].map((id) => cur(id, { docked: true, role: "glance" }));
+    const r = composeScreen([item("n", "beside")], "add", state({ current, maxChips: 2, keepChips: true }));
+    expect(r.hide).toEqual([]);
+  });
+});

@@ -84,3 +84,16 @@ describe("instrument rectangles shared with the server", () => {
     }
   });
 });
+
+describe("the server's list of instruments on the screen", () => {
+  it("is the same as what the screen draws, for every density, switch and bring-up", async () => {
+    const { hudInstrumentsOn } = await import("@friend/protocol");
+    const densities = ["calm", "standard", "full"] as const;
+    const switches = [{}, { budget: false }, { radar: true }, { usage: false, feed: true }, { approval: true }];
+    const brought = [[], ["system"], ["radar", "tickets"]] as const;
+    for (const d of densities) for (const w of switches) for (const b of brought) for (const pending of [false, true]) {
+      const drawn = visibleWidgets(d, w as never, "orbit", pending, b as never).map((x) => x.id).sort();
+      expect(hudInstrumentsOn(d, w as never, b as never, pending).sort(), `${d} ${JSON.stringify(w)} ${b.join()} ${pending}`).toEqual(drawn);
+    }
+  });
+});

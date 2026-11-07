@@ -539,3 +539,6 @@ input, textarea, select, .connector-command { -webkit-user-select: text; user-se
 @media (prefers-reduced-motion: reduce) { .chip { animation: none; } }
 .objects-stack > .chip-strip { position: static; transform: none; max-width: none; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; padding: 4px 0; pointer-events: auto; -webkit-overflow-scrolling: touch; }
 .objects-stack .chip { flex: 0 0 auto; min-height: 44px; }
+
+/* a narrower screen: one row that scrolls, never a second row down over the cards */
+@media (max-width: 1023px) { .chip-strip { max-width: 92%; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; pointer-events: auto; } .chip { flex: 0 0 auto; } }

@@ -1,4 +1,4 @@
-import type { HudWidgetId } from "./hud";
+import { HUD_WIDGET_IDS, type HudDensity, type HudWidgetId } from "./hud";
 import { jarvisNaturalSize, jarvisObjectProblem, isJarvisType, jarvisTreeOf } from "./jarvis";
 import { overlap, type Rect } from "./layout";
 import type { ScreenInfo } from "./messages";
@@ -47,15 +47,16 @@ export interface Zones {
 const CONFLICT = 0.25;
 const MIN_FOCUS_W = 40;
 
+// every zone starts below y 15: the strip of chips runs along the top, from 10.5 down to about 14.5
 const DESKTOP = {
-  focus: [26, 12, 48, 56] as Rect,
-  big: [14, 10, 72, 64] as Rect,
-  slots: [[75, 12, 22, 30], [3, 12, 22, 30], [75, 44, 22, 30]] as Rect[],
+  focus: [26, 16, 48, 52] as Rect,
+  big: [14, 15, 72, 60] as Rect,
+  slots: [[75, 16, 22, 28], [3, 16, 22, 28], [75, 46, 22, 28]] as Rect[],
 };
 const TABLET = {
-  focus: [4, 12, 64, 58] as Rect,
-  big: [4, 10, 92, 66] as Rect,
-  slots: [[70, 12, 26, 30], [70, 44, 26, 30]] as Rect[],
+  focus: [4, 16, 64, 54] as Rect,
+  big: [4, 15, 92, 60] as Rect,
+  slots: [[70, 16, 26, 28], [70, 46, 26, 28]] as Rect[],
 };
 const PHONE = { focus: [2, 10, 96, 40] as Rect, big: [2, 10, 96, 66] as Rect };
 
@@ -137,4 +138,24 @@ function letters(v: unknown, depth = 0): number {
 /** How long the text of an object needs to be read: letters / 15 + 1.5 seconds. */
 export function readSeconds(o: StageObject): number {
   return letters(o.props) / LETTERS_PER_SECOND + READ_BASE_SECONDS;
+}
+
+const DENSITY_RANK: Record<HudDensity, number> = { calm: 0, standard: 1, full: 2 };
+const LIVE: readonly HudWidgetId[] = ["system", "voice", "network", "feed", "radar", "tickets"];
+
+/**
+ * Which instruments the home screen draws right now: the same rule the screen uses (the owner's switches win, the live instruments
+ * need to be switched on or brought up, the budget ring and usage line follow the density, a waiting approval is always there).
+ * The layout keeps clear of these.
+ */
+export function hudInstrumentsOn(density: HudDensity, widgets: Partial<Record<HudWidgetId, boolean>>, brought: readonly HudWidgetId[], approvalPending: boolean): HudWidgetId[] {
+  return HUD_WIDGET_IDS.filter((id) => {
+    if (id === "approval" && approvalPending) return true;
+    const choice = widgets[id];
+    if (choice === false) return false;
+    if (id === "approval") return choice === true;
+    if (LIVE.includes(id)) return choice === true || brought.includes(id);
+    if (choice === true) return true;
+    return DENSITY_RANK[density] >= DENSITY_RANK[id === "usage" ? "calm" : "standard"];
+  });
 }

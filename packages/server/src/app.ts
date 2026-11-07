@@ -1,4 +1,4 @@
-import { parseRef, type ClientMsg, type HudWidgetId, type MusicState, type ServerMsg } from "@friend/protocol";
+import { hudInstrumentsOn, parseRef, type ClientMsg, type MusicState, type ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
 import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, clampToSafe, downloadSize, isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
@@ -226,8 +226,7 @@ export async function createApp(opts: AppOptions) {
   // the layout keeps clear of the live instruments that are on the home screen (the owner's switches and the ones the assistant brought up)
   stage.trackInstruments(() => {
     if (config.hud.layout !== "orbital") return [];
-    const on = Object.entries(config.hud.widgets).filter(([, v]) => v === true).map(([k]) => k as HudWidgetId);
-    return [...new Set([...on, ...(stage.snapshot().widgets ?? [])])];
+    return hudInstrumentsOn(config.hud.density, config.hud.widgets, stage.snapshot().widgets ?? [], approvals.pending() !== null);
   });
   stage.setLook(config.look); // the owner's own style, colour and brightness are where every screen starts
   const approvals = new Approvals({ auth, policy, audit, db }, opts.approvalTimeoutMs);

@@ -170,8 +170,9 @@ export class StageState {
     this.instruments = read;
   }
 
-  private composeState(): ComposeState {
+  private composeState(keepChips = false): ComposeState {
     return {
+      ...(keepChips ? { keepChips: true } : {}),
       screen: this.screen,
       panels: this.panels,
       instruments: this.instruments ? this.instruments() : [...this.widgets],
@@ -240,15 +241,25 @@ export class StageState {
   relayout(now: number = Date.now()): StageCommand[] {
     const items: ComposeItem[] = [...this.objects.values()]
       .map((e) => e.obj)
-      .filter((o) => !o.pinned && !this.ownerPlaced.has(o.id) && o.layer !== "overlay" && o.role !== "alert" && (!o.docked || this.squeezed.has(o.id)))
+      .filter((o) => o.role !== undefined && !o.pinned && !this.ownerPlaced.has(o.id) && o.layer !== "overlay" && o.role !== "alert" && (!o.docked || this.squeezed.has(o.id)))
       .map((o) => ({ id: o.id, type: o.type, props: o.props, role: o.role === "focus" ? ("focus" as const) : ("beside" as const), ...(o.label ? { label: o.label } : {}) }));
     if (items.length === 0) return [];
     let result: ComposeResult;
     try {
-      result = composeScreen(items, "add", this.composeState());
+      result = composeScreen(items, "add", this.composeState(true));
     } catch {
       return [];
     }
+    // only the place (and whether it is put away) changes: the time, the style and everything else of an object stay as they were
+    result = {
+      ...result,
+      show: result.show.map((o) => {
+        const old = this.objects.get(o.id)?.obj;
+        if (!old) return o;
+        const { docked: _d, ...rest } = old;
+        return { ...rest, placement: o.placement, ...(o.docked ? { docked: true as const } : {}) };
+      }),
+    };
     const norm = (o: unknown) => JSON.stringify(o, (_k, v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as object).sort(([a], [b]) => a.localeCompare(b))) : v));
     result = { ...result, show: result.show.filter((o) => norm(o) !== norm(this.objects.get(o.id)?.obj)), scene: this.scene };
     const done = this.applyResult(result, now);

@@ -27,6 +27,8 @@ export interface ComposeState {
   /** Objects the owner moved by hand: they keep their place. */
   ownerPlaced: ReadonlySet<string>;
   maxChips?: number;
+  /** The screen changed (nothing new was asked for): no chip may be dropped to fit a smaller strip. */
+  keepChips?: boolean;
 }
 
 export interface ComposeResult {
@@ -108,16 +110,26 @@ export function composeScreen(items: ComposeItem[], mode: "replace" | "add", st:
         dock.push(o.id);
         chips.push({ id: o.id, isNew: false });
       }
+    } else if (o.role === undefined) {
+      // drawn the old way (stage.show with a place): it stays where it is and the new layout keeps clear of it
+      const r = rectOf(o.placement);
+      if (r) held.push(r);
     } else kept.push(o);
   }
 
   const listedFocus = mine.filter((i) => i.role === "focus" || i.role === "alert");
-  const focusItem = listedFocus[0];
+  let focusItem = listedFocus[0];
+  // an alert stays until the owner has dealt with it or a new topic replaces it: more shown meanwhile goes beside it
+  const keptAlert = kept.find((o) => !o.docked && o.layer !== "overlay" && o.role === "alert");
+  if (keptAlert && focusItem && focusItem.role !== "alert") {
+    notes.push(`"${focusItem.id}" was put beside, not as the focus: the alert "${keptAlert.id}" is still shown.`);
+    focusItem = undefined;
+  }
   const baseItems = mine.filter((i) => i.role === "beside" || i.role === "focus" || i.role === "alert");
   // a second focus becomes a side card; an existing focus is put away when a new one comes
   const sideItems = baseItems.filter((i) => i !== focusItem);
   const keptBase = kept.filter((o) => !o.docked && o.layer !== "overlay");
-  let keptFocus = keptBase.find((o) => roleOf(o) === "focus");
+  let keptFocus = keptBase.find((o) => roleOf(o) === "focus" || roleOf(o) === "alert");
   if (keptFocus && focusItem) {
     dock.push(keptFocus.id);
     chips.push({ id: keptFocus.id, isNew: false });
@@ -165,14 +177,16 @@ export function composeScreen(items: ComposeItem[], mode: "replace" | "add", st:
     ...(it.label ? { label: it.label } : {}),
   });
 
+  // a big focus takes the middle only when there is nothing beside it; with cards beside it keeps its own place so it never covers them
+  const bigRoom = sides.length === 0;
   if (focusItem) {
     const big = focusItem.role === "alert" ? true : isBig(focusItem.type, focusItem.props);
     anyBig = big;
-    out.push(toObject(focusItem, place(big ? zones.focusBig : zones.focus)));
+    out.push(toObject(focusItem, place(big && bigRoom ? zones.focusBig : zones.focus)));
   } else if (keptFocus) {
-    const big = isBig(keptFocus.type, keptFocus.props);
+    const big = keptFocus.role === "alert" ? true : isBig(keptFocus.type, keptFocus.props);
     anyBig = big;
-    const placement = place(big ? zones.focusBig : zones.focus);
+    const placement = place(big && bigRoom ? zones.focusBig : zones.focus);
     if (!same(placement, keptFocus.placement)) out.push({ ...keptFocus, placement });
   }
   sides.forEach((s, i) => {
@@ -203,11 +217,11 @@ export function composeScreen(items: ComposeItem[], mode: "replace" | "add", st:
       hide.push(id);
     }
   };
-  while (chips.length > zones.chipMax) dropChip(chips[0]!.id, `the strip holds ${zones.chipMax}`);
+  while (!st.keepChips && chips.length > zones.chipMax) dropChip(chips[0]!.id, `the strip holds ${zones.chipMax}`);
 
   // the screen holds twelve things in all
   const total = () => st.current.filter((o) => !hide.includes(o.id) && !seen.has(o.id)).length + out.filter((o) => !byId.has(o.id) || seen.has(o.id)).length;
-  while (total() > MAX_SCREEN_OBJECTS) {
+  while (!st.keepChips && total() > MAX_SCREEN_OBJECTS) {
     const old = chips.find((c) => !c.isNew);
     if (!old) throw new Error(`Too many things for the screen (the limit is ${MAX_SCREEN_OBJECTS}). Hide something first.`);
     dropChip(old.id, `the screen holds ${MAX_SCREEN_OBJECTS} things`);

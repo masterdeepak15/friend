@@ -60,3 +60,37 @@ describe("the screen changes kind while things are shown", () => {
     expect(s.relayout()).toEqual([]);
   });
 });
+
+describe("review fixes: what a screen change must not do", () => {
+  it("never deletes chips, however small the new screen", () => {
+    const s = new StageState();
+    s.setScreen(DESKTOP);
+    runStageTool("screen.compose", { items: ["c1", "c2", "c3", "c4", "c5", "c6"].map((id) => ({ id, type: "card", props: { title: id, text: id }, role: "glance" })) }, s, () => {});
+    runStageTool("screen.compose", { items: [item("f", "focus"), item("b1", "beside"), item("b2", "beside"), item("b3", "beside")], mode: "add" }, s, () => {});
+    s.setScreen(PHONE);
+    s.relayout();
+    const ids = s.snapshot().objects.map((o) => o.id);
+    for (const id of ["c1", "c2", "c3", "c4", "c5", "c6", "f"]) expect(ids).toContain(id);
+  });
+
+  it("leaves a plain stage.show object alone (no role: nothing moves it or puts it away)", () => {
+    const s = new StageState();
+    s.setScreen(DESKTOP);
+    s.apply({ cmd: "show", object: { id: "x", type: "card", props: { text: "x" }, placement: "left", ttl: 600 } });
+    const before = JSON.stringify(s.snapshot().objects);
+    s.setScreen(PHONE);
+    expect(s.relayout()).toEqual([]);
+    s.setScreen(DESKTOP);
+    expect(s.relayout()).toEqual([]);
+    expect(JSON.stringify(s.snapshot().objects)).toBe(before);
+  });
+
+  it("keeps the time and the style of what it moves", () => {
+    const s = new StageState();
+    s.setScreen(DESKTOP);
+    s.apply({ cmd: "show", object: { id: "b", type: "card", props: { text: "b" }, placement: "auto", role: "beside", ttl: 600, style: "glass" } });
+    s.setScreen({ ...DESKTOP, width: 1366, height: 768 });
+    s.relayout();
+    expect(s.snapshot().objects.find((o) => o.id === "b")).toMatchObject({ ttl: 600, style: "glass" });
+  });
+});

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { overlap, SAFE, type Rect } from "./layout";
 import type { ScreenInfo } from "./messages";
 import type { StageObject } from "./stage";
-import { chipOf, INSTRUMENT_RECTS, isBig, readSeconds, zonesFor } from "./zones";
+import { chipOf, hudInstrumentsOn, INSTRUMENT_RECTS, isBig, readSeconds, zonesFor } from "./zones";
 
 const screen = (width: number, height: number, kind: ScreenInfo["kind"], touch = false): ScreenInfo => ({ width, height, kind, orientation: height > width ? "portrait" : "landscape", touch });
 const SIZES: [string, ScreenInfo, number][] = [
@@ -89,5 +89,22 @@ describe("instrument rectangles", () => {
       expect(r[0]).toBeGreaterThanOrEqual(0);
       expect(r[0] + r[2]).toBeLessThanOrEqual(100.01);
     }
+  });
+});
+
+describe("review fixes", () => {
+  it("every zone starts below the chip strip (y 15 or more)", () => {
+    for (const [, s] of SIZES) {
+      const z = zonesFor(s);
+      if (z.stack) continue;
+      for (const r of [z.focus, z.focusBig, ...z.beside]) expect(r[1]).toBeGreaterThanOrEqual(15);
+    }
+  });
+  it("hudInstrumentsOn follows the same rule as the screen", () => {
+    expect(hudInstrumentsOn("standard", {}, [], false)).toEqual(expect.arrayContaining(["budget", "usage"]));
+    expect(hudInstrumentsOn("calm", {}, [], false)).toEqual(["usage"]);
+    expect(hudInstrumentsOn("standard", { budget: false }, ["radar"], false)).toEqual(expect.arrayContaining(["radar", "usage"]));
+    expect(hudInstrumentsOn("standard", { budget: false }, [], false)).not.toContain("budget");
+    expect(hudInstrumentsOn("calm", {}, [], true)).toContain("approval");
   });
 });
