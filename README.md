@@ -18,8 +18,8 @@ friend onboard
 `friend onboard` is a guided setup, one step at a time. Press Enter to take the suggestion at any question; run it again and it carries on where it stopped.
 
 1. **Welcome**: what is about to happen.
-2. **What you want to use**: pick any of: Claude through your subscription (Claude Code), Claude with an API key, a model on this PC (Ollama), voice, safe code running (Docker).
-3. **What this PC needs**: it checks Node.js, plus only what your choices need: Python (voice), Docker, Ollama, Claude Code, and whether the port is free. For each missing one it shows the exact command (`winget` on Windows, `brew` on a Mac, `apt` on Linux, `npm` for Claude Code), asks **before** installing, runs it one by one with the output visible, and checks again. If a program was installed but this terminal cannot see it yet, it tells you to open a new terminal and run `friend onboard` again.
+2. **What you want to use**: pick any of: Claude through your subscription (Claude Code), Claude with an API key, a model on this PC (Ollama), voice, safe code running (built in, nothing to install).
+3. **What this PC needs**: it checks Node.js, plus only what your choices need: Python (voice), Ollama, Claude Code, and whether the port is free. Docker is optional and is not asked for. For each missing one it shows the exact command (`winget` on Windows, `brew` on a Mac, `apt` on Linux, `npm` for Claude Code), asks **before** installing, runs it one by one with the output visible, and checks again. If a program was installed but this terminal cannot see it yet, it tells you to open a new terminal and run `friend onboard` again.
 4. **Your account**: password and PIN (each typed twice) and the assistant's name.
 5. **How Friend thinks**: signs in to Claude if needed (`claude auth login`), asks for an API key, or downloads the local model, and sets the safety net (the local model behind Claude).
 6. **Voice**: a female or male voice, then the speech models (about 250 MB).
@@ -42,7 +42,7 @@ Every command starts with `friend`. If you run Friend from the source code, writ
 | `friend onboard --yes` | Takes every suggestion without asking (passwords and keys are still asked). | You want the defaults quickly. |
 | `friend onboard --redo <step>` | Runs one step again. Steps: welcome, features, prereqs, account, model, voice, workspace, network, look, finish. | You want to change one thing, for example `friend onboard --redo look` or `--redo network`. |
 | `friend onboard --reset` | Forgets what the wizard has done so far and starts over. Your account and settings stay. | The wizard's memory of its steps is wrong. |
-| `friend doctor` | Shows what this PC has (Node.js, Python, Docker, Ollama, Claude Code, the port) and the exact command to fix what is missing. Changes nothing. | Something does not work, or before asking for help. |
+| `friend doctor` | Shows what this PC has (Node.js, Python, Docker (optional), Ollama, Claude Code, the port) and the exact command to fix what is missing. Changes nothing. | Something does not work, or before asking for help. |
 | `friend setup` | Only creates the owner account: password, PIN, assistant name, workspace folder, API key, voice. | You want the plain version without the wizard. |
 | `friend status` | Prints the saved settings: data folder, owner, address, public URL, workspace, model, whether an API key is set. | A quick look at how Friend is set up. |
 | `friend version` | Prints the version. | Reporting a problem, or checking an update. |
@@ -462,22 +462,35 @@ Plugins add **skills** (instructions the agent loads when they fit, for example 
 
 - Manage them from the screen (Esc, then **Plugins**) or the terminal: `friend plugin catalog | list | install <name|folder> | enable <id> | disable <id> | remove <id>`.
 - **Installing shows what is inside and needs your confirmation (the PIN in the browser).** Switching a plugin on needs the PIN too; switching off and removing do not.
-- A plugin's tools can never be more powerful than the code sandbox: they run in a throwaway Docker container (no network, no access to your files, time and memory limits), get their arguments as `/work/args.json`, and **ask for your approval on every call**. Skills are text only: they give the model words, never power, and cannot override your rules or the approval system.
+- A plugin's tools can never be more powerful than the code sandbox: they run in the same sandbox as the code the agent writes (a throwaway Docker container when Docker works, otherwise the sandbox built into Friend; no network, no access to your files, time and memory limits), get their arguments as `/work/args.json`, and **ask for your approval on every call**. Skills are text only: they give the model words, never power, and cannot override your rules or the approval system.
 - Plugins are validated strictly (lowercase ids, size and file-count limits, no links, every file must be inside the plugin folder) and re-validated each time Friend loads; a broken plugin is switched off with a visible reason.
 - Make your own: a folder with `plugin.json` plus the files it names, then `friend plugin install ./my-plugin`. See `docs/superpowers/specs/2026-10-08-friend-plugins-design.md` for the format. Downloading plugins from the internet is deliberately not supported yet (it needs signed packages to be safe).
 
-## Running code safely (Docker)
+## Running code safely
 
-The agent can write a program (Python, Node or shell), run it, and read the result: calculations, data crunching, quick experiments. It needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) running; without it the tool says so and nothing runs. (Windows Sandbox is not needed, so Windows Home works.) The first use of each language downloads a small image (about 50 MB), so that one run needs internet; after that it works offline.
+The agent can write a program (Python, Node or shell), run it, and read the result: calculations, data crunching, quick experiments. **Nothing needs to be installed**: Friend has its own sandbox. If you have Docker, Friend can use that instead (a real container, a real shell). The setting `codeRunner` chooses: `auto` (the default: Docker when it is installed and running, otherwise the built-in sandbox), `sandbox` or `docker`. The result tells the agent (and the log) which one ran.
 
-Every run asks for your approval, and the card shows the **whole program**. Each run is its own throwaway container:
+Every run asks for your approval, and the card shows the **whole program**.
+
+**The built-in sandbox** runs each program in its own, fresh, locked-down Node.js process (Node's permission model: no reading files outside Friend's own program folders, no starting other programs, no threads, an empty environment, the network switched off, 512 MB of memory, killed at the time limit):
+
+- **JavaScript** runs in QuickJS: plain JavaScript with `console.log` and `readFile(name)` for the files it was given. No `require`, no `fetch`, no `process`.
+- **Python** runs in Pyodide: the standard library only (no numpy or pandas). Start-up takes about a second.
+- **Shell** runs in an emulated bash (just-bash) over an in-memory folder: pipes, redirections, loops and a fixed set of commands (`grep`, `sed`, `awk`, `sort`, `wc`, `tr`, `jq`, and more). It is not a real shell: a script that needs `curl`, `git` or a compiler stops with a message naming the command. Use Docker for those.
+- Files: a program sees only its own code and the files it was handed, in memory. Nothing is kept between runs.
+- Needs Node.js 20.19 or newer for the shell part (the permission feature comes with Node 20 and later).
+
+`pnpm test` runs hostile programs against the built-in sandbox in every language (reading the data folder and the environment, network attempts, endless loops, endless output, memory hogs) and confirms each is stopped and the next run still works.
+
+**With Docker** (`codeRunner: docker`, or `auto` when Docker is running), each run is its own throwaway container:
 
 - `--network none`: no internet and no DNS; it cannot send anything anywhere.
 - It sees none of your files: only its own code is mounted, read-only. The root filesystem is read-only; only a 64 MB scratch `/tmp` is writable.
 - Not root (user 65534), all capabilities dropped, `no-new-privileges`, 512 MB memory (no swap), 1 CPU, at most 128 processes.
 - A time limit (10 s by default, 60 s at most); after that the container is killed and removed. Output is cut at 20,000 characters.
+- The first use of each language downloads a small image (about 50 MB), so that one run needs internet; after that it works offline. [Docker Desktop](https://www.docker.com/products/docker-desktop/) is needed on Windows and Mac (Windows Sandbox is not needed, so Windows Home works); on Linux, Docker Engine.
 
-`pnpm test` includes a check against real containers that runs hostile code (network attempts, writes outside `/tmp`, memory hog, endless loop, fork bomb) and confirms each is stopped.
+The Docker tests include a check against real containers that runs hostile code (network attempts, writes outside `/tmp`, memory hog, endless loop, fork bomb) and confirms each is stopped.
 
 ## Free-form pages (sandbox)
 

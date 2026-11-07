@@ -180,18 +180,16 @@ describe("what this PC needs", () => {
 
   it("offers to install what is missing, one by one, showing the exact command, and checks again afterwards", async () => {
     const w = world({ python: false, docker: false });
-    // features 1,4,5; install Python: yes; install Docker: no; then the rest with the suggestions
-    const answers = ["", "1,4,5", "", "n"];
+    // features 1,4,5; install Python: yes; then the rest with the suggestions (safe code running needs nothing installed)
+    const answers = ["", "1,4,5", ""];
     await onboardCommand([], makeIo(answers), w.deps);
     const out = text();
     expect(out).toMatch(/Python: not found \(voice needs Python 3\.10 or newer\)/);
     expect(out).toMatch(/winget install -e --id Python\.Python\.3\.12/);
     expect(asked.find((q) => /Install Python now/.test(q))).toBeTruthy();
-    expect(asked.find((q) => /Install Docker now/.test(q))).toBeTruthy();
+    expect(asked.find((q) => /Install Docker now/.test(q))).toBeUndefined();
     expect(w.interactiveRan).toEqual(["winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements"]);
     expect(out).toMatch(/✓ Python 3\.12\.4/);
-    expect(out).toMatch(/Skipped\. You can install it yourself later/);
-    expect(out.indexOf("Install Python")).toBeLessThan(out.indexOf("Docker: not installed"));
   });
 
   it("explains an install that fails, and does not pretend", async () => {
@@ -262,10 +260,11 @@ describe("what this PC needs", () => {
     expect(loadConfig(dataDir).port).toBe(9100);
   });
 
-  it("tells a Docker that is installed but not running how to start it", async () => {
+  it("picking safe code running does not ask for Docker, whether or not it is running", async () => {
     const w = world({ dockerRunning: false });
     await onboardCommand([], makeIo(["", "1,5", ...Array(30).fill("")]), w.deps);
-    expect(text()).toMatch(/Docker version 27\.1\.1.*but it is not running\. Start Docker Desktop/);
+    expect(text()).not.toMatch(/[✓·✗] Docker|Docker: not|Docker version/);
+    expect(w.ran.some((l) => l.startsWith("docker"))).toBe(false);
   });
 });
 

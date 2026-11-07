@@ -52,7 +52,7 @@ export async function checkPython(d: ProbeDeps): Promise<Check> {
 }
 
 export async function checkDocker(d: ProbeDeps): Promise<Check> {
-  const base = { id: "docker" as const, label: "Docker", need: "optional" as const, unlocks: "running code and plugin tools in a safe sandbox" };
+  const base = { id: "docker" as const, label: "Docker", need: "optional" as const, unlocks: "a real container for scripts the built-in sandbox cannot run (the built-in sandbox needs nothing installed)" };
   const v = await d.run("docker", ["--version"]);
   if (v.code !== 0) return { ...base, ok: false, detail: "not installed" };
   const info = await d.run("docker", ["info", "--format", "{{.ServerVersion}}"]);

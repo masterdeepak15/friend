@@ -81,7 +81,7 @@ export async function pluginCommand(args: string[], io: IO, deps: PluginDeps = {
       if (m.skills.length) io.out(`Skills (${m.skills.length}): ${m.skills.map((s) => s.name).join(", ")}`);
       if (m.tools.length) {
         io.out(`Tools (${m.tools.length}): ${m.tools.map((t) => t.name).join(", ")}`);
-        io.out("  Tools run in a Docker sandbox with no network and no access to your files, and ask for your approval every time.");
+        io.out("  Tools run in a sandbox (Docker if you have it, otherwise the one built into Friend) with no network and no access to your files, and ask for your approval every time.");
       }
       io.out(`Files: ${r.files}, ${Math.max(1, Math.round(r.bytes / 1024))} KB`);
       if (!flags.includes("--yes")) {

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -80,6 +81,29 @@ describe("the npm package", () => {
     expect(js).not.toMatch(/[A-Z]:\\(Users|ClaudeWorkspace)|\/home\/[a-z]+\/|\/Users\/[A-Za-z]+\//);
     expect(js).not.toMatch(/^import [^\n]* from ["'](ws|zod|@modelcontextprotocol\/[^"']*)["']/m); // bundled in, not left to be installed
   });
+
+  it.skipIf(!built)("the built code sandbox runs JavaScript, Python and shell from the package folder, locked down", () => {
+    const child = join(here, "dist", "sandbox-child.mjs");
+    expect(existsSync(child)).toBe(true);
+    const flag = process.allowedNodeEnvironmentFlags.has("--permission") ? "--permission" : "--experimental-permission";
+    const programs: [string, string, string][] = [
+      ["node", "console.log(21*2)", "42\n"],
+      ["python", "print(21*2)", "42\n"],
+      ["shell", "echo $((21*2))", "42\n"],
+    ];
+    for (const [language, code, out] of programs) {
+      const r = spawnSync(process.execPath, [flag, `--allow-fs-read=${join(here, "dist")}`, `--allow-fs-read=${join(here, "node_modules")}`, "--allow-fs-read=" + resolve(here, "../../node_modules"), "--no-warnings", child], {
+        input: JSON.stringify({ language, code, files: {}, timeoutMs: 20000 }),
+        env: {},
+        encoding: "utf8",
+        timeout: 60_000,
+      });
+      const mark = "\n@@friend-sandbox-result@@";
+      const at = r.stdout.lastIndexOf(mark);
+      expect(at, `${language}: ${r.stderr}`).toBeGreaterThan(-1);
+      expect(JSON.parse(r.stdout.slice(at + mark.length)), language).toMatchObject({ code: 0, stdout: out, timedOut: false });
+    }
+  }, 120_000);
 
   it.skipIf(!built)("the built program imports no workspace package and no source files", () => {
     const js = readFileSync(bundle, "utf8");

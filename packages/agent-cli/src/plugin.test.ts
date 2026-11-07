@@ -61,7 +61,7 @@ describe("friend plugin install", () => {
     expect(await plugin(["install", "unit-converter"])).toBe(0);
     expect(text()).toMatch(/Unit converter/);
     expect(text()).toMatch(/Tools \(1\): convert/);
-    expect(text()).toMatch(/Docker sandbox with no network/i);
+    expect(text()).toMatch(/sandbox .*with no network/i);
     expect(text()).toMatch(/approval/i);
     expect(installed().map((p) => p.id)).toEqual(["unit-converter"]);
     expect(text()).toMatch(/Installed unit-converter/);

@@ -53,6 +53,19 @@ await build({
   logLevel: "info",
 });
 
+// The program that runs inside the code sandbox process (packages/server/src/sandbox/child.ts). The engines it uses stay packages.
+await build({
+  entryPoints: [join(repo, "packages/server/src/sandbox/child.ts")],
+  outfile: join(dist, "sandbox-child.mjs"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node20",
+  external: ["quickjs-emscripten", "pyodide", "just-bash"],
+  legalComments: "none",
+  logLevel: "info",
+});
+
 // Chrome control is a plugin of Friend, so it travels inside this package: the same program, bundled with what it needs,
 // plus the browser extension and the folder layout its own setup expects (dist/ next to extension/ and package.json).
 const chrome = join(repo, "packages/chrome-control");

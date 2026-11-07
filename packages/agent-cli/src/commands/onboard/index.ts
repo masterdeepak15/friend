@@ -59,7 +59,8 @@ interface Ctx {
   checks: Map<PrereqId, Check>;
 }
 
-const FEATURE_PREREQ: Partial<Record<Feature, PrereqId>> = { "claude-code": "claude", ollama: "ollama", voice: "python", sandbox: "docker" };
+// safe code running needs nothing installed: Friend has its own sandbox (Docker is an optional, stronger choice)
+export const FEATURE_PREREQ: Partial<Record<Feature, PrereqId>> = { "claude-code": "claude", ollama: "ollama", voice: "python" };
 
 const has = (c: Ctx, f: Feature) => c.state.features.includes(f);
 const save = (c: Ctx) => saveState(c.io.dataDir, c.state);
@@ -91,7 +92,7 @@ async function features(c: Ctx): Promise<Result> {
         { key: "claude-api", label: "Claude, with an API key", hint: "pay per use" },
         { key: "ollama", label: "A model on this PC with Ollama", hint: "free and private, but slower" },
         { key: "voice", label: "Voice: talk to Friend and hear it", hint: "needs Python, about 250 MB" },
-        { key: "sandbox", label: "Safe code running and plugin tools", hint: "needs Docker" },
+        { key: "sandbox", label: "Safe code running and plugin tools", hint: "built in, nothing to install (Docker is optional)" },
       ],
       ["claude-code", "voice"],
     );
