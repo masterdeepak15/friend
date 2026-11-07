@@ -208,6 +208,8 @@ function applyStage(s: StageViewState, cmd: Extract<ServerMsg, { type: "stage" }
       return { ...s, objects: s.objects.map((o) => (o.id === cmd.id ? { ...o, props: { ...o.props, ...cmd.props } } : o)) };
     case "hide":
       return { ...s, objects: s.objects.filter((o) => o.id !== cmd.id) };
+    case "dock":
+      return { ...s, objects: s.objects.map((o) => (o.id === cmd.id ? (cmd.docked ? { ...o, docked: true } : (({ docked: _d, ...rest }) => rest)(o)) : o)) };
     case "clear":
       return { ...s, objects: s.objects.filter((o) => o.pinned), widgets: cmd.keepInstruments ? s.widgets : [], scene: "conversation" }; // the owner's widgets stay; the instruments the assistant brought up go
     case "widget": {

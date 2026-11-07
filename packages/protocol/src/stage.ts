@@ -25,6 +25,10 @@ export const BASIC_TYPES = [
 ] as const;
 export const OBJECT_TYPES = [...BASIC_TYPES, ...JARVIS_TYPES] as unknown as readonly [string, ...string[]];
 
+/** What an object is for on the screen: the assistant says this, the server decides where it goes. */
+export const ObjectRole = z.enum(["focus", "beside", "glance", "note", "alert"]);
+export type ObjectRole = z.infer<typeof ObjectRole>;
+
 export const StageObject = z.object({
   id: z.string().min(1).max(64),
   type: z.enum(OBJECT_TYPES),
@@ -36,6 +40,11 @@ export const StageObject = z.object({
   layer: z.enum(["base", "overlay"]).optional(),
   /** A widget: it stays (and keeps the place the owner gave it) across refreshes, logins and restarts, until it is removed on purpose. */
   pinned: z.boolean().optional(),
+  role: ObjectRole.optional(),
+  /** Put away: shown as a small chip in the strip instead of a card; a tap brings it back. */
+  docked: z.boolean().optional(),
+  /** The short text of the chip. */
+  label: z.string().max(40).optional(),
 });
 export type StageObject = z.infer<typeof StageObject>;
 
@@ -48,6 +57,8 @@ export const StageCommand = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("show"), object: StageObject }),
   z.object({ cmd: z.literal("update"), id: z.string(), props: z.record(z.string(), z.unknown()) }),
   z.object({ cmd: z.literal("hide"), id: z.string() }),
+  /** Put an object away as a chip (docked) or bring it back as a card. */
+  z.object({ cmd: z.literal("dock"), id: z.string(), docked: z.boolean() }),
   /** Take the temporary pictures off. The live instruments go too, unless keepInstruments is set (a new scene replaces the pictures, not the instruments). */
   z.object({ cmd: z.literal("clear"), keepInstruments: z.boolean().optional() }),
   /** Bring live instruments up on the home screen (show), put some away (hide), or all of them (reset). */

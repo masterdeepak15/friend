@@ -194,6 +194,13 @@ export class StageState {
         const follow = this.settle();
         return follow.length ? { ok: true, follow } : { ok: true };
       }
+      case "dock": {
+        const e = this.objects.get(cmd.id);
+        if (!e) return { ok: false, error: `No object with id "${cmd.id}" is on screen` };
+        if (e.obj.pinned && !byOwner) return { ok: false, error: `"${cmd.id}" is a pinned widget that the owner keeps. Leave it.` };
+        e.obj = cmd.docked ? { ...e.obj, docked: true } : (({ docked: _d, ...rest }) => rest)(e.obj);
+        return { ok: true };
+      }
       case "clear": {
         // the temporary pictures go; the owner's widgets stay; the live instruments the assistant brought up go too
         for (const [id, e] of this.objects) if (!e.obj.pinned) this.objects.delete(id);
