@@ -76,7 +76,9 @@ except Exception as e:
 print("|".join(out))`,
     );
     expect(everything(r)).not.toMatch(/TOPSECRET/);
-    expect(everything(r)).not.toMatch(/spawn_sync.*function|\[object Object\]/i);
+    const parts = r.stdout.trim().split("|"); // environment, spawn, fs binding, main module, reading the secret file
+    expect([parts[1], parts[2], parts[4]]).toEqual(["denied", "denied", "denied"]);
+    expect(["None", "denied"]).toContain(parts[3]);
   }, 60_000);
 });
 
