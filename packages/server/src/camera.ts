@@ -1,7 +1,7 @@
 import type { ServerMsg } from "@friend/protocol";
 import { randomUUID } from "node:crypto";
 
-export type CameraResult = { ok: true; mime: "image/jpeg"; data: string; frames?: { mime: "image/jpeg"; data: string }[] } | { ok: false; error: string };
+export type CameraResult = { ok: true; mime: "image/jpeg"; data: string; frames?: { mime: "image/jpeg"; data: string }[]; faces?: number[][] } | { ok: false; error: string };
 
 /** All the frames of one clip together may not be larger than this. */
 export const MAX_CLIP_BYTES = 4 * 1024 * 1024;
@@ -29,6 +29,9 @@ interface Pending {
   want: number;
   got: string[];
   bytes: number;
+  /** The browser was asked to find faces in the picture; the 128 numbers of each, when they arrive. Never a picture. */
+  recognise: boolean;
+  faces: number[][] | null;
 }
 
 /**
@@ -43,15 +46,15 @@ export class CameraBroker {
     this.what = kind === "camera" ? "camera" : "screen picture";
   }
 
-  private msg(type: "request" | "cancel", id: string, clip?: { frames: number; seconds: number }): ServerMsg {
-    return { type: `${this.kind}.${type}`, id, ...(clip ? clip : {}) } as ServerMsg;
+  private msg(type: "request" | "cancel", id: string, clip?: { frames: number; seconds: number }, recognise?: boolean): ServerMsg {
+    return { type: `${this.kind}.${type}`, id, ...(clip ? clip : {}), ...(recognise ? { recognise: true } : {}) } as ServerMsg;
   }
 
   pendingId(): string | null {
     return this.pending?.id ?? null;
   }
 
-  request(emit: (m: ServerMsg) => void, signal: AbortSignal, clipAsked?: { frames: number; seconds: number }): Promise<CameraResult> {
+  request(emit: (m: ServerMsg) => void, signal: AbortSignal, clipAsked?: { frames: number; seconds: number }, recognise = false): Promise<CameraResult> {
     // a short clip: 2 to 12 frames over 1 to 10 seconds, whatever was asked
     const clip = clipAsked ? { frames: Math.min(12, Math.max(2, Math.round(clipAsked.frames))), seconds: Math.min(10, Math.max(1, Math.round(clipAsked.seconds))) } : undefined;
     if (this.pending) return Promise.resolve({ ok: false, error: `The ${this.what} is already in use.` });
@@ -73,8 +76,8 @@ export class CameraBroker {
         resolve(r);
       };
       signal.addEventListener("abort", onAbort, { once: true });
-      this.pending = { id, emit, finish, want: clip ? clip.frames : 1, got: [], bytes: 0 };
-      emit(this.msg("request", id, clip));
+      this.pending = { id, emit, finish, want: clip ? clip.frames : 1, got: [], bytes: 0, recognise, faces: null };
+      emit(this.msg("request", id, clip, recognise));
     });
   }
 
@@ -87,10 +90,20 @@ export class CameraBroker {
       if (p.bytes + jpeg.length > MAX_CLIP_BYTES) return "invalid";
       p.bytes += jpeg.length;
       p.got.push(jpeg.toString("base64"));
-      if (p.got.length >= p.want) p.finish({ ok: true, mime: "image/jpeg", data: p.got[0]!, frames: p.got.map((data) => ({ mime: "image/jpeg" as const, data })) });
+      if (p.got.length >= p.want) p.finish({ ok: true, mime: "image/jpeg", data: p.got[0]!, frames: p.got.map((data) => ({ mime: "image/jpeg" as const, data })), ...(p.faces ? { faces: p.faces } : {}) });
       return "ok";
     }
-    p.finish({ ok: true, mime: "image/jpeg", data: jpeg.toString("base64") });
+    p.finish({ ok: true, mime: "image/jpeg", data: jpeg.toString("base64"), ...(p.faces ? { faces: p.faces } : {}) });
+    return "ok";
+  }
+
+  /** The face numbers the browser found in the picture it is about to upload: at most five faces of 128 numbers each. */
+  setFaces(id: string, faces: unknown): "ok" | "unknown" | "invalid" {
+    const p = this.pending;
+    if (!p || p.id !== id) return "unknown";
+    if (!p.recognise || !Array.isArray(faces) || faces.length > 5) return "invalid";
+    for (const f of faces) if (!Array.isArray(f) || f.length !== 128 || f.some((x) => typeof x !== "number" || !Number.isFinite(x))) return "invalid";
+    p.faces = faces as number[][];
     return "ok";
   }
 

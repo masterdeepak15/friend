@@ -105,6 +105,12 @@ describe("the npm package", () => {
     }
   }, 120_000);
 
+  it.skipIf(!built)("the built web app carries the face models and the runtime they need, so recognition works with no internet", () => {
+    for (const f of ["web/models/yunet.onnx", "web/models/sface.onnx", "web/models/yunet.LICENSE", "web/models/sface.LICENSE", "web/ort/ort-wasm-simd-threaded.wasm", "web/ort/ort-wasm-simd-threaded.mjs"]) expect(existsSync(join(here, "dist", f)), f).toBe(true);
+    expect(readFileSync(join(here, "dist/web/models/yunet.LICENSE"), "utf8")).toMatch(/MIT License/);
+    expect(readFileSync(join(here, "dist/web/models/sface.LICENSE"), "utf8")).toMatch(/Apache License/);
+  });
+
   it.skipIf(!built)("the built program imports no workspace package and no source files", () => {
     const js = readFileSync(bundle, "utf8");
     expect(js).not.toMatch(/from ["']@friend\//);

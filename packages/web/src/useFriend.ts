@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { createSocket, type FriendSocket } from "./socket";
 import { initialState, reduce, type LocalAction, type StageViewState } from "./store";
 import { CameraController } from "./camera/controller";
+import { browserFaceFinder } from "./faces";
 import { ScreenController } from "./screen/capture";
 import { analyzeScreen, measureScreen } from "./screen/inspect";
 import { pageDuck } from "./audio/duck";
@@ -66,6 +67,7 @@ export function useFriend(onUnauthorized: () => void): {
       dispatch: (a) => dispatch(a),
     });
     hands.current = hf;
+    const finder = browserFaceFinder();
     const cam = new CameraController({
       send: (m) => s.send(m),
       dispatch: (a) => dispatch(a),
@@ -77,6 +79,10 @@ export function useFriend(onUnauthorized: () => void): {
           body: jpeg,
         });
         if (!res.ok) throw new Error(`upload failed (${res.status})`);
+      },
+      faces: (jpeg) => finder.find(jpeg),
+      sendFaces: async (id, faces) => {
+        await fetch(`/api/camera/faces/${encodeURIComponent(id)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ faces }) });
       },
     });
     camera.current = cam;
@@ -93,8 +99,8 @@ export function useFriend(onUnauthorized: () => void): {
       const type = (m as { type?: string; id?: unknown } | null)?.type;
       const id = (m as { id?: unknown } | null)?.id;
       if ((type === "camera.request" || type === "camera.cancel") && typeof id === "string") {
-        const { frames, seconds } = m as { frames?: unknown; seconds?: unknown };
-        void cam.handle({ type, id, ...(typeof frames === "number" ? { frames } : {}), ...(typeof seconds === "number" ? { seconds } : {}) });
+        const { frames, seconds, recognise } = m as { frames?: unknown; seconds?: unknown; recognise?: unknown };
+        void cam.handle({ type, id, ...(typeof frames === "number" ? { frames } : {}), ...(typeof seconds === "number" ? { seconds } : {}), ...(recognise === true ? { recognise: true } : {}) });
       }
       if ((type === "screen.request" || type === "screen.cancel") && typeof id === "string") void scr.handle({ type, id });
       if (type === "screen.check" && typeof id === "string") {

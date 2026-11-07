@@ -118,7 +118,7 @@ describe("camera.watch", () => {
     const p = seeing([[call("w1", "camera.watch", { seconds: 4, frames: 3 }), done], [text("Someone waved."), done]]);
     await build(p).runTurn("what is happening?", turn("chat"));
     expect(cards()).toHaveLength(0);
-    expect(snap).toHaveBeenCalledWith(expect.anything(), expect.anything(), { frames: 3, seconds: 4 });
+    expect(snap).toHaveBeenCalledWith(expect.anything(), expect.anything(), { frames: 3, seconds: 4 }, false);
     const content = p.calls[1]!.messages.at(-1)!.content as { type: string }[];
     expect(content.filter((c) => c.type === "image")).toHaveLength(3);
     expect(JSON.stringify(content[0])).toMatch(/3 pictures/);

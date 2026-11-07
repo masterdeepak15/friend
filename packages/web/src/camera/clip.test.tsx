@@ -68,3 +68,49 @@ describe("CameraController with a short clip", () => {
     expect(opts.open).not.toHaveBeenCalled();
   });
 });
+
+describe("CameraController finding faces", () => {
+  const face = Array.from({ length: 128 }, (_, i) => i / 128);
+  it("when asked to recognise: the camera goes off first, then the faces are found and sent, then the picture", async () => {
+    const order: string[] = [];
+    const faces = vi.fn(async (_b: Blob) => (order.push("found"), [face]));
+    const sendFaces = vi.fn(async (_id: string, _f: number[][]) => void order.push("sent faces"));
+    const { ctl, opts, track } = setup({ faces, sendFaces, upload: vi.fn(async () => void order.push("upload")) });
+    track.stop.mockImplementation(() => void order.push("released"));
+    await ctl.handle({ type: "camera.request", id: "r1", recognise: true });
+    expect(order).toEqual(["released", "found", "sent faces", "upload"]);
+    expect(sendFaces).toHaveBeenCalledWith("r1", [face]);
+    expect(opts.frame).toHaveBeenCalledTimes(1);
+  });
+
+  it("looks for faces in the middle frame of a clip", async () => {
+    const seen: string[] = [];
+    const faces = vi.fn(async (b: Blob) => (seen.push(await b.text()), [face]));
+    const { ctl } = setup({ faces, sendFaces: vi.fn(async () => {}) });
+    await ctl.handle({ type: "camera.request", id: "r1", frames: 5, seconds: 2, recognise: true });
+    expect(seen).toEqual(["jpeg2"]);
+  });
+
+  it("does nothing about faces when not asked", async () => {
+    const faces = vi.fn(async () => [face]);
+    const sendFaces = vi.fn(async () => {});
+    const { ctl, opts } = setup({ faces, sendFaces });
+    await ctl.handle({ type: "camera.request", id: "r1" });
+    expect(faces).not.toHaveBeenCalled();
+    expect(sendFaces).not.toHaveBeenCalled();
+    expect(opts.upload).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failure to find faces never stops the picture from being sent", async () => {
+    const { ctl, opts } = setup({ faces: vi.fn(async () => Promise.reject(new Error("model broke"))), sendFaces: vi.fn(async () => {}) });
+    await ctl.handle({ type: "camera.request", id: "r1", recognise: true });
+    expect(opts.upload).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing when no face was found", async () => {
+    const sendFaces = vi.fn(async () => {});
+    const { ctl } = setup({ faces: vi.fn(async () => []), sendFaces });
+    await ctl.handle({ type: "camera.request", id: "r1", recognise: true });
+    expect(sendFaces).not.toHaveBeenCalled();
+  });
+});

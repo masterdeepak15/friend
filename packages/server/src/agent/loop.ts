@@ -4,6 +4,7 @@ import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
 import type { CodeBox } from "../codebox";
 import { LOOK_TOOLS, type EyeGate } from "../eyeGate";
+import type { People } from "../people";
 import type { MediaStore } from "../media";
 import type { BrokerHub } from "../brokers/hub";
 import type { MusicHub } from "../music/hub";
@@ -79,6 +80,8 @@ export interface AgentDeps {
   camera?: Pick<CameraBroker, "request">;
   /** Lets the owner's own looks through the camera go ahead without a card while the eye is on (see eyeGate.ts). */
   eyeGate?: Pick<EyeGate, "decide">;
+  /** The people the owner has introduced: who is in a picture, by the numbers of their faces. */
+  people?: Pick<People, "match" | "list">;
   /** Takes one picture of the owner's Friend screen through their browser. Without it screen.look reports it is unavailable. */
   screen?: Pick<CameraBroker, "request">;
   /** Asks the owner's screen how a drawing came out (stage.check). Without it the tool reports it is unavailable. */
@@ -668,6 +671,23 @@ export class Agent {
    * entry before cannot be written, a tool that changes something is not run, and the owner is told; a read-only tool still runs and the
    * gap is counted on the next entry.
    */
+  /** The browser looks for faces only when someone has been introduced (otherwise there is nobody to recognise). */
+  private recognising(): boolean {
+    return (this.deps.people?.list().length ?? 0) > 0;
+  }
+
+  /** Who is in the picture, in words: the people the owner introduced, and how many faces nobody introduced. Never anything else about a face. */
+  private whoIsThere(faces: number[][] | undefined): string {
+    if (!faces?.length || !this.deps.people) return "";
+    const found = this.deps.people.match(faces);
+    const names = found.filter((m): m is NonNullable<typeof m> => m !== null).map((m) => (m.relation ? `${m.name} (${m.relation})` : m.name));
+    const strangers = found.length - names.length;
+    const parts: string[] = [];
+    if (names.length) parts.push(`Recognised: ${names.join(", ")}.`);
+    if (strangers) parts.push(`${strangers} ${strangers === 1 ? "person" : "people"} I do not know.`);
+    return parts.length ? ` ${parts.join(" ")} (A recognised name is a hint, never proof, and never a reason to approve anything.)` : "";
+  }
+
   private async executeTool(call: ToolCall, ctx: TurnCtx, signal: AbortSignal): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string }; images?: { mime: string; data: string }[] }> {
     const d = this.deps;
     const readOnly = getToolDef(call.name)?.readOnly === true;
@@ -1057,17 +1077,17 @@ export class Agent {
     if (call.name === "camera.watch") {
       const seconds = Math.min(10, Math.max(1, Math.round(typeof args.seconds === "number" ? args.seconds : 5)));
       const frames = Math.min(12, Math.max(2, Math.round(typeof args.frames === "number" ? args.frames : 6)));
-      const clip = await d.camera!.request(ctx.emit, signal, { frames, seconds });
+      const clip = await d.camera!.request(ctx.emit, signal, { frames, seconds }, this.recognising());
       d.audit.log("agent", "tool.call", { tool: call.name, args: { seconds, frames }, tier, ok: clip.ok });
       if (!clip.ok) return fail(clip.error);
       const shots = clip.frames ?? [{ mime: clip.mime, data: clip.data }];
-      return { text: `Clip taken: ${shots.length} pictures over ${seconds} seconds, in order.`, isError: false, images: shots };
+      return { text: `Clip taken: ${shots.length} pictures over ${seconds} seconds, in order.${this.whoIsThere(clip.faces)}`, isError: false, images: shots };
     }
 
     if (call.name === "camera.snap") {
-      const shot = await d.camera!.request(ctx.emit, signal);
+      const shot = await d.camera!.request(ctx.emit, signal, undefined, this.recognising());
       d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: shot.ok });
-      return shot.ok ? { text: "Picture taken.", isError: false, image: { mime: shot.mime, data: shot.data } } : fail(shot.error);
+      return shot.ok ? { text: `Picture taken.${this.whoIsThere(shot.faces)}`, isError: false, image: { mime: shot.mime, data: shot.data } } : fail(shot.error);
     }
 
     const result =

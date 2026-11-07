@@ -92,6 +92,7 @@ import { ClaudeCodeProvider } from "./provider/claude-code/provider";
 import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
 import { Eye } from "./eye";
+import { People } from "./people";
 import { EyeGate } from "./eyeGate";
 import { applySettings, clientLook, COSMETIC_KEYS, onlyClosesTheEye, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
@@ -299,6 +300,8 @@ export async function createApp(opts: AppOptions) {
   let pruneTimer: ReturnType<typeof setInterval> | undefined;
   let sealTimer: ReturnType<typeof setInterval> | undefined;
   let eyeTimer: ReturnType<typeof setInterval> | undefined;
+  // the people the owner has introduced (face numbers, encrypted; never pictures)
+  const people = new People(db, opts.dataDir);
   // the eye: off by default, and always off again after a restart
   const eye = new Eye({
     config: () => config,
@@ -839,10 +842,11 @@ export async function createApp(opts: AppOptions) {
     weather: weatherService,
     code: opts.codeBox ?? new CodeBox(undefined, { mode: () => config.codeRunner }),
     eyeGate: new EyeGate({ eye, audit }),
+    people,
     camera: {
-      request: (emit, signal) => {
-        audit.log("agent", "camera.requested", {});
-        return camera.request(emit, signal);
+      request: (emit, signal, clip, recognise) => {
+        audit.log("agent", "camera.requested", clip ? { frames: clip.frames, seconds: clip.seconds } : {});
+        return camera.request(emit, signal, clip, recognise);
       },
     },
     screen: {
@@ -1578,10 +1582,15 @@ export async function createApp(opts: AppOptions) {
       const out = camera.deliver(id, jpeg);
       if (out === "ok") {
         audit.log("owner", "camera.frame", { bytes: jpeg.length }); // size only, never pixels
-        broadcast({ type: "camera.cancel", id }); // every other tab stops waiting
+        if (camera.pendingId() !== id) broadcast({ type: "camera.cancel", id }); // every other tab stops waiting (once a whole clip is in)
       } else {
         audit.log("owner", "camera.frame_ignored", { reason: out, bytes: jpeg.length });
       }
+      return out;
+    },
+    onCameraFaces: (id, faces) => {
+      const out = camera.setFaces(id, faces);
+      if (out === "ok") audit.log("owner", "camera.faces", { count: (faces as unknown[]).length }); // a count, never the numbers
       return out;
     },
     onScreenFrame: (id, jpeg) => {

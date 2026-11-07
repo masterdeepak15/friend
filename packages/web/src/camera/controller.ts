@@ -85,6 +85,10 @@ export interface CameraControllerOptions {
   frame?: (stream: MediaStream) => Promise<Blob>;
   /** Several frames for a short clip: (stream, how many, over how many seconds). */
   frames?: (stream: MediaStream, count: number, seconds: number) => Promise<Blob[]>;
+  /** Finds the faces in a picture, as 128 numbers each (see ../faces). Used only when the server asks to recognise. */
+  faces?: (jpeg: Blob) => Promise<number[][]>;
+  /** Sends those numbers to the server (never the picture). */
+  sendFaces?: (id: string, faces: number[][]) => Promise<void>;
 }
 
 interface Active {
@@ -104,7 +108,7 @@ export class CameraController {
 
   constructor(private opts: CameraControllerOptions) {}
 
-  async handle(m: { type: "camera.request" | "camera.cancel"; id: string; frames?: number; seconds?: number }): Promise<void> {
+  async handle(m: { type: "camera.request" | "camera.cancel"; id: string; frames?: number; seconds?: number; recognise?: boolean }): Promise<void> {
     if (m.type === "camera.cancel") {
       const a = this.active;
       if (a && a.id === m.id) {
@@ -133,6 +137,15 @@ export class CameraController {
       const shots = clip ? await (this.opts.frames ?? ((s, n, sec) => captureFrames(s, n, sec)))(stream, clip.frames, clip.seconds) : [await (this.opts.frame ?? ((s) => captureJpeg(s)))(stream)];
       if (a.cancelled) return;
       this.release(a); // the camera goes off before anything is sent, not after
+      // who is in the picture: found here, on the middle frame; only the numbers go to the server, and a failure never stops the picture
+      if (m.recognise && this.opts.faces && this.opts.sendFaces) {
+        try {
+          const found = await this.opts.faces(shots[Math.floor(shots.length / 2)]!);
+          if (found.length) await this.opts.sendFaces(m.id, found);
+        } catch {
+          /* no faces this time */
+        }
+      }
       try {
         for (const jpeg of shots) await this.opts.upload(m.id, jpeg);
       } catch {

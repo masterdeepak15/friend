@@ -85,6 +85,8 @@ export interface GatewayDeps {
   data?: DataApi;
   /** A picture arrived for a camera request: "unknown" when nobody is waiting for that id, "invalid" when it is not a JPEG. */
   onCameraFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
+  /** The face numbers the browser found in the picture it is about to send (never the picture). */
+  onCameraFaces?: (id: string, faces: unknown) => "ok" | "unknown" | "invalid";
   /** A picture of the Friend screen arrived for a screen.look request. */
   onScreenFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
   /** Telegram, SMS and WhatsApp: status and linking for the owner's screen, and Twilio's inbound messages. */
@@ -594,6 +596,27 @@ export function createGateway(deps: GatewayDeps) {
       const out = deps.onCameraFrame!(req.params.id, body);
       if (out === "unknown") return reply.code(404).send({ error: "Nobody is waiting for that picture" });
       if (out === "invalid") return reply.code(400).send({ error: "That is not a JPEG picture" });
+      return { ok: true };
+    },
+  );
+
+  // ---- the face numbers the browser found in a camera picture (never the picture itself) ----
+  app.post<{ Params: { id: string } }>(
+    "/api/camera/faces/:id",
+    {
+      bodyLimit: 64 * 1024,
+      onRequest: async (req, reply) => {
+        const token = req.cookies[COOKIE_NAME];
+        const session = token ? auth.resolveSession(token) : null;
+        if (!session) return reply.code(401).send({ error: "Unauthorized" });
+        if (!cameraWindow.allow(`faces:${session.id}`)) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+        if (!deps.onCameraFaces) return reply.code(503).send({ error: "Camera is not available" });
+      },
+    },
+    async (req, reply) => {
+      const out = deps.onCameraFaces!(req.params.id, (req.body as { faces?: unknown } | null)?.faces);
+      if (out === "unknown") return reply.code(404).send({ error: "Nobody is waiting for that picture" });
+      if (out === "invalid") return reply.code(400).send({ error: "Those are not faces I can use" });
       return { ok: true };
     },
   );

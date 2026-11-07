@@ -87,6 +87,10 @@ cpSync(join(chrome, "package.json"), join(chromeOut, "package.json"));
 
 const keep = (src) => !/(^|[\\/])(__pycache__|node_modules|\.venv|\.pytest_cache)([\\/]|$)|\.pyc$/.test(src);
 cpSync(web, join(dist, "web"), { recursive: true });
+// the face recognition runtime (WebAssembly) comes from this package's own files, so recognition needs no internet; the models travel in the web app (public/models)
+const ortSrc = join(repo, "packages/web/node_modules/onnxruntime-web/dist");
+mkdirSync(join(dist, "web/ort"), { recursive: true });
+for (const f of ["ort-wasm-simd-threaded.wasm", "ort-wasm-simd-threaded.mjs"]) cpSync(join(ortSrc, f), join(dist, "web/ort", f));
 cpSync(join(repo, "plugins"), join(dist, "plugins"), { recursive: true, filter: keep });
 cpSync(join(repo, "packages/voice/friend_voice"), join(dist, "voice/friend_voice"), { recursive: true, filter: keep });
 cpSync(join(repo, "README.md"), join(pkgDir, "README.md"));

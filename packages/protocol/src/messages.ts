@@ -153,7 +153,7 @@ export const ServerMsg = z.discriminatedUnion("type", [
   /** How loud music and video should be while the owner talks or Friend speaks: 1 is as it is, 0.25 a quarter. */
   z.object({ type: z.literal("audio.duck"), level: z.number().min(0).max(1) }),
   /** The owner approved a look through the camera: take one picture and upload it. */
-  z.object({ type: z.literal("camera.request"), id: z.string(), frames: z.number().int().min(2).max(12).optional(), seconds: z.number().min(1).max(10).optional() }),
+  z.object({ type: z.literal("camera.request"), id: z.string(), frames: z.number().int().min(2).max(12).optional(), seconds: z.number().min(1).max(10).optional(), recognise: z.boolean().optional() }),
   /** Stop: the request was answered elsewhere, timed out, or the emergency lock fired. */
   z.object({ type: z.literal("camera.cancel"), id: z.string() }),
   /** The owner approved a look at the screen: draw this page into a picture and upload it. */
