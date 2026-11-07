@@ -92,6 +92,7 @@ import { ClaudeCodeProvider } from "./provider/claude-code/provider";
 import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
 import { Eye } from "./eye";
+import { EyeGate } from "./eyeGate";
 import { applySettings, clientLook, COSMETIC_KEYS, onlyClosesTheEye, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
 import { OpenAiProvider } from "./provider/openai";
@@ -837,6 +838,7 @@ export async function createApp(opts: AppOptions) {
     plugins,
     weather: weatherService,
     code: opts.codeBox ?? new CodeBox(undefined, { mode: () => config.codeRunner }),
+    eyeGate: new EyeGate({ eye, audit }),
     camera: {
       request: (emit, signal) => {
         audit.log("agent", "camera.requested", {});

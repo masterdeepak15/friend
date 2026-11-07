@@ -3,6 +3,7 @@ import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
 import type { CodeBox } from "../codebox";
+import { LOOK_TOOLS, type EyeGate } from "../eyeGate";
 import type { MediaStore } from "../media";
 import type { BrokerHub } from "../brokers/hub";
 import type { MusicHub } from "../music/hub";
@@ -76,6 +77,8 @@ export interface AgentDeps {
   assistantName: () => string;
   /** Takes one picture through the owner's browser. Without it the camera tool reports it is unavailable. */
   camera?: Pick<CameraBroker, "request">;
+  /** Lets the owner's own looks through the camera go ahead without a card while the eye is on (see eyeGate.ts). */
+  eyeGate?: Pick<EyeGate, "decide">;
   /** Takes one picture of the owner's Friend screen through their browser. Without it screen.look reports it is unavailable. */
   screen?: Pick<CameraBroker, "request">;
   /** Asks the owner's screen how a drawing came out (stage.check). Without it the tool reports it is unavailable. */
@@ -730,7 +733,12 @@ export class Agent {
     const insideRoots = (p === undefined ? true : lexicalInsideRoots(p, d.config.roots)) && !unpointed;
 
     const protectedPath = p !== undefined && lexicalInsideRoots(p, [d.config.dataDir]);
-    const decision = d.policy.decide({ tool: call.name, baseTier: tier, args, trust: ctx.trust, insideRoots, protectedPath });
+    let decision = d.policy.decide({ tool: call.name, baseTier: tier, args, trust: ctx.trust, insideRoots, protectedPath });
+    // the eye: the card is skipped only when the gate says so, from server facts alone (who is asking, from where, how often)
+    if (decision === "ask" && d.eyeGate && LOOK_TOOLS.has(call.name)) {
+      const seconds = typeof args.seconds === "number" ? args.seconds : 0;
+      if (d.eyeGate.decide(call.name, { trust: ctx.trust, source: ctx.source }, seconds).allow) decision = "allow";
+    }
     let approvedOutside = false;
     const device = def.target === "device" ? d.devices.targetName() : null;
     if (decision === "deny") {
