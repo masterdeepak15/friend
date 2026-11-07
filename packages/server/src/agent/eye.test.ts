@@ -107,3 +107,43 @@ describe("camera.snap with the eye on", () => {
     expect(cards()).toHaveLength(0);
   });
 });
+
+describe("camera.watch", () => {
+  const frames = [PICTURE, "RkdISUpL", "TU5PUFFS"];
+  beforeEach(() => {
+    snap.mockImplementation(async (_emit, _signal, clip) => ({ ok: true, mime: "image/jpeg", data: frames[0]!, ...(clip ? { frames: frames.map((data) => ({ mime: "image/jpeg" as const, data })) } : {}) }));
+  });
+
+  it("with the eye on at the screen: no card, and the model gets every frame", async () => {
+    const p = seeing([[call("w1", "camera.watch", { seconds: 4, frames: 3 }), done], [text("Someone waved."), done]]);
+    await build(p).runTurn("what is happening?", turn("chat"));
+    expect(cards()).toHaveLength(0);
+    expect(snap).toHaveBeenCalledWith(expect.anything(), expect.anything(), { frames: 3, seconds: 4 });
+    const content = p.calls[1]!.messages.at(-1)!.content as { type: string }[];
+    expect(content.filter((c) => c.type === "image")).toHaveLength(3);
+    expect(JSON.stringify(content[0])).toMatch(/3 pictures/);
+  });
+
+  it("asks with a card that says what it will do when the request is not from the screen", async () => {
+    await build(seeing([[call("w1", "camera.watch", { seconds: 4, frames: 3 }), done], [text("ok"), done]])).runTurn("watch", turn("channel"));
+    expect(cards()).toHaveLength(1);
+    expect(cards()[0]).toMatchObject({ tool: "camera.watch", summary: expect.stringMatching(/Watch through the camera for 4 seconds/) });
+  });
+
+  it("uses up the clip time: three 10 second clips in an hour are fine, a fourth asks", async () => {
+    const p = seeing([
+      [call("w1", "camera.watch", { seconds: 10, frames: 4 }), done],
+      [call("w2", "camera.watch", { seconds: 10, frames: 4 }), done],
+      [call("w3", "camera.watch", { seconds: 10, frames: 4 }), done],
+      [call("w4", "camera.watch", { seconds: 10, frames: 4 }), done],
+      [text("ok"), done],
+    ]);
+    await build(p).runTurn("watch a lot", turn("chat"));
+    expect(cards()).toHaveLength(1);
+  });
+
+  it("is not available to a guest", async () => {
+    await build(seeing([[call("w1", "camera.watch"), done], [text("no"), done]])).runTurn("watch", turn("voice", "guest"));
+    expect(snap).not.toHaveBeenCalled();
+  });
+});

@@ -92,7 +92,10 @@ export function useFriend(onUnauthorized: () => void): {
       dispatch(m);
       const type = (m as { type?: string; id?: unknown } | null)?.type;
       const id = (m as { id?: unknown } | null)?.id;
-      if ((type === "camera.request" || type === "camera.cancel") && typeof id === "string") void cam.handle({ type, id });
+      if ((type === "camera.request" || type === "camera.cancel") && typeof id === "string") {
+        const { frames, seconds } = m as { frames?: unknown; seconds?: unknown };
+        void cam.handle({ type, id, ...(typeof frames === "number" ? { frames } : {}), ...(typeof seconds === "number" ? { seconds } : {}) });
+      }
       if ((type === "screen.request" || type === "screen.cancel") && typeof id === "string") void scr.handle({ type, id });
       if (type === "screen.check" && typeof id === "string") {
         // let what was just drawn finish laying out, then measure it and report in words

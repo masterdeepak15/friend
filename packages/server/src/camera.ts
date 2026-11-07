@@ -1,7 +1,10 @@
 import type { ServerMsg } from "@friend/protocol";
 import { randomUUID } from "node:crypto";
 
-export type CameraResult = { ok: true; mime: "image/jpeg"; data: string } | { ok: false; error: string };
+export type CameraResult = { ok: true; mime: "image/jpeg"; data: string; frames?: { mime: "image/jpeg"; data: string }[] } | { ok: false; error: string };
+
+/** All the frames of one clip together may not be larger than this. */
+export const MAX_CLIP_BYTES = 4 * 1024 * 1024;
 
 const DENIED: Record<string, string> = {
   off: "The owner has the camera switched off.",
@@ -22,6 +25,10 @@ interface Pending {
   id: string;
   emit: (m: ServerMsg) => void;
   finish: (r: CameraResult) => void;
+  /** How many frames the browser was asked for (1 for a single picture), what has arrived, and how many bytes that is. */
+  want: number;
+  got: string[];
+  bytes: number;
 }
 
 /**
@@ -36,21 +43,23 @@ export class CameraBroker {
     this.what = kind === "camera" ? "camera" : "screen picture";
   }
 
-  private msg(type: "request" | "cancel", id: string): ServerMsg {
-    return { type: `${this.kind}.${type}`, id } as ServerMsg;
+  private msg(type: "request" | "cancel", id: string, clip?: { frames: number; seconds: number }): ServerMsg {
+    return { type: `${this.kind}.${type}`, id, ...(clip ? clip : {}) } as ServerMsg;
   }
 
   pendingId(): string | null {
     return this.pending?.id ?? null;
   }
 
-  request(emit: (m: ServerMsg) => void, signal: AbortSignal): Promise<CameraResult> {
+  request(emit: (m: ServerMsg) => void, signal: AbortSignal, clipAsked?: { frames: number; seconds: number }): Promise<CameraResult> {
+    // a short clip: 2 to 12 frames over 1 to 10 seconds, whatever was asked
+    const clip = clipAsked ? { frames: Math.min(12, Math.max(2, Math.round(clipAsked.frames))), seconds: Math.min(10, Math.max(1, Math.round(clipAsked.seconds))) } : undefined;
     if (this.pending) return Promise.resolve({ ok: false, error: `The ${this.what} is already in use.` });
     if (signal.aborted) return Promise.resolve({ ok: false, error: `The ${this.what} request was cancelled.` });
     const id = randomUUID();
     return new Promise<CameraResult>((resolve) => {
       let done = false;
-      const timer = setTimeout(() => finish({ ok: false, error: `The ${this.what} did not answer in time.` }), this.timeoutMs);
+      const timer = setTimeout(() => finish({ ok: false, error: `The ${this.what} did not answer in time.` }), this.timeoutMs + (clip ? clip.seconds * 1000 : 0));
       const onAbort = () => {
         emit(this.msg("cancel", id));
         finish({ ok: false, error: `The ${this.what} request was cancelled.` });
@@ -64,8 +73,8 @@ export class CameraBroker {
         resolve(r);
       };
       signal.addEventListener("abort", onAbort, { once: true });
-      this.pending = { id, emit, finish };
-      emit(this.msg("request", id));
+      this.pending = { id, emit, finish, want: clip ? clip.frames : 1, got: [], bytes: 0 };
+      emit(this.msg("request", id, clip));
     });
   }
 
@@ -74,6 +83,13 @@ export class CameraBroker {
     const p = this.pending;
     if (!p || p.id !== id) return "unknown";
     if (!isJpeg(jpeg)) return "invalid";
+    if (p.want > 1) {
+      if (p.bytes + jpeg.length > MAX_CLIP_BYTES) return "invalid";
+      p.bytes += jpeg.length;
+      p.got.push(jpeg.toString("base64"));
+      if (p.got.length >= p.want) p.finish({ ok: true, mime: "image/jpeg", data: p.got[0]!, frames: p.got.map((data) => ({ mime: "image/jpeg" as const, data })) });
+      return "ok";
+    }
     p.finish({ ok: true, mime: "image/jpeg", data: jpeg.toString("base64") });
     return "ok";
   }

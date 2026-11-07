@@ -217,7 +217,7 @@ describe("POST /api/camera/frame/:id", () => {
     await boot();
     const cookie = await login();
     const codes: number[] = [];
-    for (let i = 0; i < 14; i++) codes.push((await upload(cookie, "nobody")).status);
+    for (let i = 0; i < 34; i++) codes.push((await upload(cookie, "nobody")).status); // a clip is up to 12 uploads in a row, so the limit is 30 in 10 seconds
     expect(codes).toContain(429);
   });
 });

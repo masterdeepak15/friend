@@ -49,6 +49,32 @@ export async function captureJpeg(stream: MediaStream, warmupMs = WARMUP_MS): Pr
   );
 }
 
+/** Several frames from one open camera, evenly spaced over the given seconds, each a JPEG no larger than 1024 px. */
+export async function captureFrames(stream: MediaStream, count: number, seconds: number, warmupMs = WARMUP_MS): Promise<Blob[]> {
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = stream;
+  await video.play();
+  await new Promise((r) => setTimeout(r, warmupMs));
+  const { width, height } = fitSize(video.videoWidth || 640, video.videoHeight || 480);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const gap = count > 1 ? (seconds * 1000) / (count - 1) : 0;
+  const out: Blob[] = [];
+  try {
+    for (let i = 0; i < count; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, gap));
+      canvas.getContext("2d")!.drawImage(video, 0, 0, width, height);
+      out.push(await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not encode the picture."))), "image/jpeg", JPEG_QUALITY)));
+    }
+  } finally {
+    video.srcObject = null;
+  }
+  return out;
+}
+
 export interface CameraControllerOptions {
   send(m: ClientMsg): void;
   upload(id: string, jpeg: Blob): Promise<void>;
@@ -57,6 +83,8 @@ export interface CameraControllerOptions {
   enabled(): boolean;
   open?: () => Promise<MediaStream>;
   frame?: (stream: MediaStream) => Promise<Blob>;
+  /** Several frames for a short clip: (stream, how many, over how many seconds). */
+  frames?: (stream: MediaStream, count: number, seconds: number) => Promise<Blob[]>;
 }
 
 interface Active {
@@ -76,7 +104,7 @@ export class CameraController {
 
   constructor(private opts: CameraControllerOptions) {}
 
-  async handle(m: { type: "camera.request" | "camera.cancel"; id: string }): Promise<void> {
+  async handle(m: { type: "camera.request" | "camera.cancel"; id: string; frames?: number; seconds?: number }): Promise<void> {
     if (m.type === "camera.cancel") {
       const a = this.active;
       if (a && a.id === m.id) {
@@ -100,11 +128,13 @@ export class CameraController {
       }
       a.opened = true;
       this.opts.dispatch({ type: "camera.open", stream });
-      const jpeg = await (this.opts.frame ?? ((s) => captureJpeg(s)))(stream);
+      // one picture, or a short clip: never more than 12 frames over 10 seconds, whatever the server asked
+      const clip = typeof m.frames === "number" && m.frames > 1 ? { frames: Math.min(12, Math.round(m.frames)), seconds: Math.min(10, Math.max(1, Math.round(m.seconds ?? 5))) } : null;
+      const shots = clip ? await (this.opts.frames ?? ((s, n, sec) => captureFrames(s, n, sec)))(stream, clip.frames, clip.seconds) : [await (this.opts.frame ?? ((s) => captureJpeg(s)))(stream)];
       if (a.cancelled) return;
-      this.release(a); // the camera goes off before the upload, not after
+      this.release(a); // the camera goes off before anything is sent, not after
       try {
-        await this.opts.upload(m.id, jpeg);
+        for (const jpeg of shots) await this.opts.upload(m.id, jpeg);
       } catch {
         this.opts.dispatch({ type: "alert.add", level: "warn", text: "Could not send the camera picture to Friend." });
       }

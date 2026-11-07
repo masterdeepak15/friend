@@ -49,7 +49,7 @@ interface Entry {
 }
 
 /** The actions that need the screen unless the owner allows them: a picture from the camera, and an Office worker's request (it can be a command). Sending a file to the owner's own chat is not here: it only ever goes to them. */
-export const SCREEN_ONLY = new Set(["camera.snap", "office.action"]);
+export const SCREEN_ONLY = new Set(["camera.snap", "camera.watch", "office.action"]);
 
 const YES = new Set(["yes", "y", "yeah", "ok", "okay", "allow", "ha", "haan", "han", "हाँ", "हां", "हा"]);
 const NO = new Set(["no", "n", "nope", "deny", "nahi", "nahin", "नहीं", "ना"]);

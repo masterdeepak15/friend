@@ -575,7 +575,7 @@ export function createGateway(deps: GatewayDeps) {
 
   // ---- camera pictures: uploaded over HTTP because the WebSocket frame limit protects chat ----
   app.addContentTypeParser("image/jpeg", { parseAs: "buffer", bodyLimit: MAX_CAMERA_FRAME_BYTES }, (_req, body, done) => done(null, body));
-  const cameraWindow = new SlidingWindow(10, 10_000);
+  const cameraWindow = new SlidingWindow(30, 10_000); // a clip is up to 12 uploads in a row
   app.post<{ Params: { id: string } }>(
     "/api/camera/frame/:id",
     {

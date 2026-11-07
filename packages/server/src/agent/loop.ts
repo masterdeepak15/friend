@@ -436,6 +436,7 @@ export class Agent {
           const r = await this.executeTool(c, ctx, abort.signal);
           results.push({ type: "tool_result", toolUseId: c.id, content: r.text, isError: r.isError });
           if (r.image) pictures.push({ type: "image", mime: r.image.mime, data: r.image.data });
+          for (const im of r.images ?? []) pictures.push({ type: "image", mime: im.mime, data: im.data });
         }
         // pictures follow all the tool results; they are shown to the model now and never stored
         const toolMsg: Msg = { role: "tool", content: [...results, ...pictures] };
@@ -667,7 +668,7 @@ export class Agent {
    * entry before cannot be written, a tool that changes something is not run, and the owner is told; a read-only tool still runs and the
    * gap is counted on the next entry.
    */
-  private async executeTool(call: ToolCall, ctx: TurnCtx, signal: AbortSignal): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string } }> {
+  private async executeTool(call: ToolCall, ctx: TurnCtx, signal: AbortSignal): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string }; images?: { mime: string; data: string }[] }> {
     const d = this.deps;
     const readOnly = getToolDef(call.name)?.readOnly === true;
     // a web address or a search can be private: the web and browser tools log only their own site, never the words or the page
@@ -691,7 +692,7 @@ export class Agent {
         this.notRecorded++; // the tool has already run; the gap is shown on the next entry
       }
     };
-    let r: { text: string; isError: boolean; image?: { mime: string; data: string } };
+    let r: { text: string; isError: boolean; image?: { mime: string; data: string }; images?: { mime: string; data: string }[] };
     try {
       r = await this.runTool(call, ctx, signal, rec);
     } catch (e) {
@@ -707,7 +708,7 @@ export class Agent {
     ctx: TurnCtx,
     signal: AbortSignal,
     rec: { outcome?: Outcome },
-  ): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string } }> {
+  ): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string }; images?: { mime: string; data: string }[] }> {
     const d = this.deps;
     const fail = (error: string) => ({ text: `Error: ${error}`, isError: true });
     const plugin = call.name.startsWith("plugin.") ? d.plugins?.tool(call.name) : undefined;
@@ -736,7 +737,7 @@ export class Agent {
     let decision = d.policy.decide({ tool: call.name, baseTier: tier, args, trust: ctx.trust, insideRoots, protectedPath });
     // the eye: the card is skipped only when the gate says so, from server facts alone (who is asking, from where, how often)
     if (decision === "ask" && d.eyeGate && LOOK_TOOLS.has(call.name)) {
-      const seconds = typeof args.seconds === "number" ? args.seconds : 0;
+      const seconds = call.name === "camera.watch" ? (typeof args.seconds === "number" ? args.seconds : 5) : 0;
       if (d.eyeGate.decide(call.name, { trust: ctx.trust, source: ctx.source }, seconds).allow) decision = "allow";
     }
     let approvedOutside = false;
@@ -762,7 +763,7 @@ export class Agent {
       const z = d.brokers.status("zerodha");
       if (!z.installed || !z.enabled || !z.keySet || !z.secretSet) return fail("Zerodha is not set up yet. Check integrations.status zerodha and help the owner finish it; you cannot enter their key or secret.");
     }
-    if (call.name === "camera.snap") {
+    if (call.name === "camera.snap" || call.name === "camera.watch") {
       // refuse before bothering the owner with a card for a picture that could not be used
       if (!d.camera) return fail("The camera is not available.");
       if (!d.provider.vision) {
@@ -1051,6 +1052,16 @@ export class Agent {
       const seen = await d.screenCheck.request(ctx.emit, signal);
       d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: seen.ok });
       return seen.ok ? { text: seen.lines.join("\n"), isError: false } : fail(seen.error);
+    }
+
+    if (call.name === "camera.watch") {
+      const seconds = Math.min(10, Math.max(1, Math.round(typeof args.seconds === "number" ? args.seconds : 5)));
+      const frames = Math.min(12, Math.max(2, Math.round(typeof args.frames === "number" ? args.frames : 6)));
+      const clip = await d.camera!.request(ctx.emit, signal, { frames, seconds });
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { seconds, frames }, tier, ok: clip.ok });
+      if (!clip.ok) return fail(clip.error);
+      const shots = clip.frames ?? [{ mime: clip.mime, data: clip.data }];
+      return { text: `Clip taken: ${shots.length} pictures over ${seconds} seconds, in order.`, isError: false, images: shots };
     }
 
     if (call.name === "camera.snap") {
