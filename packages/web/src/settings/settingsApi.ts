@@ -1,6 +1,7 @@
 import { HUD_WIDGET_IDS, type OfficeProject, type OfficeRole } from "@friend/protocol";
 
 export type ApprovalMode = "manual" | "edits" | "auto";
+export type CodeRunnerMode = "auto" | "sandbox" | "docker";
 
 /** Telegram, SMS and WhatsApp as the screen sees them: the tokens themselves are never sent here. */
 export interface ChannelsView {
@@ -143,6 +144,7 @@ export interface SettingsView {
   ownerName?: string;
   /** How much Friend asks before acting. */
   approvals?: ApprovalMode;
+  codeRunner?: CodeRunnerMode;
   phoneApprovals?: PhoneApprovalsSettings;
   audit?: AuditSettings;
   channels?: ChannelsView;
@@ -267,6 +269,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if (after.view !== before.view) patch.view = after.view;
   if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
   if ((after.approvals ?? "manual") !== (before.approvals ?? "manual")) patch.approvals = after.approvals ?? "manual";
+  if ((after.codeRunner ?? "auto") !== (before.codeRunner ?? "auto")) patch.codeRunner = after.codeRunner ?? "auto";
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
   for (const group of ["ollama", "claudeCode", "voice", "look", "updates", "session", "memory", "proactive", "phoneApprovals", "audit"] as const) {
     if (!after[group] || !before[group]) continue;

@@ -45,6 +45,8 @@ export interface Config {
   ownerName: string;
   /** How much Friend asks before acting: manual (asks), edits (files and sandboxed code go ahead) or auto (everything but risky things goes ahead). */
   approvals: ApprovalMode;
+  /** Where code the assistant writes runs: auto (Docker if it works, otherwise the built-in sandbox), sandbox (always built in) or docker (always Docker). */
+  codeRunner: CodeRunnerMode;
   /** Asking you on your phone (Telegram buttons, or a YES / NO reply) when an action needs your approval and you are not at the screen. */
   phoneApprovals: PhoneApprovalsConfig;
   /** The audit trail: how long it is kept, whether old entries are archived, the daily seal, and how long the audit screen stays open after the PIN. */
@@ -562,6 +564,10 @@ export function sanitizeChannels(raw: unknown): ChannelsConfig {
 export type ApprovalMode = "manual" | "edits" | "auto";
 export const APPROVAL_MODES: readonly ApprovalMode[] = ["manual", "edits", "auto"];
 
+export type CodeRunnerMode = "auto" | "sandbox" | "docker";
+export const CODE_RUNNER_MODES: readonly CodeRunnerMode[] = ["auto", "sandbox", "docker"];
+export const sanitizeCodeRunner = (v: unknown): CodeRunnerMode => (v === "sandbox" || v === "docker" ? v : "auto");
+
 export type ProviderName = "claude" | "ollama" | "claude-code" | "openai";
 
 export interface OpenAiConfig {
@@ -935,6 +941,7 @@ const defaults = (dataDir: string): Config => ({
   look: { ...DEFAULT_LOOK },
   ownerName: "",
   approvals: "manual",
+  codeRunner: "auto",
   phoneApprovals: sanitizePhoneApprovals(undefined),
   audit: sanitizeAudit(undefined),
   channels: sanitizeChannels(DEFAULT_CHANNELS),
@@ -1023,6 +1030,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     look: sanitizeLook(stored.look),
     ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",
     approvals: stored.approvals === "edits" || stored.approvals === "auto" ? stored.approvals : "manual",
+    codeRunner: sanitizeCodeRunner(stored.codeRunner),
     phoneApprovals: sanitizePhoneApprovals(stored.phoneApprovals),
     audit: sanitizeAudit(stored.audit),
     channels: sanitizeChannels(stored.channels),

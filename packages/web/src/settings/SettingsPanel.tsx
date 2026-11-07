@@ -10,7 +10,7 @@ import { SecurityTab } from "./SecurityTab";
 import { TradingTab } from "./TradingTab";
 import { WidgetsTab } from "./WidgetsTab";
 import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, downloadSize, isCatalogVoice } from "@friend/protocol";
-import { DEFAULT_LOOK, diffSettings, type ApprovalMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
+import { DEFAULT_LOOK, diffSettings, type ApprovalMode, type CodeRunnerMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
 import { TABS, type SettingsTab } from "./tabs";
@@ -27,6 +27,12 @@ const APPROVAL_CHOICES: { id: ApprovalMode; label: string; note: string }[] = [
   { id: "manual", label: "Ask me (manual)", note: "Friend asks before anything that changes your PC or leaves the safe zone. The most careful." },
   { id: "edits", label: "Auto-approve file work (edits)", note: "Reading and writing files, and the sandboxed code runner, go ahead without asking. Commands still ask." },
   { id: "auto", label: "Auto-approve everything safe (auto)", note: "Commands, files and tools go ahead without asking. The most convenient, and the most trust: Friend acts on its own." },
+];
+
+const CODE_RUNNER_CHOICES: { id: CodeRunnerMode; label: string; note: string }[] = [
+  { id: "auto", label: "Automatic", note: "Uses Docker when it is installed and running, otherwise the sandbox built into Friend. Nothing to install." },
+  { id: "sandbox", label: "Built-in sandbox", note: "Always the sandbox that comes with Friend: JavaScript, Python (standard library) and a basic shell, with no network and no access to your files." },
+  { id: "docker", label: "Docker", note: "Always a Docker container (needs Docker installed and running). A real shell and any program the container image has." },
 ];
 
 const PROVIDERS: { id: ProviderName; label: string; note: string }[] = [
@@ -525,6 +531,19 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
         </label>
       ))}
       <small className="auth-note">Whatever you pick, these still ask: risky commands (they need your PIN), the camera, adding connectors or plugins, and anything in Friend's own data folder. Changing this needs your PIN.</small>
+      <div className="settings-section" role="radiogroup" aria-label="Where code runs">
+        <h3>Where does the code Friend writes run?</h3>
+        {CODE_RUNNER_CHOICES.map((c) => (
+          <label key={c.id} className="settings-check" style={{ alignItems: "flex-start" }}>
+            <input type="radio" name="codeRunner" value={c.id} checked={(draft.codeRunner ?? "auto") === c.id} onChange={() => setDraft({ ...draft, codeRunner: c.id })} />
+            <span>
+              <b>{c.label}</b>
+              <br />
+              <small className="auth-note">{c.note}</small>
+            </span>
+          </label>
+        ))}
+      </div>
       {draft.phoneApprovals && (
         <div className="settings-section" aria-label="Asking on your phone">
           <h3>When you are away from the screen</h3>

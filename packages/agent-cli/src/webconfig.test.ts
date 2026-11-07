@@ -55,3 +55,13 @@ describe("friend config set: searching the web and tidying the conversation", ()
     expect(t.out.join("\n")).not.toContain("SECRET-KEY-123");
   });
 });
+
+describe("friend config set codeRunner", () => {
+  it("stores one of the three values and refuses others", async () => {
+    const t = io();
+    expect(configKeys()).toContain("codeRunner");
+    expect(await set(t, "codeRunner", "sandbox")).toBe(0);
+    expect(loadConfig(t.dataDir).codeRunner).toBe("sandbox");
+    await expect(set(t, "codeRunner", "nope")).rejects.toThrow(/auto, sandbox or docker/);
+  });
+});

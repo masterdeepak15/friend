@@ -24,6 +24,8 @@ export const SettingsPatch = z
     ownerName: z.string().trim().max(40),
     /** How much Friend asks before acting. Loosening it is a change that needs the PIN. */
     approvals: z.enum(["manual", "edits", "auto"]),
+    /** Where the code the assistant writes runs. Changing it needs the PIN. */
+    codeRunner: z.enum(["auto", "sandbox", "docker"]),
     /** The audit trail. Owner-only. */
     audit: z
       .object({
@@ -290,6 +292,7 @@ export interface SettingsView {
   view: Config["view"];
   ownerName: string;
   approvals: Config["approvals"];
+  codeRunner: Config["codeRunner"];
   /** Asking on the phone when you are away from the screen. */
   phoneApprovals: Config["phoneApprovals"];
   /** The audit trail's settings. */
@@ -363,6 +366,7 @@ export function settingsView(c: Config): SettingsView {
     view: c.view,
     ownerName: c.ownerName,
     approvals: c.approvals,
+    codeRunner: c.codeRunner,
     phoneApprovals: { ...c.phoneApprovals },
     audit: { ...c.audit },
     channels: {
@@ -623,6 +627,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
     if (launcher) config.hud.launcher = sanitizeHud({ launcher }).launcher;
   }
   if (p.approvals) config.approvals = p.approvals;
+  if (p.codeRunner) config.codeRunner = p.codeRunner;
   if (p.phoneApprovals) Object.assign(config.phoneApprovals, p.phoneApprovals);
   if (p.audit) Object.assign(config.audit, p.audit);
   if (p.channels) {
