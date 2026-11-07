@@ -74,6 +74,13 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
   updates: {
     auto: bool,
   },
+  eye: {
+    autoOffMinutes: (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 1440) throw new Error("Expected a whole number of minutes from 0 to 1440 (0 = never switch off by itself)");
+      return n;
+    },
+  },
   session: {
     autoCompact: bool,
     compactAtTokens: (v) => {
@@ -249,6 +256,7 @@ export const KEY_HELP: Record<string, string> = {
   "claudeCode.command": "the command that starts Claude Code, if it is not on the PATH",
   "claudeCode.fallback": "ollama or none: what to use when Claude is unavailable",
   "claudeCode.webSearch": "true or false: let Claude search the web with its own WebSearch tool (Claude Code model only)",
+  "eye.autoOffMinutes": "0 to 1440: minutes until the camera eye switches itself off (default 120, 0 = only when you switch it off). The eye itself is switched on, with your PIN, on the settings screen",
   "session.autoCompact": "true or false: when Claude's own conversation grows past session.compactAtTokens, write short notes and start a fresh one by itself",
   "session.compactAtTokens": "50000 to 800000: how big Claude's conversation may grow before it is tidied up (default 100000)",
   "web.enabled": "true or false: give every model the tools web.search and web.read",

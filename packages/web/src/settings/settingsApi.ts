@@ -145,6 +145,7 @@ export interface SettingsView {
   /** How much Friend asks before acting. */
   approvals?: ApprovalMode;
   codeRunner?: CodeRunnerMode;
+  eye?: { on: boolean; autoOffMinutes: number };
   phoneApprovals?: PhoneApprovalsSettings;
   audit?: AuditSettings;
   channels?: ChannelsView;
@@ -191,7 +192,13 @@ export const DEFAULT_LOOK: Look = { style: "sphere", accent: "#3fd8ff", intensit
 
 /** Changes that only affect how the screen looks, which need no PIN. */
 export const COSMETIC = new Set(["view", "look", "ownerName"]);
-export const needsPin = (patch: Record<string, unknown>): boolean => Object.keys(patch).some((k) => !COSMETIC.has(k));
+/** Closing the eye only takes power away, so it needs no PIN; the server applies the same rule. */
+const onlyClosesEye = (patch: Record<string, unknown>): boolean => {
+  const keys = Object.keys(patch);
+  const eye = patch.eye as { on?: unknown } | undefined;
+  return keys.length === 1 && keys[0] === "eye" && !!eye && Object.keys(eye).length === 1 && eye.on === false;
+};
+export const needsPin = (patch: Record<string, unknown>): boolean => !onlyClosesEye(patch) && Object.keys(patch).some((k) => !COSMETIC.has(k));
 
 export interface SaveResult {
   settings: SettingsView;
@@ -270,6 +277,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
   if ((after.approvals ?? "manual") !== (before.approvals ?? "manual")) patch.approvals = after.approvals ?? "manual";
   if ((after.codeRunner ?? "auto") !== (before.codeRunner ?? "auto")) patch.codeRunner = after.codeRunner ?? "auto";
+  if (after.eye && JSON.stringify(after.eye) !== JSON.stringify(before.eye)) patch.eye = after.eye;
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
   for (const group of ["ollama", "claudeCode", "voice", "look", "updates", "session", "memory", "proactive", "phoneApprovals", "audit"] as const) {
     if (!after[group] || !before[group]) continue;

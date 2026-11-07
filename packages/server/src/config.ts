@@ -47,6 +47,8 @@ export interface Config {
   approvals: ApprovalMode;
   /** Where code the assistant writes runs: auto (Docker if it works, otherwise the built-in sandbox), sandbox (always built in) or docker (always Docker). */
   codeRunner: CodeRunnerMode;
+  /** The eye: while it is on the assistant may look through the camera without asking each time (only for the owner at the screen). Off by default. */
+  eye: EyeConfig;
   /** Asking you on your phone (Telegram buttons, or a YES / NO reply) when an action needs your approval and you are not at the screen. */
   phoneApprovals: PhoneApprovalsConfig;
   /** The audit trail: how long it is kept, whether old entries are archived, the daily seal, and how long the audit screen stays open after the PIN. */
@@ -564,6 +566,16 @@ export function sanitizeChannels(raw: unknown): ChannelsConfig {
 export type ApprovalMode = "manual" | "edits" | "auto";
 export const APPROVAL_MODES: readonly ApprovalMode[] = ["manual", "edits", "auto"];
 
+export interface EyeConfig {
+  on: boolean;
+  /** Minutes until the eye switches itself off; 0 means it stays on until the owner switches it off. */
+  autoOffMinutes: number;
+}
+export const sanitizeEye = (e: Partial<EyeConfig> | undefined): EyeConfig => ({
+  on: e?.on === true,
+  autoOffMinutes: typeof e?.autoOffMinutes === "number" && Number.isFinite(e.autoOffMinutes) ? Math.min(1440, Math.max(0, Math.round(e.autoOffMinutes))) : 120,
+});
+
 export type CodeRunnerMode = "auto" | "sandbox" | "docker";
 export const CODE_RUNNER_MODES: readonly CodeRunnerMode[] = ["auto", "sandbox", "docker"];
 export const sanitizeCodeRunner = (v: unknown): CodeRunnerMode => (v === "sandbox" || v === "docker" ? v : "auto");
@@ -942,6 +954,7 @@ const defaults = (dataDir: string): Config => ({
   ownerName: "",
   approvals: "manual",
   codeRunner: "auto",
+  eye: sanitizeEye(undefined),
   phoneApprovals: sanitizePhoneApprovals(undefined),
   audit: sanitizeAudit(undefined),
   channels: sanitizeChannels(DEFAULT_CHANNELS),
@@ -1031,6 +1044,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     ownerName: typeof stored.ownerName === "string" ? stored.ownerName.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 40) : "",
     approvals: stored.approvals === "edits" || stored.approvals === "auto" ? stored.approvals : "manual",
     codeRunner: sanitizeCodeRunner(stored.codeRunner),
+    eye: sanitizeEye(stored.eye),
     phoneApprovals: sanitizePhoneApprovals(stored.phoneApprovals),
     audit: sanitizeAudit(stored.audit),
     channels: sanitizeChannels(stored.channels),

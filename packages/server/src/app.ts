@@ -91,7 +91,8 @@ import { StatsSampler, startStatsFeed } from "./hudStats";
 import { ClaudeCodeProvider } from "./provider/claude-code/provider";
 import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
-import { applySettings, clientLook, COSMETIC_KEYS, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
+import { Eye } from "./eye";
+import { applySettings, clientLook, COSMETIC_KEYS, onlyClosesTheEye, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
 import { OpenAiProvider } from "./provider/openai";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
@@ -296,6 +297,18 @@ export async function createApp(opts: AppOptions) {
   brokerHub.apply();
   let pruneTimer: ReturnType<typeof setInterval> | undefined;
   let sealTimer: ReturnType<typeof setInterval> | undefined;
+  let eyeTimer: ReturnType<typeof setInterval> | undefined;
+  // the eye: off by default, and always off again after a restart
+  const eye = new Eye({
+    config: () => config,
+    audit,
+    persist: (on) => {
+      config.eye.on = on;
+      const saved = loadConfig(opts.dataDir);
+      saved.eye.on = on;
+      saveConfig(saved);
+    },
+  });
   let brokerTimer: ReturnType<typeof setInterval> | undefined;
   let statsStop: (() => void) | undefined;
   // The owner's music: the folder is a setting; the player itself runs in the browser and the assistant controls it through the hub.
@@ -574,6 +587,7 @@ export async function createApp(opts: AppOptions) {
       if (!config.office.enabled) office.stop(undefined, "owner"); // switched off: nobody keeps working
       broadcast(office.snapshot());
     }
+    if (applied.changed.some((k) => k === "eye" || k.startsWith("eye."))) eye.sync();
     broadcast(statusMsg());
     return applied;
   }
@@ -1545,7 +1559,7 @@ export async function createApp(opts: AppOptions) {
       update: async (patch, pin, ip) => {
         // how the screen looks needs no PIN: it changes what is shown and nothing else
         const looksOnly = !!patch && typeof patch === "object" && Object.keys(patch).length > 0 && Object.keys(patch).every((k) => COSMETIC_KEYS.has(k));
-        if (!looksOnly) {
+        if (!looksOnly && !onlyClosesTheEye(patch)) {
           if (!pin) throw new HttpError(400, "Enter your PIN to save settings");
           await requirePin(pin, ip);
         }
@@ -1901,6 +1915,7 @@ export async function createApp(opts: AppOptions) {
       }
     },
     onDeviceConnect: (device, ws) => devices.attach(device, ws),
+    onSignOut: () => eye.switchOff("sign-out"),
     onLock: () => {
       lockEpoch++;
       const dropped = challenges.clear();
@@ -1981,6 +1996,8 @@ export async function createApp(opts: AppOptions) {
           // tried again next minute
         }
       };
+      eyeTimer = setInterval(() => eye.sync(), 30_000);
+      eyeTimer.unref?.();
       sealTimer = setInterval(() => void seal(), 60_000);
       sealTimer.unref?.();
       heartbeat.start();
@@ -2029,6 +2046,7 @@ export async function createApp(opts: AppOptions) {
       trackConfigHash(false);
       if (pruneTimer) clearInterval(pruneTimer);
       if (sealTimer) clearInterval(sealTimer);
+      if (eyeTimer) clearInterval(eyeTimer);
       stopped = true;
       updater.stop();
       hostPlayer.dispose();

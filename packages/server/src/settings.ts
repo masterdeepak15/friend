@@ -26,6 +26,8 @@ export const SettingsPatch = z
     approvals: z.enum(["manual", "edits", "auto"]),
     /** Where the code the assistant writes runs. Changing it needs the PIN. */
     codeRunner: z.enum(["auto", "sandbox", "docker"]),
+    /** The eye. Switching it on needs the PIN; the assistant can never change it. */
+    eye: z.object({ on: z.boolean(), autoOffMinutes: z.number().int().min(0).max(1440) }).partial().strict(),
     /** The audit trail. Owner-only. */
     audit: z
       .object({
@@ -293,6 +295,7 @@ export interface SettingsView {
   ownerName: string;
   approvals: Config["approvals"];
   codeRunner: Config["codeRunner"];
+  eye: Config["eye"];
   /** Asking on the phone when you are away from the screen. */
   phoneApprovals: Config["phoneApprovals"];
   /** The audit trail's settings. */
@@ -367,6 +370,7 @@ export function settingsView(c: Config): SettingsView {
     ownerName: c.ownerName,
     approvals: c.approvals,
     codeRunner: c.codeRunner,
+    eye: { on: c.eye.on, autoOffMinutes: c.eye.autoOffMinutes },
     phoneApprovals: { ...c.phoneApprovals },
     audit: { ...c.audit },
     channels: {
@@ -452,6 +456,7 @@ export function refuseForAgent(raw: unknown): void {
   if (r.office && typeof r.office === "object" && "autonomy" in (r.office as object)) throw new SettingsError("How much of the workers' requests Friend answers itself can only be changed by the owner on the settings screen.");
   if ("audit" in r) throw new SettingsError("The audit trail settings can only be changed by the owner on the settings screen.");
   if ("phoneApprovals" in r) throw new SettingsError("Whether approvals may be answered from the phone can only be changed by the owner on the settings screen.");
+  if ("eye" in r) throw new SettingsError("The eye (whether you may look through the camera by yourself) can only be changed by the owner on the settings screen.");
   if ("approvals" in r) throw new SettingsError("How much Friend asks before acting can only be changed by the owner on the settings screen.");
   if ("web" in r) throw new SettingsError("Web search settings (the source, its keys and addresses) can only be changed by the owner on the settings screen.");
   if ("apiKey" in r || "apiKey" in oa) throw new SettingsError("The API key can only be changed by the owner on the settings screen.");
@@ -628,6 +633,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
   }
   if (p.approvals) config.approvals = p.approvals;
   if (p.codeRunner) config.codeRunner = p.codeRunner;
+  if (p.eye) Object.assign(config.eye, p.eye);
   if (p.phoneApprovals) Object.assign(config.phoneApprovals, p.phoneApprovals);
   if (p.audit) Object.assign(config.audit, p.audit);
   if (p.channels) {
@@ -686,6 +692,15 @@ export function applySettings(config: Config, raw: unknown): Applied {
 
 /** Settings that only change how the screen looks. They need no PIN, because nothing about safety depends on them. */
 export const COSMETIC_KEYS = new Set(["view", "look", "ownerName"]);
+
+/** Closing the eye needs no PIN (it only takes power away); changing anything else about it, or anything else at the same time, does. */
+export function onlyClosesTheEye(patch: unknown): boolean {
+  if (!patch || typeof patch !== "object") return false;
+  const keys = Object.keys(patch);
+  if (keys.length !== 1 || keys[0] !== "eye") return false;
+  const eye = (patch as { eye?: unknown }).eye;
+  return !!eye && typeof eye === "object" && Object.keys(eye).length === 1 && (eye as { on?: unknown }).on === false;
+}
 
 /** The part of the look that only the screen needs; the style, colour and glow travel as stage state. */
 export function clientLook(l: Config["look"]) {

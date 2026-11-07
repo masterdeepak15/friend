@@ -39,6 +39,8 @@ export interface GatewayDeps {
   onClientConnect?: (session: Session, conn: ClientConn) => void | (() => void);
   onDeviceConnect: (device: Device, ws: WebSocket) => void;
   onLock?: () => void;
+  /** The owner signed out. */
+  onSignOut?: () => void;
   /** Whether speech is currently available (the voice sidecar is up). */
   voiceAvailable?: () => boolean;
   /** Handles one recorded utterance; resolves with what was heard ("" when nothing intelligible). */
@@ -482,6 +484,7 @@ export function createGateway(deps: GatewayDeps) {
   app.post("/api/logout", async (req, reply) => {
     const token = req.cookies[COOKIE_NAME];
     if (token) auth.revokeSession(token);
+    deps.onSignOut?.();
     reply.clearCookie(COOKIE_NAME, { path: "/" });
     return { ok: true };
   });

@@ -544,6 +544,23 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           </label>
         ))}
       </div>
+      <div className="settings-section" aria-label="The eye">
+        <h3>The eye: let Friend look by itself</h3>
+        <label className="settings-check">
+          <input type="checkbox" checked={draft.eye?.on ?? false} onChange={(e) => setDraft({ ...draft, eye: { autoOffMinutes: 120, ...draft.eye, on: e.target.checked } })} />
+          <span>
+            <b>Eye on</b>
+            <br />
+            <small className="auth-note">
+              While it is on, Friend uses the camera whenever it needs to (and when in doubt) without asking each time, but only when you talk to it at this screen. Never from Telegram, Alexa, guests or workers. The camera light shows whenever the camera is open. Switching on needs your PIN; switching off does not. It is always off after a restart or when you sign out.
+            </small>
+          </span>
+        </label>
+        <Field label="Switch off by itself after (minutes, 0 = never)">
+          <input type="number" min={0} max={1440} value={draft.eye?.autoOffMinutes ?? 120} onChange={(e) => setDraft({ ...draft, eye: { on: draft.eye?.on ?? false, autoOffMinutes: Math.min(1440, Math.max(0, Math.round(Number(e.target.value) || 0))) } })} />
+        </Field>
+        <small className="auth-note">Pictures go to the AI model you chose. With Claude they are sent to Anthropic; with a local Ollama vision model they stay on this PC. Nothing from a picture is kept.</small>
+      </div>
       {draft.phoneApprovals && (
         <div className="settings-section" aria-label="Asking on your phone">
           <h3>When you are away from the screen</h3>
