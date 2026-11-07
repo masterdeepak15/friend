@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import type { Audit } from "./audit";
 import type { Db } from "./db";
-import { LockoutError, RateLimiter } from "./ratelimit";
+import { LockoutError, RateLimiter, type LimiterStore } from "./ratelimit";
 
 export { LockoutError };
 
@@ -19,6 +19,22 @@ const SESSION_TTL_MS = 7 * 24 * 3600 * 1000;
 /** Wrong passwords or PINs from one address before it is locked out. */
 export const LOGIN_TRIES = 3;
 const PAIR_TTL_MS = 5 * 60 * 1000;
+function lockoutStore(db: Db, scope: string): LimiterStore {
+  const upsert = db.prepare("insert or replace into lockouts (scope, key, fails, locked_until, updated_at) values (?, ?, ?, ?, ?)");
+  const del = db.prepare("delete from lockouts where scope = ? and key = ?");
+  return {
+    load: () =>
+      (db.prepare("select key, fails, locked_until, updated_at from lockouts where scope = ?").all(scope) as { key: string; fails: number; locked_until: number; updated_at: number }[]).map((r) => ({
+        key: r.key,
+        fails: r.fails,
+        lockedUntil: r.locked_until,
+        updatedAt: r.updated_at,
+      })),
+    save: (key, e) => void upsert.run(scope, key, e.fails, e.lockedUntil, e.updatedAt),
+    remove: (key) => void del.run(scope, key),
+  };
+}
+
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
 /** The cost of guessing a password or PIN offline: today's recommended minimum (2^17). Older hashes (2^14) still work and are upgraded at the next login. */
@@ -71,8 +87,15 @@ export class Auth {
 
   constructor(private db: Db, private audit: Audit, private clock: () => number = Date.now) {
     // three wrong tries and this address is locked for a minute; every wrong try after that doubles the wait (up to an hour)
-    this.limiter = new RateLimiter(clock, LOGIN_TRIES);
-    this.accountLimiter = new RateLimiter(clock, 20);
+    // the counts are kept in the database, so restarting Friend does not hand out fresh guesses
+    db.exec("create table if not exists lockouts (scope text not null, key text not null, fails integer not null, locked_until integer not null, updated_at integer not null, primary key (scope, key))");
+    this.limiter = new RateLimiter(clock, LOGIN_TRIES, 60_000, lockoutStore(db, "address"));
+    this.accountLimiter = new RateLimiter(clock, 20, 60_000, lockoutStore(db, "account"));
+  }
+
+  /** A limiter whose counts are kept in the database (for example the pairing codes), so a restart does not reset it. */
+  persistentLimiter(scope: string, maxFails = 5): RateLimiter {
+    return new RateLimiter(this.clock, maxFails, 60_000, lockoutStore(this.db, scope));
   }
 
   /** Where a sign-in stands for this address: the wrong tries left, and how long it is locked. Safe to show the visitor. */

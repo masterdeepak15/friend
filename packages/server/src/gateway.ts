@@ -514,7 +514,7 @@ export function createGateway(deps: GatewayDeps) {
     }
   });
 
-  const pairLimiter = new RateLimiter(Date.now);
+  const pairLimiter = auth.persistentLimiter("pair");
   app.post("/api/pair", async (req, reply) => {
     const body = z.object({ code: z.string().min(1).max(64), name: z.string().min(1).max(64) }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "Invalid input" });
