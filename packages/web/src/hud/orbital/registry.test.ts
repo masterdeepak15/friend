@@ -71,3 +71,16 @@ describe("which widgets show at each density", () => {
     expect(ids("calm", { bogus: true } as never, "orbit", false)).toEqual(["usage"]);
   });
 });
+
+describe("instrument rectangles shared with the server", () => {
+  it("equal the registry boxes over the 1600 x 900 canvas", async () => {
+    const { INSTRUMENT_RECTS } = await import("@friend/protocol");
+    for (const w of WIDGETS) {
+      const r = INSTRUMENT_RECTS[w.id];
+      expect(r[0]).toBeCloseTo((w.box.x / 1600) * 100, 1);
+      expect(r[1]).toBeCloseTo((w.box.y / 900) * 100, 1);
+      expect(r[2]).toBeCloseTo((w.box.w / 1600) * 100, 1);
+      expect(r[3]).toBeCloseTo((w.box.h / 900) * 100, 1);
+    }
+  });
+});
