@@ -31,12 +31,20 @@ export function ApprovalCard({ approval, send }: { approval: PendingApproval; se
       <pre className="approval-summary" data-testid="approval-summary" style={{ whiteSpace: "pre-wrap" }}>
         {approval.summary}
       </pre>
+      {(approval.origin || approval.warnings?.length) && (
+        <div className="approval-origin" data-testid="approval-origin" role="note">
+          {approval.origin && <p>This command follows text from {approval.origin}. Nobody at Friend wrote it.</p>}
+          {approval.warnings?.map((w) => (
+            <p key={w}>⚠ {w}</p>
+          ))}
+        </div>
+      )}
       {approval.needsPin && <PinPad pin={pin} onChange={setPin} onSubmit={() => canApprove && respond("approve")} />}
       <div className="approval-actions">
         <button type="button" style={touch} className="primary" disabled={!canApprove} onClick={() => respond("approve")}>
           Approve
         </button>
-        {approval.tier === "T2" && !approval.needsPin && approval.tool !== "camera.snap" && approval.tool !== "camera.watch" && !approval.tool.startsWith("office.") && (
+        {approval.tier === "T2" && !approval.needsPin && !approval.origin && approval.tool !== "camera.snap" && approval.tool !== "camera.watch" && !approval.tool.startsWith("office.") && (
           <button type="button" style={touch} onClick={() => respond("approve_always")}>
             Always allow
           </button>
