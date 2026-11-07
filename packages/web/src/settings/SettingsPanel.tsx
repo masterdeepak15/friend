@@ -16,6 +16,7 @@ import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 import { TABS, type SettingsTab } from "./tabs";
 import { HoloPanel } from "../orb/HoloPanel";
 import { ConversationSection } from "./ConversationSection";
+import { PeopleSection } from "./PeopleSection";
 import { WebSection } from "./WebSection";
 import { SoulTab } from "./SoulTab";
 import { StartupTab } from "./StartupTab";
@@ -561,6 +562,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
         </Field>
         <small className="auth-note">Pictures go to the AI model you chose. With Claude they are sent to Anthropic; with a local Ollama vision model they stay on this PC. Nothing from a picture is kept.</small>
       </div>
+      <PeopleSection />
       {draft.phoneApprovals && (
         <div className="settings-section" aria-label="Asking on your phone">
           <h3>When you are away from the screen</h3>

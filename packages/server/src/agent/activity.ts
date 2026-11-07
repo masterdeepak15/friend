@@ -7,6 +7,7 @@ export function toolLabel(name: string, args?: unknown): string {
   if (name.startsWith("stage.")) return "Creating a view";
   if (name === "camera.snap") return "Looking through the camera";
   if (name === "camera.watch") return "Watching through the camera";
+  if (name === "people.introduce") return "Remembering a face";
   if (name.startsWith("shell.")) return "Running a command";
   if (name.startsWith("fs.")) return "Working with files";
   if (name.startsWith("code.")) return "Running code";

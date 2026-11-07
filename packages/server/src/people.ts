@@ -1,4 +1,5 @@
 import { FACE_SIMILARITY_THRESHOLD } from "@friend/protocol";
+import { createHash } from "node:crypto";
 import type { Db } from "./db";
 import { sealText, unsealText } from "./secretBox";
 
@@ -19,6 +20,12 @@ export interface Match {
   name: string;
   relation: string;
   score: number;
+}
+
+/** Where the note about a person is kept in the memory tree. */
+export function personNotePath(name: string): string {
+  const slug = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `people/${slug || `person-${createHash("sha1").update(name).digest("hex").slice(0, 8)}`}.md`;
 }
 
 const clean = (s: string, max: number) => s.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max);

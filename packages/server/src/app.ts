@@ -92,7 +92,7 @@ import { ClaudeCodeProvider } from "./provider/claude-code/provider";
 import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
 import { Eye } from "./eye";
-import { People } from "./people";
+import { People, personNotePath } from "./people";
 import { EyeGate } from "./eyeGate";
 import { applySettings, clientLook, COSMETIC_KEYS, onlyClosesTheEye, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
@@ -1587,6 +1587,25 @@ export async function createApp(opts: AppOptions) {
         audit.log("owner", "camera.frame_ignored", { reason: out, bytes: jpeg.length });
       }
       return out;
+    },
+    peopleApi: {
+      list: () => people.list(),
+      remove: async (id, pin, ip) => {
+        if (!pin) throw new HttpError(400, "Enter your PIN to forget someone");
+        await requirePin(pin, ip);
+        const who = people.list().find((p) => p.id === id);
+        people.remove(id);
+        if (who) memoryTree.remove(personNotePath(who.name));
+        audit.log("owner", "people.removed", { name: who?.name ?? "", ip });
+      },
+      forgetAll: async (pin, ip) => {
+        if (!pin) throw new HttpError(400, "Enter your PIN to forget everyone");
+        await requirePin(pin, ip);
+        const all = people.list();
+        people.forgetAll();
+        for (const p of all) memoryTree.remove(personNotePath(p.name));
+        audit.log("owner", "people.forgotten", { count: all.length, ip });
+      },
     },
     onCameraFaces: (id, faces) => {
       const out = camera.setFaces(id, faces);

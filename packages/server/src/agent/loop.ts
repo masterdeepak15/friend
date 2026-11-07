@@ -4,7 +4,7 @@ import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
 import type { CodeBox } from "../codebox";
 import { LOOK_TOOLS, type EyeGate } from "../eyeGate";
-import type { People } from "../people";
+import { personNotePath, type People } from "../people";
 import type { MediaStore } from "../media";
 import type { BrokerHub } from "../brokers/hub";
 import type { MusicHub } from "../music/hub";
@@ -81,7 +81,7 @@ export interface AgentDeps {
   /** Lets the owner's own looks through the camera go ahead without a card while the eye is on (see eyeGate.ts). */
   eyeGate?: Pick<EyeGate, "decide">;
   /** The people the owner has introduced: who is in a picture, by the numbers of their faces. */
-  people?: Pick<People, "match" | "list">;
+  people?: Pick<People, "match" | "list" | "introduce" | "find" | "remove" | "forgetAll">;
   /** Takes one picture of the owner's Friend screen through their browser. Without it screen.look reports it is unavailable. */
   screen?: Pick<CameraBroker, "request">;
   /** Asks the owner's screen how a drawing came out (stage.check). Without it the tool reports it is unavailable. */
@@ -783,6 +783,12 @@ export class Agent {
       const z = d.brokers.status("zerodha");
       if (!z.installed || !z.enabled || !z.keySet || !z.secretSet) return fail("Zerodha is not set up yet. Check integrations.status zerodha and help the owner finish it; you cannot enter their key or secret.");
     }
+    if (call.name.startsWith("people.") && !d.people) return fail("Remembering people is not available.");
+    if (call.name === "people.introduce" || call.name === "people.remove" || call.name === "people.forget_all") {
+      // faces are biometric data: only the owner at the Friend screen may add or delete them, never a request from a channel, the Office or a schedule
+      if (ctx.source !== "chat" && ctx.source !== "voice") return fail("I can only do that while you are talking to me at the Friend screen.");
+      if (call.name === "people.introduce" && !d.camera) return fail("The camera is not available.");
+    }
     if (call.name === "camera.snap" || call.name === "camera.watch") {
       // refuse before bothering the owner with a card for a picture that could not be used
       if (!d.camera) return fail("The camera is not available.");
@@ -1072,6 +1078,50 @@ export class Agent {
       const seen = await d.screenCheck.request(ctx.emit, signal);
       d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: seen.ok });
       return seen.ok ? { text: seen.lines.join("\n"), isError: false } : fail(seen.error);
+    }
+
+    if (call.name === "people.list") {
+      const all = d.people!.list();
+      d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: true });
+      return { text: all.length ? all.map((p) => `${p.name}${p.relation ? ` (${p.relation})` : ""}${p.usable ? "" : " - needs to be introduced again"}`).join("\n") : "I do not know anyone yet.", isError: false };
+    }
+
+    if (call.name === "people.introduce") {
+      const name = String(args.name);
+      const relation = typeof args.relation === "string" ? args.relation : undefined;
+      const shot = await d.camera!.request(ctx.emit, signal, undefined, true);
+      if (!shot.ok) {
+        d.audit.log("agent", "tool.call", { tool: call.name, args: { name }, tier, ok: false });
+        return fail(shot.error);
+      }
+      const faces = shot.faces ?? [];
+      if (faces.length === 0) return fail("I see no face in the picture. Ask them to look at the camera, in good light, and try again.");
+      if (faces.length > 1) return fail(`I see ${faces.length} faces. Ask ${name} to come close, alone, and try again.`);
+      try {
+        d.people!.introduce({ name, relation, note: typeof args.note === "string" ? args.note : undefined, embedding: faces[0]! });
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+      d.memoryTree?.write(personNotePath(name), `${name}${relation ? `, the owner's ${relation}` : ""}. The owner introduced them to me on ${localIso(new Date()).slice(0, 10)}.`, { title: name, summary: relation || "a person the owner introduced", source: "agent" });
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { name }, tier, ok: true });
+      return { text: `I will remember ${name}${relation ? ` (${relation})` : ""}. Only numbers about the face are kept, not the picture.`, isError: false };
+    }
+
+    if (call.name === "people.remove") {
+      const found = d.people!.find(String(args.name));
+      if (!found) return fail(`I do not know anyone called ${String(args.name)}.`);
+      d.people!.remove(found.id);
+      d.memoryTree?.remove(personNotePath(found.name));
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { name: found.name }, tier, ok: true });
+      return { text: `I have forgotten ${found.name}: their saved face numbers and the notes about them are deleted.`, isError: false };
+    }
+
+    if (call.name === "people.forget_all") {
+      const all = d.people!.list();
+      d.people!.forgetAll();
+      for (const p of all) d.memoryTree?.remove(personNotePath(p.name));
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { count: all.length }, tier, ok: true });
+      return { text: `I have forgotten everyone (${all.length}): all saved face numbers and the notes about them are deleted.`, isError: false };
     }
 
     if (call.name === "camera.watch") {

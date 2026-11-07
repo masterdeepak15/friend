@@ -85,6 +85,12 @@ export interface GatewayDeps {
   data?: DataApi;
   /** A picture arrived for a camera request: "unknown" when nobody is waiting for that id, "invalid" when it is not a JPEG. */
   onCameraFrame?: (id: string, jpeg: Buffer) => "ok" | "unknown" | "invalid";
+  /** The people Friend remembers, on the owner's settings screen: the list, and removing one or everyone (both need the PIN). */
+  peopleApi?: {
+    list(): { id: number; name: string; relation: string; addedAt: number; usable: boolean }[];
+    remove(id: number, pin: string | undefined, ip: string): Promise<void>;
+    forgetAll(pin: string | undefined, ip: string): Promise<void>;
+  };
   /** The face numbers the browser found in the picture it is about to send (never the picture). */
   onCameraFaces?: (id: string, faces: unknown) => "ok" | "unknown" | "invalid";
   /** A picture of the Friend screen arrived for a screen.look request. */
@@ -1345,6 +1351,33 @@ export function createGateway(deps: GatewayDeps) {
     } catch (e) {
       if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
       audit.log("owner", "settings.failed", { message: (e as Error).message }); // raw detail stays in the audit log
+      return reply.code(500).send({ error: "That did not work. Try again." });
+    }
+  });
+
+  // ---- the people Friend remembers (owner session only; removing needs the PIN) ----
+  app.get("/api/people", { onRequest: settingsGuard }, async (_req, reply) => (deps.peopleApi ? deps.peopleApi.list() : reply.code(503).send({ error: "People are not available" })));
+  app.post("/api/people/remove", { onRequest: settingsGuard, bodyLimit: 1024 }, async (req, reply) => {
+    const body = z.object({ id: z.number().int(), pin: z.string().min(1).max(32).optional() }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN to forget someone" });
+    if (!deps.peopleApi) return reply.code(503).send({ error: "People are not available" });
+    try {
+      await deps.peopleApi.remove(body.data.id, body.data.pin, req.ip);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+      return reply.code(500).send({ error: "That did not work. Try again." });
+    }
+  });
+  app.post("/api/people/forget", { onRequest: settingsGuard, bodyLimit: 1024 }, async (req, reply) => {
+    const body = z.object({ pin: z.string().min(1).max(32).optional() }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Enter your PIN to forget everyone" });
+    if (!deps.peopleApi) return reply.code(503).send({ error: "People are not available" });
+    try {
+      await deps.peopleApi.forgetAll(body.data.pin, req.ip);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
       return reply.code(500).send({ error: "That did not work. Try again." });
     }
   });
