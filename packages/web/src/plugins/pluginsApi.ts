@@ -6,6 +6,8 @@ export interface InstalledPlugin {
   enabled: boolean;
   /** Why the plugin cannot be used, or null. */
   error: string | null;
+  /** Where it was imported from ("github.com/owner/repo@commit"), when it was. */
+  source?: string;
   skills: { name: string; description: string }[];
   tools: { name: string; description: string }[];
 }

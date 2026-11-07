@@ -6,6 +6,8 @@ export interface PluginSpec {
   id: string;
   name: string;
   description?: string;
+  /** Where it was imported from; recorded in the plugin so the plugins screen can show it. */
+  source?: string;
   skills?: { name: string; description: string; text: string }[];
   tools?: {
     name: string;
@@ -40,6 +42,7 @@ export function authorPlugin(plugins: Plugins, scratchRoot: string, spec: Plugin
       name: spec.name,
       version: nextVersion(previous),
       description: spec.description ?? "",
+      ...(spec.source ? { source: spec.source } : {}),
       skills: (spec.skills ?? []).map((s) => ({ name: s.name, description: s.description, file: `skills/${s.name}.md` })),
       tools: (spec.tools ?? []).map((t) => ({
         name: t.name,
