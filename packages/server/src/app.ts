@@ -822,7 +822,7 @@ export async function createApp(opts: AppOptions) {
     tasks,
     plugins,
     weather: weatherService,
-    code: opts.codeBox ?? new CodeBox(),
+    code: opts.codeBox ?? new CodeBox(undefined, { mode: () => config.codeRunner }),
     camera: {
       request: (emit, signal) => {
         audit.log("agent", "camera.requested", {});

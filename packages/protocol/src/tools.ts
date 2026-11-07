@@ -132,7 +132,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "code.run",
     description:
-      "Run a program you wrote (python, node or shell) in a throwaway Docker container and get its output. The container has no network, cannot see the owner's files and is stopped after a time limit (default 10 s, at most 60 s). Use it to calculate, process data you put in the code, test an idea or build a result. The owner approves every run. Print what you want to see to stdout.",
+      "Run a program you wrote (python, node or shell) away from the owner's PC and get its output. It runs in a throwaway Docker container when Docker works, otherwise in the sandbox built into Friend (the result says which). Neither has a network or can see the owner's files, and the program is stopped after a time limit (default 10 s, at most 60 s). The built-in sandbox is smaller: python has the standard library only (no numpy or pandas), node is plain JavaScript (no require, no fetch; use readFile and console.log), and shell is an emulated bash with a fixed set of commands (no curl, git or compilers). Use it to calculate, process data you put in the code, test an idea or build a result. The owner approves every run. Print what you want to see to stdout.",
     input: z.object({
       language: z.enum(["python", "node", "shell"]),
       code: z.string().min(1).max(50000),
