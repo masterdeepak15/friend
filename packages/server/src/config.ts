@@ -9,6 +9,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { DEFAULT_HINDI_VOICE, DEFAULT_MARATHI_VOICE, type PresenceStyle, type ViewPreset } from "@friend/protocol";
 import { homedir } from "node:os";
 import { join, posix, win32 } from "node:path";
+import { sealSecrets, unsealSecrets } from "./secretBox";
 
 export interface Config {
   bind: string;
@@ -978,7 +979,8 @@ export function checkConfigFile(dataDir: string): { state: "baseline" | "same" |
 export function saveConfig(cfg: Partial<Config> & { dataDir: string }): void {
   const { dataDir, ...rest } = cfg;
   mkdirSync(dataDir, { recursive: true });
-  writeFileSync(configPath(dataDir), JSON.stringify(rest, null, 2));
+  // keys, tokens and passwords go to the file encrypted (see secretBox.ts)
+  writeFileSync(configPath(dataDir), JSON.stringify(sealSecrets(rest, dataDir).value, null, 2));
   if (trackHash) writeFileSync(hashFile(dataDir), fingerprint(dataDir));
   try {
     chmodSync(configPath(dataDir), 0o600);
@@ -996,7 +998,11 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     saveConfig({ ...rest, dataDir });
     return base;
   }
-  const stored = JSON.parse(readFileSync(file, "utf8")) as Partial<Config>;
+  const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<Config>;
+  const opened = unsealSecrets(raw, dataDir);
+  const stored = opened.value;
+  if (opened.lost.length) console.warn(`[friend] These saved keys could not be decrypted (wrong or missing secret.key / FRIEND_SECRET_KEY) and were left empty: ${opened.lost.join(", ")}. Enter them again in Settings.`);
+  else if (sealSecrets(raw, dataDir).changed) saveConfig({ ...stored, dataDir }); // a file from before keys were encrypted: seal it now
   // Built-in destructive patterns can only be extended, never dropped by an old or edited config file.
   const destructivePatterns = [...new Set([...base.destructivePatterns, ...(stored.destructivePatterns ?? [])])];
   return {

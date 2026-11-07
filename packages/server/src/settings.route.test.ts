@@ -69,9 +69,9 @@ describe("settings routes", () => {
     const cookie = await boot({ config: { apiKey: "old-key" } });
     const res = await put(cookie, { apiKey: "new-key-value" });
     expect(await res.text()).not.toContain("new-key-value");
-    expect(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).apiKey).toBe("new-key-value");
+    expect(loadConfig(dir).apiKey).toBe("new-key-value");
     await put(cookie, { apiKey: "" });
-    expect(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).apiKey).toBe("new-key-value");
+    expect(loadConfig(dir).apiKey).toBe("new-key-value");
   });
 
   it("refuse values that make no sense, and change nothing", async () => {
