@@ -1,6 +1,6 @@
 import type { ClientMsg, HudView, PendingApproval } from "@friend/protocol";
 import type { ReactNode } from "react";
-import type { Alert, Connection, LocalAction, StageViewState, VoiceChallenge, VoiceMode } from "../store";
+import type { Alert, CameraStill, Connection, LocalAction, StageViewState, VoiceChallenge, VoiceMode } from "../store";
 import { ProfileBadge } from "./ProfileBadge";
 import { CameraIndicator } from "../camera/CameraIndicator";
 import { AlertToast } from "./AlertToast";
@@ -16,6 +16,8 @@ export interface OverlayProps {
   challenge?: VoiceChallenge | null;
   /** The live camera stream, present only while the camera is open for a picture. */
   cameraStream?: MediaStream | null;
+  /** The last picture the camera took, kept for a few seconds after a look. */
+  cameraStill?: CameraStill | null;
   /** Other client-owned panels, such as voice enrollment. */
   children?: ReactNode;
   alerts: Alert[];
@@ -41,14 +43,14 @@ export interface OverlayProps {
 }
 
 /** Layer 4: always above whatever the agent has put on the stage. */
-export function Overlay({ approval, challenge, cameraStream, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, showStatus = true, showClock = true, profile = null, assistantName = "", hud = null, hudApproval = false, send, dispatch }: OverlayProps) {
+export function Overlay({ approval, challenge, cameraStream, cameraStill = null, children, alerts, connection, deviceOnline, voiceMode, busy = false, activity = null, showStatus = true, showClock = true, profile = null, assistantName = "", hud = null, hudApproval = false, send, dispatch }: OverlayProps) {
   return (
     <div data-overlay data-hud-anim={hud?.animations ?? "full"} className="overlay" style={{ position: "fixed", inset: 0, zIndex: 1000, pointerEvents: "none" }}>
       {showStatus && <StatusBadge connection={connection} deviceOnline={deviceOnline} approval={approval} voiceMode={voiceMode} busy={busy} activity={activity} />}
       {showClock && <Clock {...(hud ? { clock: hud.clock } : {})} />}
       {profile && <ProfileBadge ownerName={profile.ownerName} speaker={profile.speaker} assistantName={assistantName} terminalLabel={hud?.terminalLabel ?? "TERMINAL"} busy={busy} listening={voiceMode === "listening"} />}
       <MicIndicator mode={voiceMode} />
-      {cameraStream && <CameraIndicator stream={cameraStream} />}
+      {(cameraStream || cameraStill) && <CameraIndicator stream={cameraStream ?? null} still={cameraStill} />}
       <AlertToast alerts={alerts} dispatch={dispatch} />
       {challenge && !approval && <ChallengeCard key={challenge.id} challenge={challenge} send={send} dispatch={dispatch} />}
       {approval && !hudApproval && <ApprovalCard approval={approval} send={send} />}

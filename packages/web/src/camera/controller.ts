@@ -89,6 +89,13 @@ export interface CameraControllerOptions {
   faces?: (jpeg: Blob) => Promise<number[][]>;
   /** Sends those numbers to the server (never the picture). */
   sendFaces?: (id: string, faces: number[][]) => Promise<void>;
+  /** True when the last face search failed because the models could not be loaded (not because nobody was there). */
+  faceProblem?: () => boolean;
+  /** A web address for a picture the screen can show, and the way to let it go. */
+  still?: (jpeg: Blob) => string;
+  release?: (url: string) => void;
+  /** How long the last picture and its result stay on the screen (milliseconds). */
+  holdMs?: number;
 }
 
 interface Active {
@@ -105,6 +112,7 @@ interface Active {
  */
 export class CameraController {
   private active: Active | null = null;
+  private shown: { url: string; timer: ReturnType<typeof setTimeout> } | null = null;
 
   constructor(private opts: CameraControllerOptions) {}
 
@@ -120,6 +128,7 @@ export class CameraController {
     if (!this.opts.enabled()) return this.opts.send({ type: "camera.denied", id: m.id, reason: "off" });
     if (this.active) return this.opts.send({ type: "camera.denied", id: m.id, reason: "busy" });
 
+    this.clearStill();
     const a: Active = { id: m.id, cancelled: false, stream: null, opened: false, released: false };
     this.active = a;
     try {
@@ -138,13 +147,21 @@ export class CameraController {
       if (a.cancelled) return;
       this.release(a); // the camera goes off before anything is sent, not after
       // who is in the picture: found here, on the middle frame; only the numbers go to the server, and a failure never stops the picture
-      if (m.recognise && this.opts.faces && this.opts.sendFaces) {
+      const middle = shots[Math.floor(shots.length / 2)]!;
+      const searching = !!(m.recognise && this.opts.faces && this.opts.sendFaces);
+      const url = this.showStill(middle, searching ? "Looking…" : "Looked");
+      if (searching) {
+        let note = "No face found";
         try {
-          const found = await this.opts.faces(shots[Math.floor(shots.length / 2)]!);
-          if (found.length) await this.opts.sendFaces(m.id, found);
+          const found = await this.opts.faces!(middle);
+          if (found.length) {
+            await this.opts.sendFaces!(m.id, found);
+            note = found.length === 1 ? "1 face found" : `${found.length} faces found`;
+          } else if (this.opts.faceProblem?.()) note = "The face models did not load";
         } catch {
           /* no faces this time */
         }
+        if (url && this.shown?.url === url) this.opts.dispatch({ type: "camera.still", url, note });
       }
       try {
         for (const jpeg of shots) await this.opts.upload(m.id, jpeg);
@@ -159,7 +176,30 @@ export class CameraController {
     }
   }
 
+  /** Shows the picture on the screen and arranges for it to go again. Never lets a failure here stop the look. */
+  private showStill(jpeg: Blob, note: string): string | null {
+    try {
+      const url = (this.opts.still ?? ((b) => URL.createObjectURL(b)))(jpeg);
+      this.opts.dispatch({ type: "camera.still", url, note });
+      const timer = setTimeout(() => this.clearStill(), this.opts.holdMs ?? 5000);
+      this.shown = { url, timer };
+      return url;
+    } catch {
+      return null;
+    }
+  }
+
+  private clearStill(): void {
+    const s = this.shown;
+    if (!s) return;
+    this.shown = null;
+    clearTimeout(s.timer);
+    this.opts.dispatch({ type: "camera.still.clear" });
+    (this.opts.release ?? ((u) => URL.revokeObjectURL(u)))(s.url);
+  }
+
   dispose(): void {
+    this.clearStill();
     const a = this.active;
     if (!a) return;
     a.cancelled = true;

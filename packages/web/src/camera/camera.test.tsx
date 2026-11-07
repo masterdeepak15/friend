@@ -42,7 +42,7 @@ describe("CameraController", () => {
     expect(opts.upload).toHaveBeenCalledWith("r1", blob);
     expect(cam.track.stop).toHaveBeenCalledTimes(1);
     expect(sent).toEqual([]);
-    expect(actions.map((a) => a.type)).toEqual(["camera.open", "camera.closed"]);
+    expect(actions.map((a) => a.type)).toEqual(["camera.open", "camera.closed", "camera.still"]);
   });
 
   it("answers 'off' without ever opening the camera while the switch is off", async () => {

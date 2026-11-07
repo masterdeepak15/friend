@@ -81,6 +81,7 @@ export function useFriend(onUnauthorized: () => void): {
         if (!res.ok) throw new Error(`upload failed (${res.status})`);
       },
       faces: (jpeg) => finder.find(jpeg),
+      faceProblem: () => finder.failed,
       sendFaces: async (id, faces) => {
         await fetch(`/api/camera/faces/${encodeURIComponent(id)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ faces }) });
       },

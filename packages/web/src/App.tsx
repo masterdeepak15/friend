@@ -231,6 +231,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         approval={state.approval}
         challenge={state.challenge}
         cameraStream={state.camera.stream}
+        cameraStill={state.camera.still ?? null}
         alerts={state.alerts}
         connection={state.connection}
         deviceOnline={state.deviceOnline}

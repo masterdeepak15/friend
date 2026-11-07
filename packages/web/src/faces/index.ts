@@ -26,6 +26,8 @@ export interface FaceFinderDeps {
  */
 export class FaceFinder {
   private loaded: ReturnType<FaceFinderDeps["load"]> | null = null;
+  /** True when the last search failed (the models could not be loaded or the picture not read), as opposed to finding nobody. */
+  failed = false;
 
   constructor(private deps: FaceFinderDeps) {}
 
@@ -38,9 +40,11 @@ export class FaceFinder {
       const faces = pickFaces(await detectFaces(ort, yunet, img));
       const out: number[][] = [];
       for (const f of faces) out.push(await embedFace(ort, sface, img, f));
+      this.failed = false;
       return out;
     } catch {
       this.loaded = null;
+      this.failed = true;
       return [];
     }
   }

@@ -47,6 +47,13 @@ export interface CameraView {
   enabled: boolean;
   /** The live stream while the camera is open for a picture, otherwise null. */
   stream: MediaStream | null;
+  /** The last picture the camera took and what was found in it, kept on the screen for a few seconds after a look. */
+  still?: CameraStill | null;
+}
+
+export interface CameraStill {
+  url: string;
+  note: string;
 }
 
 export interface StageViewState {
@@ -180,6 +187,8 @@ export type LocalAction =
   | { type: "camera.enable"; value: boolean }
   | { type: "camera.open"; stream: MediaStream }
   | { type: "camera.closed" }
+  | { type: "camera.still"; url: string; note: string }
+  | { type: "camera.still.clear" }
   | { type: "voice.mode"; mode: VoiceMode }
   | { type: "voice.level"; level: number };
 
@@ -239,6 +248,8 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       return { ...state, camera: { enabled: local.value, stream: local.value ? state.camera.stream : null } };
     }
     if (local.type === "camera.open") return { ...state, camera: { ...state.camera, stream: local.stream } };
+    if (local.type === "camera.still") return { ...state, camera: { ...state.camera, still: { url: local.url, note: local.note } } };
+    if (local.type === "camera.still.clear") return { ...state, camera: { ...state.camera, still: null } };
     if (local.type === "camera.closed") return { ...state, camera: { ...state.camera, stream: null } };
     if (local.type === "challenge.dismiss") {
       return state.challenge?.id === local.id ? { ...state, challenge: null } : state;

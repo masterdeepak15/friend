@@ -37,7 +37,7 @@ describe("CameraController with a short clip", () => {
     expect(opts.upload.mock.calls.map((c: unknown[]) => c[0])).toEqual(["r1", "r1", "r1"]);
     expect(track.stop).toHaveBeenCalledTimes(1);
     expect(order.indexOf("released")).toBeLessThan(order.indexOf("upload")); // the camera is off before anything is sent
-    expect(actions.map((a) => a.type)).toEqual(["camera.open", "camera.closed"]);
+    expect(actions.map((a) => a.type)).toEqual(["camera.open", "camera.closed", "camera.still"]);
   });
 
   it("never takes more than 12 frames or 10 seconds, whatever it is asked", async () => {
