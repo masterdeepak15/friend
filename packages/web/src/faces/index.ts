@@ -59,13 +59,19 @@ async function decodeInBrowser(jpeg: Blob): Promise<Img> {
   return { data: d.data, width: d.width, height: d.height };
 }
 
+/**
+ * The runtime files, named one by one. Left to itself the runtime asks for its ".jsep" build (made for graphics cards), which the package does not ship,
+ * so the server answered with its home page and the models never loaded.
+ */
+export const ORT_PATHS = { mjs: "/ort/ort-wasm-simd-threaded.mjs", wasm: "/ort/ort-wasm-simd-threaded.wasm" } as const;
+
 /** The finder the app uses: the models and the runtime come from this same server (/models and /ort), nothing from the internet. */
 export function browserFaceFinder(): FaceFinder {
   return new FaceFinder({
     decode: decodeInBrowser,
     load: async () => {
       const ort = await import("onnxruntime-web");
-      ort.env.wasm.wasmPaths = "/ort/";
+      ort.env.wasm.wasmPaths = { ...ORT_PATHS };
       ort.env.wasm.numThreads = 1; // one thread needs no special page headers
       const make = async (url: string) => ort.InferenceSession.create(new Uint8Array(await (await fetch(url)).arrayBuffer()), { executionProviders: ["wasm"] });
       return { ort: ort as unknown as OrtLike, yunet: (await make("/models/yunet.onnx")) as unknown as OrtSession, sface: (await make("/models/sface.onnx")) as unknown as OrtSession };
