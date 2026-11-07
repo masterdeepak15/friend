@@ -61,6 +61,8 @@ export interface MarketDeps {
   memory?: { write(path: string, text: string, meta: { title: string; summary: string }): boolean };
   audit: Pick<Audit, "log">;
   clock?: () => number;
+  /** Makes the id of a look; random unless a test needs to name it. */
+  newId?: () => string;
 }
 
 const clean = (p: string) => p.replace(/^\.\//, "").replace(/^\.$/, "").replace(/^\/+|\/+$/g, "");
@@ -147,7 +149,7 @@ export class Market {
       if (t) docs.push({ path: p, text: cut(t) });
     }
 
-    const id = randomBytes(6).toString("hex");
+    const id = (this.d.newId ?? (() => randomBytes(6).toString("hex")))();
     this.sweep();
     this.staged.set(id, { repo, reader, commit, paths, cache: texts, results, expires: this.now() + KEEP_MS });
     this.d.audit.log("agent", "plugins.fetch", { repo: `${repo.owner}/${repo.repo}`, commit, files: paths.size, plugins: results.length });

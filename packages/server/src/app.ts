@@ -67,6 +67,8 @@ import { MemoryOrganizer } from "./memory/organizer";
 import { ProactiveBeat } from "./proactive/beat";
 import { saveMessage } from "./agent/history";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
+import { GithubReader } from "./github";
+import { Market } from "./marketplace";
 import { WeatherService, weatherSummary } from "./weather";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -508,9 +510,18 @@ export async function createApp(opts: AppOptions) {
     if (!err && "remove" in change) plugins.remove(PORTFOLIO_SKILL);
     return err;
   };
+  const market = new Market({
+    dir: opts.dataDir,
+    reader: () => new GithubReader(),
+    plugins,
+    audit,
+    // the note about new skills goes in the memory tree, unless the owner switched memory off
+    memory: { write: (path, text, meta) => config.memory.enabled && memoryTree.write(path, text, { title: meta.title, summary: meta.summary, source: "agent" }).ok },
+  });
   const admin = makeAdmin({
     hub,
     plugins,
+    market,
     dataDir: opts.dataDir,
     audit: (what, detail) => audit.log("agent", what, detail),
     catalog: {
@@ -812,6 +823,7 @@ export async function createApp(opts: AppOptions) {
     settings: agentSettings,
     mcp: hub,
     admin,
+    skillMarket: market,
     provider,
     usage: (e) => usageLog.record({ ...e, ...modelInUse() }),
     session: { auto: () => ({ on: config.session.autoCompact, limit: config.session.compactAtTokens }) },

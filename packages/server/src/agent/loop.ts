@@ -28,6 +28,8 @@ import type { DeviceHub } from "../devices";
 import { classifyShell } from "../policy/classify";
 import { MEMBER_TOOLS, type PolicyEngine } from "../policy/engine";
 import type { AdminApi } from "../admin";
+import { parseRepoLink } from "../github";
+import type { Market } from "../marketplace";
 import type { ContentBlock, Msg, Provider, ToolSpec } from "../provider/types";
 import { z } from "zod";
 import { runStageTool, type StageState } from "../stage";
@@ -134,6 +136,8 @@ export interface AgentDeps {
   mcp?: McpApi;
   /** Managing connectors and plugins for the AI. Without it those tools report they are unavailable. */
   admin?: AdminApi;
+  /** Installing skills from GitHub: the card for an install shows the whole preview, and a repository the model picked by itself is asked about. */
+  skillMarket?: Market;
 }
 
 export interface McpApi {
@@ -206,6 +210,8 @@ export class Agent {
   private tidyBlockedUntil = 0;
   /** Web addresses the owner said or a search returned in this turn: the only ones web.read may open without asking. */
   private seenUrls = new Set<string>();
+  /** What the owner wrote this turn, to tell a repository they named from one the model picked. */
+  private ownerText = "";
 
   /** Runs `job` as soon as no request is being answered (right away when idle). */
   whenIdle(job: () => void): void {
@@ -301,6 +307,7 @@ export class Agent {
     const spent = { input: 0, output: 0 };
     let reported = 0;
     this.seenUrls = ctx.trust === "owner" ? urlsIn(text) : new Set();
+    this.ownerText = ctx.trust === "owner" ? text.toLowerCase() : "";
     this.scenesThisTurn = 0;
     const stage = (cmd: Parameters<StageState["apply"]>[0]) => {
       d.stage.apply(cmd);
@@ -723,6 +730,14 @@ export class Agent {
     return r;
   }
 
+  /** Whether the owner named this repository (in their message, or by adding it as a marketplace). A link nobody mentioned is the model's own choice. */
+  private namedRepo(link: string): boolean {
+    const r = parseRepoLink(link);
+    if (!r) return true; // not a link at all: it fails without touching the network
+    const key = `${r.owner}/${r.repo}`.toLowerCase();
+    return this.ownerText.includes(key) || (this.deps.skillMarket?.marketplaces().some((m) => m.repo.toLowerCase() === key) ?? false);
+  }
+
   private async runTool(
     call: ToolCall,
     ctx: TurnCtx,
@@ -750,7 +765,7 @@ export class Agent {
     const p = pathArg(call.name, args);
     // a page the model chose by itself (an address nobody said and no search returned) could be a way to send private data out in the
     // address, so it is asked about like anything else outside what the owner has allowed
-    const unpointed = call.name === "web.read" && typeof args.url === "string" && !this.seenUrls.has(normalUrl(args.url));
+    const unpointed = (call.name === "web.read" && typeof args.url === "string" && !this.seenUrls.has(normalUrl(args.url))) || (call.name === "plugins.fetch" && !this.namedRepo(String(args.url ?? "")));
     const insideRoots = (p === undefined ? true : lexicalInsideRoots(p, d.config.roots)) && !unpointed;
 
     const protectedPath = p !== undefined && lexicalInsideRoots(p, [d.config.dataDir]);
@@ -801,9 +816,18 @@ export class Agent {
       const ok = await d.media!.sendable(String(args.path));
       if (!ok.ok) return fail(ok.error);
     }
+    // an install shows the owner the source and the whole text of every skill on the card
+    let shown: Record<string, unknown> = args;
+    if (call.name === "plugins.import" && d.skillMarket && (decision === "ask" || decision === "ask_with_pin")) {
+      try {
+        shown = { ...args, preview: d.skillMarket.preview(String(args.staging), { ...(typeof args.plugin === "string" ? { plugin: args.plugin } : {}), ...(Array.isArray(args.skills) ? { skills: args.skills.map(String) } : {}) }) };
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+    }
     if (decision === "ask" || decision === "ask_with_pin") {
       const outcome = await d.approvals.request(
-        { tool: call.name, args, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin", device, remote: ctx.trust !== "voice-device" },
+        { tool: call.name, args: shown, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin", device, remote: ctx.trust !== "voice-device" },
         ctx.emit,
       );
       if (!outcome.approved) {
