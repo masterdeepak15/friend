@@ -9,6 +9,8 @@ async function run(input: SandboxInput): Promise<SandboxResult | { unavailable: 
   switch (input.language) {
     case "node":
       return (await import("./engines/node")).runNode(input);
+    case "python":
+      return (await import("./engines/python")).runPython(input);
     default:
       return { unavailable: `The built-in sandbox cannot run ${input.language} yet.` };
   }
