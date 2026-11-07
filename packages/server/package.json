@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "node scripts/build-sandbox.mjs && tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
