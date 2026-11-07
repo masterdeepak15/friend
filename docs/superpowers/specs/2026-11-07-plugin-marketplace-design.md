@@ -36,13 +36,18 @@ It does not run a fixed download. It looks at the project the way a person would
 4. **Install.** `plugins.import {staging, plugin?, skills?}` — T3, PIN. The assistant chooses the plugin and the skills the README and manifests point to. The approval card shows the source (repo and commit) and the full text of everything that will be installed. On approval it calls `authorPlugin`, then writes the memory note. Imported plugins carry their source, so the plugins screen shows "from github.com/o/r".
 5. **Marketplaces.** `plugins.marketplace_add {repo}` (T3, PIN) fetches and checks `marketplace.json` and saves the repo (`marketplaces.json` in the data folder, at most 10). `plugins.marketplace_list` (T0) lists marketplaces and their plugins; `plugins.marketplace_remove` (T3). Installing from a marketplace goes through steps 1 to 4 on that plugin's `source` folder.
 
-What the README asks for that Friend cannot do — `npm install`, `pip install`, running a script, a Claude Code slash command like `/plugin install` — is never run. The assistant maps it to what Friend can do (a `/plugin install` of a skills-only plugin is exactly steps 1 to 4) or says plainly that it cannot, and what the owner would do by hand.
+**Scripts and commands the README asks for** (`npm install`, `pip install`, a setup script) are allowed, but only through the guarded doors Friend already has, and only with the owner's OK each time:
+
+- The assistant first tells the owner in plain words what the command is, where it comes from ("step 2 of the README of github.com/o/r"), and what it could do to the PC. It never runs it in the same breath as saying it.
+- It runs through `shell.run` (the owner's PC, T2: the owner approves every command) or `code.run` (the sandbox, no network, no files, approval every run). Nothing is added that skips either.
+- **Marked and never waived.** Once a turn has fetched or read outside text (`plugins.fetch`, `plugins.read`), every `shell.run` in that turn is marked on its approval card with "follows text from github.com/o/r" and a warning. Risky shapes get a stronger warning (download-and-run such as `curl … | sh`, `sudo`, `rm -rf`, registry edits, anything writing outside the project folder). The eye's skip-approval gate and any trust shortcut never apply to such a command.
+- "Claude Code only" lines such as `/plugin install` are not commands to run: a skills-only plugin is exactly steps 1 to 4, and anything else is explained to the owner.
 
 ## Safety
 
 - Hosts: `github.com`, `api.github.com`, `raw.githubusercontent.com` only; https only; redirects must stay on those hosts; 15 s per request, 2 MB in total per fetch, at most 60 files.
 - The README and docs are data, never instructions: the assistant reads them to understand the project, but a line in them that says to run something, to skip the PIN or to change the owner's rules is ignored (the tool results are marked as outside text, as web results are today). A hostile README can at worst make it choose badly; it cannot install anything, because import always needs the PIN and the card shows the exact text that would be installed. Reading is limited to text files, 200 KB each.
-- Nothing the repo contains is run, ever: no scripts, hooks or install steps. Imported plugins have skills only, no tools.
+- The import itself runs nothing: it writes text. Hooks are never installed. Imported plugins have skills only, no tools. Anything the README says to run goes through `shell.run` or `code.run` as described above, with the owner's OK every time.
 - Skill text still sits below the owner's rules and the safety rules (the existing `skill.use` wording).
 - The GitHub API is rate limited without a token (60/hour). A limit reply says so in plain words; no token is stored in this release.
 - Everything is audited: `plugins.fetch` (repo, commit, file count) and `plugins.import` (plugin ids, skills).
