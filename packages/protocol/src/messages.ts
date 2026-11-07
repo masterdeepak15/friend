@@ -204,6 +204,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stage.move"), objectId: z.string().max(64), rect: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }) }),
   /** The owner pinned an object as a widget, or unpinned it. */
   z.object({ type: z.literal("stage.pin"), objectId: z.string().max(64), pinned: z.boolean() }),
+  /** The owner tapped a chip (docked false: bring it back) or put a card away (docked true). */
+  z.object({ type: z.literal("stage.dock"), objectId: z.string().max(64), docked: z.boolean() }),
   z.object({ type: z.literal("music.state"), state: MusicState }),
   /** A screen's button press for the PC's player (only used while the output is the PC). */
   z.object({ type: z.literal("music.remote"), command: MusicCommand }),

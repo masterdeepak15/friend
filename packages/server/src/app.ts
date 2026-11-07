@@ -1,4 +1,4 @@
-import { parseRef, type ClientMsg, type MusicState, type ServerMsg } from "@friend/protocol";
+import { parseRef, type ClientMsg, type HudWidgetId, type MusicState, type ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
 import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, clampToSafe, downloadSize, isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
@@ -219,6 +219,12 @@ export async function createApp(opts: AppOptions) {
   const stage = new StageState();
   stage.useStore(dbWidgetStore(db)); // the owner's pinned widgets come back
   stage.trackView(() => config.view);
+  // the layout keeps clear of the live instruments that are on the home screen (the owner's switches and the ones the assistant brought up)
+  stage.trackInstruments(() => {
+    if (config.hud.layout !== "orbital") return [];
+    const on = Object.entries(config.hud.widgets).filter(([, v]) => v === true).map(([k]) => k as HudWidgetId);
+    return [...new Set([...on, ...(stage.snapshot().widgets ?? [])])];
+  });
   stage.setLook(config.look); // the owner's own style, colour and brightness are where every screen starts
   const approvals = new Approvals({ auth, policy, audit, db }, opts.approvalTimeoutMs);
   // told to the screen once the clients exist (below); Claude Code is skipped quietly until then
@@ -1915,6 +1921,8 @@ export async function createApp(opts: AppOptions) {
           break;
         case "ui.screen":
           stage.setScreen(msg);
+          // the screen was turned or is another device: what is shown is laid out again for it
+          for (const command of stage.relayout()) broadcast({ type: "stage", command });
           break;
         case "music.state":
           musicHub.onState(conn, msg.state);
@@ -1939,6 +1947,15 @@ export async function createApp(opts: AppOptions) {
           if (done.ok) broadcast({ type: "stage", command });
           else conn.send({ type: "alert", level: "warn", text: done.error });
           audit.log("owner", msg.pinned ? "stage.pin" : "stage.unpin", { objectId: msg.objectId });
+          break;
+        }
+        case "stage.dock": {
+          // the owner tapped a chip (bring it back as a card) or put a card away
+          const dockCommand = { cmd: "dock" as const, id: msg.objectId, docked: true };
+          const done = msg.docked ? (() => { const a = stage.apply(dockCommand, Date.now(), true); return a.ok ? { ok: true as const, commands: [dockCommand] } : a; })() : stage.restore(msg.objectId);
+          if (done.ok) for (const command of done.commands) broadcast({ type: "stage", command });
+          else conn.send({ type: "alert", level: "warn", text: done.error });
+          audit.log("owner", msg.docked ? "stage.dock" : "stage.undock", { objectId: msg.objectId });
           break;
         }
         case "ping":

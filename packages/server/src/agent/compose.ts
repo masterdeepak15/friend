@@ -38,6 +38,8 @@ export interface ComposeResult {
   dock: string[];
   /** Objects that come back from chips as cards. */
   undock: string[];
+  /** The ones among those put away (or shown as chips) only because the screen had no room: they come back when it has. */
+  squeezed: string[];
   scene: SceneMode;
   /** What was changed and why, in words the assistant can learn from. */
   notes: string[];
@@ -72,6 +74,7 @@ export function composeScreen(items: ComposeItem[], mode: "replace" | "add", st:
   const hide: string[] = [];
   const dock: string[] = [];
   const undock: string[] = [];
+  const squeezed: string[] = [];
   const byId = new Map(st.current.map((o) => [o.id, o]));
   const roleOf = (o: StageObject): ObjectRole => o.role ?? "beside";
 
@@ -140,6 +143,7 @@ export function composeScreen(items: ComposeItem[], mode: "replace" | "add", st:
     const id = gone.existing?.id ?? gone.item!.id;
     const why = zones.stack ? "a phone shows one card at a time under the main thing" : `a ${kindOf(st.screen)} here has ${cap} place${cap === 1 ? "" : "s"} beside the main thing`;
     notes.push(`"${id}" was put away as a chip: ${why}.`);
+    squeezed.push(id);
     if (gone.existing) {
       dock.push(id);
       chips.push({ id, isNew: false });
@@ -211,14 +215,14 @@ export function composeScreen(items: ComposeItem[], mode: "replace" | "add", st:
 
   const baseShown = out.filter((o) => !o.docked && o.layer !== "overlay").length + keptBase.filter((o) => !out.some((x) => x.id === o.id) && !dock.includes(o.id)).length;
   const scene: SceneMode = alert || anyBig ? "focus" : baseShown >= 2 ? "multi" : "conversation";
-  return { show: out, hide, dock, undock, scene, notes };
+  return { show: out, hide, dock, undock, squeezed, scene, notes };
 }
 
 /** Brings a chip back as a card (the oldest card beside is put away when there is no room). */
 export function restoreScreen(id: string, st: ComposeState): ComposeResult {
   const o = st.current.find((x) => x.id === id);
   if (!o) throw new Error(`There is nothing on screen called "${id}".`);
-  if (!o.docked) return { show: [], hide: [], dock: [], undock: [], scene: "conversation", notes: [] };
+  if (!o.docked) return { show: [], hide: [], dock: [], undock: [], squeezed: [], scene: "conversation", notes: [] };
   const role: ObjectRole = o.role === "focus" ? "focus" : "beside";
   return composeScreen([{ id, type: o.type, props: o.props, role, ...(o.label ? { label: o.label } : {}) }], "add", st);
 }

@@ -121,6 +121,7 @@ describe("every message from a screen leaves an entry", () => {
     "ui.screen": { width: 800, height: 600, kind: "desktop", orientation: "landscape", touch: false },
     "stage.move": { objectId: "x", rect: { x: 0, y: 0, w: 0.5, h: 0.5 } },
     "stage.pin": { objectId: "x", pinned: true },
+    "stage.dock": { objectId: "x", docked: false },
     "music.remote": { command: { action: "pause" } },
     "office.stop": {},
     "office.fire": { workerId: "nobody" },

@@ -5,6 +5,7 @@ import {
   StageCommand,
   TOOL_DEFS,
   type HudInstrument,
+  type HudWidgetId,
   type SceneMode,
   type ScreenInfo,
   type ServerMsg,
@@ -14,6 +15,7 @@ import {
 } from "@friend/protocol";
 
 import { GUIDE_TOPICS, screenGuide, type GuideTopic } from "./agent/guide";
+import { composeScreen, restoreScreen, type ComposeItem, type ComposeResult, type ComposeState } from "./agent/compose";
 import { describeScreen, placeObject, type PanelName } from "./agent/layout";
 import type { LookConfig } from "./config";
 
@@ -135,6 +137,100 @@ export class StageState {
     this.view = read;
   }
 
+  private instruments: (() => HudWidgetId[]) | null = null;
+  private ownerPlaced = new Set<string>();
+  /** Things put away (or shown as chips) only because there was no room: they come back when there is. */
+  private squeezed = new Set<string>();
+
+  /** Where to read which live instruments are on the home screen (the layout keeps clear of them). */
+  trackInstruments(read: () => HudWidgetId[]): void {
+    this.instruments = read;
+  }
+
+  private composeState(): ComposeState {
+    return {
+      screen: this.screen,
+      panels: this.panels,
+      instruments: this.instruments ? this.instruments() : [...this.widgets],
+      current: [...this.objects.values()].map((e) => e.obj),
+      ownerPlaced: this.ownerPlaced,
+    };
+  }
+
+  /** Applies a layout result all or nothing: when one step is refused the screen stays exactly as it was. */
+  private applyResult(r: ComposeResult, now: number): { ok: true; commands: StageCommand[] } | { ok: false; error: string } {
+    const backup = new Map([...this.objects].map(([k, v]) => [k, { ...v }]));
+    const scene = this.scene;
+    const commands: StageCommand[] = [];
+    const step = (c: StageCommand): string | null => {
+      const a = this.apply(c, now);
+      if (!a.ok) return a.error;
+      commands.push(c, ...(a.follow ?? []));
+      return null;
+    };
+    const steps: StageCommand[] = [
+      ...r.hide.map((id) => ({ cmd: "hide" as const, id })),
+      ...r.dock.map((id) => ({ cmd: "dock" as const, id, docked: true })),
+      ...r.show.map((object) => ({ cmd: "show" as const, object })),
+    ];
+    for (const c of steps) {
+      const error = step(c);
+      if (error) {
+        this.objects = backup;
+        this.scene = scene;
+        return { ok: false, error };
+      }
+    }
+    if (r.scene !== this.scene) step({ cmd: "scene", mode: r.scene });
+    for (const id of r.squeezed) this.squeezed.add(id);
+    for (const o of r.show) if (!o.docked) this.squeezed.delete(o.id);
+    for (const id of r.hide) this.squeezed.delete(id);
+    return { ok: true, commands };
+  }
+
+  /** Lays the screen out from what each item is for (focus, beside, glance, note, alert). */
+  compose(items: ComposeItem[], mode: "replace" | "add", now: number = Date.now()): { ok: true; commands: StageCommand[]; result: ComposeResult } | { ok: false; error: string } {
+    let result: ComposeResult;
+    try {
+      result = composeScreen(items, mode, this.composeState());
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+    const done = this.applyResult(result, now);
+    return done.ok ? { ...done, result } : done;
+  }
+
+  /** The owner tapped a chip: it comes back as a card. */
+  restore(id: string, now: number = Date.now()): { ok: true; commands: StageCommand[]; result: ComposeResult } | { ok: false; error: string } {
+    let result: ComposeResult;
+    try {
+      result = restoreScreen(id, this.composeState());
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+    const done = this.applyResult(result, now);
+    return done.ok ? { ...done, result } : done;
+  }
+
+  /** The screen changed (turned, resized, another device): lays the shown things out again for it. Returns what the screens must be told. */
+  relayout(now: number = Date.now()): StageCommand[] {
+    const items: ComposeItem[] = [...this.objects.values()]
+      .map((e) => e.obj)
+      .filter((o) => !o.pinned && !this.ownerPlaced.has(o.id) && o.layer !== "overlay" && o.role !== "alert" && (!o.docked || this.squeezed.has(o.id)))
+      .map((o) => ({ id: o.id, type: o.type, props: o.props, role: o.role === "focus" ? ("focus" as const) : ("beside" as const), ...(o.label ? { label: o.label } : {}) }));
+    if (items.length === 0) return [];
+    let result: ComposeResult;
+    try {
+      result = composeScreen(items, "add", this.composeState());
+    } catch {
+      return [];
+    }
+    const norm = (o: unknown) => JSON.stringify(o, (_k, v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as object).sort(([a], [b]) => a.localeCompare(b))) : v));
+    result = { ...result, show: result.show.filter((o) => norm(o) !== norm(this.objects.get(o.id)?.obj)), scene: this.scene };
+    const done = this.applyResult(result, now);
+    return done.ok ? done.commands : [];
+  }
+
   /** Back to the bare presence once nothing temporary is left on the screen. */
   private settle(): StageCommand[] {
     const temporary = [...this.objects.values()].some((e) => !e.obj.pinned);
@@ -190,6 +286,8 @@ export class StageState {
         if (!e) return { ok: false, error: `No object with id "${cmd.id}" is on screen` };
         if (e.obj.pinned && !byOwner) return { ok: false, error: `"${cmd.id}" is a pinned widget that the owner keeps. Leave it, unless the owner asks you to remove it.` };
         this.objects.delete(cmd.id);
+        this.ownerPlaced.delete(cmd.id);
+        this.squeezed.delete(cmd.id);
         if (e.obj.pinned) this.persist();
         const follow = this.settle();
         return follow.length ? { ok: true, follow } : { ok: true };
@@ -204,6 +302,8 @@ export class StageState {
       case "clear": {
         // the temporary pictures go; the owner's widgets stay; the live instruments the assistant brought up go too
         for (const [id, e] of this.objects) if (!e.obj.pinned) this.objects.delete(id);
+        this.ownerPlaced.clear();
+        this.squeezed.clear();
         if (!cmd.keepInstruments) this.widgets.clear();
         this.scene = "conversation";
         return { ok: true };
@@ -237,6 +337,7 @@ export class StageState {
         const e = this.objects.get(cmd.id);
         if (!e) return { ok: false, error: `No object with id "${cmd.id}" is on screen` };
         e.obj = { ...e.obj, placement: cmd.placement };
+        if (byOwner) this.ownerPlaced.add(cmd.id);
         if (e.obj.pinned) this.persist();
         return { ok: true };
       }
@@ -323,6 +424,21 @@ export function runStageTool(
     const topic = (args as { topic?: GuideTopic } | null | undefined)?.topic;
     if (topic !== undefined && !GUIDE_TOPICS.includes(topic)) return { ok: false, error: `Unknown topic. Use one of: ${GUIDE_TOPICS.join(", ")}.` };
     return { ok: true, output: screenGuide(topic), truncated: false };
+  }
+  if (name === "screen.compose") {
+    const input = TOOL_DEFS.find((t) => t.name === "screen.compose")!.input.safeParse(args ?? {});
+    if (!input.success) return { ok: false, error: `Invalid arguments for screen.compose: ${input.error.message}` };
+    const { items, mode } = input.data as { items: ComposeItem[]; mode?: "replace" | "add" };
+    const done = stage.compose(items, mode ?? "replace");
+    if (!done.ok) return { ok: false, error: done.error };
+    for (const command of done.commands) emit({ type: "stage", command });
+    const r = done.result;
+    const where = r.show.map((o) => `${o.id} (${o.docked ? "chip" : o.layer === "overlay" ? "note" : (o.role ?? "card")})`);
+    const parts = [`Shown: ${where.join(", ")}.`];
+    if (r.dock.length) parts.push(`Put away as chips: ${r.dock.join(", ")}.`);
+    if (r.hide.length) parts.push(`Removed: ${r.hide.join(", ")}.`);
+    parts.push(...r.notes);
+    return { ok: true, output: `ok. ${parts.join(" ")}`, truncated: false };
   }
   const def = TOOL_DEFS.find((t) => t.name === name && t.target === "gateway");
   if (!def) return { ok: false, error: `Unknown stage tool: ${name}` };
