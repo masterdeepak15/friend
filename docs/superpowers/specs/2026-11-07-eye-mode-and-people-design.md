@@ -69,3 +69,11 @@ The camera becomes the assistant's eye. The owner switches the eye **on**; while
 1. Do the model licences and `onnxruntime-web` licence and size hold up (Task 1)?
 2. Should "Forget everyone" also clear the text notes about people, or ask? (Default: clears them.)
 3. Frame sampling for `camera.watch`: evenly spaced, or sharper frames preferred?
+
+## Findings from the feasibility check (Task 1, 2026-11-07)
+
+- **Licences read from the files:** YuNet `face_detection_yunet_2023mar.onnx`: MIT (OpenCV Zoo `models/face_detection_yunet/LICENSE`). SFace `face_recognition_sface_2021dec_int8.onnx`: Apache 2.0 (`models/face_recognition_sface/LICENSE`). `onnxruntime-web` 1.31.1: MIT. All three allow this use; copies of the two licence files ship beside the models.
+- **Sizes:** YuNet 227 KB; SFace int8 9.4 MB (the float32 file is 38.7 MB; the int8 one is published at 0.9932 accuracy against 0.9940 for float32). The ONNX runtime's WebAssembly file is 14.2 MB (`ort-wasm-simd-threaded.wasm`; the other backends in the package are not shipped). sha256: yunet `8f2383e4…4fa6`, sface `2b0e941e…d78a`.
+- **It runs** through `onnxruntime-web` in Node (WASM) and so in the browser, on Windows. YuNet takes a fixed 640 x 640 picture; the 12 outputs are decoded in `faces/detect.ts`; SFace takes a 112 x 112 aligned face (similarity transform from the 5 landmarks, `faces/embed.ts`) and returns 128 numbers.
+- **Accuracy on 5 public-domain portraits (3 people):** same person 0.799 and 0.748; different people 0.113 to 0.367. The higher number is two older men with white hair, above OpenCV's published 0.363. The threshold is therefore **0.55**, with a wide gap on both sides. This is a very small sample (studio portraits); the plan's end-to-end test uses it as a regression check, not as proof of real-life accuracy, and the owner is told that glasses, poor light and look-alikes cause misses and occasional wrong names, which is why recognition is never used to approve anything.
+- **Decision:** recognition runs in the browser through `onnxruntime-web` (no server child process needed).

@@ -7,7 +7,7 @@ afterEach(() => cleanup());
 configure({ asyncUtilTimeout: 8000 });
 
 // jsdom has no canvas implementation; make getContext quietly report "unsupported".
-HTMLCanvasElement.prototype.getContext = (() => null) as never;
+if (typeof HTMLCanvasElement !== "undefined") HTMLCanvasElement.prototype.getContext = (() => null) as never;
 if (typeof ResizeObserver === "undefined") {
   globalThis.ResizeObserver = class {
     observe() {}
