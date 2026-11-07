@@ -93,7 +93,7 @@ import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
 import { Eye } from "./eye";
 import { People, personNotePath } from "./people";
-import { EyeGate } from "./eyeGate";
+import { EyeGate, voiceTurnSource } from "./eyeGate";
 import { applySettings, clientLook, COSMETIC_KEYS, onlyClosesTheEye, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
 import { OpenAiProvider } from "./provider/openai";
@@ -306,6 +306,7 @@ export async function createApp(opts: AppOptions) {
   const eye = new Eye({
     config: () => config,
     audit,
+    anySession: () => auth.anySessionActive(),
     persist: (on) => {
       config.eye.on = on;
       const saved = loadConfig(opts.dataDir);
@@ -1075,17 +1076,17 @@ export async function createApp(opts: AppOptions) {
   }
 
   /** Runs the turn for something that was said, then speaks the reply. Guests get the isolated guest turn. */
-  async function runVoiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" | "member" = "owner", person?: { id: number; name: string }, spoken?: string): Promise<void> {
-    return ensureRequest("voice", () => voiceTurn(text, ip, epoch, trust, person, spoken));
+  async function runVoiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" | "member" = "owner", person?: { id: number; name: string }, spoken?: string, verified = true): Promise<void> {
+    return ensureRequest("voice", () => voiceTurn(text, ip, epoch, trust, person, spoken, verified));
   }
-  async function voiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" | "member", person?: { id: number; name: string }, spoken?: string): Promise<void> {
+  async function voiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" | "member", person?: { id: number; name: string }, spoken?: string, verified = true): Promise<void> {
     // the voice keeps pace with the captions: each sentence is spoken as soon as it has been written
     const talk = speaker?.stream(broadcast);
     const emit = (m: ServerMsg) => {
       if (m.type === "caption.delta" && epoch === lockEpoch) talk?.push(m.text); // locked meanwhile: stay silent
       broadcast(m);
     };
-    await agent.runTurn(text, { trust, emit, ip, source: "voice", ...(person ? { person } : {}), ...(spoken ? { spoken } : {}) });
+    await agent.runTurn(text, { trust, emit, ip, source: voiceTurnSource(verified), ...(person ? { person } : {}), ...(spoken ? { spoken } : {}) });
     await talk?.end();
   }
 
@@ -1450,7 +1451,7 @@ export async function createApp(opts: AppOptions) {
         void runVoiceTurn(heard, ip, epoch, "guest").catch(crash);
       } else {
         broadcast({ type: "voice.heard", text: heard, trust: trust === "owner" ? "owner" : "unverified" });
-        void runVoiceTurn(heard, ip, epoch, "owner", undefined, spoken).catch(crash);
+        void runVoiceTurn(heard, ip, epoch, "owner", undefined, spoken, trust === "owner").catch(crash);
       }
       return wake ? { text: heard, wake: true } : { text: heard };
     },
@@ -1947,6 +1948,7 @@ export async function createApp(opts: AppOptions) {
     onDeviceConnect: (device, ws) => devices.attach(device, ws),
     onSignOut: () => eye.switchOff("sign-out"),
     onLock: () => {
+      eye.switchOff("lock");
       lockEpoch++;
       const dropped = challenges.clear();
       if (dropped) broadcast({ type: "voice.challenge.end", id: dropped });

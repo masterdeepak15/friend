@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EyeGate, MAX_CLIP_SECONDS_PER_HOUR, MAX_LOOKS_PER_HOUR } from "./eyeGate";
+import { EyeGate, MAX_CLIP_SECONDS_PER_HOUR, MAX_LOOKS_PER_HOUR, voiceTurnSource } from "./eyeGate";
 
 function rig(on = true) {
   const log: { kind: string; detail: Record<string, unknown> }[] = [];
@@ -65,5 +65,19 @@ describe("EyeGate: who may look without a card", () => {
     const r = rig();
     r.gate.decide("camera.snap", screen);
     expect(JSON.stringify(r.log)).not.toMatch(/base64|jpeg|data/i);
+  });
+});
+
+describe("EyeGate: a voice nobody could check is not the owner at the screen", () => {
+  it("names the source of a voice turn by whether the voice was checked", () => {
+    expect(voiceTurnSource(true)).toBe("voice");
+    expect(voiceTurnSource(false)).toBe("voice-unverified");
+  });
+
+  it("keeps asking for a voice that could not be checked, and writes the refusal down", () => {
+    const r = rig();
+    expect(r.gate.decide("camera.snap", { trust: "owner", source: voiceTurnSource(false) })).toMatchObject({ allow: false });
+    expect(r.log.map((l) => l.kind)).toEqual(["camera.look.refused"]);
+    expect(r.gate.decide("camera.snap", { trust: "owner", source: voiceTurnSource(true) })).toEqual({ allow: true });
   });
 });

@@ -30,7 +30,7 @@ describe("the eye setting", () => {
   });
 });
 
-function rig(start: Partial<Config["eye"]> = {}) {
+function rig(start: Partial<Config["eye"]> = {}, anySession?: () => boolean) {
   const config = { eye: { on: false, autoOffMinutes: 120, ...start } } as Config;
   const log: { kind: string; detail: unknown }[] = [];
   let now = 1_000_000;
@@ -43,6 +43,7 @@ function rig(start: Partial<Config["eye"]> = {}) {
       persisted.push(on);
     },
     audit: { log: ((_who: string, kind: string, detail: unknown) => void log.push({ kind, detail })) as never },
+    ...(anySession ? { anySession } : {}),
   });
   return { eye, config, log, persisted, advance: (ms: number) => (now += ms) };
 }
@@ -88,6 +89,18 @@ describe("Eye", () => {
     expect(r.eye.isOn()).toBe(false);
     expect(r.persisted).toEqual([false]);
     expect(r.log.at(-1)).toMatchObject({ kind: "eye.off", detail: { reason: "restart" } });
+  });
+
+  it("closes when nobody is signed in any more (sessions that ran out, or were revoked)", () => {
+    let signedIn = true;
+    const r = rig({}, () => signedIn);
+    r.config.eye.on = true;
+    r.eye.sync();
+    expect(r.eye.isOn()).toBe(true);
+    signedIn = false;
+    r.eye.sync();
+    expect(r.eye.isOn()).toBe(false);
+    expect(r.log.at(-1)).toMatchObject({ kind: "eye.off", detail: { reason: "no session" } });
   });
 
   it("switchOff does nothing when it is already off", () => {
@@ -144,6 +157,17 @@ describe("the eye on the settings route and sign-out", () => {
     await t.put({ eye: { on: true } }, "123456");
     expect((await t.get()).eye.on).toBe(true);
     await fetch(`${t.base}/api/logout`, { method: "POST", headers: { cookie: t.cookie } });
+    const login = await fetch(`${t.base}/api/login`, { method: "POST", headers: j, body: JSON.stringify({ password: "correct horse battery" }) });
+    const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
+    const view = (await (await fetch(`${t.base}/api/settings`, { headers: { cookie } })).json()) as { eye: Config["eye"] };
+    expect(view.eye.on).toBe(false);
+  });
+
+  it("switches off at the emergency lock", async () => {
+    const t = await boot();
+    await t.put({ eye: { on: true } }, "123456");
+    expect((await t.get()).eye.on).toBe(true);
+    expect((await fetch(`${t.base}/api/lock`, { method: "POST", headers: { cookie: t.cookie } })).status).toBe(200);
     const login = await fetch(`${t.base}/api/login`, { method: "POST", headers: j, body: JSON.stringify({ password: "correct horse battery" }) });
     const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
     const view = (await (await fetch(`${t.base}/api/settings`, { headers: { cookie } })).json()) as { eye: Config["eye"] };

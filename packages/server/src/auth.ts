@@ -171,6 +171,11 @@ export class Auth {
     return !!r && !r.revoked && r.e > this.clock();
   }
 
+  /** Whether anybody is signed in: a session that is not revoked and has not expired. */
+  anySessionActive(): boolean {
+    return !!this.db.prepare("select 1 from sessions where revoked = 0 and expires_at > ? limit 1").get(this.clock());
+  }
+
   revokeSession(token: string): void {
     this.db.prepare("update sessions set revoked = 1 where token_hash = ?").run(sha256(token));
   }

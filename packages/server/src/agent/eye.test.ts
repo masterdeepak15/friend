@@ -82,7 +82,7 @@ describe("camera.snap with the eye on", () => {
     expect(snap).toHaveBeenCalledTimes(1);
   });
 
-  it.each([["channel"], ["office"], ["task"], [undefined]])("still asks the owner when the request came from %s", async (source) => {
+  it.each([["channel"], ["office"], ["task"], ["voice-unverified"], [undefined]])("still asks the owner when the request came from %s", async (source) => {
     await build(seeing([[call("c1", "camera.snap"), done], [text("ok"), done]])).runTurn("look", turn(source));
     expect(cards()).toHaveLength(1);
     expect(cards()[0]).toMatchObject({ tool: "camera.snap", tier: "T2" });

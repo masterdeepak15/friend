@@ -12,6 +12,12 @@ const HOUR_MS = 3_600_000;
 /** Where a request is typed or spoken at the Friend screen. Everything else (a channel, the Office, a schedule, Alexa) is somewhere else. */
 const SCREEN_SOURCES = new Set(["chat", "voice"]);
 
+/**
+ * The source of a spoken request. A voice that was recognised as the owner's counts as the owner at the screen; a voice that could not be
+ * checked (no voice has been saved yet) does not, so a visitor's words never make the camera open or an introduction happen.
+ */
+export const voiceTurnSource = (verified: boolean): "voice" | "voice-unverified" => (verified ? "voice" : "voice-unverified");
+
 export type GateAnswer = { allow: true } | { allow: false; reason: string };
 
 /**

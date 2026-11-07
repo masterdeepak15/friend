@@ -18,6 +18,8 @@ export class Eye {
       /** Saves the switch (in the running settings and in the file). */
       persist: (on: boolean) => void;
       audit: Pick<Audit, "log">;
+      /** Whether anybody is signed in. The eye closes when nobody is (the sessions ran out, or were all ended). */
+      anySession?: () => boolean;
     },
   ) {
     // an eye left on in the file by a crash or a power cut is not trusted: it starts closed
@@ -44,6 +46,7 @@ export class Eye {
       this.d.audit.log("owner", "eye.off", { reason: this.reason });
       this.reason = "owner";
     }
+    if (cfg.on && this.d.anySession && !this.d.anySession()) return this.switchOff("no session");
     if (cfg.on && cfg.autoOffMinutes > 0 && this.now() - this.since >= cfg.autoOffMinutes * 60_000) this.switchOff("timeout");
   }
 

@@ -277,7 +277,13 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
   if ((after.ownerName ?? "") !== (before.ownerName ?? "")) patch.ownerName = after.ownerName ?? "";
   if ((after.approvals ?? "manual") !== (before.approvals ?? "manual")) patch.approvals = after.approvals ?? "manual";
   if ((after.codeRunner ?? "auto") !== (before.codeRunner ?? "auto")) patch.codeRunner = after.codeRunner ?? "auto";
-  if (after.eye && JSON.stringify(after.eye) !== JSON.stringify(before.eye)) patch.eye = after.eye;
+  if (after.eye) {
+    // only what changed, so that closing the eye on its own is a patch that needs no PIN
+    const eye: Partial<NonNullable<SettingsView["eye"]>> = {};
+    if (after.eye.on !== before.eye?.on) eye.on = after.eye.on;
+    if (after.eye.autoOffMinutes !== before.eye?.autoOffMinutes) eye.autoOffMinutes = after.eye.autoOffMinutes;
+    if (Object.keys(eye).length) patch.eye = eye as NonNullable<SettingsView["eye"]>;
+  }
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
   for (const group of ["ollama", "claudeCode", "voice", "look", "updates", "session", "memory", "proactive", "phoneApprovals", "audit"] as const) {
     if (!after[group] || !before[group]) continue;

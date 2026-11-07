@@ -116,7 +116,7 @@ describe("people.introduce", () => {
   });
 
   it("works only at the Friend screen: a request from Telegram, the Office or a schedule is refused before anything is asked", async () => {
-    for (const source of ["channel", "office", "task", null]) {
+    for (const source of ["channel", "office", "task", "voice-unverified", null]) {
       await build(seeing([[call("1", "people.introduce", { name: "Priya" }), done], [text("ok"), done]])).runTurn("this is Priya", turn(source));
     }
     expect(cards()).toHaveLength(0);
