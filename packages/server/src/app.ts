@@ -66,6 +66,7 @@ import { MemoryKeeper } from "./memory/keeper";
 import { MemoryOrganizer } from "./memory/organizer";
 import { ProactiveBeat } from "./proactive/beat";
 import { saveMessage } from "./agent/history";
+import { installDefaults } from "./defaultPlugins";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
 import { GithubReader } from "./github";
 import { Market } from "./marketplace";
@@ -153,6 +154,8 @@ export interface AppOptions {
   heartbeatMs?: number;
   /** Where the agent's programs run. Defaults to throwaway Docker containers. */
   codeBox?: Pick<CodeBox, "run">;
+  /** Bundled plugins to install once on first start. Default: the screen-design skill, unless a catalog folder is given (tests, custom setups). */
+  defaultPlugins?: readonly string[];
   /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
   pluginCatalogDir?: string;
   /** Starting Friend when the computer starts, and updating it. Everything has a real default; tests hand in their own. */
@@ -1145,6 +1148,12 @@ export async function createApp(opts: AppOptions) {
   const here = dirname(fileURLToPath(import.meta.url));
   // next to the program when installed from npm, in the repository when run from source
   const catalogDir = opts.pluginCatalogDir ?? firstExistingDir([process.env.FRIEND_PLUGIN_CATALOG, resolve(here, "plugins"), resolve(here, "../../..", "plugins")]) ?? resolve(here, "plugins");
+  // the plugins that come with Friend and that the assistant should have from the start (once; what the owner removes stays removed)
+  try {
+    installDefaults(plugins, catalogDir, opts.dataDir, opts.defaultPlugins ?? (opts.pluginCatalogDir ? [] : ["screen-design"]));
+  } catch {
+    /* the assistant works without it; it can be installed from the plugins screen */
+  }
   const pluginsApi: PluginsApi = {
     list: () => {
       videoHub.poke(); // the helper programs may have been installed since the last look

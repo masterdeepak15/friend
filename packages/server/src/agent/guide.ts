@@ -39,12 +39,12 @@ Live instruments: the home screen is clean until you bring one up with stage.wid
 Other tools: stage.update {id, props} changes a shown object; stage.hide {id}; stage.clear (pinned widgets stay); stage.pin {id} keeps one; stage.scene {mode}; stage.mood {accent?, intensity?}; stage.presence; view.set; look.set.`;
 
 const LAYOUT = `ARRANGING THE SCREEN
-- Read the request's "screen:", "view=", "accent=", "on screen:" and "free regions:" lines before you place anything. They are the truth about this screen.
-- Use the whole screen: on a desktop give each thing its own object in its own place (regions, or a box for the corners), like a control room. Do not pack a whole answer into one card or one group. Group or tabs only when the owner asks for one combined panel.
-- Placement: one object "center"; two "left" and "right"; three to six "auto" with scene "multi"; one big thing scene "focus" and "center". "top" and "bottom" are wide banners.
+- Read the request's "screen:", "view=", "accent=", "on screen:", "zones:" and "free regions:" lines before you place anything. They are the truth about this screen.
+- Prefer screen.compose: say what each thing is for (focus, beside, glance, note, alert) and the screen picks the places. One focus, a few things beside it, small values as chips; do not fill the screen. Group or tabs only when the owner asks for one combined panel.
+- With stage.show, placement is explicit: one object "center"; two "left" and "right"; three to six "auto" with scene "multi"; one big thing scene "focus" and "center". "top" and "bottom" are wide banners. screen.compose does this for you for every screen size.
 - Never cover the voice presence (middle), captions (bottom), status line (bottom-left), clock (bottom-right) or the owner's pinned widgets. Pinned widgets belong to the owner: leave them, do not move them, do not hide them.
 - Update an object (same id) only when it is the same thing refreshed; a different topic is a new object, never reuse an old card for it. Clear the screen (stage.clear) whenever you need the room. At most 12 objects.
-- Phone: everything stacks in one column, so show at most two short objects, prefer stat, gauge, progress, list, card. Tablet: up to four. Desktop: use the regions.
+- Phone: everything stacks in one column, so show one focus and one card at most, prefer stat, gauge, progress, list, card; the rest are chips. Tablet: a focus and two beside. Desktop: a focus and three beside.
 - Lifetimes: what the owner asked to see stays until they dismiss it or you replace it. Passing information gets a ttl of 15 to 60 seconds.
 - When the task is done and the owner has what they need, take your temporary objects off the screen.`;
 

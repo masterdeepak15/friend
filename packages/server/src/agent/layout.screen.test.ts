@@ -2,27 +2,25 @@ import { describe, expect, it } from "vitest";
 import { screenGuide } from "./guide";
 import { LAYOUT_GUIDE } from "./layout";
 
-describe("using the whole screen, not one card", () => {
-  it("tells the assistant that a big screen is for many objects in many places, one thing each", () => {
-    expect(LAYOUT_GUIDE).toMatch(/whole screen/i);
-    expect(LAYOUT_GUIDE).toMatch(/its own (object|place)/i);
-    expect(LAYOUT_GUIDE).toMatch(/corners/i);
-    expect(LAYOUT_GUIDE).toMatch(/Do not pack/i);
-    expect(LAYOUT_GUIDE).not.toMatch(/Fewer, richer objects/);
-    expect(LAYOUT_GUIDE).not.toMatch(/Do not make one card per fact/);
+describe("a clear screen, not a crowded one", () => {
+  it("tells the assistant to say what each thing is for and to keep the screen light", () => {
+    expect(LAYOUT_GUIDE).toMatch(/screen\.compose/);
+    expect(LAYOUT_GUIDE).toMatch(/you never give coordinates/i);
+    expect(LAYOUT_GUIDE).toMatch(/Less is clearer/);
+    expect(LAYOUT_GUIDE).toMatch(/Do not fill the screen/);
   });
 
-  it("says when an old object may be changed and when the screen is cleared", () => {
+  it("says when an old object may be changed and when the screen is replaced", () => {
     expect(LAYOUT_GUIDE).toMatch(/same thing refreshed/i);
     expect(LAYOUT_GUIDE).toMatch(/different topic is a new object/i);
     expect(LAYOUT_GUIDE).toMatch(/stage\.clear/);
-    expect(LAYOUT_GUIDE).toMatch(/whenever you need the room/i);
+    expect(LAYOUT_GUIDE).toMatch(/mode replace/);
   });
 
   it("says the same in the manual's layout section, and that a Jarvis dashboard is several objects", () => {
     const layout = screenGuide("layout");
-    expect(layout).toMatch(/whole screen/i);
-    expect(layout).not.toMatch(/Fewer, richer objects/);
+    expect(layout).toMatch(/screen\.compose/);
+    expect(layout).toMatch(/do not fill the screen/i);
     expect(layout).toMatch(/same thing refreshed/i);
     expect(screenGuide("widgets")).toMatch(/for a dashboard make several objects, each in its own place/i);
   });

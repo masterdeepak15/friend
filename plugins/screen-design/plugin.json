@@ -1,0 +1,13 @@
+{
+  "id": "screen-design",
+  "name": "Screen design",
+  "version": "1.0.0",
+  "description": "How the assistant lays out its screen: one focus, a few things beside it, small things as chips, urgent things alone. Works on desktop, tablet and phone.",
+  "skills": [
+    {
+      "name": "screen-design",
+      "description": "How to lay out the owner's screen with screen.compose: one focus, things beside it, chips, notes and alerts, for desktop, tablet and phone. Use before drawing a screen you have not drawn before.",
+      "file": "skills/screen-design.md"
+    }
+  ]
+}
