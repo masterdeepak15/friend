@@ -12,3 +12,4 @@ _tmp_*
 
 # files the code-graph tool leaves next to the source it edits
 .gortex-batch-*
+packages/server/.sandbox-dev/

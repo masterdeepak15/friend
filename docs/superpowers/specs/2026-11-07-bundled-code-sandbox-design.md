@@ -94,3 +94,9 @@ Plain words, no jargon: for example "This script needs the command `curl`, which
 2. Can Pyodide's network be fully disabled, or must the worker block it (for example by not providing `fetch` in the worker)?
 3. Measured packed size, and whether `just-bash` can be trimmed (it may bundle features Friend does not use).
 4. Should the first Python start be warmed in the background when Friend starts? (Default: no, start on first use.)
+
+## Findings from the feasibility check (Task 1, 2026-11-07)
+
+- All three engines run inside a `worker_threads` worker on Windows (Node 22): `quickjs-emscripten@0.32.0`, `pyodide@314.0.7`, `just-bash@3.6.0` (versions pinned exactly). Mac and Linux are not checked on this PC; the libraries are pure JavaScript/WebAssembly with no required native parts (`just-bash` lists `@mongodb-js/zstd` and `node-liblzma` only as optional dependencies).
+- Unpacked sizes: quickjs-emscripten 2.4 MB, pyodide 14 MB, just-bash 21 MB (it depends on `typescript`, `sql.js` and others, more than Friend needs; trimming is not possible without forking, so it is accepted for now and the packed size is measured in Task 8).
+- Packaging decision: the three libraries become **dependencies of the npm package** (`packages/friend/package.json`, pinned), like the other packages from npm, so their `.wasm` files come from `node_modules` and need no copying. The worker is **our** file: `scripts/bundle.mjs` builds it to `dist/sandbox-worker.mjs` (libraries external). In the source tree and in tests the worker is compiled once with esbuild into `packages/server/.sandbox-dev/worker.mjs` (git-ignored) so it resolves the same `node_modules`.
