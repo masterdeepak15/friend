@@ -141,7 +141,7 @@ Connectors (Gmail, Chrome control, any MCP service) are managed inside the app, 
 | Key | What it is |
 |---|---|
 | `provider` | Which model answers: `claude` (API key), `claude-code` (your subscription), `ollama` (this PC) or `openai` (any OpenAI-compatible server, such as OmniRoute). |
-| `approvals` | How much Friend asks before acting: `manual` (asks every time, the default), `edits` (file work and the sandboxed code runner go ahead) or `auto` (commands and tools go ahead too). Risky commands (they need your PIN), the camera, adding connectors or plugins, and Friend's own data folder always ask, in every mode. The AI cannot change this. Easier: Esc → Settings → Approvals. |
+| `approvals` | How much Friend asks before acting: `manual` (asks every time, the default), `edits` (file work and the sandboxed code runner go ahead) or `auto` (commands and tools go ahead too). Risky commands (they need your PIN), the camera (unless you switched the eye on and are talking at the screen, see "The eye"), adding connectors or plugins, and Friend's own data folder always ask, in every mode. The AI cannot change this. Easier: Esc → Settings → Approvals. |
 | `ownerName` | Your name, shown on the profile badge (a shield in the corner) while you are signed in; it shows whoever Friend just recognized when they speak. Empty shows "Owner". |
 | `apiKey`, `model` | The Anthropic API key and the Claude model used with it. |
 | `claudeCode.model`, `claudeCode.command`, `claudeCode.fallback` | The subscription route: model (`sonnet`, `haiku`, `opus`), the command that starts Claude Code, and `ollama` or `none` for what to use when Claude is unavailable. |
@@ -516,7 +516,7 @@ Say "remind me in 30 minutes to call the bank", "remind me tomorrow at 5pm to se
 Ask "what is this?" while you hold something up to the camera, and Friend can look. It works one picture at a time:
 
 1. The camera is **off** until you turn it on: press **Esc**, choose **Camera: off** (it becomes **Camera: on**). The switch is not remembered; a reload turns it off again.
-2. When the agent wants to look it calls `camera.snap`, and an approval card appears: "Take one picture with the camera and show it to the AI model". There is no "Always allow" for the camera.
+2. When the agent wants to look it calls `camera.snap` (one picture) or `camera.watch` (a few seconds, up to 12 pictures), and an approval card appears: "Take one picture with the camera and show it to the AI model". There is no "Always allow" for the camera. The one exception is the eye (below).
 3. After you approve, the browser opens the camera, takes one frame (JPEG, longest side 1024 px), closes the camera and uploads the frame. While the camera is open a red **Camera on** badge with a small live preview shows in the corner; the agent cannot hide it.
 
 - The picture is shown to the model for that turn only. It is never written to disk, never saved in the conversation history (history keeps "[camera picture, not kept]"), and the audit log records only its size. Guests can never use the camera.
@@ -524,6 +524,26 @@ Ask "what is this?" while you hold something up to the camera, and Friend can lo
 - **With Claude as the provider the picture is sent to Anthropic's API.** With Ollama it stays on your PC, but only a vision model can use it: `ollama pull llava` (or another vision model), then `friend config set ollama.model llava` and `friend config set ollama.vision true`. Note a vision model may not support tools, so Claude is the practical choice today. Without vision the tool says so before it asks you.
 - Like the microphone, the camera needs `localhost` or HTTPS.
 - Text inside a picture is treated as data, never as instructions.
+
+### The eye: letting Friend look by itself
+
+If you do not want to approve every look, switch **the eye** on (Esc → Settings → Approvals → The eye; it needs your PIN). While it is on, Friend uses the camera whenever it needs to see, and when in doubt, without a card. It is deliberately narrow:
+
+- **Only you, at the screen.** It works for what you type or say to Friend on its own screen. A message from Telegram or WhatsApp, a voice from Alexa, a guest, a household member, the Office workers and scheduled tasks can never make it look: those keep asking.
+- **Off by default, and it switches itself off:** after the minutes you chose (`eye.autoOffMinutes`, default 120, 0 = never), when you sign out, and whenever Friend starts again. Closing it needs no PIN. The AI cannot switch it on or change it.
+- **Limits you cannot raise:** 20 looks and 30 seconds of video per hour without a card, 10 seconds and 12 pictures per clip; after that the card comes back.
+- **Always visible:** the red camera badge shows whenever the camera is open. Every look is written in the audit log (when, how, from where), never the picture.
+- **Nothing is kept.** Pictures are seen once and thrown away; only text notes (such as "Priya visited at 4 pm") stay.
+- **Where pictures go:** to the AI model you chose. With Claude (API or Claude Code) a picture is sent to Anthropic; with a local Ollama vision model it stays on this PC.
+
+### People Friend remembers
+
+Say "this is Priya, my sister" while she is in front of the camera, and Friend asks for your PIN, takes one look (it must show exactly one face) and remembers her. What is kept is **128 numbers about the face, encrypted on this PC** (like your keys), never a picture. After that, when Friend looks and Priya is there, it is told "Recognised: Priya (sister)". Faces nobody introduced are never saved and never named; the assistant is only told "1 person I do not know".
+
+- Settings → Approvals → *People Friend remembers* lists everyone, with **Remove** for one person and **Forget everyone** (both need your PIN and delete the numbers and the notes about them). Up to 50 people.
+- Introducing, removing and forgetting work only at the Friend screen.
+- Recognition is a hint, never proof: a photo or a look-alike can fool it, so a face never approves anything and never replaces your PIN. The models are YuNet (MIT) and SFace (Apache 2.0), run in your browser, with no internet needed; their licences are in `web/models` in the package.
+- Face data is sensitive personal data (India's DPDP Act, the EU's GDPR). Introduce only people who know and agree, and not children.
 
 ## Safety model
 
