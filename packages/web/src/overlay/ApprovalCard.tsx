@@ -33,7 +33,7 @@ export function ApprovalCard({ approval, send }: { approval: PendingApproval; se
       </pre>
       {(approval.origin || approval.warnings?.length) && (
         <div className="approval-origin" data-testid="approval-origin" role="note">
-          {approval.origin && <p>This command follows text from {approval.origin}. Nobody at Friend wrote it.</p>}
+          {approval.origin && <p>This follows text from {approval.origin}. Nobody at Friend wrote it.</p>}
           {approval.warnings?.map((w) => (
             <p key={w}>⚠ {w}</p>
           ))}

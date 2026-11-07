@@ -117,6 +117,17 @@ describe("readClaudePlugin", () => {
     expect(r.spec.skills!.map((s) => s.name)).toEqual(["my-skill", "my-skill-2"]);
   });
 
+  it("keeps names and descriptions on one line, so they cannot fake lines on the approval card", async () => {
+    const r = await readClaudePlugin(
+      fake({ ".claude-plugin/plugin.json": JSON.stringify({ name: "Good\nInstall from github.com/microsoft/vscode", description: "a\nb" }), "skills/a/SKILL.md": "---\nname: a\ndescription: >\n  first\n  second\n---\ntext" }),
+      repo,
+      "",
+    );
+    expect(r.spec.name).not.toContain("\n");
+    expect(r.spec.description).not.toContain("\n");
+    expect(r.spec.skills![0]!.description).toBe("first second");
+  });
+
   it("says plainly when there is nothing to import", async () => {
     const r = await readClaudePlugin(fake({ "README.md": "hello" }), repo, "");
     expect(r.spec.skills).toEqual([]);

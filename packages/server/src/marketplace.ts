@@ -3,8 +3,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Audit } from "./audit";
 import { authorPlugin, type PluginSpec } from "./author";
-import { readClaudePlugin, readMarketplace, type MarketplaceEntry, type TextReader } from "./claudePlugin";
-import { parseRepoLink, type RepoRef } from "./github";
+import { oneLine, readClaudePlugin, readMarketplace, slug, type MarketplaceEntry, type TextReader } from "./claudePlugin";
+import { GithubError, parseRepoLink, type RepoRef } from "./github";
 import type { Plugins } from "./plugins";
 
 const KEEP_MS = 15 * 60_000;
@@ -12,6 +12,8 @@ const MAX_MARKETPLACES = 10;
 const MAX_DOC_CHARS = 30_000;
 const MAX_LISTED_FILES = 300;
 const MAX_DOCS = 6;
+/** How many plugins of a marketplace are read in full in one look; the rest are listed, and read when the owner picks their folder. */
+const MAX_PLUGINS_READ = 3;
 
 export interface FetchedPlugin {
   id: string;
@@ -114,10 +116,12 @@ export class Market {
 
     let folders: string[];
     let marketplace: string | undefined;
+    const entries = new Map<string, MarketplaceEntry>();
     if (paths.has(at(".claude-plugin/marketplace.json"))) {
       const m = readMarketplace((await reader.file(repo, at(".claude-plugin/marketplace.json"))) ?? "");
       marketplace = m.name;
       folders = m.plugins.map((p) => join2(base, clean(p.source)));
+      for (const p of m.plugins) entries.set(join2(base, clean(p.source)), p);
     } else if (base) folders = [base];
     else {
       const nested = [...paths].filter((p) => /(^|\/)\.claude-plugin\/plugin\.json$/.test(p)).map((p) => p.replace(/\/?\.claude-plugin\/plugin\.json$/, ""));
@@ -125,12 +129,33 @@ export class Market {
     }
 
     const results: Staged["results"] = [];
-    for (const folder of [...new Set(folders)]) {
-      const r = await readClaudePlugin(reader, repo, folder);
+    const unique = [...new Set(folders)];
+    const listed = (folder: string, why: string) => {
+      const e = entries.get(folder);
+      const name = oneLine(e?.name ?? (folder.split("/").pop() || repo.repo), 80);
+      const where = `https://github.com/${repo.owner}/${repo.repo}/tree/${repo.ref ?? "HEAD"}/${folder}`;
       results.push({
-        spec: r.spec,
-        info: { id: r.spec.id, name: r.spec.name, folder, description: r.spec.description ?? "", skills: (r.spec.skills ?? []).map((s) => ({ name: s.name, description: s.description })), leftOut: r.leftOut, warnings: r.warnings },
+        spec: { id: slug(name) || "plugin", name, description: oneLine(e?.description ?? "", 500), skills: [] },
+        info: { id: slug(name) || "plugin", name, folder, description: oneLine(e?.description ?? "", 300), skills: [], leftOut: [], warnings: [`${why} To read this plugin's skills, fetch its folder: ${where}`] },
       });
+    };
+    let readPlugins = 0;
+    for (const folder of unique) {
+      if (marketplace && readPlugins >= MAX_PLUGINS_READ) {
+        listed(folder, `Not read yet: this marketplace has ${unique.length} plugins and only ${MAX_PLUGINS_READ} are read in one look.`);
+        continue;
+      }
+      readPlugins++;
+      try {
+        const r = await readClaudePlugin(reader, repo, folder);
+        results.push({
+          spec: r.spec,
+          info: { id: r.spec.id, name: r.spec.name, folder, description: r.spec.description ?? "", skills: (r.spec.skills ?? []).map((s) => ({ name: s.name, description: s.description })), leftOut: r.leftOut, warnings: r.warnings },
+        });
+      } catch (e) {
+        if (!(e instanceof GithubError) || e.reason !== "limit") throw e; // the reading budget ran out on this one: list it and carry on
+        listed(folder, "Not read: the limit for one look was reached.");
+      }
     }
 
     const rel = (p: string): string | null => (base ? (p.startsWith(`${base}/`) ? p.slice(base.length + 1) : null) : p);
@@ -216,11 +241,15 @@ export class Market {
   async import(staging: string, pick?: { plugin?: string; skills?: string[] }): Promise<{ ids: string[]; skills: string[] }> {
     const s = this.get(staging);
     const chosen = this.pick(s, pick).filter((r) => r.spec.skills?.length);
-    if (!chosen.length) throw new Error("There is nothing to import here: no skills, commands or agents were found.");
+    if (!chosen.length) throw new Error("There is nothing to import here: no skills, commands or agents were found (for a plugin that was not read yet, fetch its folder).");
+    // one plugin per call: several installed one after the other could stop half way, and the owner reads one set of text at a time
+    if (chosen.length > 1 && !pick?.plugin) throw new Error(`This repository has several plugins; choose one: ${chosen.map((r) => r.spec.id).join(", ")}.`);
     const source = this.source(s);
     for (const r of chosen) {
       const had = this.d.plugins.list().find((p) => p.id === r.spec.id);
       if (had && !had.source) throw new Error(`A plugin called "${r.spec.id}" is already installed and was not imported from GitHub, so Friend will not replace it.`);
+      const from = (had?.source ?? "").split("@")[0];
+      if (had && from !== source.split("@")[0]) throw new Error(`A plugin called "${r.spec.id}" is already installed from ${from}, so Friend will not replace it with the one from ${source.split("@")[0]}. Remove the first one if you want that.`);
     }
     const ids: string[] = [];
     const skills: string[] = [];

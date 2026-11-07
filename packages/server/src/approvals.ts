@@ -67,11 +67,13 @@ export class Approvals {
   request(req: ApprovalRequest, emit: (m: ServerMsg) => void): Promise<ApprovalOutcome> {
     const id = randomUUID();
     // what a person would want to know before saying yes is in the summary itself, so every place the question is asked (screen, phone, speaker) says it
-    const notes = [...(req.origin ? [`This command follows text from ${req.origin}. Nobody at Friend wrote it.`] : []), ...(req.warnings ?? [])];
+    // the notes come first (a short message cuts the end off) and the command's own lines are indented (its text cannot pass for a note)
+    const notes = [...(req.origin ? [`This follows text from ${req.origin}. Nobody at Friend wrote it.`] : []), ...(req.warnings ?? [])];
+    const said = describeCall(req.tool, req.args, req.device ?? undefined);
     const info: PendingApproval = {
       id,
       tool: req.tool,
-      summary: describeCall(req.tool, req.args, req.device ?? undefined) + (notes.length ? `\n\n${notes.map((n) => `⚠ ${n}`).join("\n")}` : ""),
+      summary: notes.length ? `${notes.map((n) => `⚠ ${n}`).join("\n")}\n\n${said.split("\n").map((l) => `    ${l}`).join("\n")}` : said,
       tier: req.tier,
       needsPin: req.needsPin,
       ...(req.origin ? { origin: req.origin } : {}),
@@ -127,7 +129,8 @@ export class Approvals {
     }
     if (!this.entries.has(msg.id)) return; // answered while the PIN was being checked
 
-    if (msg.decision === "approve_always" && entry.req.tier === "T2" && !ASK_EVERY_TIME.has(entry.req.tool)) this.addRule(entry.req);
+    // a command that follows text from the internet never becomes a standing permission, however the answer arrives
+    if (msg.decision === "approve_always" && entry.req.tier === "T2" && !entry.req.origin && !ASK_EVERY_TIME.has(entry.req.tool)) this.addRule(entry.req);
     this.finish(msg.id, { approved: true }, msg.decision, { by: how, ip, pinUsed });
   }
 

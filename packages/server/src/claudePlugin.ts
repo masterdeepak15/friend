@@ -58,7 +58,7 @@ export function parseSkillFile(text: string): { name: string; description: strin
 }
 
 /** Lowercase letters, digits and single hyphens, at most `max` characters; empty when nothing is left. */
-function slug(text: string, max = 40): string {
+export function slug(text: string, max = 40): string {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -86,6 +86,9 @@ function warningsFor(skill: string, text: string): string[] {
 function clean(folder: string): string {
   return folder.replace(/^\.\//, "").replace(/^\.$/, "").replace(/^\/+|\/+$/g, "");
 }
+
+/** One line of plain text: a name or description from a repository cannot start a line of its own on the approval card. */
+export const oneLine = (text: string, max: number): string => text.replace(/\s+/g, " ").trim().slice(0, max);
 
 const firstLine = (body: string) => (body.split("\n").map((l) => l.replace(/^#+\s*/, "").trim()).find(Boolean) ?? "").slice(0, 300);
 
@@ -149,7 +152,7 @@ export async function readClaudePlugin(
     let name = root;
     for (let n = 2; used.has(name); n++) name = `${root.slice(0, 40 - String(n).length - 1)}-${n}`;
     used.add(name);
-    skills.push({ name, description: (parsed.description || firstLine(parsed.body) || name).slice(0, 300), text: parsed.body });
+    skills.push({ name, description: oneLine(parsed.description || firstLine(parsed.body) || name, 300), text: parsed.body });
     warnings.push(...warningsFor(name, parsed.body));
   }
   if (!skills.length && !found.length) warnings.push("There are no skills, commands or agents in this folder, so there is nothing to import.");
@@ -170,11 +173,11 @@ export async function readClaudePlugin(
     if (rel(f.path) === ".mcp.json") left(f.path, "MCP servers can be added as connectors one by one, each with your approval; this import does not do it.");
   }
 
-  const rawName = typeof manifest.name === "string" && manifest.name.trim() ? manifest.name.trim() : base.split("/").pop() || repo.repo;
+  const rawName = oneLine(typeof manifest.name === "string" && manifest.name.trim() ? manifest.name : base.split("/").pop() || repo.repo, 80);
   const spec: PluginSpec = {
     id: slug(rawName) || "imported",
-    name: rawName.slice(0, 80),
-    description: typeof manifest.description === "string" ? manifest.description.slice(0, 500) : "",
+    name: rawName,
+    description: typeof manifest.description === "string" ? oneLine(manifest.description, 500) : "",
     skills,
   };
   return { spec, leftOut, warnings };

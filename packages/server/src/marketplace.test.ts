@@ -172,6 +172,46 @@ describe("installing", () => {
   });
 });
 
+describe("installing over another plugin", () => {
+  it("will not replace a plugin that came from a different repository, and says which", async () => {
+    const { market, plugins } = setup(SIMPLE);
+    await market.import((await market.fetch("o/simple")).staging);
+    await expect(market.import((await market.fetch("evil/simple")).staging)).rejects.toThrow(/already installed from github\.com\/o\/simple.*evil\/simple/i);
+    expect(plugins.list()[0]!.source).toContain("github.com/o/simple@");
+  });
+});
+
+describe("a repository with several plugins", () => {
+  const skill = (n: string) => `---\nname: ${n}\ndescription: S.\n---\ntext`;
+  const many: Record<string, string> = { "README.md": "many", ".claude-plugin/marketplace.json": JSON.stringify({ name: "big", plugins: Array.from({ length: 8 }, (_, i) => ({ name: `p${i}`, source: `./p${i}`, description: `Plugin ${i}` })) }) };
+  for (let i = 0; i < 8; i++) for (let k = 0; k < 10; k++) many[`p${i}/skills/s${k}/SKILL.md`] = skill(`s${k}`);
+
+  it("lists a large marketplace without reading every skill, so the reading budget is left for what the owner picks", async () => {
+    const reads: string[] = [];
+    const counting = (): TextReader => {
+      const inner = repoOf(many)();
+      return { tree: inner.tree, file: async (r, p, m) => (reads.push(p), inner.file(r, p, m)) };
+    };
+    const dir = mkdtempSync(join(tmpdir(), "friend-market-many-"));
+    const plugins = new Plugins(openDb(dir), join(dir, "plugins"));
+    const market = new Market({ dir, reader: counting, plugins, audit: { log() {} } as never });
+    const f = await market.fetch("o/big");
+    expect(f.plugins).toHaveLength(8);
+    expect(f.plugins.map((p) => p.name)).toContain("p7");
+    expect(reads.filter((p) => p.endsWith("SKILL.md")).length).toBeLessThanOrEqual(30);
+    expect(f.plugins[7]!.warnings.join(" ")).toMatch(/folder/i); // says how to read this one
+  });
+
+  it("installs one plugin at a time: with several and none chosen it asks which, and installs nothing", async () => {
+    const two: Record<string, string> = { "README.md": "x", "a/skills/s/SKILL.md": skill("s"), "b/skills/t/SKILL.md": skill("t"), ".claude-plugin/marketplace.json": JSON.stringify({ name: "m", plugins: [{ name: "a", source: "./a" }, { name: "b", source: "./b" }] }) };
+    const { market, plugins } = setup(two);
+    const { staging } = await market.fetch("o/m");
+    await expect(market.import(staging)).rejects.toThrow(/choose one.*a, b/i);
+    expect(plugins.list()).toEqual([]);
+    expect((await market.import(staging, { plugin: "b" })).ids).toEqual(["b"]);
+  });
+});
+
 describe("marketplaces", () => {
   it("adds one after checking its marketplace file, lists its plugins, and removes it", async () => {
     const { market } = setup();

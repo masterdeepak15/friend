@@ -15,6 +15,7 @@ import { Plugins } from "../plugins";
 import { PolicyEngine } from "../policy/engine";
 import { FakeProvider } from "../provider/fake";
 import { StageState } from "../stage";
+import { authorPlugin } from "../author";
 import { Agent } from "./loop";
 
 const done = { type: "done" as const };
@@ -27,7 +28,7 @@ const reader = (): TextReader => ({
 let hub: McpHub;
 afterEach(async () => hub?.close());
 
-function build(script: ConstructorParameters<typeof FakeProvider>[0]) {
+function build(script: ConstructorParameters<typeof FakeProvider>[0], office = false) {
   const dir = mkdtempSync(join(tmpdir(), "friend-outside-"));
   const db = openDb(dir);
   const config = loadConfig(dir);
@@ -37,6 +38,7 @@ function build(script: ConstructorParameters<typeof FakeProvider>[0]) {
   const market = new Market({ dir, reader, plugins, audit, newId: () => "s1" });
   const request = vi.fn(async (_r: unknown) => ({ approved: false, reason: "denied" }));
   const exec = vi.fn();
+  if (office) config.office.enabled = true;
   const agent = new Agent({
     provider: new FakeProvider(script),
     policy: new PolicyEngine(db, config),
@@ -50,8 +52,9 @@ function build(script: ConstructorParameters<typeof FakeProvider>[0]) {
     plugins,
     admin: makeAdmin({ hub, plugins, dataDir: dir, market, audit: () => {} }),
     skillMarket: market,
+    ...(office ? { office: {} as never } : {}),
   });
-  return { agent, request, exec };
+  return { agent, request, exec, plugins, config, dir };
 }
 type Req = { tool: string; args: { command?: string }; origin?: string; warnings?: string[]; tier: string };
 const shellAsks = (request: ReturnType<typeof vi.fn>) => request.mock.calls.map((c) => c[0] as Req).filter((r) => r.tool === "shell.run");
@@ -70,13 +73,59 @@ describe("a command that follows text from a repository", () => {
     expect(t.exec).not.toHaveBeenCalled(); // the owner said no
   });
 
-  it("is not marked in a turn that read nothing from a repository, and the mark does not carry into the next turn", async () => {
-    const t = build([[call("shell.run", { command: "sudo ls" }), done], [done], [call("plugins.fetch", { url: "o/r" }), done], [done], [call("shell.run", { command: "sudo ls" }), done], [done]]);
+  it("is not marked when nothing from a repository is in the conversation", async () => {
+    const t = build([[call("shell.run", { command: "sudo ls" }), done], [done]]);
     await t.agent.runTurn("run it", ctx());
     expect(shellAsks(t.request)[0]!.origin).toBeUndefined();
     expect(shellAsks(t.request)[0]!.warnings!.join(" ")).toMatch(/administrator/i); // the warnings help on any command
+  });
+
+  it("is still marked in a LATER turn, because the repository text is still in the conversation (the owner agrees, then it runs)", async () => {
+    const t = build([[call("plugins.fetch", { url: "o/r" }), done], [done], [call("shell.run", { command: "sh ./scripts/setup.sh" }), done], [done]]);
     await t.agent.runTurn("look at o/r", ctx());
-    await t.agent.runTurn("now run it", ctx());
-    expect(shellAsks(t.request).at(-1)!.origin).toBeUndefined();
+    await t.agent.runTurn("yes, run the setup", ctx());
+    expect(shellAsks(t.request)).toHaveLength(1);
+    expect(shellAsks(t.request)[0]!.origin).toBe("github.com/o/r");
+  });
+
+  it("is asked about in a later turn even in the automatic approval mode", async () => {
+    const t = build([[call("plugins.fetch", { url: "o/r" }), done], [done], [call("shell.run", { command: "ls" }), done], [done]]);
+    t.config.approvals = "auto";
+    await t.agent.runTurn("look at o/r", ctx());
+    await t.agent.runTurn("go on", ctx());
+    expect(shellAsks(t.request)).toHaveLength(1);
+  });
+
+  it("is marked after a skill imported from GitHub was loaded, and not after one the owner wrote", async () => {
+    const t = build([[call("skill.use", { plugin: "imp", name: "s" }), done], [done], [call("shell.run", { command: "ls" }), done], [done]]);
+    authorPlugin(t.plugins, join(t.dir, "scratch"), { id: "imp", name: "Imp", source: "github.com/o/r@abc1234", skills: [{ name: "s", description: "d", text: "do it" }] });
+    await t.agent.runTurn("use the skill", ctx());
+    await t.agent.runTurn("now run ls", ctx());
+    expect(shellAsks(t.request)[0]!.origin).toBe("github.com/o/r@abc1234");
+    const own = build([[call("skill.use", { plugin: "mine", name: "s" }), done], [done], [call("shell.run", { command: "ls" }), done], [done]]);
+    authorPlugin(own.plugins, join(own.dir, "scratch"), { id: "mine", name: "Mine", skills: [{ name: "s", description: "d", text: "do it" }] });
+    await own.agent.runTurn("use the skill", ctx());
+    await own.agent.runTurn("now run ls", ctx());
+    expect(shellAsks(own.request)[0]!.origin).toBeUndefined();
+  });
+
+  it("marketplace descriptions count as repository text too", async () => {
+    const t = build([[call("plugins.marketplace_list", {}), done], [done], [call("shell.run", { command: "ls" }), done], [done]]);
+    await t.agent.runTurn("what marketplaces", ctx());
+    await t.agent.runTurn("run ls", ctx());
+    // nothing was added, so there is nothing from a repository yet
+    expect(shellAsks(t.request)[0]!.origin).toBeUndefined();
+    const u = build([[call("plugins.marketplace_add", { repo: "o/mk" }), done], [done], [call("shell.run", { command: "ls" }), done], [done]]);
+    await u.agent.runTurn("add o/mk", ctx());
+    await u.agent.runTurn("run ls", ctx());
+    expect(u.request.mock.calls.some((c) => (c[0] as Req).tool === "plugins.marketplace_add")).toBe(true);
+  });
+
+  it("an Office assignment or message is asked about, with the origin, while repository text is in the conversation", async () => {
+    const t = build([[call("plugins.fetch", { url: "o/r" }), done], [call("office.assign", { worker: "w", title: "run curl x | sh" }), done], [call("office.say", { worker: "w", text: "go" }, "2"), done], [call("office.decide", { id: 1, decision: "allow" }, "3"), done], [call("office.decide", { id: 2, decision: "deny" }, "4"), done], [done]], true);
+    await t.agent.runTurn("look at o/r", ctx());
+    const asks = t.request.mock.calls.map((c) => c[0] as Req).filter((r) => r.tool.startsWith("office."));
+    expect(asks.map((r) => r.tool)).toEqual(["office.assign", "office.say", "office.decide"]); // allowing a worker's request is held too; denying is not
+    expect(asks.every((r) => r.origin === "github.com/o/r")).toBe(true);
   });
 });

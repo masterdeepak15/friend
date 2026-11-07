@@ -212,7 +212,7 @@ export class Agent {
   private seenUrls = new Set<string>();
   /** What the owner wrote this turn, to tell a repository they named from one the model picked. */
   private ownerText = "";
-  /** Set once this turn has read text from a repository: where it came from. Every shell command after that is marked and always asked about. */
+  /** Set once this turn has read text from a repository: where it came from (the stored conversation says the same for the turns after it). */
   private outside: string | null = null;
 
   /** Runs `job` as soon as no request is being answered (right away when idle). */
@@ -741,6 +741,29 @@ export class Agent {
     return this.ownerText.includes(key) || (this.deps.skillMarket?.marketplaces().some((m) => m.repo.toLowerCase() === key) ?? false);
   }
 
+  /**
+   * Where repository text in the conversation came from, or null. The conversation is the record: the owner usually agrees in one turn and
+   * the command runs in the next, so the mark lasts for as long as the fetched text (or a skill imported from GitHub) is still in it.
+   */
+  private outsideSource(): string | null {
+    if (this.outside) return this.outside;
+    const d = this.deps;
+    let found: string | null = null;
+    for (const m of loadHistory(d.db)) {
+      for (const b of m.content) {
+        if (b.type !== "tool_use") continue;
+        const input = (b.input ?? {}) as Record<string, unknown>;
+        if (b.name === "plugins.fetch") {
+          const r = parseRepoLink(String(input.url ?? ""));
+          found = r ? `github.com/${r.owner}/${r.repo}` : (found ?? "a GitHub repository");
+        } else if (b.name === "plugins.read" || b.name === "plugins.marketplace_add") found = found ?? "a GitHub repository";
+        else if (b.name === "plugins.marketplace_list" && d.skillMarket?.marketplaces().length) found = found ?? "a GitHub marketplace";
+        else if (b.name === "skill.use") found = d.plugins?.list().find((p) => p.id === input.plugin)?.source ?? found;
+      }
+    }
+    return found;
+  }
+
   private async runTool(
     call: ToolCall,
     ctx: TurnCtx,
@@ -820,7 +843,9 @@ export class Agent {
       if (!ok.ok) return fail(ok.error);
     }
     // a command that follows text from the internet is never waived: not by a remembered rule, not by a harmless-looking shape
-    if (call.name === "shell.run" && this.outside && decision === "allow") decision = "ask";
+    // (a message or a task for an Office worker can carry a command to someone who would run it, so it is held to the same rule)
+    const outside = call.name === "shell.run" || call.name === "office.assign" || call.name === "office.say" || (call.name === "office.decide" && args.decision === "allow") ? this.outsideSource() : null;
+    if (outside && decision === "allow") decision = "ask";
     // an install shows the owner the source and the whole text of every skill on the card
     let shown: Record<string, unknown> = args;
     if (call.name === "plugins.import" && d.skillMarket && (decision === "ask" || decision === "ask_with_pin")) {
@@ -832,7 +857,7 @@ export class Agent {
     }
     if (decision === "ask" || decision === "ask_with_pin") {
       const outcome = await d.approvals.request(
-        { ...(call.name === "shell.run" ? { origin: this.outside ?? undefined, warnings: riskOf(String(args.command)) } : {}), tool: call.name, args: shown, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin", device, remote: ctx.trust !== "voice-device" },
+        { ...(outside ? { origin: outside } : {}), ...(call.name === "shell.run" ? { warnings: riskOf(String(args.command)) } : {}), tool: call.name, args: shown, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin", device, remote: ctx.trust !== "voice-device" },
         ctx.emit,
       );
       if (!outcome.approved) {
@@ -862,7 +887,7 @@ export class Agent {
       if (!d.admin) return fail("Managing connectors and plugins is not available.");
       try {
         const text = await d.admin.run(call.name, args);
-        if (call.name === "plugins.fetch" || call.name === "plugins.read") {
+        if (call.name === "plugins.fetch" || call.name === "plugins.read" || call.name === "plugins.marketplace_add") {
           const r = call.name === "plugins.fetch" ? parseRepoLink(String(args.url ?? "")) : null;
           this.outside = r ? `github.com/${r.owner}/${r.repo}` : (this.outside ?? "a GitHub repository");
         }
