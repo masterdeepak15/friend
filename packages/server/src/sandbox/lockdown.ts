@@ -36,6 +36,13 @@ export function lockDownNetwork(): void {
   set(net.Server.prototype, "listen");
   for (const k of ["connect"]) set(tls, k);
   for (const k of ["createSocket"]) set(dgram, k);
+  // the classes behind the functions too: a program that reaches Node can build a socket or a resolver without the helper functions
+  for (const k of ["bind", "connect", "send"]) set(dgram.Socket.prototype, k);
+  for (const k of ["resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa", "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr", "resolveSoa", "resolveSrv", "resolveTxt", "reverse", "setServers"]) {
+    set(dns.Resolver.prototype, k);
+    set(dns.promises.Resolver.prototype, k);
+  }
+  set(dns, "setServers");
   for (const k of ["request", "get", "createServer"]) {
     set(http, k);
     set(https, k);

@@ -809,10 +809,11 @@ export class Agent {
     if (call.name === "code.run") {
       const { language, code, timeoutSec } = args as { language: "python" | "node" | "shell"; code: string; timeoutSec?: number };
       const r = await d.code!.run({ language, code, timeoutSec });
-      d.audit.log("agent", "tool.call", { tool: call.name, args: { language, chars: code.length }, tier, ok: r.ok });
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { language, chars: code.length }, tier, ok: r.ok, ...(r.ok && r.runner ? { runner: r.runner } : {}) });
       if (!r.ok) return fail(r.error);
       const parts = [r.timedOut ? "Stopped: it ran past the time limit." : `exit code ${r.exitCode}`];
-      if (r.runner === "sandbox") parts.push("(ran in Friend's built-in sandbox)");
+      if (r.fellBack) parts.push("(Docker was not available, so this ran in Friend's built-in sandbox, which is smaller: no real shell, and Python has the standard library only)");
+      else if (r.runner === "sandbox") parts.push("(ran in Friend's built-in sandbox)");
       if (r.stdout) parts.push(`--- stdout ---\n${r.stdout}`);
       if (r.stderr) parts.push(`--- stderr ---\n${r.stderr}`);
       return { text: parts.join("\n"), isError: false };

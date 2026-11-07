@@ -73,6 +73,13 @@ describe("code.run", () => {
     expect(lastTool(p)).toContain("42");
   });
 
+  it("says when Docker was not available and the built-in sandbox ran the program instead", async () => {
+    run.mockResolvedValueOnce(ok({ stdout: "hi\n", runner: "sandbox", fellBack: true }));
+    const p = new FakeProvider([[call("1", { language: "python", code: "print('hi')" }), done], [text("ok"), done]]);
+    await build(p).runTurn("run it", ctx());
+    expect(lastTool(p)).toMatch(/Docker was not available.*built-in sandbox/i);
+  });
+
   it("does not run anything when the owner says no", async () => {
     decision = "deny";
     const p = new FakeProvider([[call("1", { language: "shell", code: "echo hi" }), done], [text("ok"), done]]);

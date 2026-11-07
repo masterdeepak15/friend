@@ -30,7 +30,7 @@ export interface DockerResult {
 export type DockerExec = (args: string[], opts: { timeoutMs: number }) => Promise<DockerResult>;
 
 export type RunResult =
-  | { ok: true; runner?: "sandbox" | "docker"; exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }
+  | { ok: true; runner?: "sandbox" | "docker"; fellBack?: boolean; exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }
   | { ok: false; error: string };
 
 /** The real docker command line. A timeout stops that one container by name. */
@@ -107,13 +107,18 @@ export class CodeBox {
     const mode = this.opts.mode?.() ?? "docker";
     if (mode === "sandbox") return this.inSandbox(input, timeoutMs);
     const now = this.opts.now ?? Date.now;
-    if (mode === "auto" && now() < this.dockerDownUntil) return this.inSandbox(input, timeoutMs);
+    if (mode === "auto" && now() < this.dockerDownUntil) return this.fallBack(await this.inSandbox(input, timeoutMs));
     const viaDocker = await this.inDocker(input, timeoutMs);
     if (viaDocker.unavailable && mode === "auto") {
       this.dockerDownUntil = now() + DOCKER_RETRY_MS;
-      return this.inSandbox(input, timeoutMs);
+      return this.fallBack(await this.inSandbox(input, timeoutMs));
     }
     return viaDocker.result;
+  }
+
+  /** Marks a run that went to the built-in sandbox only because Docker would not run it, so the owner and the model are told. */
+  private fallBack(r: RunResult): RunResult {
+    return r.ok ? { ...r, fellBack: true } : r;
   }
 
   private async inSandbox(input: { language: Language; code: string; files?: Record<string, string> }, timeoutMs: number): Promise<RunResult> {

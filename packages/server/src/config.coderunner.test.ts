@@ -47,5 +47,10 @@ describe("the codeRunner setting on the settings screen route", () => {
     const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
     const view = await (await fetch(`http://127.0.0.1:${port}/api/settings`, { headers: { cookie } })).json();
     expect(view.codeRunner).toBe("sandbox");
+    // changing where code runs is a safety setting: it needs the PIN
+    const without = await fetch(`http://127.0.0.1:${port}/api/settings`, { method: "PUT", headers: { ...j, cookie }, body: JSON.stringify({ settings: { codeRunner: "docker" } }) });
+    expect(without.ok).toBe(false);
+    const withPin = await fetch(`http://127.0.0.1:${port}/api/settings`, { method: "PUT", headers: { ...j, cookie }, body: JSON.stringify({ pin: "123456", settings: { codeRunner: "docker" } }) });
+    expect(withPin.ok).toBe(true);
   });
 });

@@ -468,11 +468,11 @@ Plugins add **skills** (instructions the agent loads when they fit, for example 
 
 ## Running code safely
 
-The agent can write a program (Python, Node or shell), run it, and read the result: calculations, data crunching, quick experiments. **Nothing needs to be installed**: Friend has its own sandbox. If you have Docker, Friend can use that instead (a real container, a real shell). The setting `codeRunner` chooses: `auto` (the default: Docker when it is installed and running, otherwise the built-in sandbox), `sandbox` or `docker`. The result tells the agent (and the log) which one ran.
+The agent can write a program (Python, Node or shell), run it, and read the result: calculations, data crunching, quick experiments. **Nothing needs to be installed**: Friend has its own sandbox. If you have Docker, Friend can use that instead (a real container, a real shell). The setting `codeRunner` chooses: `auto` (the default: Docker when it is installed and running, otherwise the built-in sandbox), `sandbox` or `docker`. The result tells the agent (and the log) which one ran. With `auto`, if Docker is installed but not running, the run goes to the built-in sandbox instead and the result says so; set `codeRunner` to `docker` if you never want that.
 
 Every run asks for your approval, and the card shows the **whole program**.
 
-**The built-in sandbox** runs each program in its own, fresh, locked-down Node.js process (Node's permission model: no reading files outside Friend's own program folders, no starting other programs, no threads, an empty environment, the network switched off, 512 MB of memory, killed at the time limit):
+**The built-in sandbox** runs each program in its own, fresh, locked-down Node.js process (Node's permission model: no reading files outside Friend's own program folders, no starting other programs, no threads, a neutral environment (no user name, home folder or PATH of yours), the network switched off (TCP, UDP and DNS), 512 MB of memory, killed at the time limit):
 
 - **JavaScript** runs in QuickJS: plain JavaScript with `console.log` and `readFile(name)` for the files it was given. No `require`, no `fetch`, no `process`.
 - **Python** runs in Pyodide: the standard library only (no numpy or pandas). Start-up takes about a second.

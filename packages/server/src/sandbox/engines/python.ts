@@ -1,6 +1,6 @@
 import { constants as fsConstants } from "node:fs";
 import { constants as osConstants } from "node:os";
-import { MAX_SANDBOX_OUTPUT, type SandboxInput, type SandboxResult } from "../types";
+import { MAX_SANDBOX_OUTPUT, SANDBOX_MEMORY_MB, type SandboxInput, type SandboxResult } from "../types";
 
 // Python runs the program with this wrapper: the exit code of sys.exit is kept and an error prints its traceback.
 const HARNESS = `
@@ -37,6 +37,14 @@ for name in ("js", "pyodide_js", "pyodide.code", "pyodide.ffi", "_pyodide_core",
  * files it was given. Its network does not exist (no sockets in the engine, and the sandbox process has its network modules off).
  */
 export async function runPython(input: SandboxInput): Promise<SandboxResult> {
+  // WebAssembly memory is outside Node's heap limit, so cap it here: when Python's allocator asks for more than the limit the request
+  // is refused and Python raises a MemoryError, instead of taking gigabytes.
+  const limitPages = (SANDBOX_MEMORY_MB * 1024 * 1024) / 65536;
+  const realGrow = WebAssembly.Memory.prototype.grow;
+  WebAssembly.Memory.prototype.grow = function (this: WebAssembly.Memory, delta: number): number {
+    if (this.buffer.byteLength / 65536 + delta > limitPages) throw new RangeError("The program asked for more memory than the sandbox allows.");
+    return realGrow.call(this, delta);
+  };
   // Pyodide's start-up asks Node for its constants through process.binding, which the permission model refuses; give it just those.
   (process as unknown as { binding: (name: string) => unknown }).binding = (name: string) => {
     if (name === "constants") return { fs: fsConstants, os: osConstants, crypto: {}, zlib: {}, trace: {} };
@@ -56,6 +64,8 @@ export async function runPython(input: SandboxInput): Promise<SandboxResult> {
   py.FS.writeFile("/home/pyodide/main.py", input.code);
   py.globals.set("__friend_src", input.code);
   py.runPython(CLOSE_BRIDGE);
+  // no handle to Node's own modules from here on (the network modules are already switched off in lockdown.ts)
+  delete (process as unknown as { getBuiltinModule?: unknown }).getBuiltinModule;
   let code: number | null = 1;
   try {
     code = Number(await py.runPythonAsync("__friend_run(__friend_src)"));

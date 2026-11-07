@@ -36,6 +36,32 @@ function engineFolders(child: string): string[] {
   return [...found];
 }
 
+/**
+ * What the program sees as its environment. Empty on Mac and Linux. Windows puts the user's own variables (name, home folder, PATH, temp
+ * folder) back into an empty environment, so every one of them is given a neutral value instead.
+ */
+function neutralEnvironment(): Record<string, string> {
+  if (process.platform !== "win32") return {};
+  const root = process.env.SystemRoot ?? "C:\Windows";
+  return {
+    SystemRoot: root,
+    WINDIR: root,
+    PATH: `${root}\system32`,
+    SYSTEMDRIVE: "C:",
+    USERPROFILE: "C:\sandbox",
+    HOMEDRIVE: "C:",
+    HOMEPATH: "\sandbox",
+    USERNAME: "sandbox",
+    USERDOMAIN: "SANDBOX",
+    LOGONSERVER: "\\SANDBOX",
+    COMPUTERNAME: "SANDBOX",
+    TEMP: "C:\sandbox\tmp",
+    TMP: "C:\sandbox\tmp",
+    APPDATA: "C:\sandbox\appdata",
+    LOCALAPPDATA: "C:\sandbox\appdata",
+  };
+}
+
 function permissionFlag(): string {
   const flags = process.allowedNodeEnvironmentFlags;
   if (flags.has("--permission")) return "--permission";
@@ -63,7 +89,7 @@ export async function runInSandbox(input: SandboxInput): Promise<SandboxResult> 
     let out = "";
     let err = "";
     let timedOut = false;
-    const p = spawn(process.execPath, args, { env: {}, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    const p = spawn(process.execPath, args, { env: neutralEnvironment(), windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     const finish = (r: SandboxResult | Error) => {
       if (done) return;
       done = true;

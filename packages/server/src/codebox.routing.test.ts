@@ -54,6 +54,12 @@ describe("CodeBox picks where the code runs", () => {
     expect(r.calls.sandbox).toBe(1);
   });
 
+  it("tells the caller when auto had to use the sandbox because Docker would not run it, and only then", async () => {
+    expect(await rig("auto", "missing").box.run(py)).toMatchObject({ runner: "sandbox", fellBack: true });
+    expect(await rig("sandbox", "works").box.run(py)).not.toHaveProperty("fellBack");
+    expect(await rig("auto", "works").box.run(py)).not.toHaveProperty("fellBack");
+  });
+
   it("auto: after Docker failed, it is not tried again for a minute, then it is", async () => {
     const r = rig("auto", "missing");
     await r.box.run(py);
