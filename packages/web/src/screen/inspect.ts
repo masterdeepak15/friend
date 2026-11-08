@@ -44,7 +44,7 @@ export function analyzeScreen(s: Screen): string[] {
   const r = (n: number) => Math.round(n);
   for (const o of s.objects) {
     if (!o.drawn) out.push(`${o.id}: nothing is drawn in it (an empty box). Hide it, or check its props.`);
-    if (o.scrollH - o.h > SLACK || o.scrollW - o.w > SLACK) out.push(`${o.id}: its content is cut off: it needs about ${r(Math.max(o.scrollW, o.w))}x${r(Math.max(o.scrollH, o.h))} px and the box is ${r(o.w)}x${r(o.h)} px. Make the box bigger or the content smaller.`);
+    if (o.scrollH - o.h > SLACK || o.scrollW - o.w > SLACK) out.push(`${o.id}: its content is cut off: it needs about ${r(Math.max(o.scrollW, o.w))}x${r(Math.max(o.scrollH, o.h))} px and the box is ${r(o.w)}x${r(o.h)} px. Shrink the content or use screen.compose; never enlarge the box by hand.`);
     const off = Math.max(0, -o.x, -o.y, o.x + o.w - s.view.w, o.y + o.h - s.view.h);
     if (off > SLACK) out.push(`${o.id}: ${r(off)} px of it is outside the screen. Move it inside.`);
   }
