@@ -137,3 +137,17 @@ describe("the theme for the AI's pages", () => {
     expect(css).toContain("--ok:#00ff88");
   });
 });
+
+describe("kv given items or label, as the model often writes it", () => {
+  it("shows rows given as items", () => {
+    const { container } = render(<Kv props={{ title: "Team", items: [{ key: "Workers", value: 2 }, { key: "Used", value: "65%" }] }} />);
+    expect(container.querySelectorAll(".obj-kv > div")).toHaveLength(2);
+    expect(container.textContent).toContain("Workers");
+    expect(container.textContent).toContain("65%");
+  });
+  it("shows a row whose name is given as label or name", () => {
+    const { container } = render(<Kv props={{ rows: [{ label: "CPU", value: 40 }, { name: "RAM", value: 8 }] }} />);
+    expect(container.textContent).toContain("CPU");
+    expect(container.textContent).toContain("RAM");
+  });
+});

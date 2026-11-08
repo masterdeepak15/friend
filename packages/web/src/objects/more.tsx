@@ -67,11 +67,12 @@ export function Kv({ props }: { props: Props }) {
     <>
       <Title props={props} />
       <dl className="obj-kv">
-        {arr(props.rows).map((r, i) => {
+        {/* the manual says rows, but the model often writes items (as the list and timeline do) and label or name for the key: show them all */}
+        {arr(arr(props.rows).length > 0 ? props.rows : props.items).map((r, i) => {
           const row = rec(r);
           return (
             <div key={i}>
-              <dt>{str(row.key)}</dt>
+              <dt>{str(row.key ?? row.label ?? row.name)}</dt>
               <dd>{str(row.value)}</dd>
             </div>
           );

@@ -142,7 +142,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer, p
       <section
         key={o.id}
         data-object={o.id}
-        className={`obj glass${isJarvisType(o.type) ? " obj-bare" : ""}${o.style === "alert" ? " alert" : ""}${overlay ? " overlay" : ""}${o.pinned ? " pinned" : ""}${live ? " dragging" : ""}${leaving ? " leaving" : ""}`}
+        className={`obj glass${isJarvisType(o.type) ? " obj-bare" : ""}${o.style === "alert" ? " alert" : ""}${overlay ? " overlay" : ""}${overlay && o.role === "note" ? " note" : ""}${o.pinned ? " pinned" : ""}${live ? " dragging" : ""}${leaving ? " leaving" : ""}`}
         style={overlay ? undefined : placementToStyle(placement, viewport)}
       >
         {movable && (
@@ -230,7 +230,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer, p
       </div>
       {overlays.length > 0 && (
         <div className="overlay-layer" data-testid="overlay">
-          <div
+          {overlays.some(({ object }) => object.role !== "note") && <div
             className="overlay-backdrop"
             onClick={() =>
               overlays.forEach(({ object }) => {
@@ -238,7 +238,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer, p
                 dispatch({ type: "object.dismiss", id: object.id });
               })
             }
-          />
+          />}
           {overlays.map(renderObject)}
         </div>
       )}
