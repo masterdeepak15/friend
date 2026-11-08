@@ -108,10 +108,8 @@ describe("what goes on the screen", () => {
     hours: Array.from({ length: 24 }, (_, i) => ({ label: `${String(i).padStart(2, "0")}:00`, tempC: 20 + i / 2, rainPct: i * 2 })),
   };
 
-  it("builds valid stage commands: the temperature, humidity, wind, and a 24-hour chart", () => {
-    const cmds = weatherScene(w);
-    for (const c of cmds) expect(StageCommand.safeParse(c).success, JSON.stringify(c)).toBe(true);
-    const shown = cmds.flatMap((c) => (c.cmd === "show" ? [c.object] : []));
+  it("builds the items for the screen director: the 24-hour chart, the temperature, humidity and wind", () => {
+    const shown = weatherScene(w);
     expect(shown.every((o) => o.id.startsWith("weather-"))).toBe(true);
     expect(shown.find((o) => o.id === "weather-now")).toMatchObject({ type: "stat", props: { label: "Pune, India", value: "31", unit: "°C" } });
     expect(shown.find((o) => o.id === "weather-now")!.props.delta).toContain("Partly cloudy");
@@ -121,7 +119,7 @@ describe("what goes on the screen", () => {
     expect(chart.type).toBe("chart");
     expect((chart.props.labels as string[]).length).toBe(24);
     expect((chart.props.series as { name: string; values: number[] }[]).map((s) => s.name)).toEqual(["Temperature °C", "Rain chance %"]);
-    expect(cmds[0]).toEqual({ cmd: "scene", mode: "multi" });
+    expect(shown.map((o) => o.role)).toEqual(["focus", "beside", "glance", "glance"]);
   });
 
   it("gives the model a short factual summary that says the screen is already showing it", () => {

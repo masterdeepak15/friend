@@ -32,7 +32,7 @@ import { parseRepoLink } from "../github";
 import type { Market } from "../marketplace";
 import type { ContentBlock, Msg, Provider, ToolSpec } from "../provider/types";
 import { z } from "zod";
-import { designFindings } from "./compose";
+import { designFindings, type ComposeItem } from "./compose";
 import { runStageTool, type StageState } from "../stage";
 import type { ScreenCheck } from "../screenCheck";
 import { getToolDef, lexicalInsideRoots, pathArg, toolSpecs } from "../tools/registry";
@@ -968,7 +968,7 @@ export class Agent {
       const r = await d.weather.get(String(args.city));
       d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: r.ok });
       if (!r.ok) return fail(r.error);
-      this.showScene(weatherScene(r.weather), ctx.emit);
+      this.composeScene(weatherScene(r.weather), ctx.emit);
       return { text: weatherSummary(r.weather), isError: false };
     }
 
@@ -1238,6 +1238,15 @@ export class Agent {
   private showWidget(show: ("system" | "voice" | "network" | "feed" | "radar" | "tickets")[], emit: (m: ServerMsg) => void): void {
     const cmd: StageCommand = { cmd: "widget", show };
     if (this.deps.stage.apply(cmd).ok) emit({ type: "stage", command: cmd });
+  }
+
+  /** A scene the server draws itself goes through the screen director like anything the model shows: places for this screen, nothing on top of an instrument. */
+  private composeScene(items: ComposeItem[], emit: (m: ServerMsg) => void): void {
+    if (this.scenesThisTurn++ === 0) {
+      const clear: StageCommand = { cmd: "clear", keepInstruments: true };
+      if (this.deps.stage.apply(clear).ok) emit({ type: "stage", command: clear });
+    }
+    runStageTool("screen.compose", { items, mode: "replace" }, this.deps.stage, emit);
   }
 
   private showScene(commands: StageCommand[], emit: (m: ServerMsg) => void): void {

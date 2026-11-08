@@ -147,3 +147,17 @@ describe("clear data requests are answered with the real tools before the model 
     expect(p.calls[0]!.messages).toHaveLength(1);
   });
 });
+
+describe("the weather is laid out by the screen director", () => {
+  it("the forecast chart is the focus, the temperature sits beside it, humidity and wind are chips", async () => {
+    const p = new FakeProvider([[text("ok"), done]]);
+    await build(p).runTurn("What is the weather in Pune?", ctx());
+    const o = Object.fromEntries(stage.snapshot().objects.map((x) => [x.id, x]));
+    expect(o["weather-hours"]).toMatchObject({ role: "focus" });
+    expect(o["weather-hours"]!.docked).toBeUndefined();
+    expect(o["weather-now"]).toMatchObject({ role: "beside" });
+    expect(o["weather-now"]!.docked).toBeUndefined();
+    expect(o["weather-humidity"]).toMatchObject({ docked: true, role: "glance" });
+    expect(o["weather-wind"]).toMatchObject({ docked: true, role: "glance" });
+  });
+});

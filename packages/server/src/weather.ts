@@ -1,4 +1,4 @@
-import type { StageCommand } from "@friend/protocol";
+import type { ComposeItem } from "./agent/compose";
 import { z } from "zod";
 
 /** Weather from Open-Meteo: free, no account and no API key. Only these two fixed hosts are ever contacted. */
@@ -139,26 +139,34 @@ export class WeatherService {
   }
 }
 
-/** The pictures for a forecast: placed by the server itself, so they appear whatever the model does next. */
-export function weatherScene(w: Weather): StageCommand[] {
-  const show = (id: string, type: "stat" | "gauge" | "chart", props: Record<string, unknown>, placement: "auto" = "auto"): StageCommand => ({
-    cmd: "show",
-    object: { id, type, props, placement },
-  });
+/**
+ * The pictures for a forecast, given to the screen director like anything else the assistant shows: the 24-hour chart is the focus,
+ * the temperature sits beside it, humidity and wind are chips. The server draws them itself, so they appear whatever the model does next.
+ */
+export function weatherScene(w: Weather): ComposeItem[] {
   return [
-    { cmd: "scene", mode: "multi" },
-    show("weather-now", "stat", { label: w.place, value: String(Math.round(w.tempC)), unit: "°C", delta: `${w.description}, feels like ${Math.round(w.feelsC)}°C` }),
-    show("weather-humidity", "gauge", { label: "Humidity", value: Math.round(w.humidity), unit: "%" }),
-    show("weather-wind", "stat", { label: "Wind", value: String(Math.round(w.windKmh)), unit: "km/h" }),
-    show("weather-hours", "chart", {
-      title: "Next 24 hours",
-      kind: "line",
-      labels: w.hours.map((h) => h.label),
-      series: [
-        { name: "Temperature °C", values: w.hours.map((h) => Math.round(h.tempC * 10) / 10) },
-        { name: "Rain chance %", values: w.hours.map((h) => h.rainPct ?? 0) },
-      ],
-    }),
+    {
+      id: "weather-hours",
+      type: "chart",
+      role: "focus",
+      props: {
+        title: "Next 24 hours",
+        kind: "line",
+        labels: w.hours.map((h) => h.label),
+        series: [
+          { name: "Temperature °C", values: w.hours.map((h) => Math.round(h.tempC * 10) / 10) },
+          { name: "Rain chance %", values: w.hours.map((h) => h.rainPct ?? 0) },
+        ],
+      },
+    },
+    {
+      id: "weather-now",
+      type: "stat",
+      role: "beside",
+      props: { label: w.place, value: String(Math.round(w.tempC)), unit: "°C", delta: `${w.description}, feels like ${Math.round(w.feelsC)}°C` },
+    },
+    { id: "weather-humidity", type: "gauge", role: "glance", props: { label: "Humidity", value: Math.round(w.humidity), unit: "%" } },
+    { id: "weather-wind", type: "stat", role: "glance", props: { label: "Wind", value: String(Math.round(w.windKmh)), unit: "km/h" } },
   ];
 }
 

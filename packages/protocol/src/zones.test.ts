@@ -129,3 +129,25 @@ describe("tablet keeps the focus clear of open panels", () => {
     expect(z.focus).toEqual([4, 16, 64, 54]);
   });
 });
+
+describe("beside slots fit around instruments instead of being dropped", () => {
+  const desktop = screen(1920, 855, "desktop");
+  // Maya's home screen: the voice instrument on the left, the tickets and budget instruments on the right
+  const maya = { panels: [] as Rect[], instruments: [INSTRUMENT_RECTS.voice, INSTRUMENT_RECTS.tickets, INSTRUMENT_RECTS.budget] };
+  it("keeps at least two beside slots, none covering an instrument, each tall enough to use", () => {
+    const z = zonesFor(desktop, maya);
+    expect(z.beside.length).toBeGreaterThanOrEqual(2);
+    for (const r of z.beside) {
+      for (const i of maya.instruments) expect(overlap(r, i)).toBeLessThan(0.01);
+      expect(r[3]).toBeGreaterThanOrEqual(16);
+      expect(inside(r)).toBe(true);
+    }
+  });
+  it("a slot an instrument starts above is dropped, one an instrument sits under is shortened", () => {
+    const z = zonesFor(desktop, { panels: [], instruments: [[75, 10, 22, 20]] });
+    for (const r of z.beside) expect(overlap(r, [75, 10, 22, 20])).toBeLessThan(0.01);
+  });
+  it("with no instrument the slots are as before", () => {
+    expect(zonesFor(desktop).beside).toEqual([[75, 16, 22, 28], [3, 16, 22, 28], [75, 46, 22, 28]]);
+  });
+});

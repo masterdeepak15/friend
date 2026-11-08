@@ -207,3 +207,22 @@ describe("panels on a tablet", () => {
     expect(overlap(box(shown(r, "bad")!), [70, 12, 28, 62])).toBeLessThan(0.01);
   });
 });
+
+describe("Maya's instruments (voice, tickets, budget) leave room beside the focus", () => {
+  it("a focus with two beside cards shows both as cards, nothing put away", () => {
+    const r = composeScreen([item("f", "focus"), item("b1", "beside"), item("b2", "beside")], "replace", state({ screen: screen(1920, 855, "desktop"), instruments: ["voice", "tickets", "budget"] }));
+    expect(r.dock).toEqual([]);
+    expect(r.show.filter((o) => !o.docked).map((o) => o.id).sort()).toEqual(["b1", "b2", "f"]);
+    for (const o of r.show) for (const i of ["voice", "tickets", "budget"] as const) expect(overlap(box(o), INSTRUMENT_RECTS[i])).toBeLessThan(0.25);
+  });
+});
+
+describe("what the model is told when nothing fits beside", () => {
+  it("the note says what to do and not to place it by hand", () => {
+    const r = composeScreen([item("f", "focus"), item("a", "beside"), item("b", "beside")], "replace", state({ screen: PHONE }));
+    const note = r.notes.join(" ");
+    expect(note).toMatch(/"b" was put away as a chip/);
+    expect(note).toMatch(/tap its chip|make it the focus/i);
+    expect(note).toMatch(/do not place it by hand/i);
+  });
+});

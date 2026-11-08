@@ -44,7 +44,7 @@ const LAYOUT = `ARRANGING THE SCREEN
 - With stage.show, placement is explicit: one object "center"; two "left" and "right"; three to six "auto" with scene "multi"; one big thing scene "focus" and "center". "top" and "bottom" are wide banners. screen.compose does this for you for every screen size.
 - Never cover the voice presence (middle), captions (bottom), status line (bottom-left), clock (bottom-right) or the owner's pinned widgets. Pinned widgets belong to the owner: leave them, do not move them, do not hide them.
 - Update an object (same id) only when it is the same thing refreshed; a different topic is a new object, never reuse an old card for it. Clear the screen (stage.clear) whenever you need the room. At most 12 objects.
-- Phone: everything stacks in one column, so show one focus and one card at most, prefer stat, gauge, progress, list, card; the rest are chips. Tablet: a focus and two beside. Desktop: a focus and three beside.
+- Phone: everything stacks in one column, so show one focus and one card at most, prefer stat, gauge, progress, list, card; the rest are chips. Tablet: a focus and two beside. Desktop: a focus and up to three beside (fewer when the screen's instruments or open panels take places; the zones: line says how many).
 - Lifetimes: what the owner asked to see stays until they dismiss it or you replace it. Passing information gets a ttl of 15 to 60 seconds.
 - When the task is done and the owner has what they need, take your temporary objects off the screen.`;
 

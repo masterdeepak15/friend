@@ -27,6 +27,7 @@ You say what each thing is for. The system picks the place for this screen. You 
 ## For each screen
 
 - **Desktop:** a focus in the middle, up to three cards beside it, chips along the top. Use `beside` for what really helps, not to fill space.
+- **Beside places are small.** On a home screen with instruments they are short (a number, a few lines): put a chart or a long table as the `focus`, not beside. The `zones:` line of the screen description says how many places there are. If something was put away as a chip, leave it: do not put it back with `stage.show` and a box, that covers the screen's own instruments.
 - **Tablet:** a focus and up to two cards beside it. Keep text large and short.
 - **Phone:** one card at a time under the orb; everything else is a chip. Prefer a stat, a gauge or a short list over a wide chart or table. The request's `screen:` line says which one this is; if it changes (the owner turns the phone), the screen is laid out again by itself.
 

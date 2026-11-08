@@ -47,6 +47,7 @@ export interface Zones {
 const CONFLICT = 0.25;
 const MIN_FOCUS_W = 40;
 const MIN_TABLET_FOCUS_W = 30;
+const MIN_SLOT_H = 16;
 
 // every zone starts below y 15: the strip of chips runs along the top, from 10.5 down to about 14.5
 const DESKTOP = {
@@ -67,6 +68,18 @@ const clampChips = (n: number): number => Math.min(12, Math.max(1, Math.round(n)
 export function zonesFor(screen: ScreenInfo | null, taken: Taken = { panels: [], instruments: [] }, maxChips?: number): Zones {
   const all = [...taken.panels, ...taken.instruments];
   const free = (r: Rect) => !all.some((t) => overlap(r, t) > CONFLICT);
+  /** A slot kept whole, shortened to end above what sits under it, or dropped when something starts above it or too little is left. */
+  const fitSlot = (r: Rect): Rect | null => {
+    let h = r[3];
+    for (const t of all) {
+      const across = t[0] < r[0] + r[2] && t[0] + t[2] > r[0];
+      if (!across || t[1] >= r[1] + h || t[1] + t[3] <= r[1]) continue;
+      if (t[1] <= r[1]) return null;
+      h = Math.min(h, t[1] - 1 - r[1]);
+    }
+    return h >= MIN_SLOT_H ? [r[0], r[1], r[2], Math.round(h * 100) / 100] : null;
+  };
+  const fitted = (slots: Rect[]) => slots.map(fitSlot).filter((r): r is Rect => r !== null);
   const kind = screen?.kind ?? "desktop";
   const chips = (byKind: number) => (maxChips === undefined ? byKind : clampChips(maxChips));
 
@@ -85,16 +98,17 @@ export function zonesFor(screen: ScreenInfo | null, taken: Taken = { panels: [],
       const hi = Math.min(r[0] + r[2], right - 1);
       return hi - lo >= MIN_TABLET_FOCUS_W ? [Math.round(lo * 100) / 100, r[1], Math.round((hi - lo) * 100) / 100, r[3]] : r;
     };
-    return { focus: fit(TABLET.focus), focusBig: fit(TABLET.big), beside: TABLET.slots.filter(free), chipMax: chips(5), stack: false };
+    return { focus: fit(TABLET.focus), focusBig: fit(TABLET.big), beside: fitted(TABLET.slots), chipMax: chips(5), stack: false };
   }
 
-  const beside = DESKTOP.slots.filter(free);
+  const beside = fitted(DESKTOP.slots);
+  const slotOpen = (i: number) => fitSlot(DESKTOP.slots[i]!) !== null;
   const [fx, fy, fw, fh] = DESKTOP.focus;
   const band = all.filter((t) => t[1] < fy + fh && t[1] + t[3] > fy);
   const leftEdge = Math.max(-Infinity, ...band.filter((t) => t[0] + t[2] / 2 < 50).map((t) => t[0] + t[2]));
   const rightEdge = Math.min(Infinity, ...band.filter((t) => t[0] + t[2] / 2 >= 50).map((t) => t[0]));
-  const leftOpen = free(DESKTOP.slots[1]!);
-  const rightOpen = free(DESKTOP.slots[0]!) || free(DESKTOP.slots[2]!);
+  const leftOpen = slotOpen(1);
+  const rightOpen = slotOpen(0) || slotOpen(2);
   let lo = Math.max(leftOpen ? fx : DESKTOP.big[0], leftEdge + 1);
   let hi = Math.min(rightOpen ? fx + fw : DESKTOP.big[0] + DESKTOP.big[2], rightEdge - 1);
   if (hi - lo < MIN_FOCUS_W) {

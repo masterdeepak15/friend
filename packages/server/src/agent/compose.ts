@@ -154,7 +154,7 @@ export function composeScreen(items: ComposeItem[], mode: "replace" | "add", st:
     const gone = sides.splice(oldest === -1 ? sides.length - 1 : oldest, 1)[0]!;
     const id = gone.existing?.id ?? gone.item!.id;
     const why = zones.stack ? "a phone shows one card at a time under the main thing" : `a ${kindOf(st.screen)} here has ${cap} place${cap === 1 ? "" : "s"} beside the main thing`;
-    notes.push(`"${id}" was put away as a chip: ${why}.`);
+    notes.push(`"${id}" was put away as a chip: ${why}. The owner can tap its chip to bring it back; to see it now, make it the focus. Do not place it by hand with stage.show: that covers the screen's own instruments.`);
     squeezed.push(id);
     if (gone.existing) {
       dock.push(id);
