@@ -51,4 +51,11 @@ describe("the shorter layout guide", () => {
   it("the layout topic of the manual mentions the roles", () => {
     expect(screenGuide("layout")).toContain("screen.compose");
   });
+
+  it("says the beside places are small and that nothing put away is to be placed back by hand", () => {
+    const r = inspectPlugin(join(catalog, "screen-design"));
+    const text = r.ok ? (r.skillText.get("screen-design") ?? "") : "";
+    expect(text).toMatch(/Beside places are small/);
+    expect(text).toMatch(/do not put it back with `stage.show`/);
+  });
 });
