@@ -67,16 +67,16 @@ describe("chips keep clear of open panels", () => {
   it("with the chat panel open the strip ends before it", () => {
     const { container } = render(<Stage state={chipsOnly} send={() => {}} dispatch={() => {}} panelsOpen={{ chat: true, tasks: false }} />);
     expect(strip(container).style.right).toBe("32%");
-    expect(strip(container).style.left).toBe("2%");
+    expect(strip(container).style.left).toBe("24%");
   });
   it("with the tasks panel open the strip starts after it", () => {
     const { container } = render(<Stage state={chipsOnly} send={() => {}} dispatch={() => {}} panelsOpen={{ chat: false, tasks: true }} />);
     expect(strip(container).style.left).toBe("30%");
-    expect(strip(container).style.right).toBe("2%");
+    expect(strip(container).style.right).toBe("24%");
   });
-  it("with no panel open the strip spans the safe width", () => {
+  it("with no panel open the strip keeps clear of the status line", () => {
     const { container } = render(<Stage state={chipsOnly} send={() => {}} dispatch={() => {}} />);
-    expect(strip(container).style.left).toBe("2%");
-    expect(strip(container).style.right).toBe("2%");
+    expect(strip(container).style.left).toBe("24%");
+    expect(strip(container).style.right).toBe("24%");
   });
 });
