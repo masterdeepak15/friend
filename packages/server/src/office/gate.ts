@@ -1,6 +1,7 @@
 import type { OfficePolicy } from "@friend/protocol";
 import { classifyShell } from "../policy/classify";
 import { lexicalInsideRoots } from "../tools/registry";
+import { isSimpleCommand } from "../policy/classify";
 
 export type GateVerdict = { verdict: "allow" } | { verdict: "deny"; reason: string } | { verdict: "ask"; danger: boolean };
 
@@ -30,6 +31,31 @@ function plainAbsolute(p: string): boolean {
 function touchesProtected(p: string): boolean {
   const parts = p.toLowerCase().split(/[\\/]+/).filter(Boolean);
   return parts.some((s) => PROTECTED_DIRS.has(s)) || parts.at(-1) === ".mcp.json";
+}
+
+const READ_ONLY_COMMANDS = new Set(["ls", "dir", "pwd", "cat", "type", "head", "tail", "wc", "grep", "rg", "tree", "stat", "file", "du", "which", "where", "whoami", "date", "get-childitem", "get-content", "get-location", "select-string", "get-item", "test-path", "ffprobe"]);
+const READ_ONLY_GIT = new Set(["status", "log", "diff", "show", "ls-files", "rev-parse", "blame"]);
+/** Flags that make an otherwise reading command run something else or write a file. */
+const RUNS_OR_WRITES = /^(--pre|--output|--ext-diff|--exec|-exec|-delete|-o$|-out|-c$)/i;
+
+/**
+ * A single plain command that only looks: listing, reading, searching, git status. No chaining, piping or redirection, and no path in it
+ * that leaves the project folders. These are let through without asking, as a read of the same files by Read or Grep already is.
+ */
+export function readOnlyShell(command: string, folders: string[]): boolean {
+  if (!isSimpleCommand(command.trim())) return false;
+  const words = command.trim().split(/\s+/);
+  const first = (words[0] ?? "").replace(/\.exe$/i, "").toLowerCase();
+  const rest = words.slice(1).map((w) => w.replace(/^["']|["']$/g, ""));
+  if (first === "git") {
+    if (!READ_ONLY_GIT.has((rest[0] ?? "").toLowerCase())) return false;
+  } else if (!READ_ONLY_COMMANDS.has(first)) return false;
+  for (const w of rest) {
+    if (RUNS_OR_WRITES.test(w)) return false;
+    if (/^[~%]/.test(w) || /(^|[\\/])\.\.([\\/]|$)/.test(w)) return false;
+    if (/^([a-zA-Z]:|[\\/])/.test(w) && (!plainAbsolute(w) || !lexicalInsideRoots(w, folders))) return false;
+  }
+  return true;
 }
 
 /**
@@ -62,6 +88,8 @@ export function decideAction(call: { tool: string; input: Record<string, unknown
       }
     }
   }
+
+  if (command !== null && readOnlyShell(command, ctx.folders)) return { verdict: "allow" };
 
   const danger = command !== null && classifyShell(command, ctx.shellPatterns) === "T3";
   if (ctx.policy.allowTools.includes(call.tool) && !danger) return { verdict: "allow" }; // a dangerous command asks for the PIN even when the shell was allowed

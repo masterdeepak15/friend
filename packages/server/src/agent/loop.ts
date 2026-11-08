@@ -793,7 +793,9 @@ export class Agent {
     // a page the model chose by itself (an address nobody said and no search returned) could be a way to send private data out in the
     // address, so it is asked about like anything else outside what the owner has allowed
     const unpointed = (call.name === "web.read" && typeof args.url === "string" && !this.seenUrls.has(normalUrl(args.url))) || (call.name === "plugins.fetch" && !this.namedRepo(String(args.url ?? "")));
-    const insideRoots = (p === undefined ? true : lexicalInsideRoots(p, d.config.roots)) && !unpointed;
+    // reading what the Office workers made is the assistant's job as their manager: their project folders count as open for reading
+    const officeRoots = def.readOnly && d.config.office.enabled ? d.config.office.projects.flatMap((pr) => [pr.folder, ...pr.extraFolders]) : [];
+    const insideRoots = (p === undefined ? true : lexicalInsideRoots(p, [...d.config.roots, ...officeRoots])) && !unpointed;
 
     const protectedPath = p !== undefined && lexicalInsideRoots(p, [d.config.dataDir]);
     let decision = d.policy.decide({ tool: call.name, baseTier: tier, args, trust: ctx.trust, insideRoots, protectedPath });

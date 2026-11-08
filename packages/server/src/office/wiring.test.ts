@@ -184,7 +184,7 @@ describe("the Office in the app", () => {
     app!.office.assign({ worker: "Ada", title: "Write notes" });
     await until(() => procs.length === 1);
     procs[0]!.onEvent({ kind: "init", sessionId: "s", model: "m" });
-    procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
+    procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md and checked that it opens fine.", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
     await until(() => provider.calls.length > 0);
     const asked = JSON.stringify(provider.calls[0]!.messages);
     expect(asked).toContain("Office update");
@@ -202,7 +202,7 @@ describe("the Office in the app", () => {
     app!.office.assign({ worker: "Ada", title: "Write notes" });
     await until(() => procs.length === 1);
     procs[0]!.onEvent({ kind: "init", sessionId: "s", model: "m" });
-    procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
+    procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md and checked that it opens fine.", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
     await until(() => got.some((m) => m.type === "stage" && m.command.cmd === "show" && m.command.object.id === "note-office-update"));
     const card = got.find((m) => m.type === "stage" && m.command.cmd === "show" && m.command.object.id === "note-office-update") as unknown as { command: { object: { layer: string; type: string; props: { text: string } } } };
     expect(card.command.object).toMatchObject({ type: "card", layer: "overlay", props: { text: "Ada wrote notes.md; I read it and it looks right." } });
@@ -244,7 +244,7 @@ describe("the Office in the app", () => {
     app!.office.assign({ worker: "Ada", title: "Write notes" });
     await until(() => procs.length === 1);
     procs[0]!.onEvent({ kind: "init", sessionId: "s", model: "m" });
-    procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
+    procs[0]!.onEvent({ kind: "result", ok: true, text: "Wrote notes.md and checked that it opens fine.", turns: 1, durationMs: 1, input: 1, output: 1, denials: [], sessionId: "s" });
     await until(() => provider.calls.length > 0);
     const asked = JSON.stringify(provider.calls[0]!.messages);
     expect(asked).toMatch(/no screen is open, so your note is sent to their phone \(no phone app is set up, so it waits on the screen\)/);

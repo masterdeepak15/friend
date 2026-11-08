@@ -69,7 +69,7 @@ const settle = async () => {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 };
 const initEv = (sessionId = "sess-1"): WorkerEvent => ({ kind: "init", sessionId, model: "m" });
-const resultEv = (o: Partial<Extract<WorkerEvent, { kind: "result" }>> = {}): WorkerEvent => ({ kind: "result", ok: true, text: "Done.", turns: 2, durationMs: 10, input: 100, output: 50, denials: [], sessionId: "sess-1", ...o });
+const resultEv = (o: Partial<Extract<WorkerEvent, { kind: "result" }>> = {}): WorkerEvent => ({ kind: "result", ok: true, text: "Done. I made the change and checked the result.", turns: 2, durationMs: 10, input: 100, output: 50, denials: [], sessionId: "sess-1", ...o });
 const quotaEv = (utilization: number, resetsAt: number): WorkerEvent => ({ kind: "quota", quota: { fiveHour: { utilization, resetsAt }, sevenDay: null } });
 
 function make(over: Record<string, unknown> = {}, command?: string) {
@@ -298,7 +298,7 @@ describe("a run", () => {
     t.office.assign({ worker: "Ben", title: "Go" });
     await settle();
     t.procs[0]!.emit(initEv());
-    t.procs[0]!.emit(resultEv({ text: "Done." }));
+    t.procs[0]!.emit(resultEv({ text: "Done. I made the change and checked the result." }));
     expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ worker: "Ben", jobTitle: "Developer", manager: "Lena" }));
   });
 
@@ -630,7 +630,7 @@ describe("what a worker may do", () => {
         const start = recs(t, "worker.run")[0]!;
         expect(start).toMatchObject({ actorKind: "worker", actorId: `${w.name} (${w.id})`, outcome: "started", target: w.name });
         expect(start.requestId).toMatch(/^run-[0-9a-f]{8}$/);
-        proc.emit(resultEv({ text: "Wrote it." }));
+        proc.emit(resultEv({ text: "Wrote it down in the notes file and checked it." }));
         await settle();
         const end = recs(t, "worker.run").at(-1)!;
         expect(end).toMatchObject({ outcome: "done", requestId: start.requestId, detail: { status: "idle", ticketStatus: "review" } });
@@ -751,11 +751,11 @@ describe("what a worker may do", () => {
   });
   it("answers no when the owner says no, or when the card times out, with the reason", async () => {
     const { t, bridge } = await running();
-    const a = bridge.ask("Bash", { command: "ls" });
+    const a = bridge.ask("Bash", { command: "npm install" });
     await settle();
     t.resolvers[0]!.resolve({ approved: false, reason: "Denied by owner" });
     await expect(a).resolves.toMatchObject({ behavior: "deny", message: "Denied by owner" });
-    const b = bridge.ask("Bash", { command: "dir" });
+    const b = bridge.ask("Bash", { command: "npm run build" });
     await settle();
     t.resolvers[1]!.resolve({ approved: false, reason: "Approval timed out" });
     await expect(b).resolves.toMatchObject({ behavior: "deny", message: "Approval timed out" });
@@ -990,9 +990,9 @@ describe("reviewing and talking", () => {
     t.office.assign({ worker: w.id, title: "Write notes" });
     await settle();
     t.procs[0]!.emit(initEv());
-    t.procs[0]!.emit(resultEv({ text: "Wrote notes.md" }));
+    t.procs[0]!.emit(resultEv({ text: "Wrote notes.md with the outline and checked it opens." }));
     expect(t.notify).toHaveBeenCalledTimes(1);
-    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ worker: w.name, ticketId: 1, title: "Write notes", status: "review", report: "Wrote notes.md" }));
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ worker: w.name, ticketId: 1, title: "Write notes", status: "review", report: "Wrote notes.md with the outline and checked it opens." }));
   });
 
   it("does not write the same line twice in the feed when the last words and the report are the same", async () => {
@@ -1089,5 +1089,76 @@ describe("what the screens are told", () => {
     await vi.advanceTimersByTimeAsync(250);
     expect(states().length).toBe(first + 1);
     expect((states().at(-1) as { workers: unknown[] }).workers).toHaveLength(4);
+  });
+});
+
+describe("tickets that cannot get stuck", () => {
+  const LONG = "Wrote notes.md with the outline and checked that the file opens.";
+  it("close ends a stale ticket with a reason, takes it out of the queue, and will not close one being worked on", async () => {
+    const t = make({ maxConcurrent: 1 });
+    const w = t.hire("scribe");
+    const a = t.office.assign({ worker: w.id, title: "first" }) as { ticket: { id: number } };
+    await settle();
+    const b = t.office.assign({ worker: w.id, title: "second" }) as { ticket: { id: number } };
+    expect(t.office.close(a.ticket.id, "x")).toMatchObject({ ok: false, error: expect.stringMatching(/Stop the worker/) });
+    expect(t.office.close(b.ticket.id, "")).toMatchObject({ ok: false });
+    expect(t.office.close(b.ticket.id, "replaced by a newer one")).toEqual({ ok: true });
+    expect(t.store.getTicket(b.ticket.id)!.status).toBe("done");
+    expect(t.store.getTicket(b.ticket.id)!.report).toMatch(/Closed: replaced by a newer one/);
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.emit(resultEv({ text: LONG }));
+    await settle();
+    expect(t.procs).toHaveLength(1); // the closed ticket did not start
+    expect(t.office.close(9999, "x")).toMatchObject({ ok: false });
+  });
+
+  it("a ticket left in todo by a stop can be closed", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    const a = t.office.assign({ worker: w.id, title: "x" }) as { ticket: { id: number } };
+    await settle();
+    t.office.stop(w.id);
+    expect(t.store.getTicket(a.ticket.id)!.status).toBe("todo");
+    expect(t.office.close(a.ticket.id, "no longer needed")).toEqual({ ok: true });
+  });
+
+  it("a message to an idle worker is closed when it has answered, and Friend still hears the answer", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    expect(t.office.say(w.id, "Please look at the owner feedback")).toEqual({ ok: true });
+    await settle();
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.emit(resultEv({ text: "Read it and changed the intro." }));
+    const ticket = t.store.listTickets().find((x) => x.title.startsWith("Message: "))!;
+    expect(ticket.status).toBe("done");
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ ticketId: ticket.id, status: "review", report: "Read it and changed the intro." }));
+    expect(t.office.review(ticket.id, true)).toEqual({ ok: true }); // the usual review step does not fail on it
+  });
+
+  it("a report of one word is not accepted: the worker is asked once for a real one", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    const a = t.office.assign({ worker: w.id, title: "Write notes" }) as { ticket: { id: number } };
+    await settle();
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.emit(resultEv({ text: "Done." }));
+    expect(t.store.getTicket(a.ticket.id)!.status).toBe("doing");
+    expect(t.procs[0]!.sent.at(-1)).toMatch(/too short/);
+    expect(t.notify).not.toHaveBeenCalled();
+    t.procs[0]!.emit(resultEv({ text: LONG }));
+    expect(t.store.getTicket(a.ticket.id)!.status).toBe("review");
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ report: LONG }));
+  });
+
+  it("a worker that answers the request for more with the same short word still ends in review (asked only once)", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    const a = t.office.assign({ worker: w.id, title: "Write notes" }) as { ticket: { id: number } };
+    await settle();
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.emit(resultEv({ text: "Done." }));
+    t.procs[0]!.emit(resultEv({ text: "Done." }));
+    expect(t.store.getTicket(a.ticket.id)!.status).toBe("review");
+    expect(t.procs[0]!.sent.filter((s) => /too short/.test(s))).toHaveLength(1);
   });
 });

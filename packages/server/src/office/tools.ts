@@ -53,6 +53,10 @@ export function officeTool(office: OfficeApi, name: string, args: Record<string,
       const r = office.review(Number(args.ticket), args.accept === true, args.note ? String(args.note) : undefined);
       return r.ok ? ok(args.accept === true ? "Accepted." : "Sent back.") : fail(r.error ?? "Could not review the ticket.");
     }
+    case "office.close": {
+      const r = office.close(Number(args.ticket), String(args.reason ?? ""));
+      return r.ok ? ok(`Ticket #${Number(args.ticket)} is closed.`) : fail(r.error ?? "Could not close the ticket.");
+    }
     case "office.fire": {
       const r = office.fire(String(args.worker), "agent");
       return r.ok ? ok(`${r.name} was removed from the Office.`) : fail(r.error);

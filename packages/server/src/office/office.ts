@@ -87,12 +87,19 @@ interface Run {
   parentRequestId: string | null;
   /** "Dev (be8d8dca)": who the entries of this run name. */
   label: string;
+  /** A report that was too short has been asked for once more. */
+  nudged: boolean;
 }
 
 const OFF = "The Office is switched off in Settings.";
 const STATE_EVERY_MS = 200;
 const DETAIL_CHARS = 80;
 const FEED_CHARS = 200;
+/** A report shorter than this ("Done.") tells the manager nothing it can check: the worker is asked once for a real one. */
+const MIN_REPORT_CHARS = 40;
+const FULLER_REPORT = "Your report was too short for your manager to check. Reply again with what you did, which files you changed or made, and what you checked.";
+/** A message to an idle worker becomes a ticket with this start; its answer is the end of it, nobody reviews it. */
+const isMessage = (t: { title: string } | undefined): boolean => !!t && t.title.startsWith("Message: ");
 const APPROVE_SPEC: BridgeTool = {
   name: "approve",
   description: "Ask Friend whether an action may run. Friend answers for its owner.",
@@ -115,7 +122,7 @@ function describeAction(tool: string, input: Record<string, unknown>): string {
  * it does is read from settings at the moment it does it.
  */
 /** What Friend's own tools use of the Office. */
-export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "decide" | "stop" | "fire" | "status" | "report">;
+export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "decide" | "close" | "stop" | "fire" | "status" | "report">;
 
 export class Office {
   private runs = new Map<string, Run>();
@@ -226,6 +233,7 @@ export class Office {
   review(ticketId: number, accept: boolean, note?: string): { ok: boolean; error?: string } {
     const t = this.d.store.getTicket(ticketId);
     if (!t) return { ok: false, error: `There is no ticket #${ticketId}.` };
+    if (t.status === "done" && accept) return { ok: true }; // a message that was answered is closed already
     if (t.status !== "review") return { ok: false, error: `Ticket #${ticketId} is not waiting for review (it is ${t.status}).` };
     this.d.audit.log("agent", "office.review", { ticket: ticketId, accept });
     if (accept) {
@@ -235,6 +243,21 @@ export class Office {
       if (t.workerId) this.queue.push({ workerId: t.workerId, ticketId, ...(note ? { note } : {}) });
     }
     this.pump();
+    this.changed();
+    return { ok: true };
+  }
+
+  /** Closes a ticket nobody needs to review (stale, replaced, a message): done, with the reason kept in its report. */
+  close(ticketId: number, reason: string): { ok: boolean; error?: string } {
+    const t = this.d.store.getTicket(ticketId);
+    if (!t) return { ok: false, error: `There is no ticket #${ticketId}.` };
+    if (t.status === "done") return { ok: true };
+    if (t.status === "doing") return { ok: false, error: `Ticket #${ticketId} is being worked on. Stop the worker first (office.stop), then close it.` };
+    const why = reason.trim().slice(0, 300);
+    if (!why) return { ok: false, error: "Give a reason for closing the ticket." };
+    this.queue = this.queue.filter((e) => e.ticketId !== ticketId);
+    this.d.store.patchTicket(ticketId, { status: "done", report: `${t.report ? `${t.report}\n\n` : ""}Closed: ${why}` });
+    this.d.audit.log("agent", "office.close", { ticket: ticketId, reason: why });
     this.changed();
     return { ok: true };
   }
@@ -392,7 +415,7 @@ export class Office {
     }
     this.d.store.patchTicket(ticket.id, { status: "doing", workerId: worker.id });
     this.d.store.patchWorker(worker.id, { status: "starting", ticketId: ticket.id, detail: "Starting", startedAt: Date.now() });
-    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, report: "", sent: 1, answered: 0, requestId: newRequestId("run"), parentRequestId: ticket.requestId, label: `${worker.name} (${worker.id})` };
+    const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, report: "", sent: 1, answered: 0, nudged: false, requestId: newRequestId("run"), parentRequestId: ticket.requestId, label: `${worker.name} (${worker.id})` };
     run.bridge = this.makeBridge((call) => void runWithRequest({ prefix: "run", requestId: run.requestId, parentId: run.parentRequestId, actorKind: "worker", actorId: `${worker.name} (${worker.id})` }, () => this.onCall(run, call)));
     run.bridge.setTools([APPROVE_SPEC]);
     this.runs.set(worker.id, run);
@@ -501,11 +524,19 @@ export class Office {
     this.d.store.patchTicket(run.ticketId, { report: ev.text.trim() || run.report }); // kept whole, so Friend can read all of it
     this.rec(run, "ticket.report", ev.ok ? "done" : "failed", `#${run.ticketId}`, { ticket: run.ticketId, report: ev.text.trim() || run.report, turns: ev.turns, tokens: ev.input + ev.output });
     run.answered++;
+    const message = isMessage(this.d.store.getTicket(run.ticketId));
+    if (ev.ok && !message && !run.nudged && run.proc && run.answered >= run.sent && run.report.length < MIN_REPORT_CHARS) {
+      run.nudged = true;
+      run.sent++;
+      run.proc.send(FULLER_REPORT);
+      this.feed(run.workerId, "text", "Asked for a fuller report.");
+      return;
+    }
     if (run.answered < run.sent && ev.ok) return; // the owner said something meanwhile; its answer is still to come
     const worker = this.d.store.getWorker(run.workerId)!;
     const over = this.budgetReason(worker);
     if (over) this.conclude(run, { worker: "stopped", ticket: "blocked", feed: { kind: "error", text: over } });
-    else this.conclude(run, { worker: "idle", ticket: ev.ok ? "review" : "blocked" });
+    else this.conclude(run, { worker: "idle", ticket: ev.ok ? (message ? "done" : "review") : "blocked", ...(ev.ok && message ? { reply: true } : {}) });
   }
 
   private onExit(run: Run, x: WorkerExit): void {
@@ -517,7 +548,7 @@ export class Office {
   }
 
   /** Ends a run: the worker's and the ticket's new states, the process and its questions, and whatever was waiting for a place. */
-  private conclude(run: Run, o: { worker: WorkerStatus; ticket: TicketStatus | null; feed?: { kind: FeedKind; text: string } }): void {
+  private conclude(run: Run, o: { worker: WorkerStatus; ticket: TicketStatus | null; reply?: boolean; feed?: { kind: FeedKind; text: string } }): void {
     if (run.concluded) return;
     run.concluded = true;
     if (run.startTimer) clearTimeout(run.startTimer);
@@ -535,10 +566,10 @@ export class Office {
       /* already gone */
     }
     void run.bridge.stop().catch(() => {});
-    if ((o.ticket === "review" || o.ticket === "blocked") && this.cfg.notifyFriend && !this.down) {
+    if ((o.ticket === "review" || o.ticket === "blocked" || o.reply) && this.cfg.notifyFriend && !this.down) {
       const ticket = this.d.store.getTicket(run.ticketId);
       const worker = this.d.store.getWorker(run.workerId);
-      if (ticket && worker) this.d.notify?.({ worker: worker.name, jobTitle: worker.title, manager: worker.managerId ? (this.d.store.getWorker(worker.managerId)?.name ?? null) : null, ticketId: ticket.id, title: ticket.title, status: o.ticket, report: run.report || o.feed?.text || "" });
+      if (ticket && worker) this.d.notify?.({ worker: worker.name, jobTitle: worker.title, manager: worker.managerId ? (this.d.store.getWorker(worker.managerId)?.name ?? null) : null, ticketId: ticket.id, title: ticket.title, status: o.ticket === "blocked" ? "blocked" : "review", report: run.report || o.feed?.text || "" });
     }
     this.changed();
     this.pump();

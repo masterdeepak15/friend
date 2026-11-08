@@ -923,6 +923,13 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "office.close",
+    description: "Close a ticket nobody needs to review any more (stale, replaced, or only a message that was answered). It is marked done with your reason. A ticket a worker is working on must be stopped first (office.stop).",
+    input: z.object({ ticket: z.number().int(), reason: z.string().min(1).max(300) }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
     name: "office.fire",
     description: "Remove a worker from the Office when it is no longer needed. It is stopped, the workers who reported to it now report to its manager, and its finished tickets stay. The owner is asked.",
     input: z.object({ worker: z.string().min(1).max(64) }),
@@ -1189,6 +1196,8 @@ ${visible(clip(String(a.text ?? ""), 3000))}`;
       return `${a.accept ? "Accept" : "Send back"} ticket #${visible(String(a.ticket ?? ""))}`;
     case "office.action": // a worker's own question: what it wants to do is shown whole
       return `Worker ${visible(String(a.worker ?? ""))} wants to ${visible(String(a.summary ?? ""))}`;
+    case "office.close":
+      return `Close ticket #${visible(String(a.ticket ?? ""))}`;
     case "office.fire":
       return `Remove the worker ${visible(String(a.worker ?? ""))} from the Office`;
     case "office.stop":
