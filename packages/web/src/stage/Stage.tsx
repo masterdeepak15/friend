@@ -1,5 +1,6 @@
+import { ChipStrip } from "./ChipStrip";
 import type { ClientMsg } from "@friend/protocol";
-import { Component, useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CommandBar } from "../input/CommandBar";
 import { designScale, layoutMode, screenOf } from "../hud/orbital/geometry";
 import type { Slash } from "../input/commands";
@@ -121,7 +122,9 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
   };
   const stageRef = useRef<HTMLDivElement>(null);
   const dragger = useObjectDrag(send, dispatch, () => stageRef.current);
-  const entries = useGhosts(state.objects, prefersReducedMotion() ? 0 : EXIT_MS);
+  const cards = useMemo(() => state.objects.filter((o) => !o.docked), [state.objects]); // a new list every render would restart the exit animations for ever
+  const chips = useMemo(() => state.objects.filter((o) => o.docked), [state.objects]);
+  const entries = useGhosts(cards, prefersReducedMotion() ? 0 : EXIT_MS);
   const overlays = entries.filter((e) => e.object.layer === "overlay");
   const autos = entries.filter((e) => e.object.layer !== "overlay" && e.object.placement === "auto");
   const fixed = entries.filter((e) => e.object.layer !== "overlay" && e.object.placement !== "auto");
@@ -219,6 +222,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
       />
       {hudLayer}
       <div className={narrow ? "objects objects-stack" : "objects"} style={{ zIndex: 10 }}>
+        <ChipStrip chips={chips} onRestore={(id) => send({ type: "stage.dock", objectId: id, docked: false })} />
         {autos.length > 0 && <div className="auto-grid">{autos.map(renderObject)}</div>}
         {fixed.map(renderObject)}
       </div>

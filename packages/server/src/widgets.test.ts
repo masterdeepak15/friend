@@ -128,7 +128,7 @@ describe("knowing the screen", () => {
 
   it("is left out when unknown, so nothing else about the summary changes", () => {
     const s = new StageState();
-    expect(s.summary(0)).toBe("accent=#3fd8ff; scene=conversation; presence=idle; the stage is empty; free regions: center, left, right, top, bottom");
+    expect(s.summary(0)).toBe("accent=#3fd8ff; scene=conversation; presence=idle; the stage is empty; free regions: center, left, right, top, bottom; zones: focus free, beside 3 of 3 free; chips (0 of 7): none");
   });
 
   it("makes everything a stacked, automatic placement on a phone, and says so", () => {
@@ -242,5 +242,29 @@ describe("the screen and widgets through the app", () => {
     const p = (c.msgs.find((m) => m.type === "stage" && m.command.cmd === "place") as Extract<ServerMsg, { type: "stage" }>).command as { placement: { x: number; y: number; w: number; h: number } };
     expect(p.placement.y).toBeGreaterThanOrEqual(0.1); // not over the top strip
     expect(p.placement.y + p.placement.h).toBeLessThanOrEqual(0.78 + 1e-9); // not over the captions and the status line
+  });
+});
+
+describe("the screen director through the app", () => {
+  const compose = (items: unknown[]) => [{ type: "tool_call" as const, id: "t1", name: "screen.compose", args: { items } }, done];
+
+  it("lays a screen out from roles, lets the owner tap a chip back, and lays it out again when the screen is turned", async () => {
+    const items = [
+      { id: "f", type: "card", props: { title: "f", text: "f" }, role: "focus" },
+      { id: "b1", type: "card", props: { title: "b1", text: "b1" }, role: "beside" },
+      { id: "b2", type: "card", props: { title: "b2", text: "b2" }, role: "beside" },
+    ];
+    const { connect } = await boot(mkdtempSync(join(tmpdir(), "friend-screen-")), [compose(items), [text("ok"), done]]);
+    const c = await connect();
+    c.send({ type: "chat.send", text: "show me" });
+    await until(() => c.msgs.filter((m) => m.type === "stage" && m.command.cmd === "show").length >= 3);
+
+    c.send({ type: "ui.screen", ...phone }); // turned into a phone: the extra card becomes a chip
+    const chipShown = () => c.msgs.find((m) => m.type === "stage" && m.command.cmd === "show" && m.command.object.docked) as Extract<ServerMsg, { type: "stage" }> | undefined;
+    await until(() => chipShown() !== undefined);
+    const id = (chipShown()!.command as { object: { id: string } }).object.id;
+
+    c.send({ type: "stage.dock", objectId: id, docked: false }); // the owner taps the chip
+    await until(() => c.msgs.some((m) => m.type === "stage" && m.command.cmd === "show" && (m.command as { object: { id: string } }).object.id === id && !(m.command as { object: { docked?: boolean } }).object.docked));
   });
 });

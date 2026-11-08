@@ -268,6 +268,10 @@ How it is kept safe:
 
 When it notices something you repeat, the AI may suggest a **skill** (instructions it loads later) or a **plugin tool** (a small python, node or shell program that runs in the code sandbox: no network, no access to your files, approval on every call). If you agree it calls `plugins.create`: the approval card shows **everything it wrote, untruncated**, and needs your PIN. It is then checked like any plugin, switched on and loaded straight away (`plugins.reload` re-reads everything; the Plugins panel has a **Reload plugins** button too). Creating the same id again installs a newer version. The AI can also list, switch off or on, and delete plugins.
 
+## A screen that lays itself out
+
+The assistant says what each thing on the screen is for (the main thing, what goes beside it, small values to keep in view, a passing note, an urgent alert) and Friend places it for the screen you are using: desktop, tablet or phone. Finished cards shrink into small chips along the top and come back with a tap. A bundled Screen design skill teaches the assistant the principles. See [docs/guides/screen-director.md](docs/guides/screen-director.md).
+
 ## Skills from GitHub
 
 Give Friend a GitHub link and say "install this": for example `https://github.com/lemomo-ai/lemo-opuscar.git`. It works like a person would. It looks at the repository, **reads the README and the docs**, tells you in plain words what the project is, what it will take and what it will leave out and why, and asks only when it cannot tell. Then you read the source and the **full text of every skill** on the approval card and enter your PIN. Skills from Claude Code plugins are imported as they are; slash commands and sub-agents become skills (`cmd-…`, `agent-…`). You can also add a **marketplace** (a repository with `.claude-plugin/marketplace.json`) and install from it by name. Afterwards Friend writes a note in its memory saying which skills it has and what each is for, and the Plugins screen shows where each one came from.

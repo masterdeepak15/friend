@@ -32,7 +32,7 @@ describe("the screen manual", () => {
     const tool = TOOL_DEFS.find((t) => t.name === "stage.guide")!;
     expect(tool.baseTier).toBe("T0");
     expect(LAYOUT_GUIDE).toMatch(/stage\.guide/);
-    expect(LAYOUT_GUIDE).toMatch(/layer "overlay"/);
+    expect(LAYOUT_GUIDE).toMatch(/role note/);
     const out = runStageTool("stage.guide", { topic: "overlay" }, new StageState(), () => {});
     expect(out).toMatchObject({ ok: true });
     expect(runStageTool("stage.guide", {}, new StageState(), () => {})).toMatchObject({ ok: true, output: screenGuide("all") });

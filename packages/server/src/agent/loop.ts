@@ -32,6 +32,7 @@ import { parseRepoLink } from "../github";
 import type { Market } from "../marketplace";
 import type { ContentBlock, Msg, Provider, ToolSpec } from "../provider/types";
 import { z } from "zod";
+import { designFindings } from "./compose";
 import { runStageTool, type StageState } from "../stage";
 import type { ScreenCheck } from "../screenCheck";
 import { getToolDef, lexicalInsideRoots, pathArg, toolSpecs } from "../tools/registry";
@@ -1135,7 +1136,9 @@ export class Agent {
       if (!d.screenCheck) return fail("Checking the screen is not available.");
       const seen = await d.screenCheck.request(ctx.emit, signal);
       d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: seen.ok });
-      return seen.ok ? { text: seen.lines.join("\n"), isError: false } : fail(seen.error);
+      if (!seen.ok) return fail(seen.error);
+      // what the screen measured, then what a designer would say about the whole layout
+      return { text: [...seen.lines, ...designFindings(d.stage.snapshot().objects, d.stage.screenInfo())].join("\n"), isError: false };
     }
 
     if (call.name === "people.list") {

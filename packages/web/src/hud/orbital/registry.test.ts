@@ -71,3 +71,29 @@ describe("which widgets show at each density", () => {
     expect(ids("calm", { bogus: true } as never, "orbit", false)).toEqual(["usage"]);
   });
 });
+
+describe("instrument rectangles shared with the server", () => {
+  it("equal the registry boxes over the 1600 x 900 canvas", async () => {
+    const { INSTRUMENT_RECTS } = await import("@friend/protocol");
+    for (const w of WIDGETS) {
+      const r = INSTRUMENT_RECTS[w.id];
+      expect(r[0]).toBeCloseTo((w.box.x / 1600) * 100, 1);
+      expect(r[1]).toBeCloseTo((w.box.y / 900) * 100, 1);
+      expect(r[2]).toBeCloseTo((w.box.w / 1600) * 100, 1);
+      expect(r[3]).toBeCloseTo((w.box.h / 900) * 100, 1);
+    }
+  });
+});
+
+describe("the server's list of instruments on the screen", () => {
+  it("is the same as what the screen draws, for every density, switch and bring-up", async () => {
+    const { hudInstrumentsOn } = await import("@friend/protocol");
+    const densities = ["calm", "standard", "full"] as const;
+    const switches = [{}, { budget: false }, { radar: true }, { usage: false, feed: true }, { approval: true }];
+    const brought = [[], ["system"], ["radar", "tickets"]] as const;
+    for (const d of densities) for (const w of switches) for (const b of brought) for (const pending of [false, true]) {
+      const drawn = visibleWidgets(d, w as never, "orbit", pending, b as never).map((x) => x.id).sort();
+      expect(hudInstrumentsOn(d, w as never, b as never, pending).sort(), `${d} ${JSON.stringify(w)} ${b.join()} ${pending}`).toEqual(drawn);
+    }
+  });
+});

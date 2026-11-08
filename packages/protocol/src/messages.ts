@@ -100,6 +100,8 @@ export const HudView = z.object({
   widgets: z.object(Object.fromEntries(HUD_WIDGET_IDS.map((id) => [id, z.boolean().optional()])) as Record<HudWidgetId, z.ZodOptional<z.ZodBoolean>>),
   /** The orbital screen shows the approved mockup's sample content (workers, tickets, budget, feed) instead of empty slots. */
   preview: z.boolean().optional(),
+  /** How the assistant's cards are put away as chips. */
+  tidy: z.object({ dockAfterSeconds: z.number().min(0).max(3600), maxChips: z.number().int().min(1).max(12).nullable(), autoTidy: z.boolean() }).optional(),
 });
 export type HudView = z.infer<typeof HudView>;
 
@@ -204,6 +206,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stage.move"), objectId: z.string().max(64), rect: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }) }),
   /** The owner pinned an object as a widget, or unpinned it. */
   z.object({ type: z.literal("stage.pin"), objectId: z.string().max(64), pinned: z.boolean() }),
+  /** The owner tapped a chip (docked false: bring it back) or put a card away (docked true). */
+  z.object({ type: z.literal("stage.dock"), objectId: z.string().max(64), docked: z.boolean() }),
   z.object({ type: z.literal("music.state"), state: MusicState }),
   /** A screen's button press for the PC's player (only used while the output is the PC). */
   z.object({ type: z.literal("music.remote"), command: MusicCommand }),

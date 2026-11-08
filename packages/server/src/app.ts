@@ -1,4 +1,4 @@
-import { parseRef, type ClientMsg, type MusicState, type ServerMsg } from "@friend/protocol";
+import { hudInstrumentsOn, parseRef, type ClientMsg, type MusicState, type ServerMsg } from "@friend/protocol";
 import { Agent, type AgentSettings } from "./agent/loop";
 import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, clampToSafe, downloadSize, isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
@@ -66,6 +66,7 @@ import { MemoryKeeper } from "./memory/keeper";
 import { MemoryOrganizer } from "./memory/organizer";
 import { ProactiveBeat } from "./proactive/beat";
 import { saveMessage } from "./agent/history";
+import { installDefaults } from "./defaultPlugins";
 import { Plugins, isPluginId, listCatalog } from "./plugins";
 import { GithubReader } from "./github";
 import { Market } from "./marketplace";
@@ -153,6 +154,8 @@ export interface AppOptions {
   heartbeatMs?: number;
   /** Where the agent's programs run. Defaults to throwaway Docker containers. */
   codeBox?: Pick<CodeBox, "run">;
+  /** Bundled plugins to install once on first start. Default: the screen-design skill, unless a catalog folder is given (tests, custom setups). */
+  defaultPlugins?: readonly string[];
   /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
   pluginCatalogDir?: string;
   /** Starting Friend when the computer starts, and updating it. Everything has a real default; tests hand in their own. */
@@ -219,6 +222,12 @@ export async function createApp(opts: AppOptions) {
   const stage = new StageState();
   stage.useStore(dbWidgetStore(db)); // the owner's pinned widgets come back
   stage.trackView(() => config.view);
+  stage.trackTidy(() => config.hud.tidy);
+  // the layout keeps clear of the live instruments that are on the home screen (the owner's switches and the ones the assistant brought up)
+  stage.trackInstruments(() => {
+    if (config.hud.layout !== "orbital") return [];
+    return hudInstrumentsOn(config.hud.density, config.hud.widgets, stage.snapshot().widgets ?? [], approvals.pending() !== null);
+  });
   stage.setLook(config.look); // the owner's own style, colour and brightness are where every screen starts
   const approvals = new Approvals({ auth, policy, audit, db }, opts.approvalTimeoutMs);
   // told to the screen once the clients exist (below); Claude Code is skipped quietly until then
@@ -983,7 +992,7 @@ export async function createApp(opts: AppOptions) {
     look: clientLook(config.look),
     ownerName: config.ownerName,
     assistantName: auth.assistantName(),
-    hud: { terminalLabel: config.hud.terminalLabel, clock: { ...config.hud.clock }, launcher: config.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })), animations: config.hud.animations, layout: config.hud.layout, density: config.hud.density, widgets: { ...config.hud.widgets }, preview: config.hud.preview },
+    hud: { terminalLabel: config.hud.terminalLabel, clock: { ...config.hud.clock }, launcher: config.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })), animations: config.hud.animations, layout: config.hud.layout, density: config.hud.density, widgets: { ...config.hud.widgets }, preview: config.hud.preview, tidy: { ...config.hud.tidy } },
     music: { folderSet: config.music.folder !== "", volume: config.music.volume, shuffle: config.music.shuffle, repeat: config.music.repeat, visualizer: config.music.visualizer, startView: config.music.startView, output: config.music.output },
   });
   const statusMsg = (): ServerMsg => ({
@@ -1138,6 +1147,12 @@ export async function createApp(opts: AppOptions) {
   const here = dirname(fileURLToPath(import.meta.url));
   // next to the program when installed from npm, in the repository when run from source
   const catalogDir = opts.pluginCatalogDir ?? firstExistingDir([process.env.FRIEND_PLUGIN_CATALOG, resolve(here, "plugins"), resolve(here, "../../..", "plugins")]) ?? resolve(here, "plugins");
+  // the plugins that come with Friend and that the assistant should have from the start (once; what the owner removes stays removed)
+  try {
+    installDefaults(plugins, catalogDir, opts.dataDir, opts.defaultPlugins ?? (opts.pluginCatalogDir ? [] : ["screen-design"]));
+  } catch {
+    /* the assistant works without it; it can be installed from the plugins screen */
+  }
   const pluginsApi: PluginsApi = {
     list: () => {
       videoHub.poke(); // the helper programs may have been installed since the last look
@@ -1915,6 +1930,8 @@ export async function createApp(opts: AppOptions) {
           break;
         case "ui.screen":
           stage.setScreen(msg);
+          // the screen was turned or is another device: what is shown is laid out again for it
+          for (const command of stage.relayout()) broadcast({ type: "stage", command });
           break;
         case "music.state":
           musicHub.onState(conn, msg.state);
@@ -1939,6 +1956,15 @@ export async function createApp(opts: AppOptions) {
           if (done.ok) broadcast({ type: "stage", command });
           else conn.send({ type: "alert", level: "warn", text: done.error });
           audit.log("owner", msg.pinned ? "stage.pin" : "stage.unpin", { objectId: msg.objectId });
+          break;
+        }
+        case "stage.dock": {
+          // the owner tapped a chip (bring it back as a card) or put a card away
+          const dockCommand = { cmd: "dock" as const, id: msg.objectId, docked: true };
+          const done = msg.docked ? (() => { const a = stage.apply(dockCommand, Date.now(), true); return a.ok ? { ok: true as const, commands: [dockCommand] } : a; })() : stage.restore(msg.objectId);
+          if (done.ok) for (const command of done.commands) broadcast({ type: "stage", command });
+          else conn.send({ type: "alert", level: "warn", text: done.error });
+          audit.log("owner", msg.docked ? "stage.dock" : "stage.undock", { objectId: msg.objectId });
           break;
         }
         case "ping":
@@ -2066,6 +2092,7 @@ export async function createApp(opts: AppOptions) {
       languageWarm = setTimeout(warmLanguagesQuietly, opts.warmLanguagesAfterMs ?? 20_000);
       timer = setInterval(() => {
         const gone = stage.expire();
+        for (const command of stage.tidy(Date.now(), config.hud.tidy)) broadcast({ type: "stage", command });
         for (const id of gone) broadcast({ type: "stage", command: { cmd: "hide", id } });
         if (gone.length) for (const follow of stage.settleNow()) broadcast({ type: "stage", command: follow });
       }, opts.expireIntervalMs ?? 1000);

@@ -73,6 +73,8 @@ export interface HudSettings {
   widgets: Partial<Record<(typeof HUD_WIDGET_IDS)[number], boolean>>;
   /** Fill the orbital screen with sample content (clearly labelled) to preview the look before workers exist. */
   preview?: boolean;
+  /** How the assistant's cards are put away as chips (a server that does not send it yet means the defaults). */
+  tidy?: { dockAfterSeconds: number; maxChips: number | null; autoTidy: boolean };
 }
 
 /** The Office as the settings screen edits it (the same shape the server keeps). */
@@ -312,6 +314,12 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     const clock: Record<string, unknown> = {};
     for (const k of Object.keys(after.hud.clock) as (keyof HudSettings["clock"])[]) if (after.hud.clock[k] !== before.hud.clock[k]) clock[k] = after.hud.clock[k];
     if (Object.keys(clock).length) changed.clock = clock;
+    if (after.hud.tidy) {
+      const was = before.hud.tidy ?? { dockAfterSeconds: 40, maxChips: null, autoTidy: true };
+      const tidy: Record<string, unknown> = {};
+      for (const k of ["dockAfterSeconds", "maxChips", "autoTidy"] as const) if (after.hud.tidy[k] !== was[k]) tidy[k] = after.hud.tidy[k];
+      if (Object.keys(tidy).length) changed.tidy = tidy;
+    }
     if (JSON.stringify(after.hud.launcher) !== JSON.stringify(before.hud.launcher)) changed.launcher = after.hud.launcher;
     if (Object.keys(changed).length) patch.hud = changed;
   }

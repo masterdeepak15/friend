@@ -1,6 +1,6 @@
 import { z, type ZodTypeAny } from "zod";
 import { ViewPreset } from "./messages";
-import { Placement, PresenceState, PresenceStyle, SceneMode, StageObject } from "./stage";
+import { OBJECT_TYPES, ObjectRole, Placement, PresenceState, PresenceStyle, SceneMode, StageObject } from "./stage";
 import type { Tier } from "./tiers";
 
 export interface ToolDef {
@@ -764,6 +764,29 @@ export const TOOL_DEFS: ToolDef[] = [
     description:
       "Show an object on the owner's screen. Give id, type, props, placement. Types and props: card {title?, text}; stat {label, value, unit?, delta?}; gauge {label, value 0-100, unit?}; list {title?, items}; table {title?, columns, rows}; code {title?, language?, code}; chart {title?, kind: line|bar|area, labels[], series:[{name, values[]}]}; timeline {title?, items:[{time, title, detail?}]}; graph {title?, nodes:[{id, label?}], edges:[{from, to, label?}]}; sandbox {title?, html} = a small page in an isolated frame with all HTML, CSS and JavaScript inline and no network: use it for animations, clocks, simulations, games and any visual the others cannot draw; colour it with var(--accent|ink|muted|ok|warn|bad|glass|edge|ui|mono) only. More (props in stage.guide): markdown, progress, checklist, kv, countdown, Jarvis components are types too (JStatCard, JGaugeChart, JTable, JCard, about forty more: see stage.guide) and look best: pick them first, image|video|pdf|gallery (src only from file.present); group {items:[{type, props}]} and tabs {tabs:[{title, type, props}]} put many objects in ONE: prefer them to many cards. placement: \"auto\" (default, tidy grid), center, left, right, top, bottom, or {x,y,w,h} as fractions 0..1. Optional ttl seconds, and layer \"overlay\" to float it over the screen for a short explanation. Call stage.guide for the manual. Example: {object:{id:\"cpu\",type:\"gauge\",props:{label:\"CPU\",value:42,unit:\"%\"},placement:\"auto\"}}",
     input: z.object({ object: StageObject }),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "screen.compose",
+    description:
+      "Lay out the owner's screen by saying what each thing is FOR; the system picks the place for this screen (desktop, tablet or phone). Give items [{id, type, props, role, label?, ttl?}] and mode. Roles: focus = the one thing the owner asked to see (one per call); beside = supports the focus (a few fit; the oldest is put away as a chip when full); glance = a small value to keep in view as a chip (a temperature, a count; give a short label); note = short passing information, floats on top and leaves by itself (ttl 15-60 s); alert = urgent, shown alone in alert style, what was there is put away as chips. mode: replace (default, a new topic: what was shown is put away as chips, nothing is lost) or add (more of the same topic). Same id again updates it. Pinned widgets and things the owner moved never move. The result says where everything went and what was changed. Types and props are as in stage.show.",
+    input: z.object({
+      items: z
+        .array(
+          z.object({
+            id: z.string().min(1).max(64),
+            type: z.enum(OBJECT_TYPES),
+            props: z.record(z.string(), z.unknown()),
+            role: ObjectRole,
+            label: z.string().max(40).optional(),
+            ttl: z.number().positive().max(3600).optional(),
+          }),
+        )
+        .min(1)
+        .max(8),
+      mode: z.enum(["replace", "add"]).optional(),
+    }),
     baseTier: "T0",
     target: "gateway",
   },
