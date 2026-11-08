@@ -49,3 +49,16 @@ describe("an overlay", () => {
     expect(s.objects[0]!.layer).toBe("overlay");
   });
 });
+
+describe("a passing note", () => {
+  it("floats without dimming the screen, and sits low and small", () => {
+    const { container } = render(<Stage state={stageWith([obj("n", { layer: "overlay", placement: "center", role: "note" })])} send={() => {}} dispatch={() => {}} />);
+    expect(screen.getByTestId("overlay").querySelector('[data-object="n"]')).toBeTruthy();
+    expect(container.querySelector(".overlay-backdrop")).toBeNull();
+    expect(container.querySelector('[data-object="n"]')!.className).toMatch(/\bnote\b/);
+  });
+  it("an explanation (an overlay with no note role) still dims the screen", () => {
+    const { container } = render(<Stage state={stageWith([obj("why", { layer: "overlay", placement: "center" })])} send={() => {}} dispatch={() => {}} />);
+    expect(container.querySelector(".overlay-backdrop")).not.toBeNull();
+  });
+});
