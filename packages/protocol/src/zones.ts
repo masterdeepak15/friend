@@ -46,6 +46,7 @@ export interface Zones {
 /** More than this much of the smaller box covered counts as sitting on top of it. */
 const CONFLICT = 0.25;
 const MIN_FOCUS_W = 40;
+const MIN_TABLET_FOCUS_W = 30;
 
 // every zone starts below y 15: the strip of chips runs along the top, from 10.5 down to about 14.5
 const DESKTOP = {
@@ -70,7 +71,22 @@ export function zonesFor(screen: ScreenInfo | null, taken: Taken = { panels: [],
   const chips = (byKind: number) => (maxChips === undefined ? byKind : clampChips(maxChips));
 
   if (kind === "phone") return { focus: PHONE.focus, focusBig: PHONE.big, beside: [], chipMax: chips(5), stack: true };
-  if (kind === "tablet") return { focus: TABLET.focus, focusBig: TABLET.big, beside: TABLET.slots.filter(free), chipMax: chips(5), stack: false };
+  if (kind === "tablet") {
+    // the same rule as on a desktop: what is open on the left or right edge (a panel, an instrument) is left clear, the focus gets the rest
+    const edges = (r: Rect) => {
+      const band = all.filter((t) => t[1] < r[1] + r[3] && t[1] + t[3] > r[1]);
+      const left = Math.max(-Infinity, ...band.filter((t) => t[0] + t[2] / 2 < 50).map((t) => t[0] + t[2]));
+      const right = Math.min(Infinity, ...band.filter((t) => t[0] + t[2] / 2 >= 50).map((t) => t[0]));
+      return { left, right };
+    };
+    const fit = (r: Rect): Rect => {
+      const { left, right } = edges(r);
+      const lo = Math.max(r[0], left + 1);
+      const hi = Math.min(r[0] + r[2], right - 1);
+      return hi - lo >= MIN_TABLET_FOCUS_W ? [Math.round(lo * 100) / 100, r[1], Math.round((hi - lo) * 100) / 100, r[3]] : r;
+    };
+    return { focus: fit(TABLET.focus), focusBig: fit(TABLET.big), beside: TABLET.slots.filter(free), chipMax: chips(5), stack: false };
+  }
 
   const beside = DESKTOP.slots.filter(free);
   const [fx, fy, fw, fh] = DESKTOP.focus;
