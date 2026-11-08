@@ -53,6 +53,7 @@ beforeEach(async () => {
     stop: vi.fn(() => ({ stopped: 2 })),
     report: vi.fn(),
     fire: vi.fn(() => ({ ok: true, name: "Ada" })),
+    close: vi.fn(() => ({ ok: true })),
     status: vi.fn(() => ({ workers: [view({ status: "running", detail: "Write a.txt" })], tickets: [{ id: 7, projectId: "site", title: "Fix it", status: "doing", workerId: "w1" }], quota })),
   };
   build = (provider, withOffice = true) =>
@@ -129,6 +130,13 @@ describe("the six office tools", () => {
     expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
     expect(office.fire).toHaveBeenCalledWith("Ada", "agent");
     expect(result(p)).toMatch(/Ada.*removed/i);
+  });
+
+  it("close reaches its method and needs no owner card", async () => {
+    const p = new FakeProvider([[call("1", "office.close", { ticket: 17, reason: "replaced by #20" }), done], [text("ok"), done]]);
+    await build(p).runTurn("close the old ticket", owner());
+    expect(office.close).toHaveBeenCalledWith(17, "replaced by #20");
+    expect(result(p)).toMatch(/#17 is closed/);
   });
 
   it("review and stop reach their methods", async () => {

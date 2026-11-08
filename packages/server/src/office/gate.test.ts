@@ -98,7 +98,7 @@ describe("shell commands", () => {
 
   it("do not fail on a deny pattern that is not a valid expression, and are not refused by it", () => {
     const c = ctx({ policy: policy({ denyCommands: ["(unclosed", "git\\s+push"] }) });
-    expect(verdict("Bash", { command: "ls" }, c)).toEqual({ verdict: "ask", danger: false });
+    expect(verdict("Bash", { command: "npm test" }, c)).toEqual({ verdict: "ask", danger: false });
     expect(verdict("Bash", { command: "git push" }, c)).toMatchObject({ verdict: "deny" });
   });
 
@@ -122,5 +122,28 @@ describe("everything else", () => {
 
   it("an empty allow-list asks about everything", () => {
     expect(verdict("Read", { file_path: "C:\\proj\\a" }, ctx({ policy: policy({ allowTools: [] }) }))).toEqual({ verdict: "ask", danger: false });
+  });
+});
+
+describe("read-only commands go ahead without a card", () => {
+  const sh = (command: string, tool = "Bash") => verdict(tool, { command });
+  it("lets through a plain listing, reading, search or git look inside the project", () => {
+    for (const c of ["ls", "ls -la", "dir C:\\proj\\audio", "cat notes.md", "head -n 20 script.txt", "grep -rn title src", "git status", "git log --oneline", "git diff", "Get-ChildItem -Recurse", "Get-Content notes.md", "ffprobe clip.wav"]) {
+      expect(sh(c), c).toEqual({ verdict: "allow" });
+    }
+    expect(sh("Get-ChildItem", "PowerShell")).toEqual({ verdict: "allow" });
+  });
+
+  it("still asks for anything that writes, chains, pipes, redirects or runs something", () => {
+    for (const c of ["ls > out.txt", "ls; rm -r x", "cat a | sh", "cat $(whoami)", "git push", "git commit -m x", "git checkout main", "git diff --output=x.patch", "rg --pre ./run x", "npm install", "node build.js", "rm a.txt", "mkdir out"]) {
+      expect(sh(c).verdict, c).toBe("ask");
+    }
+  });
+
+  it("asks when a path leaves the project folders, and a deny pattern still wins", () => {
+    for (const c of ["ls C:\\Windows", "cat ..\\secret.txt", "cat ~/.ssh/id_rsa", "cat /etc/passwd", "type %USERPROFILE%\\x"]) {
+      expect(sh(c).verdict, c).toBe("ask");
+    }
+    expect(verdict("Bash", { command: "git log" }, ctx({ policy: policy({ denyCommands: ["git\\s+log"] }) }))).toMatchObject({ verdict: "deny" });
   });
 });

@@ -145,3 +145,14 @@ describe("looking at the screen after drawing (stage.check)", () => {
     expect(ClientMsg.safeParse({ type: "screen.checked", id: "c1", lines: ["x".repeat(201)] }).success).toBe(false);
   });
 });
+
+describe("office.close", () => {
+  it("closes a ticket with a reason, on the gateway, and says so in plain words", () => {
+    const d = TOOL_DEFS.find((t) => t.name === "office.close")!;
+    expect(d.baseTier).toBe("T1");
+    expect(d.target).toBe("gateway");
+    expect(d.input.safeParse({ ticket: 17, reason: "replaced by #20" }).success).toBe(true);
+    expect(d.input.safeParse({ ticket: 17 }).success).toBe(false);
+    expect(describeCall("office.close", { ticket: 17, reason: "x" })).toMatch(/Close ticket #17/);
+  });
+});
