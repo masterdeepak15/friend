@@ -531,14 +531,15 @@ input, textarea, select, .connector-command { -webkit-user-select: text; user-se
 @media (pointer: coarse), (max-width: 720px) { .owner-hotspot { display: none; } }
 
 /* put-away chips: a quiet strip along the top, inside the safe area (below the owner menu, above the cards) */
-.chip-strip { position: absolute; top: 10.5%; left: 50%; transform: translateX(-50%); max-width: 56%; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; pointer-events: none; z-index: 12; }
+.chip-strip { position: absolute; top: 10.5%; display: flex; flex-wrap: nowrap; overflow-x: auto; justify-content: safe center; gap: 6px; pointer-events: none; z-index: 12; scrollbar-width: none; } /* left and right are set by the strip itself, clear of the open panels */
+.chip-strip .chip { flex: 0 0 auto; }
 .chip { pointer-events: auto; display: inline-flex; align-items: baseline; gap: 8px; min-height: 32px; padding: 4px 12px; border: 1px solid var(--edge, rgba(63, 216, 255, 0.35)); background: var(--glass, rgba(6, 20, 28, 0.62)); color: var(--muted, #7fa3b6); font: inherit; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; animation: chip-rise 0.45s ease-out both; }
 .chip:hover, .chip:focus-visible { color: var(--ink, #d4ecf7); border-color: var(--accent, #3fd8ff); outline: none; }
 .chip-value { color: var(--accent, #3fd8ff); font-family: var(--mono, monospace); font-size: 14px; letter-spacing: 0; }
 @keyframes chip-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .chip { animation: none; } }
-.objects-stack > .chip-strip { position: static; transform: none; max-width: none; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; padding: 4px 0; pointer-events: auto; -webkit-overflow-scrolling: touch; }
+.objects-stack > .chip-strip { position: static; left: auto; right: auto; max-width: none; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; padding: 4px 0; pointer-events: auto; -webkit-overflow-scrolling: touch; }
 .objects-stack .chip { flex: 0 0 auto; min-height: 44px; }
 
 /* a narrower screen: one row that scrolls, never a second row down over the cards */
-@media (max-width: 1023px) { .chip-strip { max-width: 92%; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; pointer-events: auto; } .chip { flex: 0 0 auto; } }
+@media (max-width: 1023px) { .chip-strip { justify-content: flex-start; pointer-events: auto; } }

@@ -9,10 +9,12 @@ const safeChip = (o: StageObject): { label: string; value?: string } => {
 };
 
 /** The things put away, as small chips along the top. A tap brings one back as a card. */
-export function ChipStrip({ chips, onRestore }: { chips: StageObject[]; onRestore: (id: string) => void }) {
+export function ChipStrip({ chips, onRestore, panelsOpen }: { chips: StageObject[]; onRestore: (id: string) => void; panelsOpen?: { chat: boolean; tasks: boolean } }) {
   if (chips.length === 0) return null;
+  // the side panels sit at 2% to 28% (tasks) and 70% to 98% (chat): the strip keeps to the space between the ones that are open
+  const style = { left: panelsOpen?.tasks ? "30%" : "2%", right: panelsOpen?.chat ? "32%" : "2%" };
   return (
-    <nav className="chip-strip" aria-label="Put away">
+    <nav className="chip-strip" aria-label="Put away" style={style}>
       {chips.map((o) => {
         const { label, value } = safeChip(o);
         return (

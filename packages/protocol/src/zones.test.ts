@@ -108,3 +108,24 @@ describe("review fixes", () => {
     expect(hudInstrumentsOn("calm", {}, [], true)).toContain("approval");
   });
 });
+
+describe("tablet keeps the focus clear of open panels", () => {
+  const tablet = screen(820, 1180, "tablet", true);
+  const chat: Rect = [70, 12, 28, 62];
+  const tasks: Rect = [2, 12, 26, 40];
+  it("a big focus stops before the chat panel", () => {
+    const z = zonesFor(tablet, { panels: [chat], instruments: [] });
+    expect(overlap(z.focusBig, chat)).toBeLessThan(0.01);
+    expect(z.focusBig[2]).toBeGreaterThanOrEqual(30);
+    expect(overlap(z.focus, chat)).toBeLessThan(0.01);
+  });
+  it("a big focus starts after the tasks panel", () => {
+    const z = zonesFor(tablet, { panels: [tasks], instruments: [] });
+    expect(overlap(z.focusBig, tasks)).toBeLessThan(0.01);
+  });
+  it("with nothing open the zones are as before", () => {
+    const z = zonesFor(tablet);
+    expect(z.focusBig).toEqual([4, 15, 92, 60]);
+    expect(z.focus).toEqual([4, 16, 64, 54]);
+  });
+});

@@ -199,3 +199,11 @@ describe("review fixes", () => {
     expect(r.hide).toEqual([]);
   });
 });
+
+describe("panels on a tablet", () => {
+  it("an alert with the chat panel open keeps clear of it", () => {
+    const tablet = screen(820, 1180, "tablet", true);
+    const r = composeScreen([item("bad", "alert")], "replace", state({ screen: tablet, panels: ["chat"] }));
+    expect(overlap(box(shown(r, "bad")!), [70, 12, 28, 62])).toBeLessThan(0.01);
+  });
+});

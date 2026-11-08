@@ -52,12 +52,14 @@ export interface StageProps {
   onMenu?: () => void;
   /** Drawn between the orb and the pictures the assistant puts up: the orbital screen goes here. */
   hudLayer?: ReactNode;
+  /** Which side panels are open: the chips keep clear of them. */
+  panelsOpen?: { chat: boolean; tasks: boolean };
 }
 
 const LONG_PRESS_MS = 350;
 
 /** Layers 1–3: ambient background, voice presence, agent-placed objects, captions and the hidden command bar. */
-export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }: StageProps) {
+export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer, panelsOpen }: StageProps) {
   const viewport = useViewport();
   const [openRequest, setOpenRequest] = useState(0);
   const [barOpen, setBarOpen] = useState(false);
@@ -222,7 +224,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer }:
       />
       {hudLayer}
       <div className={narrow ? "objects objects-stack" : "objects"} style={{ zIndex: 10 }}>
-        <ChipStrip chips={chips} onRestore={(id) => send({ type: "stage.dock", objectId: id, docked: false })} />
+        <ChipStrip chips={chips} panelsOpen={panelsOpen} onRestore={(id) => send({ type: "stage.dock", objectId: id, docked: false })} />
         {autos.length > 0 && <div className="auto-grid">{autos.map(renderObject)}</div>}
         {fixed.map(renderObject)}
       </div>

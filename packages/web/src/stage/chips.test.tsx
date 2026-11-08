@@ -60,3 +60,23 @@ describe("put-away chips", () => {
     expect(screen.getAllByRole("button", { name: /^Show / })).toHaveLength(3);
   });
 });
+
+describe("chips keep clear of open panels", () => {
+  const chipsOnly = stageWith([card("a", { docked: true }), card("b", { docked: true })]);
+  const strip = (c: HTMLElement) => c.querySelector<HTMLElement>(".chip-strip")!;
+  it("with the chat panel open the strip ends before it", () => {
+    const { container } = render(<Stage state={chipsOnly} send={() => {}} dispatch={() => {}} panelsOpen={{ chat: true, tasks: false }} />);
+    expect(strip(container).style.right).toBe("32%");
+    expect(strip(container).style.left).toBe("2%");
+  });
+  it("with the tasks panel open the strip starts after it", () => {
+    const { container } = render(<Stage state={chipsOnly} send={() => {}} dispatch={() => {}} panelsOpen={{ chat: false, tasks: true }} />);
+    expect(strip(container).style.left).toBe("30%");
+    expect(strip(container).style.right).toBe("2%");
+  });
+  it("with no panel open the strip spans the safe width", () => {
+    const { container } = render(<Stage state={chipsOnly} send={() => {}} dispatch={() => {}} />);
+    expect(strip(container).style.left).toBe("2%");
+    expect(strip(container).style.right).toBe("2%");
+  });
+});
