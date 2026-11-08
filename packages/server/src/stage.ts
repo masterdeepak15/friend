@@ -453,6 +453,16 @@ export class StageState {
   }
 }
 
+/** What a compose result says in words: what is shown where, what was put away, and the notes. */
+function composeSummary(r: ComposeResult): string[] {
+  const where = r.show.map((o) => `${o.id} (${o.docked ? "chip" : o.layer === "overlay" ? "note" : (o.role ?? "card")})`);
+  const parts = [`Shown: ${where.join(", ")}.`];
+  if (r.dock.length) parts.push(`Put away as chips: ${r.dock.join(", ")}.`);
+  if (r.hide.length) parts.push(`Removed: ${r.hide.join(", ")}.`);
+  parts.push(...r.notes);
+  return parts;
+}
+
 export function runStageTool(
   name: string,
   args: unknown,
@@ -471,13 +481,7 @@ export function runStageTool(
     const done = stage.compose(items, mode ?? "replace");
     if (!done.ok) return { ok: false, error: done.error };
     for (const command of done.commands) emit({ type: "stage", command });
-    const r = done.result;
-    const where = r.show.map((o) => `${o.id} (${o.docked ? "chip" : o.layer === "overlay" ? "note" : (o.role ?? "card")})`);
-    const parts = [`Shown: ${where.join(", ")}.`];
-    if (r.dock.length) parts.push(`Put away as chips: ${r.dock.join(", ")}.`);
-    if (r.hide.length) parts.push(`Removed: ${r.hide.join(", ")}.`);
-    parts.push(...r.notes);
-    return { ok: true, output: `ok. ${parts.join(" ")}`, truncated: false };
+    return { ok: true, output: `ok. ${composeSummary(done.result).join(" ")}`, truncated: false };
   }
   const def = TOOL_DEFS.find((t) => t.name === name && t.target === "gateway");
   if (!def) return { ok: false, error: `Unknown stage tool: ${name}` };
@@ -500,6 +504,15 @@ export function runStageTool(
   if (command.cmd === "show" && command.object.layer === "overlay" && !command.object.pinned) {
     // an overlay floats over everything: it takes no place on the stage and moves nothing
     command = { cmd: "show", object: { ...command.object, placement: "center" } };
+  } else if (command.cmd === "show" && stage.snapshot().objects.some((o) => o.role !== undefined) && !command.object.pinned) {
+    // the screen was laid out by screen.compose: a card shown by hand joins that layout (same id: its content changes, its place and role stay),
+    // so a box, a region or "auto" can never push it over the instruments or make it fill the screen
+    const o = command.object;
+    const role = stage.snapshot().objects.find((x) => x.id === o.id)?.role ?? "beside";
+    const done = stage.compose([{ id: o.id, type: o.type, props: o.props, role, ...(o.label ? { label: o.label } : {}), ...(o.ttl !== undefined ? { ttl: o.ttl } : {}) }], "add");
+    if (!done.ok) return { ok: false, error: done.error };
+    for (const c of done.commands) emit({ type: "stage", command: c });
+    return { ok: true, output: `ok. This screen is laid out by screen.compose, so "${o.id}" was placed for you as ${role} and the place you gave was not used. To change the layout call screen.compose again. ${composeSummary(done.result).join(" ")}`, truncated: false };
   } else if (command.cmd === "show") {
     // never let a new object land on top of another one or on the always-visible parts of the screen
     const placed = placeObject(command.object, stage.snapshot().objects, stage.openPanels(), stage.screenInfo());

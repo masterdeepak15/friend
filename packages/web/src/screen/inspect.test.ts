@@ -50,3 +50,12 @@ describe("looking at the screen after something was drawn", () => {
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(200);
   });
 });
+describe("the cut-off finding does not tell the model to enlarge the box", () => {
+  it("says to shrink the content or use screen.compose, and not to enlarge by hand", () => {
+    const line = analyzeScreen({ view, objects: [obj("c", 100, 100, 800, 400, { scrollH: 700 })], hud: [] }).join(" ");
+    expect(line).toMatch(/cut off/);
+    expect(line).toMatch(/screen.compose/);
+    expect(line).not.toMatch(/box bigger/);
+    expect(line).toMatch(/never enlarge the box by hand/);
+  });
+});
