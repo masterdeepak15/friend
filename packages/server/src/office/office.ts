@@ -111,6 +111,17 @@ const APPROVE_SPEC: BridgeTool = {
   description: "Ask Friend whether an action may run. Friend answers for its owner.",
   inputSchema: { type: "object", properties: { tool_name: { type: "string" }, input: { type: "object" }, tool_use_id: { type: "string" } }, required: ["tool_name", "input"] },
 };
+const ASSIGN_SPEC: BridgeTool = {
+  name: "assign",
+  description: "Give a ticket to one of the people who report to you. Say what to do, where in the project, and what done looks like. Their report comes back to you as a message.",
+  inputSchema: { type: "object", properties: { worker: { type: "string", description: "Their name" }, title: { type: "string" }, description: { type: "string" } }, required: ["worker", "title"] },
+};
+const TEAM_SPEC: BridgeTool = {
+  name: "team",
+  description: "The people who report to you: their jobs, what they are good at, and what each is doing now.",
+  inputSchema: { type: "object", properties: {} },
+};
+const REPORT_CHARS = 6000;
 const clip = (s: string, n: number): string => (s.length > n ? s.slice(0, n) : s);
 
 /** What the owner is shown to approve: a shell command in full, a file action by its path. */
@@ -252,11 +263,11 @@ export class Office {
     return { ok: true, worker: this.workerView(w) };
   }
 
-  assign(a: { worker: string; title: string; description?: string }): Result<{ ticket: OfficeTicketView; queued: boolean }> {
+  assign(a: { worker: string; title: string; description?: string; by?: string }): Result<{ ticket: OfficeTicketView; queued: boolean }> {
     if (!this.cfg.enabled) return { ok: false, error: OFF };
     const worker = this.d.store.findWorker(a.worker);
     if (!worker) return { ok: false, error: this.noWorker(a.worker) };
-    const ticket = this.d.store.createTicket({ projectId: worker.projectId, title: clip(a.title.trim(), 200), description: clip(a.description ?? "", 4000), requestId: currentRequest()?.requestId ?? null });
+    const ticket = this.d.store.createTicket({ projectId: worker.projectId, title: clip(a.title.trim(), 200), description: clip(a.description ?? "", 4000), requestId: currentRequest()?.requestId ?? null, assignedBy: a.by ?? null });
     this.d.store.patchTicket(ticket.id, { workerId: worker.id });
     this.d.audit.log("agent", "office.assign", { worker: worker.id, ticket: ticket.id });
     this.queue.push({ workerId: worker.id, ticketId: ticket.id });
@@ -493,7 +504,7 @@ export class Office {
     this.d.store.patchWorker(worker.id, { status: "starting", ticketId: ticket.id, detail: "Starting", startedAt: Date.now() });
     const run: Run = { workerId: worker.id, ticketId: ticket.id, proc: null, bridge: null as unknown as BridgeLike, startTimer: null, spoke: false, pending: 0, concluded: false, report: "", sent: 1, answered: 0, nudged: false, requestId: newRequestId("run"), parentRequestId: ticket.requestId, label: `${worker.name} (${worker.id})` };
     run.bridge = this.makeBridge((call) => void runWithRequest({ prefix: "run", requestId: run.requestId, parentId: run.parentRequestId, actorKind: "worker", actorId: `${worker.name} (${worker.id})` }, () => this.onCall(run, call)));
-    run.bridge.setTools([APPROVE_SPEC]);
+    run.bridge.setTools([APPROVE_SPEC, ...(this.reportsOf(worker.id).length > 0 ? [ASSIGN_SPEC, TEAM_SPEC] : [])]); // a lead can give work to its team
     this.runs.set(worker.id, run);
     this.rec(run, "worker.run", "started", worker.name, { ticket: ticket.id, title: clip(ticket.title, 200) });
     this.changed();
@@ -549,6 +560,58 @@ export class Office {
   }
 
   /** Who the worker is, who it reports to, and what its job is: its standing brief. Workers made before jobs were kept with them fall back to their starter role. */
+  /** What a lead is told about its team and its job as the lead. */
+  private leadBrief(w: WorkerRow, boss: string | undefined): string {
+    const team = this.reportsOf(w.id);
+    if (team.length === 0) return "";
+    const people = team.map((r) => `${r.name} (${r.title || r.roleId}${r.capabilities ? `, ${r.capabilities}` : ""})`).join("; ");
+    return `You lead ${team.length} ${team.length === 1 ? "person" : "people"}: ${people}. You are the lead, not the only worker: when you get a goal, split it into tickets and give each to the right person with your assign tool (the team tool shows who is free). Do not do their work yourself; do only what is no one's job. In each ticket say the goal, where in the project, and what done looks like. Then end your turn with a short note of who has what. Their reports come back to you as messages: check them, send anything wrong back with assign, and when everything is done write one report for ${boss ?? "Friend"}: what each person did, what you checked, and what is left.`;
+  }
+
+  /** The Office's own tools that a lead calls: giving a ticket to a team member, and looking at the team. */
+  private onTeamCall(run: Run, call: BridgeCall): void {
+    const say = (text: string, isError = false) => call.respond({ text, ...(isError ? { isError: true } : {}) });
+    const team = this.reportsOf(run.workerId);
+    if (run.concluded) return say("The worker was stopped.", true);
+    if (team.length === 0) return say("Nobody reports to you.", true);
+    if (call.name === "team") {
+      return say(
+        team
+          .map((r) => {
+            const t = r.ticketId !== null ? this.d.store.getTicket(r.ticketId) : undefined;
+            return `${r.name} (${r.title || r.roleId}${r.capabilities ? `, ${r.capabilities}` : ""}): ${r.status}${t ? `, working on ticket #${t.id} "${clip(t.title, 80)}"` : ""}`;
+          })
+          .join("\n"),
+      );
+    }
+    const a = (call.args ?? {}) as { worker?: unknown; title?: unknown; description?: unknown };
+    const ref = String(a.worker ?? "").trim().toLowerCase();
+    const target = team.find((r) => r.id === ref || r.name.toLowerCase() === ref);
+    if (!target) return say(`${String(a.worker ?? "")} does not report to you. Your team: ${team.map((r) => r.name).join(", ")}.`, true);
+    const title = typeof a.title === "string" ? a.title.trim() : "";
+    if (!title) return say("Give the ticket a title.", true);
+    const r = this.assign({ worker: target.id, title, ...(typeof a.description === "string" ? { description: a.description } : {}), by: run.workerId });
+    if (!r.ok) return say(r.error, true);
+    this.rec(run, "ticket.assign", "done", target.name, { ticket: r.ticket.id, title: clip(title, 200) });
+    return say(`Ticket #${r.ticket.id} is ${r.queued ? "queued for" : "started by"} ${target.name}. Their report will come to you as a message.`);
+  }
+
+  /** The workers who report to this one. */
+  private reportsOf(workerId: string): WorkerRow[] {
+    return this.d.store.listWorkers().filter((x) => x.managerId === workerId);
+  }
+
+  /** Tickets a lead gave out that are not finished. */
+  private outstanding(leadId: string): number {
+    return this.d.store.listTickets().filter((t) => t.assignedBy === leadId && (t.status === "todo" || t.status === "doing")).length;
+  }
+
+  /** Puts a team member's report in front of its lead: into its conversation if it is working, as a message ticket if it is idle. */
+  private deliver(leadId: string, text: string): void {
+    const lead = this.d.store.getWorker(leadId);
+    if (lead) this.say(lead.id, text);
+  }
+
   private briefing(w: WorkerRow): string {
     const legacy = !w.title && !w.instructions ? this.cfg.roles.find((r) => r.id === w.roleId) : undefined;
     const title = w.title || legacy?.title || "worker";
@@ -559,6 +622,7 @@ export class Office {
       (w.instructions || legacy?.instructions || "").trim(),
       w.skills.length ? `You have skills installed (your Skill tool lists them). Before you start a kind of work, use the skill that fits it, and follow it.` : "",
       w.mcp.length ? `You also have tools from connected servers: ${w.mcp.join(", ")}. Use them when the ticket needs them.` : "",
+      this.leadBrief(w, boss),
     ]
       .filter((s) => s !== "")
       .join("\n\n");
@@ -631,7 +695,9 @@ export class Office {
     }
     this.rec(run, "ticket.report", ev.ok ? "done" : "failed", `#${run.ticketId}`, { ticket: run.ticketId, report: ev.text.trim() || run.report, turns: ev.turns, tokens: ev.input + ev.output });
     run.answered++;
-    const message = isMessage(this.d.store.getTicket(run.ticketId));
+    const own = this.d.store.getTicket(run.ticketId);
+    const message = isMessage(own);
+    const delegated = !!own?.assignedBy; // a lead gave it: the lead reviews it, not the assistant
     if (ev.ok && !message && !run.nudged && run.proc && run.answered >= run.sent && run.report.length < MIN_REPORT_CHARS) {
       run.nudged = true;
       run.sent++;
@@ -643,7 +709,7 @@ export class Office {
     const worker = this.d.store.getWorker(run.workerId)!;
     const over = this.budgetReason(worker);
     if (over) this.conclude(run, { worker: "stopped", ticket: "blocked", feed: { kind: "error", text: over } });
-    else this.conclude(run, { worker: "idle", ticket: ev.ok ? (message ? "done" : "review") : "blocked", ...(ev.ok && message ? { reply: true } : {}) });
+    else this.conclude(run, { worker: "idle", ticket: ev.ok ? (message || delegated ? "done" : "review") : "blocked", ...(ev.ok && message ? { reply: true } : {}) });
   }
 
   private onExit(run: Run, x: WorkerExit): void {
@@ -665,6 +731,13 @@ export class Office {
     if (o.ticket) this.rec(run, "ticket.status", o.ticket === "blocked" ? "failed" : "done", `#${run.ticketId}`, { ticket: run.ticketId, status: o.ticket });
     this.rec(run, "worker.run", o.worker === "idle" ? "done" : o.worker === "stopped" ? "refused" : "failed", run.label, { status: o.worker, ticketStatus: o.ticket, ...(o.feed ? { reason: o.feed.text } : {}) });
     if (o.feed) this.feed(run.workerId, o.feed.kind, o.feed.text);
+    // a ticket a lead gave out: its report goes to the lead, who checks it and goes on; the assistant is not troubled with each one
+    const given = this.d.store.getTicket(run.ticketId);
+    const handedOver = !!given?.assignedBy && (o.ticket === "done" || o.ticket === "blocked");
+    if (handedOver && !this.down) {
+      const who = this.d.store.getWorker(run.workerId)?.name ?? "a worker";
+      this.deliver(given!.assignedBy!, `Report from ${who} on ticket #${given!.id} "${clip(given!.title, 120)}" (${o.ticket === "done" ? "finished" : "could not finish"}):\n${(run.report || o.feed?.text || "").slice(0, REPORT_CHARS)}`);
+    }
     this.d.approvals.denyWhere((r) => (r.args as { workerId?: string } | null)?.workerId === run.workerId, "The worker was stopped.");
     this.d.assistant?.cancelWorker(run.workerId);
     try {
@@ -675,7 +748,9 @@ export class Office {
     void run.bridge.stop().catch(() => {});
     const held = this.ctx.get(run.workerId);
     const pct = held !== undefined && this.cfg.context.warnAt > 0 && held / this.cfg.context.window >= this.cfg.context.warnAt ? Math.round((held / this.cfg.context.window) * 100) : null;
-    if ((o.ticket === "review" || o.ticket === "blocked" || o.reply) && this.cfg.notifyFriend && !this.down) {
+    // a lead whose team still has work out is not reported on yet: the report comes when the last of it is in
+    const teamBusy = o.ticket !== "blocked" && this.outstanding(run.workerId) > 0;
+    if ((o.ticket === "review" || o.ticket === "blocked" || o.reply) && this.cfg.notifyFriend && !this.down && !handedOver && !teamBusy) {
       const ticket = this.d.store.getTicket(run.ticketId);
       const worker = this.d.store.getWorker(run.workerId);
       if (ticket && worker) this.d.notify?.({ worker: worker.name, jobTitle: worker.title, manager: worker.managerId ? (this.d.store.getWorker(worker.managerId)?.name ?? null) : null, ticketId: ticket.id, title: ticket.title, status: o.ticket === "blocked" ? "blocked" : "review", report: run.report || o.feed?.text || "", ...(pct !== null ? { contextPct: pct } : {}) });
@@ -703,6 +778,7 @@ export class Office {
 
   private async onCall(run: Run, call: BridgeCall): Promise<void> {
     const answer = (v: object) => call.respond({ text: JSON.stringify(v) });
+    if (call.name === "assign" || call.name === "team") return this.onTeamCall(run, call);
     if (call.name !== "approve") return call.respond({ text: `Error: there is no tool ${call.name}.`, isError: true });
     const a = (call.args ?? {}) as { tool_name?: unknown; input?: unknown };
     if (typeof a.tool_name !== "string" || !a.input || typeof a.input !== "object" || Array.isArray(a.input)) return answer({ behavior: "deny", message: "That question was not understood." });
@@ -715,6 +791,12 @@ export class Office {
     const project = worker && this.cfg.projects.find((p) => p.id === worker.projectId);
     if (!worker || !project) return answer({ behavior: "deny", message: "The project of this worker no longer exists." });
 
+    // a lead's own tools: giving a ticket to its team and looking at it. Nobody else has them.
+    if (tool === "mcp__office__assign" || tool === "mcp__office__team") {
+      if (this.reportsOf(worker.id).length === 0) return answer({ behavior: "deny", message: "Nobody reports to you." });
+      this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: "allow", by: "lead" });
+      return answer({ behavior: "allow", updatedInput: input });
+    }
     // a skill is only a way of working: it goes ahead for a worker that was given skills. A connected tool must be one this worker was given.
     if (tool === "Skill" && worker.skills.length > 0) {
       this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: "allow", by: "skills" });

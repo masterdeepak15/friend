@@ -25,16 +25,19 @@ describe("workerNodes", () => {
     expect(workerNodes([worker("Ada", { status: "failed", detail: "claude is not installed" })], true)[0]!.detail).toBe("claude is not installed");
   });
 
-  it("ends with a hire node while the office is on and fewer than five are hired", () => {
+  it("ends with a hire node while the office is on and the ring has room", () => {
     const four = ["A1", "A2", "A3", "A4"].map((n) => worker(n));
     expect(workerNodes(four, true).at(-1)).toMatchObject({ kind: "hire", glyph: "+", caption: "HIRE WORKER", status: "add" });
-    expect(workerNodes([...four, worker("A5")], true).some((n) => n.kind === "hire")).toBe(false);
+    expect(workerNodes([...four, worker("A5")], true).at(-1)).toMatchObject({ kind: "hire" });
+    expect(workerNodes(Array.from({ length: 11 }, (_, i) => worker(`W${i}`)), true).some((n) => n.kind === "hire")).toBe(false);
     expect(workerNodes(four, false).some((n) => n.kind === "hire")).toBe(false);
     expect(workerNodes([], true)).toHaveLength(1);
   });
 
-  it("shows at most five workers", () => {
-    expect(workerNodes(Array.from({ length: 8 }, (_, i) => worker(`W${i}`)), true)).toHaveLength(5);
+  it("shows every worker up to what the ring holds: a team of six or more is all there (the first one was not the only one lost)", () => {
+    const six = ["Nova", "Atlas", "Quill", "Vector", "Sonic", "Sentinel"].map((n) => worker(n));
+    expect(workerNodes(six, true).filter((n) => n.kind === "worker").map((n) => n.label)).toEqual(["Nova", "Atlas", "Quill", "Vector", "Sonic", "Sentinel"]);
+    expect(workerNodes(Array.from({ length: 20 }, (_, i) => worker(`W${i}`)), true)).toHaveLength(11);
   });
 });
 

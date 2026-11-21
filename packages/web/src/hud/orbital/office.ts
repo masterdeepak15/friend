@@ -2,8 +2,8 @@ import type { OfficeQuota, OfficeTicketView, OfficeWorkerView } from "@friend/pr
 import type { OfficeFeedLine } from "../../store";
 import { clamp, type NodeStatus, type TicketStatus } from "./kit";
 
-/** How many workers the orbit has room for (its slots). */
-export const MAX_ORBIT_WORKERS = 5;
+/** How many workers the orbit has room for: the ring holds twelve nodes, the last one the place to hire the next. */
+export const MAX_ORBIT_WORKERS = 11;
 /** How many ticket cells the honeycomb has room for. */
 export const MAX_CELLS = 11;
 
