@@ -173,6 +173,15 @@ export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChan
           <Field label="Pause at (% of the five-hour window)" hint="When your Claude subscription window is this full, workers wait until it resets. 0 means never pause.">
             <input type="number" min={0} max={100} value={Math.round(office.pauseAtWindow * 100)} onChange={(e) => onChange({ pauseAtWindow: Math.min(100, Math.max(0, num(e.target.value))) / 100 })} />
           </Field>
+          <Field label="Skill folders" hint="One folder per line where skills are looked for. Leave empty to use Claude Code's own folder (your installed skills and plugins).">
+            <LinesArea rows={3} value={office.capabilities.skillRoots} onChange={(v) => onChange({ capabilities: { ...office.capabilities, skillRoots: v } })} />
+          </Field>
+          <Field label="Skills the assistant may give workers" hint="One skill id per line. * means all; a trailing * means a group (for example superpowers:*). Empty means none.">
+            <LinesArea rows={3} value={office.capabilities.allowSkills} onChange={(v) => onChange({ capabilities: { ...office.capabilities, allowSkills: v } })} />
+          </Field>
+          <Field label="Connected tools the assistant may give workers" hint="One connector id per line (the connectors under Connections). * means all. Empty means none. A worker's use of a tool still asks, unless you let it through under 'Let through' as mcp__id__*.">
+            <LinesArea rows={3} value={office.capabilities.allowMcp} onChange={(v) => onChange({ capabilities: { ...office.capabilities, allowMcp: v } })} />
+          </Field>
           <Field label="Context window of the workers (tokens)" hint="How much a worker's model can hold at once, for example 200000. Used to show how full each worker is.">
             <input type="number" min={10000} max={5000000} step={10000} value={office.context.window} onChange={(e) => onChange({ context: { ...office.context, window: Math.min(5000000, Math.max(10000, num(e.target.value))) } })} />
           </Field>

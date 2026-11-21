@@ -150,3 +150,17 @@ describe.runIf(process.platform === "win32")("stopping a worker on Windows", () 
     expect(running(child)).toBe(false);
   });
 });
+
+describe("skills for a worker", () => {
+  const base = { model: "m", instructions: "", permission: "default" as const, mcpConfigPath: "mcp.json", extraFolders: [] };
+  it("keeps skills and slash commands off without a plugin folder, and loads that folder when there is one", () => {
+    expect(buildWorkerArgs(base)).toContain("--disable-slash-commands");
+    expect(buildWorkerArgs(base)).not.toContain("--plugin-dir");
+    const a = buildWorkerArgs({ ...base, pluginDir: "D:/x/w.skills" });
+    expect(a).not.toContain("--disable-slash-commands");
+    expect(a[a.indexOf("--plugin-dir") + 1]).toBe("D:/x/w.skills");
+    expect(a).toContain("--setting-sources");
+    expect(a[a.indexOf("--setting-sources") + 1]).toBe("local"); // your own settings and their permission rules still do not load
+    expect(a).toContain("--strict-mcp-config");
+  });
+});

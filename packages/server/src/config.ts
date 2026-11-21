@@ -359,6 +359,8 @@ export interface OfficeConfig {
   decideTries: number;
   /** How full a worker's session may get: the context window of the workers' model (tokens), the share at which the assistant is told to consider tidying up, and the share at which the Office tidies up by itself (0 never). */
   context: { window: number; warnAt: number; hardAt: number };
+  /** What the assistant may give a worker. skillRoots: folders to look for skills in (none: Claude Code's own folder). allowSkills and allowMcp: the skill ids and connector ids it may give out; * means all, a trailing * means a group. */
+  capabilities: { skillRoots: string[]; allowSkills: string[]; allowMcp: string[] };
   /** Tokens a worker may use, and all workers together; 0 means no limit. */
   budget: { perWorkerTokens: number; totalTokens: number };
   roles: OfficeRole[];
@@ -398,6 +400,7 @@ export function sanitizeOffice(raw: unknown): OfficeConfig {
     typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, whole ? Math.round(v) : Math.round(v * 100) / 100)) : def;
   const b = obj(r.budget);
   const c = obj(r.context);
+  const cap = obj(r.capabilities);
   const p = obj(r.policy);
   const strings = (v: unknown, def: readonly string[], max: number, maxLen: number): string[] =>
     Array.isArray(v) ? [...new Set(v.filter((s): s is string => typeof s === "string").map((s) => s.trim()).filter((s) => s.length > 0 && s.length <= maxLen))].slice(0, max) : [...def];
@@ -431,6 +434,7 @@ export function sanitizeOffice(raw: unknown): OfficeConfig {
     notifyFriend: r.notifyFriend !== false,
     autonomy: OFFICE_AUTONOMY.find((l) => l === r.autonomy) ?? "low",
     decideTries: num(r.decideTries, 1, 10, 3),
+    capabilities: { skillRoots: strings(cap.skillRoots, [], 10, 260), allowSkills: strings(cap.allowSkills, ["*"], 100, 80), allowMcp: strings(cap.allowMcp, [], 40, 16) },
     context: { window: num(c.window, 10_000, 5_000_000, 200_000), warnAt: num(c.warnAt, 0, 1, 0.7, false), hardAt: num(c.hardAt, 0, 1, 0, false) },
     budget: { perWorkerTokens: num(b.perWorkerTokens, 0, 1_000_000_000, 0), totalTokens: num(b.totalTokens, 0, 1_000_000_000, 0) },
     roles,

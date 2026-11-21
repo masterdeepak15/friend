@@ -1,5 +1,5 @@
 import type { ServerMsg } from "@friend/protocol";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,10 +7,19 @@ import { loadConfig, sanitizeOffice } from "../config";
 import { openDb } from "../db";
 import type { BridgeAnswer, BridgeCall } from "../provider/claude-code/bridge";
 import type { WorkerEvent } from "./events";
+import type { ConnectorConfig } from "../connectors/store";
+import type { SkillInfo } from "./capabilities";
 import { Office, type BridgeLike, type WorkerLike } from "./office";
 import { OfficeStore } from "./store";
 
 afterEach(() => vi.useRealTimers());
+
+/** What the Office may give out in these tests: set by a test, empty by default. */
+const fixture = { skills: [] as SkillInfo[], connectors: [] as ConnectorConfig[] };
+afterEach(() => {
+  fixture.skills = [];
+  fixture.connectors = [];
+});
 
 class FakeProc implements WorkerLike {
   alive = true;
@@ -128,6 +137,7 @@ function make(over: Record<string, unknown> = {}, command?: string) {
       return b;
     },
     dataDir: dir,
+    capabilities: { skills: () => fixture.skills, connectors: () => fixture.connectors },
   });
   const hire = (role = "scribe", name?: string) => {
     const r = office.hire({ role, project: "site", ...(name ? { name } : {}) });
@@ -1264,5 +1274,110 @@ describe("tidying a worker's context", () => {
     const t = make({ context: { window: 200_000, warnAt: 0.7, hardAt: 0 } });
     await busyWorker(t);
     expect(t.store.listTickets().some((x) => x.title.startsWith("Tidy up: "))).toBe(false);
+  });
+});
+
+describe("skills and connected tools for a worker", () => {
+  const makeSkill = (id: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "friend-skill-"));
+    writeFileSync(join(dir, "SKILL.md"), `---\nname: ${id}\ndescription: x\n---\nDo it well.`);
+    return { id, plugin: "", name: id, description: "x", dir } as SkillInfo;
+  };
+  const conn = (id: string, enabled = true): ConnectorConfig => ({ id, name: id, kind: "stdio", command: "node", args: ["s.js"], env: {}, enabled });
+  const argOf = (t: ReturnType<typeof make>, flag: string, n = 0) => t.procs[n]!.o.args[t.procs[n]!.o.args.indexOf(flag) + 1]!;
+
+  it("a worker without them is started as before: no skills, only the Office's own server", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    t.office.assign({ worker: w.id, title: "x" });
+    await settle();
+    expect(t.procs[0]!.o.args).toContain("--disable-slash-commands");
+    expect(t.procs[0]!.o.args).not.toContain("--plugin-dir");
+    expect(Object.keys(JSON.parse(readFileSync(argOf(t, "--mcp-config"), "utf8")).mcpServers)).toEqual(["office"]);
+  });
+
+  it("gives a worker the skills and tools it was hired with, and starts it with just those", async () => {
+    fixture.skills = [makeSkill("planning"), makeSkill("reviewing")];
+    fixture.connectors = [conn("files")];
+    const t = make({ capabilities: { allowSkills: ["*"], allowMcp: ["files"] } });
+    const r = t.office.hire({ role: "scribe", project: "site", skills: ["planning"], mcp: ["files"] });
+    expect(r).toMatchObject({ ok: true, worker: { skills: ["planning"], mcp: ["files"] } });
+    const id = (r as { worker: { id: string } }).worker.id;
+    t.office.assign({ worker: id, title: "x" });
+    await settle();
+    const args = t.procs[0]!.o.args;
+    expect(args).not.toContain("--disable-slash-commands");
+    const plugin = argOf(t, "--plugin-dir");
+    expect(readFileSync(join(plugin, "skills", "planning", "SKILL.md"), "utf8")).toMatch(/Do it well/);
+    expect(existsSync(join(plugin, "skills", "reviewing"))).toBe(false); // only what it was given
+    expect(Object.keys(JSON.parse(readFileSync(argOf(t, "--mcp-config"), "utf8")).mcpServers).sort()).toEqual(["files", "office"]);
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("local");
+    expect(t.procs[0]!.sent[0]).toBeDefined();
+    expect(args.join(" ")).toMatch(/use the skill that fits/);
+  });
+
+  it("refuses what does not exist, what the owner has not allowed, and a tool that is switched off", () => {
+    fixture.skills = [makeSkill("planning")];
+    fixture.connectors = [conn("files"), conn("mail", false)];
+    const t = make({ capabilities: { allowSkills: ["planning"], allowMcp: ["files", "mail"] } });
+    expect(t.office.hire({ role: "scribe", project: "site", skills: ["nope"] })).toMatchObject({ ok: false, error: expect.stringMatching(/no skill "nope"/) });
+    expect(t.office.hire({ role: "scribe", project: "site", mcp: ["mail"] })).toMatchObject({ ok: false, error: expect.stringMatching(/switched off/) });
+    expect(t.office.hire({ role: "scribe", project: "site", mcp: ["ghost"] })).toMatchObject({ ok: false, error: expect.stringMatching(/no connected tool/) });
+    const closed = make({ capabilities: { allowSkills: [], allowMcp: [] } });
+    expect(closed.office.hire({ role: "scribe", project: "site", skills: ["planning"] })).toMatchObject({ ok: false, error: expect.stringMatching(/not allowed/) });
+    expect(closed.office.hire({ role: "scribe", project: "site", mcp: ["files"] })).toMatchObject({ ok: false, error: expect.stringMatching(/not allowed/) });
+  });
+
+  it("by default every skill may be given and no connected tool may", () => {
+    fixture.skills = [makeSkill("planning")];
+    fixture.connectors = [conn("files")];
+    const t = make();
+    expect(t.office.hire({ role: "scribe", project: "site", skills: ["planning"] })).toMatchObject({ ok: true });
+    expect(t.office.hire({ role: "coder", project: "site", mcp: ["files"] })).toMatchObject({ ok: false });
+  });
+
+  it("equip changes what a worker has from its next ticket, and a permission taken back later is respected at the start", async () => {
+    fixture.skills = [makeSkill("planning"), makeSkill("reviewing")];
+    const t = make();
+    const w = t.hire("scribe");
+    expect(t.office.equip(w.id, { skills: ["reviewing"] })).toMatchObject({ ok: true, skills: ["reviewing"] });
+    expect(t.store.getWorker(w.id)!.skills).toEqual(["reviewing"]);
+    expect(t.office.equip(w.id, { skills: ["nope"] })).toMatchObject({ ok: false });
+    expect(t.office.equip("nobody", { skills: [] })).toMatchObject({ ok: false });
+    t.config.office.capabilities.allowSkills = []; // the owner takes it back
+    t.office.assign({ worker: w.id, title: "x" });
+    await settle();
+    expect(t.procs[0]!.o.args).not.toContain("--plugin-dir");
+  });
+
+  it("lists what exists and what is allowed", () => {
+    fixture.skills = [makeSkill("planning")];
+    fixture.connectors = [conn("files")];
+    const t = make({ capabilities: { allowSkills: ["planning"], allowMcp: [] } });
+    expect(t.office.options()).toEqual({ skills: [{ id: "planning", description: "x", allowed: true }], connectors: [{ id: "files", name: "files", kind: "stdio", enabled: true, allowed: false }] });
+  });
+
+  it("lets a worker with skills use the Skill tool, asks about the same tool for one without, and refuses a tool it was not given", async () => {
+    fixture.skills = [makeSkill("planning")];
+    fixture.connectors = [conn("files")];
+    const t = make({ capabilities: { allowSkills: ["*"], allowMcp: ["files"] } });
+    const withSkill = (t.office.hire({ role: "scribe", project: "site", skills: ["planning"], mcp: ["files"] }) as { worker: { id: string } }).worker;
+    t.office.assign({ worker: withSkill.id, title: "x" });
+    await settle();
+    expect(await t.bridges[0]!.ask("Skill", { skill: "office-skills:planning" })).toMatchObject({ behavior: "allow" });
+    expect(await t.bridges[0]!.ask("mcp__other__steal", {})).toMatchObject({ behavior: "deny", message: expect.stringMatching(/not given/) });
+    const pending = t.bridges[0]!.ask("mcp__files__read", {}); // a tool it has still asks: nothing lets it through by itself
+    await settle();
+    expect(t.resolvers).toHaveLength(1);
+    t.resolvers[0]!.resolve({ approved: true });
+    expect(await pending).toMatchObject({ behavior: "allow" });
+    const bare = t.hire("coder");
+    t.office.assign({ worker: bare.id, title: "y" });
+    await settle();
+    const ask = t.bridges[1]!.ask("Skill", { skill: "x" });
+    await settle();
+    expect(t.resolvers).toHaveLength(2); // no skills were given to this worker: it is asked like any other action
+    t.resolvers[1]!.resolve({ approved: false });
+    await ask;
   });
 });

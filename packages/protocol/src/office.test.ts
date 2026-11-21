@@ -177,3 +177,16 @@ describe("office.tidy", () => {
     expect(describeCall("office.tidy", { worker: "Ada", fresh: false })).not.toMatch(/clean session/);
   });
 });
+
+describe("giving a worker skills and tools", () => {
+  const def = (n: string) => TOOL_DEFS.find((t) => t.name === n)!;
+  it("office.options only reads, office.equip needs the usual card, and hire takes skills and tools", () => {
+    expect(def("office.options").baseTier).toBe("T0");
+    expect(def("office.options").readOnly).toBe(true);
+    expect(def("office.equip").baseTier).toBe("T1");
+    expect(def("office.equip").input.safeParse({ worker: "Ada", skills: ["superpowers:brainstorming"], mcp: ["files"] }).success).toBe(true);
+    expect(def("office.equip").input.safeParse({ skills: [] }).success).toBe(false);
+    expect(def("office.hire").input.safeParse({ project: "site", title: "Dev", skills: ["a"], mcp: ["b"] }).success).toBe(true);
+    expect(describeCall("office.equip", { worker: "Ada" })).toMatch(/Ada/);
+  });
+});

@@ -1,6 +1,8 @@
 import type { OfficeQuota, OfficeTicketView, OfficeWorkerView, ServerMsg, TicketStatus, WorkerStatus } from "@friend/protocol";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import type { ConnectorConfig } from "../connectors/store";
+import { buildSkillPlugin, mcpEntry, matchesAllow, normServer, toolServer, type SkillInfo } from "./capabilities";
 import { join } from "node:path";
 import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
@@ -49,6 +51,8 @@ export interface OfficeDeps {
   assistant?: { request: (a: AskInput) => Promise<AssistantDecision>; cancelWorker: (workerId: string) => void; decide: (id: number, decision: "allow" | "deny" | "ask_owner", reason: string) => { ok: true } | { ok: false; error: string } };
   /** At autonomy "judge": the assistant weighs one request. Null when it could not answer, and then the owner is asked. */
   judge?: (a: JudgeAsk) => Promise<Judgement | null>;
+  /** What can be given to a worker: the installed skills and the connected tools. */
+  capabilities?: { skills: () => SkillInfo[]; connectors: () => ConnectorConfig[] };
   spawn?: WorkerFactory;
   bridge?: BridgeFactory;
   /** Where the per-worker MCP files are kept. */
@@ -124,7 +128,7 @@ function describeAction(tool: string, input: Record<string, unknown>): string {
  * it does is read from settings at the moment it does it.
  */
 /** What Friend's own tools use of the Office. */
-export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "decide" | "close" | "tidy" | "stop" | "fire" | "status" | "report">;
+export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "decide" | "close" | "tidy" | "equip" | "options" | "stop" | "fire" | "status" | "report">;
 
 export class Office {
   private runs = new Map<string, Run>();
@@ -156,7 +160,51 @@ export class Office {
 
   // ---- what Friend and the owner ask for ----
 
-  hire(a: { project: string; title?: string; instructions?: string; capabilities?: string; manager?: string; role?: string; name?: string }): Result<{ worker: OfficeWorkerView }> {
+  /** The skills and connected tools asked for, checked against what exists and what the owner allows. */
+  private checkGrants(skills: string[], mcp: string[]): { ok: true; skills: string[]; mcp: string[] } | { ok: false; error: string } {
+    const cap = this.cfg.capabilities;
+    const have = this.d.capabilities?.skills() ?? [];
+    const outSkills: string[] = [];
+    for (const id of new Set(skills)) {
+      if (!have.some((s) => s.id === id)) return { ok: false, error: `There is no skill "${id}". Ask office.options for the list.` };
+      if (!matchesAllow(cap.allowSkills, id)) return { ok: false, error: `The owner has not allowed the skill "${id}" for workers (Settings, Office).` };
+      outSkills.push(id);
+    }
+    const conns = this.d.capabilities?.connectors() ?? [];
+    const outMcp: string[] = [];
+    for (const id of new Set(mcp)) {
+      const c = conns.find((x) => x.id === id);
+      if (!c || id === "office") return { ok: false, error: `There is no connected tool "${id}". Ask office.options for the list.` };
+      if (!c.enabled) return { ok: false, error: `The connected tool "${id}" is switched off.` };
+      if (!matchesAllow(cap.allowMcp, id)) return { ok: false, error: `The owner has not allowed the connected tool "${id}" for workers (Settings, Office).` };
+      outMcp.push(id);
+    }
+    return { ok: true, skills: outSkills, mcp: outMcp };
+  }
+
+  /** What can be given to a worker, and whether the owner allows each. */
+  options(): { skills: { id: string; description: string; allowed: boolean }[]; connectors: { id: string; name: string; kind: string; enabled: boolean; allowed: boolean }[] } {
+    const cap = this.cfg.capabilities;
+    return {
+      skills: (this.d.capabilities?.skills() ?? []).slice(0, 300).map((s) => ({ id: s.id, description: s.description.slice(0, 160), allowed: matchesAllow(cap.allowSkills, s.id) })),
+      connectors: (this.d.capabilities?.connectors() ?? []).filter((c) => c.id !== "office").map((c) => ({ id: c.id, name: c.name, kind: c.kind, enabled: c.enabled, allowed: matchesAllow(cap.allowMcp, c.id) })),
+    };
+  }
+
+  /** Changes the skills and/or the connected tools of a worker; they apply from its next ticket. */
+  equip(workerRef: string, g: { skills?: string[]; mcp?: string[] }): Result<{ worker: string; skills: string[]; mcp: string[] }> {
+    if (!this.cfg.enabled) return { ok: false, error: OFF };
+    const w = this.d.store.findWorker(workerRef);
+    if (!w) return { ok: false, error: this.noWorker(workerRef) };
+    const c = this.checkGrants(g.skills ?? w.skills, g.mcp ?? w.mcp);
+    if (!c.ok) return c;
+    this.d.store.setGrants(w.id, { ...(g.skills ? { skills: c.skills } : {}), ...(g.mcp ? { mcp: c.mcp } : {}) });
+    this.d.audit.log("agent", "office.equip", { worker: w.id, skills: c.skills, mcp: c.mcp });
+    this.changed();
+    return { ok: true, worker: w.name, skills: c.skills, mcp: c.mcp };
+  }
+
+  hire(a: { project: string; title?: string; instructions?: string; capabilities?: string; manager?: string; role?: string; name?: string; skills?: string[]; mcp?: string[] }): Result<{ worker: OfficeWorkerView }> {
     if (!this.cfg.enabled) return { ok: false, error: OFF };
     // a starter role is only a template: its job, brief and model are copied onto the worker; anything given here wins
     const template = a.role ? this.cfg.roles.find((r) => r.id === a.role) : undefined;
@@ -176,6 +224,8 @@ export class Office {
     } catch {
       return { ok: false, error: `The folder of the project ${project.name} was not found: ${project.folder}` };
     }
+    const grants = this.checkGrants(a.skills ?? [], a.mcp ?? []);
+    if (!grants.ok) return grants;
     const taken = new Set(this.d.store.listWorkers().map((w) => w.name.toLowerCase()));
     let name = (a.name ?? "").trim().slice(0, 30);
     if (name && taken.has(name.toLowerCase())) return { ok: false, error: `There is already a worker named ${name}.` };
@@ -194,8 +244,10 @@ export class Office {
       model: clip((template?.model ?? "").trim(), 100),
       permission: template?.permission ?? "default", // a worker Friend makes up always asks before editing
       managerId,
+      skills: grants.skills,
+      mcp: grants.mcp,
     });
-    this.d.audit.log("agent", "office.hire", { worker: w.id, title: jobTitle, role: template?.id ?? null, project: project.id, manager: managerId });
+    this.d.audit.log("agent", "office.hire", { worker: w.id, title: jobTitle, role: template?.id ?? null, project: project.id, manager: managerId, skills: grants.skills, mcp: grants.mcp });
     this.changed();
     return { ok: true, worker: this.workerView(w) };
   }
@@ -458,12 +510,22 @@ export class Office {
     const dir = join(this.d.dataDir, "office");
     mkdirSync(dir, { recursive: true });
     const mcp = join(dir, `${worker.id}.mcp.json`);
-    writeFileSync(mcp, JSON.stringify({ mcpServers: { office: { type: "http", url: run.bridge.url, headers: { Authorization: `Bearer ${run.bridge.token}` } } } }));
+    // what the worker was given, checked again now: the owner may have taken something back since
+    const live = this.checkGrantsQuiet(worker);
+    const servers: Record<string, unknown> = { office: { type: "http", url: run.bridge.url, headers: { Authorization: `Bearer ${run.bridge.token}` } } };
+    for (const c of this.d.capabilities?.connectors() ?? []) if (live.mcp.includes(c.id)) servers[c.id] = mcpEntry(c);
+    writeFileSync(mcp, JSON.stringify({ mcpServers: servers }));
+    let pluginDir: string | undefined;
+    if (live.skills.length > 0) {
+      pluginDir = join(dir, `${worker.id}.skills`);
+      buildSkillPlugin(pluginDir, live.skills);
+    }
     const args = buildWorkerArgs({
       model: worker.model.trim() || cfg.claudeCode.model,
       instructions: this.briefing(worker),
       permission: worker.permission,
       mcpConfigPath: mcp,
+      ...(pluginDir ? { pluginDir } : {}),
       extraFolders: project.extraFolders,
       ...(resume ? { resume } : { sessionId: randomUUID() }),
     });
@@ -475,6 +537,17 @@ export class Office {
     run.proc.send(this.prompt(ticket, project, note, !resume));
   }
 
+  /** The grants of a worker that still stand: what exists, is switched on and is allowed now. */
+  private checkGrantsQuiet(w: WorkerRow): { skills: SkillInfo[]; mcp: string[] } {
+    const cap = this.cfg.capabilities;
+    const have = this.d.capabilities?.skills() ?? [];
+    const conns = this.d.capabilities?.connectors() ?? [];
+    return {
+      skills: w.skills.flatMap((id) => have.filter((s) => s.id === id && matchesAllow(cap.allowSkills, id))),
+      mcp: w.mcp.filter((id) => id !== "office" && conns.some((c) => c.id === id && c.enabled) && matchesAllow(cap.allowMcp, id)),
+    };
+  }
+
   /** Who the worker is, who it reports to, and what its job is: its standing brief. Workers made before jobs were kept with them fall back to their starter role. */
   private briefing(w: WorkerRow): string {
     const legacy = !w.title && !w.instructions ? this.cfg.roles.find((r) => r.id === w.roleId) : undefined;
@@ -484,6 +557,8 @@ export class Office {
       `You are ${w.name}, ${title}${w.capabilities ? ` (${w.capabilities})` : ""}, working for the owner's assistant Friend.`,
       `You report to ${boss ?? "Friend, the owner's assistant"}. When you are done or stuck, say so plainly in your final reply: that is how your manager hears from you.`,
       (w.instructions || legacy?.instructions || "").trim(),
+      w.skills.length ? `You have skills installed (your Skill tool lists them). Before you start a kind of work, use the skill that fits it, and follow it.` : "",
+      w.mcp.length ? `You also have tools from connected servers: ${w.mcp.join(", ")}. Use them when the ticket needs them.` : "",
     ]
       .filter((s) => s !== "")
       .join("\n\n");
@@ -640,6 +715,17 @@ export class Office {
     const project = worker && this.cfg.projects.find((p) => p.id === worker.projectId);
     if (!worker || !project) return answer({ behavior: "deny", message: "The project of this worker no longer exists." });
 
+    // a skill is only a way of working: it goes ahead for a worker that was given skills. A connected tool must be one this worker was given.
+    if (tool === "Skill" && worker.skills.length > 0) {
+      this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: "allow", by: "skills" });
+      return answer({ behavior: "allow", updatedInput: input });
+    }
+    const server = toolServer(tool);
+    if (server !== null && server !== "office" && !worker.mcp.some((id) => normServer(id) === server)) {
+      this.d.audit.log("agent", "office.approval", { worker: worker.id, tool, verdict: "deny", by: "grants" });
+      return answer({ behavior: "deny", message: "That tool was not given to this worker." });
+    }
+
     const summary = summarizeToolCall(tool, input);
     const verdict = decideAction({ tool, input }, { folders: [project.folder, ...project.extraFolders], policy: this.cfg.policy, shellPatterns: this.d.config().destructivePatterns });
     if (verdict.verdict === "allow") {
@@ -738,7 +824,7 @@ export class Office {
 
   private workerView(w: WorkerRow): OfficeWorkerView {
     const perWorker = this.cfg.budget.perWorkerTokens;
-    return { id: w.id, name: w.name, roleId: w.roleId, projectId: w.projectId, status: w.status, ticketId: w.ticketId, detail: clip(w.detail, DETAIL_CHARS), tokens: w.tokens, budget: perWorker > 0 ? perWorker : null, startedAt: w.startedAt, context: this.ctx.has(w.id) ? { tokens: this.ctx.get(w.id)!, window: this.cfg.context.window } : null, title: w.title || this.cfg.roles.find((r) => r.id === w.roleId)?.title || w.roleId, capabilities: w.capabilities, managerId: w.managerId };
+    return { id: w.id, name: w.name, roleId: w.roleId, projectId: w.projectId, status: w.status, ticketId: w.ticketId, detail: clip(w.detail, DETAIL_CHARS), tokens: w.tokens, budget: perWorker > 0 ? perWorker : null, startedAt: w.startedAt, context: this.ctx.has(w.id) ? { tokens: this.ctx.get(w.id)!, window: this.cfg.context.window } : null, title: w.title || this.cfg.roles.find((r) => r.id === w.roleId)?.title || w.roleId, capabilities: w.capabilities, managerId: w.managerId, skills: w.skills, mcp: w.mcp };
   }
 
   private feed(workerId: string, kind: FeedKind, text: string): void {

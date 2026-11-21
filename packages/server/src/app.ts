@@ -19,6 +19,7 @@ import type { YtRun } from "./video/resolve";
 import type { VideoStatus } from "./video/types";
 import { runCommand } from "./connectors/run";
 import { ConnectorStore } from "./connectors/store";
+import { discoverSkills, skillRootsOf } from "./office/capabilities";
 import { Approvals } from "./approvals";
 import { PhoneApprovals, parseButton } from "./phoneApprovals";
 import { judgeAction } from "./office/judge";
@@ -355,7 +356,8 @@ export async function createApp(opts: AppOptions) {
   const browserHub = new BrowserHub({ config: () => config.browser, tmpRoot: join(opts.dataDir, "browser-profiles") });
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
-  const hub = new McpHub(new ConnectorStore(opts.dataDir));
+  const connectorStore = new ConnectorStore(opts.dataDir);
+  const hub = new McpHub(connectorStore);
   let listenPort = config.port;
   const provisioner = opts.video?.provisioner ?? new Provisioner({ dataDir: opts.dataDir, onError: (name, why) => audit.log("system", "video.provision_failed", { name, why: why.slice(0, 200) }) });
   const videoHub: VideoHub = new VideoHub({
@@ -724,6 +726,7 @@ export async function createApp(opts: AppOptions) {
     judge: (a) => judgeAction(provider, a),
     assistant: assistantApprovals,
     dataDir: opts.dataDir,
+    capabilities: { skills: () => discoverSkills(skillRootsOf(config.office.capabilities.skillRoots)), connectors: () => connectorStore.list() },
     ...(opts.office?.spawn ? { spawn: opts.office.spawn } : {}),
     ...(opts.office?.bridge ? { bridge: opts.office.bridge } : {}),
   });

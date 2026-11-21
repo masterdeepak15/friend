@@ -57,6 +57,9 @@ export interface WorkerRow {
   permission: "default" | "acceptEdits";
   /** Another worker's id; null: the worker reports to Friend. */
   managerId: string | null;
+  /** The skills (ids) and connected tools (connector ids) this worker was given. */
+  skills: string[];
+  mcp: string[];
 }
 export interface TicketRow {
   id: number;
@@ -98,6 +101,8 @@ interface WRow {
   model: string;
   permission: "default" | "acceptEdits";
   manager_id: string | null;
+  skills: string;
+  mcp: string;
 }
 interface TRow {
   id: number;
@@ -111,7 +116,15 @@ interface TRow {
   created_at: number;
   updated_at: number;
 }
-const toWorker = (r: WRow): WorkerRow => ({ id: r.id, name: r.name, roleId: r.role_id, projectId: r.project_id, status: r.status, sessionId: r.session_id, ticketId: r.ticket_id, detail: r.detail, tokens: r.tokens, createdAt: r.created_at, startedAt: r.started_at, title: r.title, capabilities: r.capabilities, instructions: r.instructions, model: r.model, permission: r.permission, managerId: r.manager_id });
+const idList = (s: string | null | undefined): string[] => {
+  try {
+    const v: unknown = JSON.parse(s ?? "[]");
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+};
+const toWorker = (r: WRow): WorkerRow => ({ id: r.id, name: r.name, roleId: r.role_id, projectId: r.project_id, status: r.status, sessionId: r.session_id, ticketId: r.ticket_id, detail: r.detail, tokens: r.tokens, createdAt: r.created_at, startedAt: r.started_at, title: r.title, capabilities: r.capabilities, instructions: r.instructions, model: r.model, permission: r.permission, managerId: r.manager_id, skills: idList(r.skills), mcp: idList(r.mcp) });
 const toTicket = (r: TRow): TicketRow => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description, status: r.status, workerId: r.worker_id, report: r.report, requestId: r.request_id, createdAt: r.created_at, updatedAt: r.updated_at });
 
 const WORKER_COLUMNS: Record<string, string> = { status: "status", sessionId: "session_id", ticketId: "ticket_id", detail: "detail", startedAt: "started_at" };
@@ -123,9 +136,9 @@ export const MAX_REPORT_CHARS = 20_000;
 export class OfficeStore {
   constructor(private db: Db, private now: () => number = Date.now) {}
 
-  createWorker(w: { name: string; roleId: string; projectId: string; title?: string; capabilities?: string; instructions?: string; model?: string; permission?: "default" | "acceptEdits"; managerId?: string | null }): WorkerRow {
+  createWorker(w: { name: string; roleId: string; projectId: string; title?: string; capabilities?: string; instructions?: string; model?: string; permission?: "default" | "acceptEdits"; managerId?: string | null; skills?: string[]; mcp?: string[] }): WorkerRow {
     const id = randomBytes(4).toString("hex");
-    this.db.prepare("insert into office_workers (id, name, role_id, project_id, created_at, title, capabilities, instructions, model, permission, manager_id) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, w.name, w.roleId, w.projectId, this.now(), w.title ?? "", w.capabilities ?? "", w.instructions ?? "", w.model ?? "", w.permission ?? "default", w.managerId ?? null);
+    this.db.prepare("insert into office_workers (id, name, role_id, project_id, created_at, title, capabilities, instructions, model, permission, manager_id, skills, mcp) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, w.name, w.roleId, w.projectId, this.now(), w.title ?? "", w.capabilities ?? "", w.instructions ?? "", w.model ?? "", w.permission ?? "default", w.managerId ?? null, JSON.stringify(w.skills ?? []), JSON.stringify(w.mcp ?? []));
     return this.getWorker(id)!;
   }
 
@@ -148,6 +161,12 @@ export class OfficeStore {
     const keys = Object.keys(p).filter((k) => k in WORKER_COLUMNS && (p as Record<string, unknown>)[k] !== undefined);
     if (keys.length === 0) return;
     this.db.prepare(`update office_workers set ${keys.map((k) => `${WORKER_COLUMNS[k]} = ?`).join(", ")} where id = ?`).run(...keys.map((k) => (p as Record<string, unknown>)[k]), id);
+  }
+
+  /** Replaces the skills and/or the connected tools a worker has. */
+  setGrants(id: string, g: { skills?: string[]; mcp?: string[] }): void {
+    if (g.skills) this.db.prepare("update office_workers set skills = ? where id = ?").run(JSON.stringify(g.skills), id);
+    if (g.mcp) this.db.prepare("update office_workers set mcp = ? where id = ?").run(JSON.stringify(g.mcp), id);
   }
 
   addTokens(id: string, n: number): void {

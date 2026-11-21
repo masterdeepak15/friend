@@ -19,7 +19,7 @@ const LEVEL: Record<OfficeConfig["autonomy"], string> = {
 /** A short note for the model's prompt about the Office, built only from the owner's settings. */
 export function officeBrief(o: OfficeConfig): string {
   if (!o.enabled) return `The Office (hired workers) is off. If the owner wants workers, turn it on with settings.set { office: { enabled: true } } (the owner approves with their PIN), then set up a project.`;
-  const lines = ["The Office: you can hire workers (separate Claude sessions) to do work in the owner's project folders (office.hire, office.assign, office.say, office.review, office.report (read a worker's whole report), office.close (close a stale or answered ticket with a reason), office.tidy (have a worker write its notes and start a clean session), office.fire (remove a worker who is no longer needed), office.stop, office.status)."];
+  const lines = ["The Office: you can hire workers (separate Claude sessions) to do work in the owner's project folders (office.hire, office.assign, office.say, office.review, office.report (read a worker's whole report), office.close (close a stale or answered ticket with a reason), office.tidy (have a worker write its notes and start a clean session), office.options and office.equip (the skills and connected tools you can give a worker), office.fire (remove a worker who is no longer needed), office.stop, office.status)."];
   lines.push(HIRING);
   if (o.roles.length) lines.push(`Starter roles you may use instead of describing a job yourself: ${o.roles.map((r) => `${r.id} (${clip(r.title, 40)})`).join(", ")}.`);
   lines.push(
@@ -29,6 +29,9 @@ export function officeBrief(o: OfficeConfig): string {
   );
   lines.push(
     "You run the plan: you are told when a worker finishes or is stuck. Keep going until the work is done: review the ticket, then give the next ticket to the right worker, so nobody sits idle while work remains. Workers hear each other only through you, so put what one produced into the next one's ticket, and pass a worker's report to its manager when the manager should review it. Tell the owner what happened in a sentence or two.",
+  );
+  lines.push(
+    "Skills and tools: a worker is better at its job when it has the right skills (ways of working) and tools. When you hire, call office.options to see which skills and connected tools exist and which the owner allows, and give each worker what fits its job with office.hire (skills, mcp) or later with office.equip: for a build, the planning, test-first and review skills if they are listed; a connected tool when the work needs it. Give only what helps; skills and tools are loaded for every ticket.",
   );
   lines.push(
     `Context: a worker keeps one conversation across its tickets, and it grows. office.status shows how full each worker's context is (its window is ${Math.round(o.context.window / 1000)}k tokens). You decide when to tidy: between tickets, when a worker is past about ${Math.round(o.context.warnAt * 100)}% or the next ticket is a different part of the work, call office.tidy: the worker writes what is done, what was decided and why, and what is open into OFFICE_NOTES.md in its project folder, and its next ticket starts clean and reads the notes. If the next ticket continues the same work and the context is not full, leave it alone; office.tidy with fresh false saves the notes and keeps the session. For a big build, give small tickets one part at a time and pass the notes on, so no single session has to hold everything.${o.context.hardAt > 0 ? ` The Office also tidies a worker by itself at ${Math.round(o.context.hardAt * 100)}%.` : ""}`,

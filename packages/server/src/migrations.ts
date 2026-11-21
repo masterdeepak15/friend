@@ -304,4 +304,9 @@ create table person_faces (
 );
 create index person_faces_person on person_faces (person_id);`,
   },
+  {
+    id: 19,
+    sql: `alter table office_workers add column skills text not null default '[]';
+alter table office_workers add column mcp text not null default '[]';`,
+  },
 ];

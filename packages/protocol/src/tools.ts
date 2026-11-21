@@ -879,7 +879,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "office.hire",
     description:
-      "Hire a worker on a project (one of the configured projects). Give the job yourself: a title (e.g. Backend engineer), instructions (what they do and how, written like a brief to a new colleague), capabilities (one line) and who they report to (manager: the name of another worker, none means you). Or pass role to start from one of the starter roles. A worker keeps its memory between tickets.",
+      "Hire a worker on a project (one of the configured projects). Give the job yourself: a title (e.g. Backend engineer), instructions (what they do and how, written like a brief to a new colleague), capabilities (one line) and who they report to (manager: the name of another worker, none means you). Or pass role to start from one of the starter roles. A worker keeps its memory between tickets. Give it the skills and tools that help the job: office.options lists what exists (skills, connected tools); pass skills (ids) and mcp (connector ids).",
     input: z
       .object({
         project: z.string().min(1).max(24),
@@ -889,6 +889,8 @@ export const TOOL_DEFS: ToolDef[] = [
         manager: z.string().min(1).max(64).optional(),
         role: z.string().min(1).max(24).optional(),
         name: z.string().min(1).max(30).optional(),
+        skills: z.array(z.string().min(1).max(80)).max(20).optional(),
+        mcp: z.array(z.string().min(1).max(16)).max(10).optional(),
       })
       .refine((a) => !!a.title || !!a.role, { message: "Give the job a title, or a starter role." }),
     baseTier: "T1",
@@ -919,6 +921,20 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "office.review",
     description: "Accept or send back a ticket a worker has finished (it is in review).",
     input: z.object({ ticket: z.number().int(), accept: z.boolean(), note: z.string().max(500).optional() }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "office.options",
+    description: "List what you can give a worker: the installed skills (ways of working, for example planning, testing or reviewing) and the connected tools (MCP connectors), each with whether the owner allows it. Pass the ids to office.hire or office.equip.",
+    input: z.object({}),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
+    name: "office.equip",
+    description: "Change the skills and/or connected tools a worker has (lists replace the old ones; leave one out to keep it). It takes effect at the worker's next ticket.",
+    input: z.object({ worker: z.string().min(1).max(64), skills: z.array(z.string().min(1).max(80)).max(20).optional(), mcp: z.array(z.string().min(1).max(16)).max(10).optional() }),
     baseTier: "T1",
     target: "gateway",
   },
@@ -956,7 +972,7 @@ const READ_ONLY_TOOLS = new Set([
   "fs.list", "fs.read", "system.info", "process.list", "weather.get", "web.search", "web.read", "market.get", "market.scan", "market.replay",
   "memory.read", "memory.search", "soul.read", "task.list", "plugins.catalog", "plugins.list", "plugins.fetch", "plugins.read", "plugins.marketplace_list", "integrations.status", "portfolio.status",
   "portfolio.summary", "portfolio.holdings", "portfolio.positions", "portfolio.funds", "portfolio.orders", "reports.list", "music.search",
-  "music.nowplaying", "video.check", "settings.get", "connectors.list", "stage.check", "stage.guide", "office.status", "office.report",
+  "music.nowplaying", "video.check", "settings.get", "connectors.list", "stage.check", "stage.guide", "office.status", "office.report", "office.options",
 ]);
 for (const def of TOOL_DEFS) if (READ_ONLY_TOOLS.has(def.name)) def.readOnly = true;
 
@@ -1203,6 +1219,10 @@ ${visible(clip(String(a.text ?? ""), 3000))}`;
       return `${a.accept ? "Accept" : "Send back"} ticket #${visible(String(a.ticket ?? ""))}`;
     case "office.action": // a worker's own question: what it wants to do is shown whole
       return `Worker ${visible(String(a.worker ?? ""))} wants to ${visible(String(a.summary ?? ""))}`;
+    case "office.options":
+      return "List the skills and tools that can be given to a worker";
+    case "office.equip":
+      return `Change the skills and tools of the worker ${visible(String(a.worker ?? ""))}`;
     case "office.tidy":
       return `Have the worker ${visible(String(a.worker ?? ""))} write its notes${a.fresh === false ? "" : " and start a clean session next"}`;
     case "office.close":

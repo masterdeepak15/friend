@@ -163,6 +163,12 @@ describe("a worker opened on the screen", () => {
     expect(send).toHaveBeenCalledWith({ type: "office.stop", workerId: "ada" });
   });
 
+  it("shows the skills and tools a worker was given", () => {
+    mount({}, { office: { ...busy(), workers: busy().workers.map((w) => ({ ...w, skills: ["superpowers:brainstorming"], mcp: ["files"] })) } });
+    fireEvent.click(screen.getByRole("button", { name: /^Ada/ }));
+    expect(screen.getByRole("dialog", { name: "Ada" }).querySelector("[data-grants]")!.textContent).toBe("Skills: superpowers:brainstorming · Tools: files");
+  });
+
   it("shows how full the worker's context is", () => {
     mount({}, { office: { ...busy(), workers: busy().workers.map((w) => ({ ...w, context: { tokens: 140000, window: 200000 } })) } });
     fireEvent.click(screen.getByRole("button", { name: /^Ada/ }));
