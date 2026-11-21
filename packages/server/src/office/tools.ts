@@ -12,7 +12,8 @@ const WRAP = "untrusted-worker-report";
 function statusText(s: ReturnType<OfficeApi["status"]>): string {
   const lines: string[] = [];
   if (s.workers.length === 0) lines.push("No workers yet.");
-  for (const w of s.workers) lines.push(`Worker ${plain(w.name, 30)} (id ${plain(w.id, 24)}, role ${plain(w.roleId, 24)}, project ${plain(w.projectId, 24)}): ${w.status}${w.detail ? `, ${plain(w.detail)}` : ""}, ${w.tokens} tokens`);
+  const ctx = (w: (typeof s.workers)[number]) => (w.context ? `, context about ${Math.round(w.context.tokens / 1000)}k of ${Math.round(w.context.window / 1000)}k (${Math.round((w.context.tokens / w.context.window) * 100)}%)` : "");
+  for (const w of s.workers) lines.push(`Worker ${plain(w.name, 30)} (id ${plain(w.id, 24)}, role ${plain(w.roleId, 24)}, project ${plain(w.projectId, 24)}): ${w.status}${w.detail ? `, ${plain(w.detail)}` : ""}, ${w.tokens} tokens${ctx(w)}`);
   for (const t of s.tickets) lines.push(`Ticket #${t.id} [${t.status}] ${plain(t.title, 200)}${t.workerId ? ` (worker ${plain(t.workerId, 24)})` : ""}`);
   const win = (label: string, w: { utilization: number } | null) => (w ? `${label} ${Math.round(w.utilization * 100)}% used` : "");
   const quota = [win("five-hour window", s.quota.fiveHour), win("seven-day window", s.quota.sevenDay)].filter(Boolean).join(", ");
@@ -52,6 +53,10 @@ export function officeTool(office: OfficeApi, name: string, args: Record<string,
     case "office.review": {
       const r = office.review(Number(args.ticket), args.accept === true, args.note ? String(args.note) : undefined);
       return r.ok ? ok(args.accept === true ? "Accepted." : "Sent back.") : fail(r.error ?? "Could not review the ticket.");
+    }
+    case "office.tidy": {
+      const r = office.tidy(String(args.worker), args.fresh !== false);
+      return r.ok ? ok(r.message) : fail(r.error);
     }
     case "office.close": {
       const r = office.close(Number(args.ticket), String(args.reason ?? ""));

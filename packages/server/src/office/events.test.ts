@@ -100,3 +100,14 @@ describe("summarizeToolCall", () => {
     expect(summarizeToolCall("Bash", { command: 5 })).toBe("Bash");
   });
 });
+
+describe("the size of a worker's context", () => {
+  it("is read from what the last model turn took in, caches included", () => {
+    const out = parseWorkerEvent({ type: "assistant", message: { content: [{ type: "text", text: "hi" }], usage: { input_tokens: 10, cache_read_input_tokens: 90_000, cache_creation_input_tokens: 2000, output_tokens: 5 } } });
+    expect(out).toContainEqual({ kind: "context", tokens: 92_010 });
+    expect(out).toContainEqual({ kind: "text", text: "hi" });
+  });
+  it("is not reported when the turn has no usage", () => {
+    expect(parseWorkerEvent({ type: "assistant", message: { content: [{ type: "text", text: "hi" }] } })).toEqual([{ kind: "text", text: "hi" }]);
+  });
+});

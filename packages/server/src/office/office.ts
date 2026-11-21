@@ -1,6 +1,6 @@
 import type { OfficeQuota, OfficeTicketView, OfficeWorkerView, ServerMsg, TicketStatus, WorkerStatus } from "@friend/protocol";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
@@ -43,7 +43,7 @@ export interface OfficeDeps {
   /** Gets the tokens a run used (counts only, never words). */
   usage: (e: { source: string; input: number; output: number }) => void;
   /** Told when a ticket ends in review or blocked, so Friend can report it and go on with the plan. */
-  notify?: (e: { worker: string; jobTitle: string; manager: string | null; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => void;
+  notify?: (e: { worker: string; jobTitle: string; manager: string | null; ticketId: number; title: string; status: "review" | "blocked"; report: string; contextPct?: number }) => void;
   emit: (m: ServerMsg) => void;
   /** At autonomy "self": the assistant herself, in her own conversation, answers each request (the worker waits, nothing is dropped). */
   assistant?: { request: (a: AskInput) => Promise<AssistantDecision>; cancelWorker: (workerId: string) => void; decide: (id: number, decision: "allow" | "deny" | "ask_owner", reason: string) => { ok: true } | { ok: false; error: string } };
@@ -99,7 +99,9 @@ const FEED_CHARS = 200;
 const MIN_REPORT_CHARS = 40;
 const FULLER_REPORT = "Your report was too short for your manager to check. Reply again with what you did, which files you changed or made, and what you checked.";
 /** A message to an idle worker becomes a ticket with this start; its answer is the end of it, nobody reviews it. */
-const isMessage = (t: { title: string } | undefined): boolean => !!t && t.title.startsWith("Message: ");
+const isTidy = (t: { title: string } | undefined): boolean => !!t && t.title.startsWith("Tidy up: ");
+const isMessage = (t: { title: string } | undefined): boolean => !!t && (t.title.startsWith("Message: ") || isTidy(t));
+const NOTES_FILE = "OFFICE_NOTES.md";
 const APPROVE_SPEC: BridgeTool = {
   name: "approve",
   description: "Ask Friend whether an action may run. Friend answers for its owner.",
@@ -122,7 +124,7 @@ function describeAction(tool: string, input: Record<string, unknown>): string {
  * it does is read from settings at the moment it does it.
  */
 /** What Friend's own tools use of the Office. */
-export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "decide" | "close" | "stop" | "fire" | "status" | "report">;
+export type OfficeApi = Pick<Office, "hire" | "assign" | "say" | "review" | "decide" | "close" | "tidy" | "stop" | "fire" | "status" | "report">;
 
 export class Office {
   private runs = new Map<string, Run>();
@@ -130,6 +132,10 @@ export class Office {
   private memo = new Map<string, { allow: boolean; reason: string }>();
   private queue: QueueEntry[] = [];
   private quota: OfficeQuota = { fiveHour: null, sevenDay: null };
+  /** How many tokens each worker's session holds now, as its last model turn read them. Not kept across a restart. */
+  private ctx = new Map<string, number>();
+  /** Tickets that end a tidy-up and should also end the session. */
+  private tidyEnds = new Set<number>();
   private pauseAlerted = false;
   private resumeTimer: ReturnType<typeof setTimeout> | null = null;
   private lastEmit = 0;
@@ -260,6 +266,24 @@ export class Office {
     this.d.audit.log("agent", "office.close", { ticket: ticketId, reason: why });
     this.changed();
     return { ok: true };
+  }
+
+  /** Has a worker write down where the work stands; with fresh, its next ticket starts a clean session that reads the notes. */
+  tidy(workerRef: string, fresh = true): { ok: true; message: string } | { ok: false; error: string } {
+    if (!this.cfg.enabled) return { ok: false, error: OFF };
+    const w = this.d.store.findWorker(workerRef);
+    if (!w) return { ok: false, error: this.noWorker(workerRef) };
+    if (this.runs.has(w.id)) return { ok: false, error: `${w.name} is working. Wait until it has finished its ticket, then tidy it up.` };
+    if (!w.sessionId && !this.ctx.has(w.id)) return { ok: true, message: `${w.name} has no session to tidy: its next ticket starts clean anyway.` };
+    const r = this.assign({
+      worker: w.id,
+      title: "Tidy up: write the notes",
+      description: `Write down where the work stands, so nothing is lost when your session ends. In ${NOTES_FILE} in the project folder (make it if it does not exist), keep a section for you (## ${w.name}) and update it: what is done (and where), the decisions you took and why, what is still open, what to do next, and anything the next person must know to carry on. Keep it short and exact: names of files and functions, not stories. Do not change anything else. Reply with one line saying it is written.`,
+    });
+    if (!r.ok) return { ok: false, error: r.error };
+    if (fresh) this.tidyEnds.add(r.ticket.id);
+    this.d.audit.log("agent", "office.tidy", { worker: w.id, fresh, ticket: r.ticket.id });
+    return { ok: true, message: `${w.name} is writing its notes (ticket #${r.ticket.id})${fresh ? ". When it is done its next ticket starts a clean session that reads them." : ". Its session goes on."}` };
   }
 
   /** Stops one worker, or every worker when none is named. */
@@ -448,7 +472,7 @@ export class Office {
     run.startTimer = setTimeout(() => {
       if (!run.spoke) this.conclude(run, { worker: "failed", ticket: "blocked", feed: { kind: "error", text: `${worker.name} did not start within ${cfg.office.startTimeoutSec} seconds.` } });
     }, timeoutMs);
-    run.proc.send(this.prompt(ticket, project, note));
+    run.proc.send(this.prompt(ticket, project, note, !resume));
   }
 
   /** Who the worker is, who it reports to, and what its job is: its standing brief. Workers made before jobs were kept with them fall back to their starter role. */
@@ -465,11 +489,12 @@ export class Office {
       .join("\n\n");
   }
 
-  private prompt(ticket: TicketRow, project: Config["office"]["projects"][number], note?: string): string {
+  private prompt(ticket: TicketRow, project: Config["office"]["projects"][number], note?: string, fresh = false): string {
     return [
       `Ticket #${ticket.id}: ${ticket.title}`,
       ticket.description,
       note ? `The owner sent this back with a note: ${note}` : "",
+      fresh && existsSync(join(project.folder, NOTES_FILE)) ? `This is a clean session. Before you start, read ${NOTES_FILE} in the project folder: it says where the work stands.` : "",
       `Project: ${project.name}${project.goal ? `\nGoal: ${project.goal}` : ""}`,
       `Work only inside ${project.folder}. When you are done, reply with a short report of what you did.`,
     ]
@@ -504,6 +529,9 @@ export class Office {
         this.rec(run, "worker.tool_result", ev.ok ? "done" : "failed", "", { id: ev.id, text: ev.text.slice(0, 300) });
         if (!ev.ok) this.feed(run.workerId, "error", ev.text.replace(/\s+/g, " ").trim());
         break;
+      case "context":
+        this.ctx.set(run.workerId, ev.tokens);
+        break;
       case "quota":
         if (ev.quota.fiveHour) this.quota = { ...this.quota, fiveHour: ev.quota.fiveHour };
         if (ev.quota.sevenDay) this.quota = { ...this.quota, sevenDay: ev.quota.sevenDay };
@@ -522,6 +550,10 @@ export class Office {
     this.feed(run.workerId, "result", ev.text.replace(/\s+/g, " ").trim() || (ev.ok ? "Done." : "Stopped with an error."));
     run.report = ev.text.replace(/\s+/g, " ").trim() || (ev.ok ? "Done." : "Stopped with an error.");
     this.d.store.patchTicket(run.ticketId, { report: ev.text.trim() || run.report }); // kept whole, so Friend can read all of it
+    if (ev.ok && this.tidyEnds.delete(run.ticketId)) {
+      this.d.store.patchWorker(run.workerId, { sessionId: null }); // the next ticket starts a clean session
+      this.ctx.delete(run.workerId);
+    }
     this.rec(run, "ticket.report", ev.ok ? "done" : "failed", `#${run.ticketId}`, { ticket: run.ticketId, report: ev.text.trim() || run.report, turns: ev.turns, tokens: ev.input + ev.output });
     run.answered++;
     const message = isMessage(this.d.store.getTicket(run.ticketId));
@@ -566,10 +598,17 @@ export class Office {
       /* already gone */
     }
     void run.bridge.stop().catch(() => {});
+    const held = this.ctx.get(run.workerId);
+    const pct = held !== undefined && this.cfg.context.warnAt > 0 && held / this.cfg.context.window >= this.cfg.context.warnAt ? Math.round((held / this.cfg.context.window) * 100) : null;
     if ((o.ticket === "review" || o.ticket === "blocked" || o.reply) && this.cfg.notifyFriend && !this.down) {
       const ticket = this.d.store.getTicket(run.ticketId);
       const worker = this.d.store.getWorker(run.workerId);
-      if (ticket && worker) this.d.notify?.({ worker: worker.name, jobTitle: worker.title, manager: worker.managerId ? (this.d.store.getWorker(worker.managerId)?.name ?? null) : null, ticketId: ticket.id, title: ticket.title, status: o.ticket === "blocked" ? "blocked" : "review", report: run.report || o.feed?.text || "" });
+      if (ticket && worker) this.d.notify?.({ worker: worker.name, jobTitle: worker.title, manager: worker.managerId ? (this.d.store.getWorker(worker.managerId)?.name ?? null) : null, ticketId: ticket.id, title: ticket.title, status: o.ticket === "blocked" ? "blocked" : "review", report: run.report || o.feed?.text || "", ...(pct !== null ? { contextPct: pct } : {}) });
+    }
+    // the owner may let the Office tidy a worker by itself when its session is this full; a tidy-up is never started by a tidy-up
+    if (pct !== null && !this.down && this.cfg.context.hardAt > 0 && pct / 100 >= this.cfg.context.hardAt && o.worker === "idle" && !isTidy(this.d.store.getTicket(run.ticketId))) {
+      const r = this.tidy(run.workerId, true);
+      if (r.ok) this.feed(run.workerId, "text", `Its context is ${pct}% full: the Office is having it write its notes.`);
     }
     this.changed();
     this.pump();
@@ -699,7 +738,7 @@ export class Office {
 
   private workerView(w: WorkerRow): OfficeWorkerView {
     const perWorker = this.cfg.budget.perWorkerTokens;
-    return { id: w.id, name: w.name, roleId: w.roleId, projectId: w.projectId, status: w.status, ticketId: w.ticketId, detail: clip(w.detail, DETAIL_CHARS), tokens: w.tokens, budget: perWorker > 0 ? perWorker : null, startedAt: w.startedAt, title: w.title || this.cfg.roles.find((r) => r.id === w.roleId)?.title || w.roleId, capabilities: w.capabilities, managerId: w.managerId };
+    return { id: w.id, name: w.name, roleId: w.roleId, projectId: w.projectId, status: w.status, ticketId: w.ticketId, detail: clip(w.detail, DETAIL_CHARS), tokens: w.tokens, budget: perWorker > 0 ? perWorker : null, startedAt: w.startedAt, context: this.ctx.has(w.id) ? { tokens: this.ctx.get(w.id)!, window: this.cfg.context.window } : null, title: w.title || this.cfg.roles.find((r) => r.id === w.roleId)?.title || w.roleId, capabilities: w.capabilities, managerId: w.managerId };
   }
 
   private feed(workerId: string, kind: FeedKind, text: string): void {

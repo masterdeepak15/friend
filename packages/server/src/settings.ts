@@ -175,6 +175,7 @@ export const SettingsPatch = z
         notifyFriend: z.boolean(),
         autonomy: z.enum(["low", "medium", "high", "judge", "self", "hybrid"]),
         decideTries: z.number().int().min(1).max(10),
+        context: z.object({ window: z.number().int().min(10_000).max(5_000_000), warnAt: z.number().min(0).max(1), hardAt: z.number().min(0).max(1) }).partial().strict(),
         budget: z.object({ perWorkerTokens: z.number().int().min(0).max(1_000_000_000), totalTokens: z.number().int().min(0).max(1_000_000_000) }).partial().strict(),
         roles: z.array(OfficeRole).max(20),
         projects: z.array(OfficeProject).max(20),

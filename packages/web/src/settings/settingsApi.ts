@@ -86,6 +86,8 @@ export interface OfficeSettings {
   notifyFriend: boolean;
   autonomy: "low" | "medium" | "high" | "judge" | "self" | "hybrid";
   decideTries: number;
+  /** How full a worker's session may get: its model's window (tokens), when the assistant is told to consider a tidy-up, and when the Office tidies up by itself (0 = never). */
+  context: { window: number; warnAt: number; hardAt: number };
   budget: { perWorkerTokens: number; totalTokens: number };
   roles: OfficeRole[];
   projects: OfficeProject[];
@@ -331,6 +333,9 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     const budget: Record<string, number> = {};
     for (const k of ["perWorkerTokens", "totalTokens"] as const) if (a.budget[k] !== b.budget[k]) budget[k] = a.budget[k];
     if (Object.keys(budget).length) changed.budget = budget;
+    const context: Record<string, number> = {};
+    for (const k of ["window", "warnAt", "hardAt"] as const) if (a.context[k] !== b.context[k]) context[k] = a.context[k];
+    if (Object.keys(context).length) changed.context = context;
     if (JSON.stringify(a.roles) !== JSON.stringify(b.roles)) changed.roles = a.roles;
     if (JSON.stringify(a.projects) !== JSON.stringify(b.projects)) changed.projects = a.projects;
     const policy: Record<string, string[]> = {};

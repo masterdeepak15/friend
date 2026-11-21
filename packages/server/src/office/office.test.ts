@@ -1,5 +1,5 @@
 import type { ServerMsg } from "@friend/protocol";
-import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -1160,5 +1160,109 @@ describe("tickets that cannot get stuck", () => {
     t.procs[0]!.emit(resultEv({ text: "Done." }));
     expect(t.store.getTicket(a.ticket.id)!.status).toBe("review");
     expect(t.procs[0]!.sent.filter((s) => /too short/.test(s))).toHaveLength(1);
+  });
+});
+
+describe("tidying a worker's context", () => {
+  const LONG = "Wrote notes.md with the outline and checked that the file opens.";
+  const ctxEv = (tokens: number): WorkerEvent => ({ kind: "context", tokens });
+
+  async function busyWorker(t: ReturnType<typeof make>) {
+    const w = t.hire("scribe");
+    t.office.assign({ worker: w.id, title: "Build the login" });
+    await settle();
+    t.procs[0]!.emit(initEv("sess-1"));
+    t.procs[0]!.emit(ctxEv(150_000));
+    t.procs[0]!.emit(resultEv({ text: LONG }));
+    await settle();
+    return w;
+  }
+
+  it("shows how full a worker's session is, and tells the assistant when it is past the level", async () => {
+    const t = make({ context: { window: 200_000, warnAt: 0.7, hardAt: 0 } });
+    const w = await busyWorker(t);
+    expect(t.office.status().workers.find((x) => x.id === w.id)!.context).toEqual({ tokens: 150_000, window: 200_000 });
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ status: "review", contextPct: 75 }));
+  });
+
+  it("says nothing about the context when it is below the level", async () => {
+    const t = make({ context: { window: 1_000_000, warnAt: 0.7, hardAt: 0 } });
+    await busyWorker(t);
+    expect(t.notify).toHaveBeenCalledWith(expect.not.objectContaining({ contextPct: expect.anything() }));
+  });
+
+  it("tidy asks the worker to write its notes, then the next ticket starts a clean session that reads them", async () => {
+    const t = make();
+    const w = await busyWorker(t);
+    const r = t.office.tidy(w.id);
+    expect(r).toMatchObject({ ok: true });
+    await settle();
+    expect(t.procs).toHaveLength(2);
+    expect(t.procs[1]!.o.args).toContain("--resume"); // the tidy-up itself runs in the session that holds the work
+    expect(t.procs[1]!.sent[0]).toMatch(/OFFICE_NOTES\.md/);
+    t.procs[1]!.emit(initEv("sess-1"));
+    t.procs[1]!.emit(resultEv({ text: "Notes are written in OFFICE_NOTES.md." }));
+    await settle();
+    expect(t.store.getWorker(w.id)!.sessionId).toBeNull();
+    writeFileSync(join(t.projectDir, "OFFICE_NOTES.md"), "## Scribe\nDone: login.");
+    t.office.assign({ worker: w.id, title: "Build the logout" });
+    await settle();
+    expect(t.procs).toHaveLength(3);
+    expect(t.procs[2]!.o.args).not.toContain("--resume");
+    expect(t.procs[2]!.sent[0]).toMatch(/clean session[\s\S]*OFFICE_NOTES\.md/);
+  });
+
+  it("tidy with fresh false writes the notes and keeps the session", async () => {
+    const t = make();
+    const w = await busyWorker(t);
+    t.office.tidy(w.id, false);
+    await settle();
+    t.procs[1]!.emit(initEv("sess-1"));
+    t.procs[1]!.emit(resultEv({ text: "Notes are written in OFFICE_NOTES.md." }));
+    await settle();
+    expect(t.store.getWorker(w.id)!.sessionId).toBe("sess-1");
+  });
+
+  it("a worker that is working is not tidied, and an unknown one is named as unknown", async () => {
+    const t = make();
+    const w = t.hire("scribe");
+    t.office.assign({ worker: w.id, title: "x" });
+    await settle();
+    expect(t.office.tidy(w.id)).toMatchObject({ ok: false, error: expect.stringMatching(/is working/) });
+    expect(t.office.tidy("nobody")).toMatchObject({ ok: false });
+  });
+
+  it("the tidy-up ticket closes itself and is not asked to be reviewed", async () => {
+    const t = make();
+    const w = await busyWorker(t);
+    t.office.tidy(w.id);
+    await settle();
+    t.procs[1]!.emit(initEv("sess-1"));
+    t.procs[1]!.emit(resultEv({ text: "Notes are written in OFFICE_NOTES.md." }));
+    const tidy = t.store.listTickets().find((x) => x.title.startsWith("Tidy up: "))!;
+    expect(tidy.status).toBe("done");
+  });
+
+  it("at the safety level the Office tidies a worker by itself, and never starts a tidy-up from a tidy-up", async () => {
+    const t = make({ context: { window: 200_000, warnAt: 0.7, hardAt: 0.9 } });
+    const w = t.hire("scribe");
+    t.office.assign({ worker: w.id, title: "Build everything" });
+    await settle();
+    t.procs[0]!.emit(initEv("sess-1"));
+    t.procs[0]!.emit(ctxEv(190_000));
+    t.procs[0]!.emit(resultEv({ text: LONG }));
+    await settle();
+    expect(t.store.listTickets().filter((x) => x.title.startsWith("Tidy up: "))).toHaveLength(1);
+    t.procs[1]!.emit(initEv("sess-1"));
+    t.procs[1]!.emit(ctxEv(195_000));
+    t.procs[1]!.emit(resultEv({ text: "Notes are written in OFFICE_NOTES.md." }));
+    await settle();
+    expect(t.store.listTickets().filter((x) => x.title.startsWith("Tidy up: "))).toHaveLength(1);
+  });
+
+  it("leaves it all to the assistant when the safety level is 0", async () => {
+    const t = make({ context: { window: 200_000, warnAt: 0.7, hardAt: 0 } });
+    await busyWorker(t);
+    expect(t.store.listTickets().some((x) => x.title.startsWith("Tidy up: "))).toBe(false);
   });
 });

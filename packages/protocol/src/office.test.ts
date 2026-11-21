@@ -156,3 +156,16 @@ describe("office.close", () => {
     expect(describeCall("office.close", { ticket: 17, reason: "x" })).toMatch(/Close ticket #17/);
   });
 });
+
+describe("office.tidy", () => {
+  it("is on the gateway at T1, takes a worker and an optional fresh, and says so in plain words", () => {
+    const d = TOOL_DEFS.find((t) => t.name === "office.tidy")!;
+    expect(d.baseTier).toBe("T1");
+    expect(d.target).toBe("gateway");
+    expect(d.input.safeParse({ worker: "Ada" }).success).toBe(true);
+    expect(d.input.safeParse({ worker: "Ada", fresh: false }).success).toBe(true);
+    expect(d.input.safeParse({}).success).toBe(false);
+    expect(describeCall("office.tidy", { worker: "Ada" })).toMatch(/Ada.*clean session/);
+    expect(describeCall("office.tidy", { worker: "Ada", fresh: false })).not.toMatch(/clean session/);
+  });
+});
