@@ -61,6 +61,9 @@ export const OfficeWorkerView = z.object({
   startedAt: z.number().nullable(),
   /** How full the worker's session is (tokens in its context now, and the window it has), when known. */
   context: z.object({ tokens: z.number().min(0), window: z.number().min(1) }).nullable().optional(),
+  /** The skills and connected tools (ids) this worker was given. */
+  skills: z.array(z.string().max(80)).max(20).optional(),
+  mcp: z.array(z.string().max(16)).max(10).optional(),
 });
 export type OfficeWorkerView = z.infer<typeof OfficeWorkerView>;
 

@@ -13,6 +13,8 @@ export interface WorkerArgsInput {
   instructions: string;
   permission: "default" | "acceptEdits";
   mcpConfigPath: string;
+  /** A folder holding the skills this worker was given (a plugin). Without one, skills and slash commands stay off. */
+  pluginDir?: string;
   extraFolders: string[];
   resume?: string;
   sessionId?: string;
@@ -35,7 +37,7 @@ export function buildWorkerArgs(o: WorkerArgsInput): string[] {
     "--setting-sources", "local",
     "--strict-mcp-config", "--mcp-config", o.mcpConfigPath,
     "--permission-prompt-tool", APPROVE_TOOL,
-    "--disable-slash-commands",
+    ...(o.pluginDir ? ["--plugin-dir", o.pluginDir] : ["--disable-slash-commands"]),
     ...(instructions ? ["--append-system-prompt", instructions.startsWith("-") ? `Instructions: ${instructions}` : instructions] : []),
     ...o.extraFolders.filter((f) => f !== "" && !f.startsWith("-")).flatMap((f) => ["--add-dir", f]),
     ...(o.resume ? ["--resume", o.resume] : o.sessionId ? ["--session-id", o.sessionId] : []),

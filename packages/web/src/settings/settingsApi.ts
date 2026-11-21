@@ -88,6 +88,8 @@ export interface OfficeSettings {
   decideTries: number;
   /** How full a worker's session may get: its model's window (tokens), when the assistant is told to consider a tidy-up, and when the Office tidies up by itself (0 = never). */
   context: { window: number; warnAt: number; hardAt: number };
+  /** What the assistant may give a worker: where skills are looked for (none: Claude Code's folder), and the skill ids and connected-tool ids it may give out (* = all). */
+  capabilities: { skillRoots: string[]; allowSkills: string[]; allowMcp: string[] };
   budget: { perWorkerTokens: number; totalTokens: number };
   roles: OfficeRole[];
   projects: OfficeProject[];
@@ -336,6 +338,9 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     const context: Record<string, number> = {};
     for (const k of ["window", "warnAt", "hardAt"] as const) if (a.context[k] !== b.context[k]) context[k] = a.context[k];
     if (Object.keys(context).length) changed.context = context;
+    const capabilities: Record<string, string[]> = {};
+    for (const k of ["skillRoots", "allowSkills", "allowMcp"] as const) if (JSON.stringify(a.capabilities[k]) !== JSON.stringify(b.capabilities[k])) capabilities[k] = a.capabilities[k];
+    if (Object.keys(capabilities).length) changed.capabilities = capabilities;
     if (JSON.stringify(a.roles) !== JSON.stringify(b.roles)) changed.roles = a.roles;
     if (JSON.stringify(a.projects) !== JSON.stringify(b.projects)) changed.projects = a.projects;
     const policy: Record<string, string[]> = {};

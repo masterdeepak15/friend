@@ -147,3 +147,13 @@ describe("read-only commands go ahead without a card", () => {
     expect(verdict("Bash", { command: "git log" }, ctx({ policy: policy({ denyCommands: ["git\\s+log"] }) }))).toMatchObject({ verdict: "deny" });
   });
 });
+
+describe("a connected server's tools as a group", () => {
+  const c = (tools: string[]) => ctx({ policy: policy({ allowTools: tools }) });
+  it("lets mcp__name__* through, only that server's, and never a plain * or other tools", () => {
+    expect(verdict("mcp__files__read", {}, c(["mcp__files__*"]))).toEqual({ verdict: "allow" });
+    expect(verdict("mcp__other__read", {}, c(["mcp__files__*"])).verdict).toBe("ask");
+    expect(verdict("Bash", { command: "npm install" }, c(["*"])).verdict).toBe("ask");
+    expect(verdict("mcp__files__read", {}, c(["mcp__files__read"]))).toEqual({ verdict: "allow" });
+  });
+});

@@ -44,6 +44,13 @@ export function WorkerView({ worker, feed, rect, send, onClose }: WorkerViewProp
           {worker.detail ? ` · ${worker.detail}` : ""}
         </p>
         <p className="ob-li ob-sub">Tokens {worker.tokens}{worker.budget ? ` of ${worker.budget}` : ""}</p>
+        {worker.skills?.length || worker.mcp?.length ? (
+          <p className="ob-li ob-sub" data-grants="">
+            {worker.skills?.length ? `Skills: ${worker.skills.join(", ")}` : ""}
+            {worker.skills?.length && worker.mcp?.length ? " · " : ""}
+            {worker.mcp?.length ? `Tools: ${worker.mcp.join(", ")}` : ""}
+          </p>
+        ) : null}
         {worker.context ? (
           <p className="ob-li ob-sub" data-context="">
             Context {Math.round(worker.context.tokens / 1000)}k of {Math.round(worker.context.window / 1000)}k ({Math.round((worker.context.tokens / worker.context.window) * 100)}%)

@@ -92,6 +92,8 @@ export function decideAction(call: { tool: string; input: Record<string, unknown
   if (command !== null && readOnlyShell(command, ctx.folders)) return { verdict: "allow" };
 
   const danger = command !== null && classifyShell(command, ctx.shellPatterns) === "T3";
-  if (ctx.policy.allowTools.includes(call.tool) && !danger) return { verdict: "allow" }; // a dangerous command asks for the PIN even when the shell was allowed
+  // a tool of a connected server may be let through as a group: mcp__name__*
+  const listed = ctx.policy.allowTools.some((t) => t === call.tool || (t.startsWith("mcp__") && t.endsWith("*") && call.tool.startsWith(t.slice(0, -1))));
+  if (listed && !danger) return { verdict: "allow" }; // a dangerous command asks for the PIN even when the shell was allowed
   return { verdict: "ask", danger };
 }
