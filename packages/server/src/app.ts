@@ -1915,6 +1915,14 @@ export async function createApp(opts: AppOptions) {
         case "office.stop":
           office.stop(msg.workerId, "owner");
           break;
+        case "office.tidy": {
+          const r = office.tidy(msg.workerId, msg.fresh !== false);
+          if (!r.ok) {
+            audit.log("owner", "office.tidy_failed", { error: r.error });
+            broadcast({ type: "alert", level: "warn", text: r.error });
+          } else audit.log("owner", "office.tidy", { worker: msg.workerId, fresh: msg.fresh !== false });
+          break;
+        }
         case "office.fire": {
           const r = office.fire(msg.workerId, "owner");
           if (!r.ok) audit.log("owner", "office.fire_failed", { error: r.error });

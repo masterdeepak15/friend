@@ -125,6 +125,7 @@ describe("every message from a screen leaves an entry", () => {
     "music.remote": { command: { action: "pause" } },
     "office.stop": {},
     "office.fire": { workerId: "nobody" },
+    "office.tidy": { workerId: "nobody" },
     "office.say": { workerId: "nobody", text: "hi" },
   };
   const SKIPS: Skip[] = [

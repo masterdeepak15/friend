@@ -215,6 +215,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   /** The owner stops one worker, or every worker when no id is given. */
   z.object({ type: z.literal("office.stop"), workerId: z.string().max(64).optional() }),
   z.object({ type: z.literal("office.fire"), workerId: z.string().min(1).max(64) }),
+  /** The owner has a worker write down where its work stands (OFFICE_NOTES.md); with fresh (the default) its next ticket starts a clean session. */
+  z.object({ type: z.literal("office.tidy"), workerId: z.string().min(1).max(64), fresh: z.boolean().optional() }),
   /** The owner says something to a worker. */
   z.object({ type: z.literal("office.say"), workerId: z.string().max(64), text: z.string().min(1).max(2000) }),
 ]);

@@ -163,6 +163,31 @@ describe("a worker opened on the screen", () => {
     expect(send).toHaveBeenCalledWith({ type: "office.stop", workerId: "ada" });
   });
 
+  it("shows how full the worker's context is", () => {
+    mount({}, { office: { ...busy(), workers: busy().workers.map((w) => ({ ...w, context: { tokens: 140000, window: 200000 } })) } });
+    fireEvent.click(screen.getByRole("button", { name: /^Ada/ }));
+    expect(screen.getByRole("dialog", { name: "Ada" }).querySelector("[data-context]")!.textContent).toMatch(/Context 140k of 200k \(70%\)/);
+  });
+
+  it("tidies the worker up from the screen, with the session or notes only, but not while it is working", () => {
+    const send = vi.fn();
+    mount({}, { office: busy() }, { send });
+    fireEvent.click(screen.getByRole("button", { name: /^Ada/ }));
+    expect((screen.getByRole("button", { name: /^tidy up$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /^notes only$/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("sends the tidy-up when the worker is idle", () => {
+    const send = vi.fn();
+    const o = busy();
+    mount({}, { office: { ...o, workers: o.workers.map((w) => ({ ...w, status: "idle" as const })) } }, { send });
+    fireEvent.click(screen.getByRole("button", { name: /^Ada/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^tidy up$/i }));
+    expect(send).toHaveBeenLastCalledWith({ type: "office.tidy", workerId: "ada" });
+    fireEvent.click(screen.getByRole("button", { name: /^notes only$/i }));
+    expect(send).toHaveBeenLastCalledWith({ type: "office.tidy", workerId: "ada", fresh: false });
+  });
+
   it("removes the worker only after a second click", () => {
     const send = vi.fn();
     mount({}, { office: busy() }, { send });

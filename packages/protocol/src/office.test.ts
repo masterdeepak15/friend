@@ -157,6 +157,14 @@ describe("office.close", () => {
   });
 });
 
+describe("office.tidy from the screen", () => {
+  it("is a message the screen may send, with an optional fresh", () => {
+    expect(ClientMsg.safeParse({ type: "office.tidy", workerId: "w1" }).success).toBe(true);
+    expect(ClientMsg.safeParse({ type: "office.tidy", workerId: "w1", fresh: false }).success).toBe(true);
+    expect(ClientMsg.safeParse({ type: "office.tidy" }).success).toBe(false);
+  });
+});
+
 describe("office.tidy", () => {
   it("is on the gateway at T1, takes a worker and an optional fresh, and says so in plain words", () => {
     const d = TOOL_DEFS.find((t) => t.name === "office.tidy")!;
