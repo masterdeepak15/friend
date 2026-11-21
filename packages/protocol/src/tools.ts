@@ -923,6 +923,13 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "office.tidy",
+    description: "Tidy up a worker's context so the work is not lost: the worker writes what is done, what was decided and why, and what is open into OFFICE_NOTES.md in its project folder. With fresh (the default) its next ticket then starts a clean session that reads those notes; with fresh false only the notes are written and the session goes on. Use it between tickets, when office.status shows its context getting full or the next ticket is a different part of the work. A worker that is working cannot be tidied: wait for it to finish.",
+    input: z.object({ worker: z.string().min(1).max(64), fresh: z.boolean().optional() }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
     name: "office.close",
     description: "Close a ticket nobody needs to review any more (stale, replaced, or only a message that was answered). It is marked done with your reason. A ticket a worker is working on must be stopped first (office.stop).",
     input: z.object({ ticket: z.number().int(), reason: z.string().min(1).max(300) }),
@@ -1196,6 +1203,8 @@ ${visible(clip(String(a.text ?? ""), 3000))}`;
       return `${a.accept ? "Accept" : "Send back"} ticket #${visible(String(a.ticket ?? ""))}`;
     case "office.action": // a worker's own question: what it wants to do is shown whole
       return `Worker ${visible(String(a.worker ?? ""))} wants to ${visible(String(a.summary ?? ""))}`;
+    case "office.tidy":
+      return `Have the worker ${visible(String(a.worker ?? ""))} write its notes${a.fresh === false ? "" : " and start a clean session next"}`;
     case "office.close":
       return `Close ticket #${visible(String(a.ticket ?? ""))}`;
     case "office.fire":

@@ -7,6 +7,8 @@ export type WorkerEvent =
   | { kind: "tool"; id: string; name: string; summary: string }
   | { kind: "tool_result"; id: string; ok: boolean; text: string }
   | { kind: "quota"; quota: OfficeQuota }
+  /** How many tokens the worker's context holds now (what the last model turn read). */
+  | { kind: "context"; tokens: number }
   | { kind: "result"; ok: boolean; text: string; turns: number; durationMs: number; input: number; output: number; denials: string[]; sessionId: string };
 
 const MAX_TEXT = 4000;
@@ -42,13 +44,17 @@ export function parseWorkerEvent(ev: unknown): WorkerEvent[] {
   switch (e.type) {
     case "system":
       return e.subtype === "init" && typeof e.session_id === "string" ? [{ kind: "init", sessionId: e.session_id, model: typeof e.model === "string" ? e.model : "" }] : [];
-    case "assistant":
-      return (Array.isArray(e.message?.content) ? e.message.content : []).flatMap((b: unknown): WorkerEvent[] => {
+    case "assistant": {
+      const blocks = (Array.isArray(e.message?.content) ? e.message.content : []).flatMap((b: unknown): WorkerEvent[] => {
         const block = obj(b);
         if (block.type === "text" && typeof block.text === "string" && block.text.trim()) return [{ kind: "text", text: clip(block.text) }];
         if (block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string") return [{ kind: "tool", id: block.id, name: block.name, summary: summarizeToolCall(block.name, block.input) }];
         return [];
       });
+      const u = obj(e.message?.usage);
+      const held = num(u.input_tokens) + num(u.cache_read_input_tokens) + num(u.cache_creation_input_tokens);
+      return held > 0 ? [...blocks, { kind: "context", tokens: held }] : blocks;
+    }
     case "user":
       return (Array.isArray(e.message?.content) ? e.message.content : []).flatMap((b: unknown): WorkerEvent[] => {
         const block = obj(b);

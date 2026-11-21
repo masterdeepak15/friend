@@ -774,9 +774,9 @@ export async function createApp(opts: AppOptions) {
   const ownerReach = (): string => `How the owner can be reached: ${clients.size > 0 ? "a Friend screen is open" : "no screen is open"}; phone: ${ownerChannels().join(", ") || "no phone app is set up"}.`;
   const officeNotes: string[] = [];
   let officeNoteTimer: NodeJS.Timeout | null = null;
-  const officeNote = (e: { worker: string; jobTitle?: string; manager?: string | null; ticketId: number; title: string; status: "review" | "blocked"; report: string }) => {
+  const officeNote = (e: { worker: string; jobTitle?: string; manager?: string | null; ticketId: number; title: string; status: "review" | "blocked"; report: string; contextPct?: number }) => {
     const safe = (s: string, n: number) => s.replace(/[<>]/g, "‹").replace(/\s+/g, " ").trim().slice(0, n);
-    officeNotes.push(`${safe(e.worker, 40)}${e.jobTitle ? ` (${safe(e.jobTitle, 40)}${e.manager ? `, reports to ${safe(e.manager, 40)}` : ""})` : ""} ${e.status === "review" ? "finished" : "could not finish"} ticket #${e.ticketId} "${safe(e.title, 200)}" (now ${e.status}). The start of its report (read all of it with office.report, ticket ${e.ticketId}):\n<untrusted-worker-report>${safe(e.report, 600)}</untrusted-worker-report>`);
+    officeNotes.push(`${safe(e.worker, 40)}${e.jobTitle ? ` (${safe(e.jobTitle, 40)}${e.manager ? `, reports to ${safe(e.manager, 40)}` : ""})` : ""} ${e.status === "review" ? "finished" : "could not finish"} ticket #${e.ticketId} "${safe(e.title, 200)}" (now ${e.status}). The start of its report (read all of it with office.report, ticket ${e.ticketId}):\n<untrusted-worker-report>${safe(e.report, 600)}</untrusted-worker-report>${e.contextPct !== undefined ? `\nIts context is ${e.contextPct}% full: before its next ticket, decide whether to tidy it up (office.tidy).` : ""}`);
     if (officeNoteTimer) return;
     officeNoteTimer = setTimeout(() => {
       officeNoteTimer = null;
@@ -1915,6 +1915,14 @@ export async function createApp(opts: AppOptions) {
         case "office.stop":
           office.stop(msg.workerId, "owner");
           break;
+        case "office.tidy": {
+          const r = office.tidy(msg.workerId, msg.fresh !== false);
+          if (!r.ok) {
+            audit.log("owner", "office.tidy_failed", { error: r.error });
+            broadcast({ type: "alert", level: "warn", text: r.error });
+          } else audit.log("owner", "office.tidy", { worker: msg.workerId, fresh: msg.fresh !== false });
+          break;
+        }
         case "office.fire": {
           const r = office.fire(msg.workerId, "owner");
           if (!r.ok) audit.log("owner", "office.fire_failed", { error: r.error });

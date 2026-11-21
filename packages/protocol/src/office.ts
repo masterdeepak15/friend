@@ -59,6 +59,8 @@ export const OfficeWorkerView = z.object({
   tokens: z.number().min(0),
   budget: z.number().min(0).nullable(),
   startedAt: z.number().nullable(),
+  /** How full the worker's session is (tokens in its context now, and the window it has), when known. */
+  context: z.object({ tokens: z.number().min(0), window: z.number().min(1) }).nullable().optional(),
 });
 export type OfficeWorkerView = z.infer<typeof OfficeWorkerView>;
 

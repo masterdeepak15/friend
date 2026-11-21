@@ -55,7 +55,7 @@ async function boot(officeOn = true, script: ConstructorParameters<typeof FakePr
       port: 0,
       roots: [],
       office: { enabled: officeOn, maxConcurrent: 2, startTimeoutSec: 60, pauseAtWindow: 0.9, notifyFriend: true,
-    autonomy: bootAutonomy, decideTries: 3, budget: { perWorkerTokens: 0, totalTokens: 0 }, roles: [{ id: "scribe", title: "Scribe", instructions: "Write.", model: "", permission: "default" }], projects: [{ id: "site", name: "Site", folder, goal: "", extraFolders: [] }], policy: { allowTools: ["Read"], denyCommands: [] } },
+    autonomy: bootAutonomy, decideTries: 3, context: { window: 200000, warnAt: 0.7, hardAt: 0 }, budget: { perWorkerTokens: 0, totalTokens: 0 }, roles: [{ id: "scribe", title: "Scribe", instructions: "Write.", model: "", permission: "default" }], projects: [{ id: "site", name: "Site", folder, goal: "", extraFolders: [] }], policy: { allowTools: ["Read"], denyCommands: [] } },
     },
     pluginCatalogDir: join(dir, "none"),
     office: {

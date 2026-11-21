@@ -54,6 +54,7 @@ beforeEach(async () => {
     report: vi.fn(),
     fire: vi.fn(() => ({ ok: true, name: "Ada" })),
     close: vi.fn(() => ({ ok: true })),
+    tidy: vi.fn(() => ({ ok: true, message: "Ada is writing its notes (ticket #9)." })),
     status: vi.fn(() => ({ workers: [view({ status: "running", detail: "Write a.txt" })], tickets: [{ id: 7, projectId: "site", title: "Fix it", status: "doing", workerId: "w1" }], quota })),
   };
   build = (provider, withOffice = true) =>
@@ -130,6 +131,21 @@ describe("the six office tools", () => {
     expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
     expect(office.fire).toHaveBeenCalledWith("Ada", "agent");
     expect(result(p)).toMatch(/Ada.*removed/i);
+  });
+
+  it("tidy reaches its method, fresh by default, and shows how full a worker is in the status", async () => {
+    const p = new FakeProvider([[call("1", "office.tidy", { worker: "Ada" }), done], [text("ok"), done]]);
+    await build(p).runTurn("tidy Ada", owner());
+    expect(office.tidy).toHaveBeenCalledWith("Ada", true);
+    expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
+    expect(result(p)).toMatch(/writing its notes/);
+    const q = new FakeProvider([[call("1", "office.tidy", { worker: "Ada", fresh: false }), done], [text("ok"), done]]);
+    await build(q).runTurn("save Ada's notes", owner());
+    expect(office.tidy).toHaveBeenLastCalledWith("Ada", false);
+    office.status.mockReturnValueOnce({ workers: [view({ context: { tokens: 140_000, window: 200_000 } })], tickets: [], quota });
+    const s = new FakeProvider([[call("1", "office.status", {}), done], [text("ok"), done]]);
+    await build(s).runTurn("status", owner());
+    expect(result(s)).toMatch(/context about 140k of 200k \(70%\)/);
   });
 
   it("close reaches its method and needs no owner card", async () => {

@@ -173,6 +173,15 @@ export function OfficeTab({ office, onChange }: { office: OfficeSettings; onChan
           <Field label="Pause at (% of the five-hour window)" hint="When your Claude subscription window is this full, workers wait until it resets. 0 means never pause.">
             <input type="number" min={0} max={100} value={Math.round(office.pauseAtWindow * 100)} onChange={(e) => onChange({ pauseAtWindow: Math.min(100, Math.max(0, num(e.target.value))) / 100 })} />
           </Field>
+          <Field label="Context window of the workers (tokens)" hint="How much a worker's model can hold at once, for example 200000. Used to show how full each worker is.">
+            <input type="number" min={10000} max={5000000} step={10000} value={office.context.window} onChange={(e) => onChange({ context: { ...office.context, window: Math.min(5000000, Math.max(10000, num(e.target.value))) } })} />
+          </Field>
+          <Field label="Tell the assistant to consider tidying up at (% full)" hint="When a worker's session is this full, the assistant is reminded to decide whether to have it write its notes and start fresh. 0 never reminds.">
+            <input type="number" min={0} max={100} value={Math.round(office.context.warnAt * 100)} onChange={(e) => onChange({ context: { ...office.context, warnAt: Math.min(100, Math.max(0, num(e.target.value))) / 100 } })} />
+          </Field>
+          <Field label="Tidy up by itself at (% full)" hint="A safety net: past this the Office has the worker write its notes and start fresh without waiting for the assistant. 0 leaves it all to the assistant.">
+            <input type="number" min={0} max={100} value={Math.round(office.context.hardAt * 100)} onChange={(e) => onChange({ context: { ...office.context, hardAt: Math.min(100, Math.max(0, num(e.target.value))) / 100 } })} />
+          </Field>
           <Field label="Limit per worker (tokens)" hint="A worker stops when it has used this many. 0 means no limit.">
             <input type="number" min={0} step={1000} value={office.budget.perWorkerTokens} onChange={(e) => onChange({ budget: { ...office.budget, perWorkerTokens: num(e.target.value) } })} />
           </Field>

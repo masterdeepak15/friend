@@ -44,6 +44,11 @@ export function WorkerView({ worker, feed, rect, send, onClose }: WorkerViewProp
           {worker.detail ? ` · ${worker.detail}` : ""}
         </p>
         <p className="ob-li ob-sub">Tokens {worker.tokens}{worker.budget ? ` of ${worker.budget}` : ""}</p>
+        {worker.context ? (
+          <p className="ob-li ob-sub" data-context="">
+            Context {Math.round(worker.context.tokens / 1000)}k of {Math.round(worker.context.window / 1000)}k ({Math.round((worker.context.tokens / worker.context.window) * 100)}%)
+          </p>
+        ) : null}
         <div className="ob-worker-log" ref={logRef} aria-live="polite">
           {feed.length === 0 ? <p className="ob-li ob-sub">Nothing yet</p> : feed.map((l, i) => (
             <p key={`${l.at}-${i}`} data-feed-line="" data-kind={l.kind} className={`ob-li${l.kind === "tool" || l.kind === "result" ? " ob-live" : ""}`}>
@@ -63,6 +68,12 @@ export function WorkerView({ worker, feed, rect, send, onClose }: WorkerViewProp
         <button type="submit">Send</button>
         <button type="button" className="ob-stop" disabled={!active} onClick={() => send({ type: "office.stop", workerId: worker.id })}>
           Stop
+        </button>
+        <button type="button" className="ob-stop" disabled={active} title="The worker writes where its work stands into OFFICE_NOTES.md, and its next ticket starts a clean session" onClick={() => send({ type: "office.tidy", workerId: worker.id })}>
+          Tidy up
+        </button>
+        <button type="button" className="ob-stop" disabled={active} title="Only write the notes; the session goes on" onClick={() => send({ type: "office.tidy", workerId: worker.id, fresh: false })}>
+          Notes only
         </button>
         <button type="button" className="ob-stop" onClick={() => (sure ? send({ type: "office.fire", workerId: worker.id }) : setSure(true))} onBlur={() => setSure(false)}>
           {sure ? "Confirm remove" : "Remove"}
