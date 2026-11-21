@@ -68,6 +68,10 @@ class FakeBridge implements BridgeLike {
     this.tools = t;
   }
   failPending() {}
+  /** What a lead does when it calls one of the Office's own tools. */
+  tool(name: string, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
+    return new Promise((resolve) => this.onCall({ id: `c${++this.n}`, name, args, respond: (a: BridgeAnswer) => resolve(a as { text: string; isError?: boolean }) }));
+  }
   /** What Claude Code does: asks the approve tool, and waits for the answer. */
   ask(tool_name: string, input: Record<string, unknown>): Promise<{ behavior: string; message?: string; updatedInput?: unknown }> {
     return new Promise((resolve) => this.onCall({ id: `c${++this.n}`, name: "approve", args: { tool_name, input, tool_use_id: "u1" }, respond: (a: BridgeAnswer) => resolve(JSON.parse(a.text)) }));
@@ -1379,5 +1383,118 @@ describe("skills and connected tools for a worker", () => {
     expect(t.resolvers).toHaveLength(2); // no skills were given to this worker: it is asked like any other action
     t.resolvers[1]!.resolve({ approved: false });
     await ask;
+  });
+});
+
+describe("a lead and its team", () => {
+  const LONG = "Wrote the outline in outline.md and checked that it opens.";
+  const names = (t: ReturnType<typeof make>, n: number) => (t.bridges[n]!.tools as { name: string }[]).map((x) => x.name);
+
+  function team() {
+    const t = make({ maxConcurrent: 3 });
+    const nova = t.hire("scribe", "Nova");
+    const ben = t.office.hire({ role: "coder", project: "site", name: "Ben", manager: "Nova" });
+    if (!ben.ok) throw new Error(ben.error);
+    const cy = t.office.hire({ role: "coder", project: "site", name: "Cy" });
+    if (!cy.ok) throw new Error(cy.error);
+    return { t, nova, ben: ben.worker, cy: cy.worker };
+  }
+
+  it("a lead gets the tools to give out work and see its team, and nobody else does", async () => {
+    const { t, nova, cy } = team();
+    t.office.assign({ worker: nova.id, title: "Build it" });
+    t.office.assign({ worker: cy.id, title: "Alone" });
+    await settle();
+    expect(names(t, 0)).toEqual(["approve", "assign", "team"]);
+    expect(names(t, 1)).toEqual(["approve"]);
+  });
+
+  it("tells the lead who it leads and that it is not the only worker", async () => {
+    const { t, nova } = team();
+    t.office.assign({ worker: nova.id, title: "Build it" });
+    await settle();
+    const brief = t.procs[0]!.o.args[t.procs[0]!.o.args.indexOf("--append-system-prompt") + 1]!;
+    expect(brief).toMatch(/You lead 1 person: Ben/);
+    expect(brief).toMatch(/not the only worker/);
+    expect(brief).toMatch(/assign tool/);
+  });
+
+  it("a lead gives a ticket to a team member (only to its own people), and the member starts it", async () => {
+    const { t, nova, ben, cy } = team();
+    t.office.assign({ worker: nova.id, title: "Build it" });
+    await settle();
+    const r = await t.bridges[0]!.tool("assign", { worker: "Ben", title: "Write the outline", description: "In outline.md" });
+    expect(r.isError).toBeUndefined();
+    expect(r.text).toMatch(/Ticket #2 is started by Ben/);
+    const given = t.store.getTicket(2)!;
+    expect(given).toMatchObject({ workerId: ben.id, assignedBy: nova.id, title: "Write the outline" });
+    await settle();
+    expect(t.procs).toHaveLength(2);
+    expect(t.procs[1]!.sent[0]).toMatch(/Write the outline/);
+    expect(await t.bridges[0]!.tool("assign", { worker: "Cy", title: "x" })).toMatchObject({ isError: true });
+    expect(cy.id).toBeTruthy();
+    expect(await t.bridges[0]!.tool("assign", { worker: "Ben", title: "  " })).toMatchObject({ isError: true });
+    expect((await t.bridges[0]!.tool("team", {})).text).toMatch(/Ben \(.*\): (running|starting).*ticket #2/);
+  });
+
+  it("a lead's own tools go ahead without a card; for anyone else they are refused", async () => {
+    const { t, nova, cy } = team();
+    t.office.assign({ worker: nova.id, title: "Build it" });
+    t.office.assign({ worker: cy.id, title: "Alone" });
+    await settle();
+    expect(await t.bridges[0]!.ask("mcp__office__assign", { worker: "Ben", title: "x" })).toMatchObject({ behavior: "allow" });
+    expect(await t.bridges[1]!.ask("mcp__office__assign", { worker: "Ben", title: "x" })).toMatchObject({ behavior: "deny" });
+    expect(t.resolvers).toHaveLength(0);
+  });
+
+  it("the report of a team member goes to its lead, not to the assistant, and the lead's own report waits until its team is done", async () => {
+    const { t, nova, ben } = team();
+    t.office.assign({ worker: nova.id, title: "Build it" });
+    await settle();
+    await t.bridges[0]!.tool("assign", { worker: "Ben", title: "Write the outline" });
+    await settle();
+    // the lead ends its turn having delegated: the assistant is not told yet, the team is still working
+    t.procs[0]!.emit(initEv("sess-n"));
+    t.procs[0]!.emit(resultEv({ text: "Delegated the outline to Ben and I will check it when he reports." }));
+    await settle();
+    expect(t.store.getTicket(1)!.status).toBe("review");
+    expect(t.notify).not.toHaveBeenCalled();
+    // the team member finishes: its ticket is done, the lead gets the report as a message and goes on
+    t.procs[1]!.emit(initEv("sess-b"));
+    t.procs[1]!.emit(resultEv({ text: LONG }));
+    await settle();
+    expect(t.store.getTicket(2)!.status).toBe("done");
+    expect(t.procs).toHaveLength(3);
+    expect(t.procs[2]!.sent[0]).toMatch(/Report from Ben on ticket #2[\s\S]*Wrote the outline in outline.md/);
+    expect(ben.id).toBeTruthy();
+    expect(t.notify).not.toHaveBeenCalled(); // the lead has not answered yet
+    t.procs[2]!.emit(initEv("sess-n"));
+    t.procs[2]!.emit(resultEv({ text: "All done: Ben wrote the outline, I checked it and it is complete." }));
+    await settle();
+    expect(t.notify).toHaveBeenCalledTimes(1); // now the assistant hears, once, from the lead
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ worker: "Nova", report: expect.stringMatching(/All done: Ben wrote the outline/) }));
+  });
+
+  it("a ticket a team member could not finish also goes to the lead", async () => {
+    const { t, nova } = team();
+    t.office.assign({ worker: nova.id, title: "Build it" });
+    await settle();
+    await t.bridges[0]!.tool("assign", { worker: "Ben", title: "Write the outline" });
+    await settle();
+    t.procs[1]!.emit(initEv("sess-b"));
+    t.procs[1]!.emit(resultEv({ ok: false, text: "The tool is missing" }));
+    await settle();
+    expect(t.store.getTicket(2)!.status).toBe("blocked");
+    expect(t.procs[0]!.sent.at(-1)).toMatch(/could not finish/); // the lead is still working: it is told straight away
+    expect(t.notify).not.toHaveBeenCalled();
+  });
+
+  it("a worker with no lead is reviewed by the assistant as before", async () => {
+    const { t, cy } = team();
+    t.office.assign({ worker: cy.id, title: "Alone" });
+    await settle();
+    t.procs[0]!.emit(initEv());
+    t.procs[0]!.emit(resultEv({ text: LONG }));
+    expect(t.notify).toHaveBeenCalledWith(expect.objectContaining({ worker: "Cy", status: "review" }));
   });
 });

@@ -309,4 +309,8 @@ create index person_faces_person on person_faces (person_id);`,
     sql: `alter table office_workers add column skills text not null default '[]';
 alter table office_workers add column mcp text not null default '[]';`,
   },
+  {
+    id: 20,
+    sql: `alter table office_tickets add column assigned_by text;`,
+  },
 ];
