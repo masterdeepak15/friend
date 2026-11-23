@@ -248,7 +248,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer, p
         </p>
       )}
       {coarse && voice && !barOpen && <TouchControls voice={voice} mode={mode} onType={() => setOpenRequest((n) => n + 1)} onMenu={() => onMenu?.()} />}
-      <CommandBar requestOpen={openRequest} slash={slash} onOpenChange={setBarOpen} onSend={(text) => send({ type: "chat.send", text })} {...(hudBar ? { hud: hudBar } : {})} />
+      <CommandBar requestOpen={openRequest} slash={slash} onOpenChange={setBarOpen} onSend={(text, files) => send({ type: "chat.send", text, ...(files?.length ? { attachments: files } : {}) })} {...(hudBar ? { hud: hudBar } : {})} />
     </div>
   );
 }

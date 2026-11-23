@@ -247,7 +247,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         send={send}
         dispatch={dispatch}
       >
-        {state.viewKnown && panels.show.chat && <ChatPanel lines={state.chat} live={state.chatLive} onSend={(text) => send({ type: "chat.send", text })} onClose={() => panels.toggle("chat", false)} />}
+        {state.viewKnown && panels.show.chat && <ChatPanel lines={state.chat} live={state.chatLive} onSend={(text, files) => send({ type: "chat.send", text, ...(files?.length ? { attachments: files } : {}) })} onClose={() => panels.toggle("chat", false)} />}
         {state.viewKnown && panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
         {state.viewKnown && panels.show.launcher && state.hud && !orbital && <QuickLaunch items={state.hud.launcher} animations={animations} onAction={launch} />}
         {state.viewKnown && panels.show.music && <MusicPlayerView player={player} music={state.music} animations={animations} />}

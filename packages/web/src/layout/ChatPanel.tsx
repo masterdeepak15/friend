@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { AttachButton, AttachChips } from "../attach/AttachControls";
+import { FILES_ONLY_TEXT, useAttach, type AttachedFile } from "../attach/useAttach";
 import type { ChatLine } from "../store";
 import { Movable } from "./Movable";
 
 /** The conversation, on request: what was said or typed, what Friend answered, and a box to type in. */
-export function ChatPanel({ lines, live, onSend, onClose }: { lines: ChatLine[]; live: boolean; onSend: (text: string) => void; onClose: () => void }) {
+export function ChatPanel({ lines, live, onSend, onClose }: { lines: ChatLine[]; live: boolean; onSend: (text: string, files?: AttachedFile[]) => void; onClose: () => void }) {
   const [text, setText] = useState("");
+  const attach = useAttach();
   const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,17 +38,24 @@ export function ChatPanel({ lines, live, onSend, onClose }: { lines: ChatLine[];
         ))}
         <div ref={end} />
       </div>
+      <AttachChips attach={attach} />
       <form
         className="chat-form"
+        onDragOver={attach.handlers.onDragOver}
+        onDrop={attach.handlers.onDrop}
         onSubmit={(e) => {
           e.preventDefault();
           const t = text.trim();
-          if (!t) return;
-          onSend(t);
+          const files = attach.ready;
+          if ((!t && files.length === 0) || attach.busy) return; // a file still on its way is waited for
+          if (files.length > 0) onSend(t || FILES_ONLY_TEXT, files);
+          else onSend(t);
+          attach.clear();
           setText("");
         }}
       >
-        <input aria-label="Type to chat" data-space-talks="" value={text} placeholder="Type a message…" autoComplete="off" onChange={(e) => setText(e.target.value)} />
+        <input aria-label="Type to chat" data-space-talks="" value={text} placeholder="Type a message…" autoComplete="off" onChange={(e) => setText(e.target.value)} onPaste={attach.handlers.onPaste} />
+        <AttachButton attach={attach} />
         <button type="submit" aria-label="Send message">
           ↵
         </button>

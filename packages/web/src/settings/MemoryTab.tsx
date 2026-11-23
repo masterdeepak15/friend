@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import "./office.css";
-import type { MemorySettings } from "./settingsApi";
+import type { AttachmentSettings, MemorySettings } from "./settingsApi";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
@@ -31,7 +31,7 @@ const whole = (v: string): number => (v.trim() === "" || !Number.isFinite(Number
  * What Friend remembers: whether memory is a tree of small notes, whether Friend saves by itself once you have paused, and how much of the
  * memory index it sees every turn. The notes themselves are plain files you can open; nothing about them is set here.
  */
-export function MemoryTab({ memory, onChange }: { memory: MemorySettings; onChange: (p: Partial<MemorySettings>) => void }) {
+export function MemoryTab({ memory, onChange, attachments, onAttachments }: { memory: MemorySettings; onChange: (p: Partial<MemorySettings>) => void; attachments?: AttachmentSettings; onAttachments?: (p: Partial<AttachmentSettings>) => void }) {
   return (
     <div className="of-tab" data-on={memory.enabled ? "true" : "false"}>
       <section className="of-hero">
@@ -83,6 +83,29 @@ export function MemoryTab({ memory, onChange }: { memory: MemorySettings; onChan
           </Field>
         </div>
       </Card>
+
+      {attachments && onAttachments && (
+        <Card code="04" title="Files you attach in chat" note="Attach documents (text, Word, Excel, PowerPoint, PDF, pictures) with the paperclip, or drop them on the chat box. They are kept in Friend's data folder, never sent anywhere by themselves, and deleted after the days below.">
+          <div className="of-grid">
+            <Field label="Largest file (MB)" hint="Over this a file is refused. At most 50.">
+              <input
+                type="number"
+                min={0.1}
+                max={50}
+                step={0.5}
+                value={Math.round((attachments.maxBytes / 1048576) * 10) / 10}
+                onChange={(e) => onAttachments({ maxBytes: Math.min(52428800, Math.max(1024, Math.round(Number(e.target.value) * 1048576) || 1024)) })}
+              />
+            </Field>
+            <Field label="Files with one message" hint="From 1 to 10.">
+              <input type="number" min={1} max={10} value={attachments.maxFiles} onChange={(e) => onAttachments({ maxFiles: Math.min(10, Math.max(1, whole(e.target.value))) })} />
+            </Field>
+            <Field label="Keep for (days)" hint="Older files are deleted. From 1 to 3650.">
+              <input type="number" min={1} max={3650} value={attachments.keepDays} onChange={(e) => onAttachments({ keepDays: Math.min(3650, Math.max(1, whole(e.target.value))) })} />
+            </Field>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

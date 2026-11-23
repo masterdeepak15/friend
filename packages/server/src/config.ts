@@ -73,7 +73,21 @@ export interface Config {
   hud: HudConfig;
   /** The Office: workers Friend hires, in the owner's projects, under the owner's rules. */
   office: OfficeConfig;
+  /** Files the owner attaches to chat messages: the most a file may weigh, how many go with one message, and how many days they are kept. */
+  attachments: AttachmentsConfig;
   dataDir: string;
+}
+
+export interface AttachmentsConfig {
+  maxBytes: number;
+  maxFiles: number;
+  keepDays: number;
+}
+
+export function sanitizeAttachments(raw: unknown): AttachmentsConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const num = (v: unknown, lo: number, hi: number, def: number): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : def);
+  return { maxBytes: num(r.maxBytes, 1024, 50 * 1024 * 1024, 10 * 1024 * 1024), maxFiles: num(r.maxFiles, 1, 10, 5), keepDays: num(r.keepDays, 1, 3650, 30) };
 }
 
 export interface VideoConfig {
@@ -1000,6 +1014,7 @@ const defaults = (dataDir: string): Config => ({
   browser: sanitizeBrowser({}),
   hud: sanitizeHud({}),
   office: sanitizeOffice({}),
+  attachments: sanitizeAttachments({}),
   dataDir,
 });
 
@@ -1090,6 +1105,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     browser: sanitizeBrowser(stored.browser),
     hud: sanitizeHud(stored.hud),
     office: sanitizeOffice(stored.office),
+    attachments: sanitizeAttachments(stored.attachments),
     dataDir,
   };
 }

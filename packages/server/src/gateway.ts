@@ -1,3 +1,4 @@
+import { ATTACHMENT_CEILING_BYTES } from "./attach/store";
 import fastifyCookie from "@fastify/cookie";
 import { registerAuditRoutes } from "./auditApi";
 import type { AuditQuery } from "./auditQuery";
@@ -103,6 +104,8 @@ export interface GatewayDeps {
   alexa?: AlexaApi;
   /** The owner's music: the list, the audio and the covers. */
   music?: MusicApi;
+  /** Files the owner attaches to a chat message: stored, and the id comes back. */
+  onAttachmentUpload?: (name: string, bytes: Buffer) => { ok: true; meta: { id: string; name: string; size: number } } | { ok: false; status: number; error: string };
   /** Files the owner approved to be shown (file.present); the media route answers 404 without it. */
   media?: { lookup(id: string): { path: string; mime: string; size: number } | null };
 }
@@ -578,6 +581,33 @@ export function createGateway(deps: GatewayDeps) {
         audit.log("owner", "voice.utterance_failed", { message: (e as Error).message }); // raw detail stays in the audit log
         return reply.code(502).send({ error: "Speech recognition failed. Try again." });
       }
+    },
+  );
+
+  // ---- files attached to a chat message: a raw body, the name in the address; the size limit is the owner's setting, checked as the file is stored ----
+  app.addContentTypeParser("application/octet-stream", { parseAs: "buffer", bodyLimit: ATTACHMENT_CEILING_BYTES }, (_req, body, done) => done(null, body));
+  const attachWindow = new SlidingWindow(20, 10_000);
+  app.post(
+    "/api/chat/upload",
+    {
+      bodyLimit: ATTACHMENT_CEILING_BYTES,
+      onRequest: async (req, reply) => {
+        const token = req.cookies[COOKIE_NAME];
+        const session = token ? auth.resolveSession(token) : null;
+        if (!session) return reply.code(401).send({ error: "Unauthorized" });
+        if (!attachWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+        if (!deps.onAttachmentUpload) return reply.code(503).send({ error: "Attaching files is not available" });
+      },
+    },
+    async (req, reply) => {
+      const body = req.body;
+      if (!Buffer.isBuffer(body)) return reply.code(415).send({ error: "Send the file as application/octet-stream" });
+      const token = req.cookies[COOKIE_NAME];
+      if (!(token && auth.resolveSession(token))) return reply.code(401).send({ error: "Unauthorized" });
+      const r = deps.onAttachmentUpload!(String((req.query as { name?: string }).name ?? "file"), body);
+      if (!r.ok) return reply.code(r.status).send({ error: r.error });
+      audit.log("owner", "chat.attach", { name: r.meta.name, size: r.meta.size });
+      return r.meta;
     },
   );
 

@@ -263,6 +263,7 @@ export const SettingsPatch = z
       })
       .partial()
       .strict(),
+    attachments: z.object({ maxBytes: z.number().int().min(1024).max(50 * 1024 * 1024), maxFiles: z.number().int().min(1).max(10), keepDays: z.number().int().min(1).max(3650) }).partial().strict(),
     memory: z.object({ enabled: z.boolean(), maxIndexChars: z.number().int().min(400).max(6000), autoSave: z.enum(["off", "on"]), showSaved: z.boolean(), autoTidy: z.boolean(), saveDelaySec: z.number().int().min(10).max(3600) }).partial().strict(),
     web: z
       .object({
@@ -330,6 +331,7 @@ export interface SettingsView {
   browser: Config["browser"];
   hud: Config["hud"];
   office: Config["office"];
+  attachments: Config["attachments"];
   /** The ids of allowed Amazon accounts are shown shortened. */
   alexa: {
     installed: boolean;
@@ -400,6 +402,7 @@ export function settingsView(c: Config): SettingsView {
     browser: { ...c.browser },
     hud: { ...c.hud, tidy: { ...c.hud.tidy }, clock: { ...c.hud.clock }, widgets: { ...c.hud.widgets }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
     office: structuredClone(c.office),
+    attachments: { ...c.attachments },
     alexa: {
       installed: c.alexa.installed,
       enabled: c.alexa.enabled,
@@ -619,6 +622,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
     Object.assign(config.video, rest);
     if (allowedSites) config.video.allowedSites = normalizeSites(allowedSites);
   }
+  if (p.attachments) Object.assign(config.attachments, p.attachments);
   if (p.office) {
     const { budget, roles, projects, policy, ...rest } = p.office;
     Object.assign(config.office, rest);

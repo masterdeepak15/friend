@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { AttachButton, AttachChips } from "../attach/AttachControls";
+import { FILES_ONLY_TEXT, useAttach, type AttachedFile } from "../attach/useAttach";
 import { filterCommands, parseSlash, unescapeSlash, type Slash } from "./commands";
 
 const isTyping = (el: EventTarget | null) =>
@@ -15,7 +17,7 @@ export interface HudBar {
  * bottom instead (`hud`): always there, and sending or Esc only empties it, so the view never changes.
  * A line that starts with / is a command for this screen (see /help): it is never sent to the AI.
  */
-export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { onSend: (text: string) => void; requestOpen: number; slash?: Slash; onOpenChange?: (open: boolean) => void; hud?: HudBar }) {
+export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { onSend: (text: string, files?: AttachedFile[]) => void; requestOpen: number; slash?: Slash; onOpenChange?: (open: boolean) => void; hud?: HudBar }) {
   const always = !!hud;
   const [open, setOpen] = useState(false);
   const changed = useRef(onOpenChange);
@@ -23,6 +25,7 @@ export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { 
   useEffect(() => changed.current?.(always ? false : open), [open, always]);
   const [text, setText] = useState("");
   const [selected, setSelected] = useState(0);
+  const attach = useAttach();
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -58,6 +61,7 @@ export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { 
   const close = () => {
     setText("");
     setSelected(0);
+    attach.clear();
     setOpen(false);
     if (always) input.current?.blur(); // so Space can talk again
   };
@@ -68,8 +72,10 @@ export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { 
       // "/set" + Enter runs the highlighted match; "/camera on" runs as typed
       const typedArgs = /^\/\S*\s/.test(t);
       slash.run(!typedArgs && picked ? `/${picked.name}` : t);
-    } else if (t) {
-      onSend(unescapeSlash(t));
+    } else if (t || attach.ready.length > 0) {
+      if (attach.busy) return; // a file still on its way is waited for
+      if (attach.ready.length > 0) onSend(t ? unescapeSlash(t) : FILES_ONLY_TEXT, attach.ready);
+      else onSend(unescapeSlash(t));
     }
     close();
   };
@@ -78,6 +84,8 @@ export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { 
     <form
       className={`command-bar${always ? " command-bar-hud" : ""}`}
       style={hud?.style}
+      onDragOver={attach.handlers.onDragOver}
+      onDrop={attach.handlers.onDrop}
       onSubmit={(e) => {
         e.preventDefault();
         submit();
@@ -105,8 +113,10 @@ export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { 
           ))}
         </ul>
       )}
+      <AttachChips attach={attach} float />
       <input
         ref={input}
+        onPaste={attach.handlers.onPaste}
         {...(always ? { "data-space-talks": "" } : {})}
         aria-label="Message"
         value={text}
@@ -129,6 +139,7 @@ export function CommandBar({ onSend, requestOpen, slash, onOpenChange, hud }: { 
           }
         }}
       />
+      <AttachButton attach={attach} />
       <button type="submit" aria-label="Send">
         ↵
       </button>
