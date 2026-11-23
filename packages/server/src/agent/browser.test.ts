@@ -125,6 +125,6 @@ describe("the safe browser in the agent loop", () => {
   it("is not available to a guest or to a household member", async () => {
     const g = new FakeProvider([[text("no"), done]]);
     await build(g).runTurn("hi", { trust: "guest", emit, ip: "9.9.9.9" });
-    expect(names(g)).toEqual([]);
+    expect(names(g)).toEqual(["security.alert"]); // the one silent tool a stranger has
   });
 });

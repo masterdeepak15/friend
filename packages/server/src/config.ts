@@ -51,6 +51,8 @@ export interface Config {
   eye: EyeConfig;
   /** Asking you on your phone (Telegram buttons, or a YES / NO reply) when an action needs your approval and you are not at the screen. */
   phoneApprovals: PhoneApprovalsConfig;
+  /** Messages to the owner's phone (only) when someone is trying to break in. */
+  securityAlerts: SecurityAlertsConfig;
   /** The audit trail: how long it is kept, whether old entries are archived, the daily seal, and how long the audit screen stays open after the PIN. */
   audit: AuditConfig;
   /** Messaging channels: Telegram, and SMS and WhatsApp through Twilio. The tokens are secrets and never go to the screen. */
@@ -76,6 +78,18 @@ export interface Config {
   /** Files the owner attaches to chat messages: the most a file may weigh, how many go with one message, and how many days they are kept. */
   attachments: AttachmentsConfig;
   dataDir: string;
+}
+
+export interface SecurityAlertsConfig {
+  enabled: boolean;
+  cooldownMinutes: number;
+  maxPerDay: number;
+}
+
+export function sanitizeSecurityAlerts(raw: unknown): SecurityAlertsConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const num = (v: unknown, lo: number, hi: number, def: number): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : def);
+  return { enabled: r.enabled !== false, cooldownMinutes: num(r.cooldownMinutes, 1, 1440, 15), maxPerDay: num(r.maxPerDay, 1, 200, 20) };
 }
 
 export interface AttachmentsConfig {
@@ -1006,6 +1020,7 @@ const defaults = (dataDir: string): Config => ({
   codeRunner: "auto",
   eye: sanitizeEye(undefined),
   phoneApprovals: sanitizePhoneApprovals(undefined),
+  securityAlerts: sanitizeSecurityAlerts(undefined),
   audit: sanitizeAudit(undefined),
   channels: sanitizeChannels(DEFAULT_CHANNELS),
   brokers: sanitizeBrokers({}),
@@ -1097,6 +1112,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     codeRunner: sanitizeCodeRunner(stored.codeRunner),
     eye: sanitizeEye(stored.eye),
     phoneApprovals: sanitizePhoneApprovals(stored.phoneApprovals),
+    securityAlerts: sanitizeSecurityAlerts(stored.securityAlerts),
     audit: sanitizeAudit(stored.audit),
     channels: sanitizeChannels(stored.channels),
     brokers: sanitizeBrokers(stored.brokers),

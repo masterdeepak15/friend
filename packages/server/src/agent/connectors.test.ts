@@ -57,7 +57,7 @@ describe("a connector's tools in the agent", () => {
     expect(b.provider.calls[0]!.tools.find((t) => t.name === "mcp.mail.send_email")).toMatchObject({ description: "[Mail] Sends an email." });
     const g = build({ script: [[done]] });
     await g.agent.runTurn("hi", ctx("guest"));
-    expect(g.provider.calls[0]!.tools).toEqual([]);
+    expect(((g.provider.calls[0]!.tools ?? []) as { name: string }[]).map((t) => t.name)).toEqual(["security.alert"]); // the one silent tool a stranger has
   });
 
   it("always ask the owner first, and run only after approval", async () => {

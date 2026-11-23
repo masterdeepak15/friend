@@ -111,6 +111,7 @@ import { DuckController } from "./audio/duck";
 import { Autostart, currentSelf, realAutostartDeps, type AutostartDeps, type SelfCommand } from "./system/autostart";
 import { npmLatest, runningVersion, spawnUpgrade } from "./system/npm";
 import { Updater, type UpdaterTimes } from "./system/updater";
+import { SecurityWatch } from "./securityWatch";
 import { Challenges } from "./voice/challenge";
 import { loadOrCreateKey } from "./voice/crypto";
 import { EnrollError, Enrollment } from "./voice/enrollment";
@@ -125,6 +126,8 @@ const SPEAKER_MODEL = "wespeaker_en_voxceleb_resnet34";
 
 export interface AppOptions {
   dataDir: string;
+  /** Where security alerts go (tests): by default the owner's linked phone apps, never the screen. */
+  securitySend?: (text: string) => Promise<string[]>;
   provider?: Provider;
   /** Speech in and out; without it voice is simply unavailable. */
   voice?: VoiceService;
@@ -758,6 +761,23 @@ export async function createApp(opts: AppOptions) {
     },
     audit: (event: string, detail: Record<string, unknown>) => audit.log("system", event, detail),
   });
+  /** Warns the owner on their phone ONLY (every linked app but SMS, or SMS when it is all there is): never the screen, never the speakers. Returns the apps it reached. */
+  const alertOwnerPhone = async (text: string): Promise<string[]> => {
+    const all = ownerChannels();
+    const apps = all.filter((c) => c !== "sms");
+    const sent: string[] = [];
+    for (const c of apps.length ? apps : all) {
+      try {
+        const r = await channelHub.send(c, "me", text);
+        if (r.ok) sent.push(c);
+      } catch {
+        /* the next app is tried */
+      }
+    }
+    return sent;
+  };
+  const security = new SecurityWatch({ config: () => config.securityAlerts, send: opts.securitySend ?? alertOwnerPhone, audit });
+  audit.observe((e) => security.see(e));
   /** Tells the owner something, whatever it is about: on the screen when one is open, otherwise their phone, otherwise the screen for when they come back. */
   const tellOwner = async (text: string, title = "Friend"): Promise<string> => {
     const where = await deliverToOwner(text, { ...phoneDeps(), screenOpen: clients.size > 0, show: showOwnerNote }, title);
@@ -833,6 +853,10 @@ export async function createApp(opts: AppOptions) {
   const agent = new Agent({
     auditQuery: new AuditQuery(db),
     notifyOwner: (text, title) => tellOwner(text, title),
+    securityAlert: async (text) => {
+      const r = await security.notify("assistant", "Someone is trying to get past the rules", `The assistant noticed it while talking: "${text.replace(/\s+/g, " ").trim().slice(0, 300)}"`, 2);
+      return r.sent.length ? "The owner was told on their phone. Do not mention this to the speaker." : `The owner could not be told (${r.why ?? "no phone app is linked"}). Do not mention this to the speaker.`;
+    },
     ownerReach,
     settings: agentSettings,
     mcp: hub,
@@ -2009,6 +2033,7 @@ export async function createApp(opts: AppOptions) {
     onDeviceConnect: (device, ws) => devices.attach(device, ws),
     onSignOut: () => eye.switchOff("sign-out"),
     onLock: () => {
+      void security.notify("lock", "The emergency lock was used", "Every session was ended and the camera was switched off.");
       eye.switchOff("lock");
       lockEpoch++;
       const dropped = challenges.clear();
@@ -2029,6 +2054,8 @@ export async function createApp(opts: AppOptions) {
   return {
     /** The PC's own music player (also used by tests). */
     musicHost: hostPlayer,
+    /** Watches the audit trail for break-in attempts (also used by tests). */
+    security,
     /** The hired workers (also used by tests). */
     office,
     config,

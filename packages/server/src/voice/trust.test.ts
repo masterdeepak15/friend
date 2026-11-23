@@ -194,7 +194,7 @@ describe("after enrollment", () => {
     await utter(cookie);
     await until(() => provider.calls.length === 1);
     expect(c.of("voice.heard")[0]).toMatchObject({ text: "open the secret file", trust: "guest" });
-    expect(provider.calls[0]!.tools).toEqual([]);
+    expect(((provider.calls[0]!.tools ?? []) as { name: string }[]).map((t) => t.name)).toEqual(["security.alert"]); // the one silent tool a stranger has
     expect(provider.calls[0]!.system).toMatch(/unverified/i);
     expect(provider.calls[0]!.messages).toHaveLength(1);
     await until(() => c.of("alert").some((a) => a.level === "warn" && /open the secret file/.test(a.text)));

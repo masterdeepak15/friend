@@ -122,7 +122,7 @@ describe.skipIf(!installed)("real speaker recognition end to end", () => {
     }
     const guestCalls = provider.calls.slice(1);
     for (const c of guestCalls) {
-      expect(c.tools).toEqual([]);
+      expect(((c.tools ?? []) as { name: string }[]).map((t) => t.name)).toEqual(["security.alert"]); // the one silent tool a stranger has
       expect(c.messages).toHaveLength(1);
       expect(c.system).toMatch(/unverified/i);
     }

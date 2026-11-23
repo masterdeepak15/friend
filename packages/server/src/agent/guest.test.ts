@@ -89,7 +89,7 @@ describe("guest turns", () => {
   it("get no tools and cannot run one even if the model asks", async () => {
     const { agent, provider } = build([[call("1", "shell.run", { command: "dir" }), done], [text("I can't do that."), done]]);
     await agent.runTurn("run a command", { trust: "guest", emit, ip: "1.1.1.1" });
-    expect(provider.calls[0]!.tools).toEqual([]);
+    expect((provider.calls[0]!.tools ?? []).map((t) => t.name)).toEqual(["security.alert"]); // the one silent tool; nothing else
     expect(exec).not.toHaveBeenCalled();
     expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
   });

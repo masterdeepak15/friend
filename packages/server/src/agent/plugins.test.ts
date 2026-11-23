@@ -167,7 +167,7 @@ describe("plugin tools", () => {
   it("never reach a guest", async () => {
     const p = new FakeProvider([[call("1", TOOL, { value: 1, from: "a", to: "b" }), done], [text("no"), done]]);
     await build(p).runTurn("convert", ctx("guest"));
-    expect(p.calls[0]!.tools).toEqual([]);
+    expect(((p.calls[0]!.tools ?? []) as { name: string }[]).map((t) => t.name)).toEqual(["security.alert"]); // the one silent tool a stranger has
     expect(run).not.toHaveBeenCalled();
     expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
   });

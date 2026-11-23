@@ -187,7 +187,7 @@ describe("Agent.runTurn", () => {
   it("gives guests no tools and denies any tool call", async () => {
     const provider = new FakeProvider([[call("1", "fs.list", { path: "C:\\work" }), done], [text("sorry"), done]]);
     await build(provider).runTurn("hi", ctx("guest"));
-    expect(provider.calls[0]!.tools).toEqual([]);
+    expect(((provider.calls[0]!.tools ?? []) as { name: string }[]).map((t) => t.name)).toEqual(["security.alert"]); // the one silent tool a stranger has
     expect(exec).not.toHaveBeenCalled();
   });
 

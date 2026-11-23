@@ -523,6 +523,7 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
   );
 
   const mode = draft.approvals ?? "manual";
+  const setAlerts = (p: Partial<NonNullable<SettingsView["securityAlerts"]>>) => setDraft({ ...draft, securityAlerts: { ...draft.securityAlerts!, ...p } });
   const setPhone = (p: Partial<NonNullable<SettingsView["phoneApprovals"]>>) => setDraft({ ...draft, phoneApprovals: { ...draft.phoneApprovals!, ...p } });
   const approvalsTab = (
     <div className="settings-section" role="radiogroup" aria-label="How much Friend asks before acting">
@@ -569,6 +570,22 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
         <small className="auth-note">Pictures go to the AI model you chose. With Claude they are sent to Anthropic; with a local Ollama vision model they stay on this PC. Nothing from a picture is kept.</small>
       </div>
       <PeopleSection />
+      {draft.securityAlerts && (
+        <div className="settings-section" aria-label="Break-in warnings">
+          <h3>Warn me if someone tries to break in</h3>
+          <label className="settings-check">
+            <input type="checkbox" checked={draft.securityAlerts.enabled} onChange={(e) => setAlerts({ enabled: e.target.checked })} />
+            <span>Message my phone (Telegram or WhatsApp, once linked) about wrong passwords and PINs, strangers asking for private things, and attempts to use the camera</span>
+          </label>
+          <Field label="Do not repeat the same warning for (minutes)" hint="1 to 1440. What happens meanwhile is added to the next warning.">
+            <input type="number" min={1} max={1440} value={draft.securityAlerts.cooldownMinutes} onChange={(e) => setAlerts({ cooldownMinutes: Math.min(1440, Math.max(1, Math.round(Number(e.target.value) || 1))) })} />
+          </Field>
+          <Field label="Most warnings in a day" hint="1 to 200.">
+            <input type="number" min={1} max={200} value={draft.securityAlerts.maxPerDay} onChange={(e) => setAlerts({ maxPerDay: Math.min(200, Math.max(1, Math.round(Number(e.target.value) || 1))) })} />
+          </Field>
+          <small className="auth-note">The warning goes to your phone only. Nothing is shown or said on the screen, so the person in front of the computer is not told. Only you can change these settings, at this screen.</small>
+        </div>
+      )}
       {draft.phoneApprovals && (
         <div className="settings-section" aria-label="Asking on your phone">
           <h3>When you are away from the screen</h3>

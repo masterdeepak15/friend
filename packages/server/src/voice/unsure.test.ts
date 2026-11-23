@@ -97,7 +97,7 @@ describe("a voice that is close to the owner's but not sure", () => {
     expect(c.of("voice.heard")[0]).toMatchObject({ trust: "guest" });
     expect(c.of("alert").some((m) => /An unrecognized voice said/.test(m.text))).toBe(true);
     expect(provider.calls[0]!.system).toMatch(/unverified speaker/i);
-    expect(provider.calls[0]!.tools ?? []).toHaveLength(0);
+    expect((provider.calls[0]!.tools ?? []).map((t) => t.name)).toEqual(["security.alert"]); // the one silent tool, nothing else
   });
 
   it("changes nothing for the owner's own voice or for a voice that is clearly someone else's", async () => {

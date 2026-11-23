@@ -91,7 +91,22 @@ const toRow = (r: Raw): AuditRow => ({
 /** A raw database row as an entry (for the query layer). */
 export const toAuditRow = toRow;
 
+/** What a watcher is told about each entry after it is written. */
+export interface AuditSeen {
+  kind: string;
+  actorKind: string;
+  detail: Record<string, unknown>;
+  ts: number;
+}
+
 export class Audit {
+  private watchers: ((e: AuditSeen) => void)[] = [];
+
+  /** Calls `fn` after every entry is written (a watcher that throws changes nothing). */
+  observe(fn: (e: AuditSeen) => void): void {
+    this.watchers.push(fn);
+  }
+
   constructor(private db: Db, private clock: () => number = Date.now) {
     this.ensureStart();
   }
@@ -163,13 +178,24 @@ export class Audit {
   }
 
   private append(i: RecordInput, actor: string): number {
+    let id: number;
     try {
       // inside the caller's own transaction (the retention step) the entry joins it
-      if (this.db.inTransaction) return this.insert(i, actor);
-      return this.db.transaction(() => this.insert(i, actor)).immediate();
+      id = this.db.inTransaction ? this.insert(i, actor) : this.db.transaction(() => this.insert(i, actor)).immediate();
     } catch (e) {
       throw new AuditWriteError(`The audit log could not be written: ${(e as Error).message}`);
     }
+    if (this.watchers.length > 0) {
+      const seen: AuditSeen = { kind: i.kind, actorKind: i.actorKind, detail: (i.detail ?? {}) as Record<string, unknown>, ts: this.clock() };
+      for (const w of this.watchers) {
+        try {
+          w(seen);
+        } catch {
+          /* a watcher never changes what was written */
+        }
+      }
+    }
+    return id;
   }
 
   /** Reads the last hash and writes the next entry; always called inside one immediate transaction. */

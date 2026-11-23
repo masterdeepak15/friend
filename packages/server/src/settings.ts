@@ -264,6 +264,7 @@ export const SettingsPatch = z
       })
       .partial()
       .strict(),
+    securityAlerts: z.object({ enabled: z.boolean(), cooldownMinutes: z.number().int().min(1).max(1440), maxPerDay: z.number().int().min(1).max(200) }).partial().strict(),
     attachments: z.object({ maxBytes: z.number().int().min(1024).max(50 * 1024 * 1024), maxFiles: z.number().int().min(1).max(10), keepDays: z.number().int().min(1).max(3650) }).partial().strict(),
     memory: z.object({ enabled: z.boolean(), maxIndexChars: z.number().int().min(400).max(6000), autoSave: z.enum(["off", "on"]), showSaved: z.boolean(), autoTidy: z.boolean(), saveDelaySec: z.number().int().min(10).max(3600) }).partial().strict(),
     web: z
@@ -333,6 +334,7 @@ export interface SettingsView {
   hud: Config["hud"];
   office: Config["office"];
   attachments: Config["attachments"];
+  securityAlerts: Config["securityAlerts"];
   /** The ids of allowed Amazon accounts are shown shortened. */
   alexa: {
     installed: boolean;
@@ -404,6 +406,7 @@ export function settingsView(c: Config): SettingsView {
     hud: { ...c.hud, tidy: { ...c.hud.tidy }, clock: { ...c.hud.clock }, widgets: { ...c.hud.widgets }, launcher: c.hud.launcher.map((l) => ({ ...l, action: { ...l.action } })) },
     office: structuredClone(c.office),
     attachments: { ...c.attachments },
+    securityAlerts: { ...c.securityAlerts },
     alexa: {
       installed: c.alexa.installed,
       enabled: c.alexa.enabled,
@@ -462,6 +465,7 @@ export function refuseForAgent(raw: unknown): void {
   if ("alexa" in r) throw new SettingsError("Alexa settings can only be changed by the owner on the settings screen.");
   if ("channels" in r) throw new SettingsError("Messaging channels can only be set up by the owner on the settings screen.");
   if (r.office && typeof r.office === "object" && "autonomy" in (r.office as object)) throw new SettingsError("How much of the workers' requests Friend answers itself can only be changed by the owner on the settings screen.");
+  if ("securityAlerts" in r) throw new SettingsError("Whether Friend warns you on your phone about break-in attempts can only be changed by the owner on the settings screen.");
   if ("audit" in r) throw new SettingsError("The audit trail settings can only be changed by the owner on the settings screen.");
   if ("phoneApprovals" in r) throw new SettingsError("Whether approvals may be answered from the phone can only be changed by the owner on the settings screen.");
   if ("eye" in r) throw new SettingsError("The eye (whether you may look through the camera by yourself) can only be changed by the owner on the settings screen.");
@@ -625,6 +629,7 @@ export function applySettings(config: Config, raw: unknown): Applied {
     if (allowedSites) config.video.allowedSites = normalizeSites(allowedSites);
   }
   if (p.attachments) Object.assign(config.attachments, p.attachments);
+  if (p.securityAlerts) Object.assign(config.securityAlerts, p.securityAlerts);
   if (p.office) {
     const { budget, roles, projects, policy, ...rest } = p.office;
     Object.assign(config.office, rest);
