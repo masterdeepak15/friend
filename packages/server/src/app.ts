@@ -78,6 +78,7 @@ import { Tasks } from "./tasks";
 import { Office, type BridgeFactory, type WorkerFactory } from "./office/office";
 import { OfficeStore } from "./office/store";
 import { join } from "node:path";
+import { AttachmentStore, attachmentNote, readAttachment } from "./attach/store";
 import { checkConfigFile, loadConfig, sanitizeBrowser, sanitizeWeb, saveConfig, trackConfigHash, type Config } from "./config";
 import { openDb } from "./db";
 import { UsageLog, USAGE_KEEP_DAYS } from "./usage";
@@ -715,6 +716,7 @@ export async function createApp(opts: AppOptions) {
     tries: () => config.office.decideTries,
     runTurn: (text) => runWithRequest({ prefix: "office-approval" }, () => agent.runTurn(text, { trust: "owner", emit: broadcastLate, ip: "127.0.0.1", source: "office" })),
   });
+  const attachments = new AttachmentStore(join(opts.dataDir, "uploads"), () => config.attachments);
   const office = new Office({
     config: () => config,
     store: officeStore,
@@ -904,6 +906,7 @@ export async function createApp(opts: AppOptions) {
     music: musicHub,
     video: videoHub,
     office,
+    attachments: { read: (id, part) => readAttachment(attachments, id, part) },
     integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub)) },
   });
 
@@ -1609,6 +1612,7 @@ export async function createApp(opts: AppOptions) {
       history: () => chatLines(db),
       tasks: () => tasks.list(),
     },
+    onAttachmentUpload: (name, bytes) => attachments.save(name, bytes),
     onCameraFrame: (id, jpeg) => {
       const out = camera.deliver(id, jpeg);
       if (out === "ok") {
@@ -1871,11 +1875,18 @@ export async function createApp(opts: AppOptions) {
           // the reply is spoken as it is written, like one to a spoken request, unless the owner turned that off
           runWithRequest({ prefix: "chat", actorKind: "owner", actorId: "owner" }, () => {
             recordWs(msg);
+            // files that came with the message: the assistant is told their names and ids, and reads them with attachment.read
+            const files = (msg.attachments ?? []).slice(0, config.attachments.maxFiles).flatMap((a) => {
+              const f = attachments.get(a.id);
+              return f ? [f.meta] : [];
+            });
+            if ((msg.attachments?.length ?? 0) > config.attachments.maxFiles) conn.send({ type: "alert", level: "warn", text: `Only the first ${config.attachments.maxFiles} files were used.` });
+            const text = files.length ? msg.text + attachmentNote(files) : msg.text;
             if (speaker && voiceAvailable() && config.voice.speakTyped) {
-              void runVoiceTurn(msg.text, conn.ip, lockEpoch).catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
+              void runVoiceTurn(text, conn.ip, lockEpoch).catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
             } else {
               void agent
-                .runTurn(msg.text, { trust: "owner", emit: broadcast, ip: conn.ip, source: "chat" })
+                .runTurn(text, { trust: "owner", emit: broadcast, ip: conn.ip, source: "chat" })
                 .catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
             }
           });

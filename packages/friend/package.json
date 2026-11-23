@@ -27,6 +27,7 @@
     "pyodide": "314.0.7",
     "quickjs-emscripten": "0.32.0",
     "selfsigned": "^5.5.0",
+    "unpdf": "^2.2.1",
     "undici": "^8.11.2",
     "ws": "^8.22.0",
     "zod": "^4.6.5"

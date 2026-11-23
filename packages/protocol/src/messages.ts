@@ -187,7 +187,12 @@ export const ApprovalRespond = z.object({
 export type ApprovalRespond = z.infer<typeof ApprovalRespond>;
 
 export const ClientMsg = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("chat.send"), text: z.string().min(1).max(8000) }),
+  z.object({
+    type: z.literal("chat.send"),
+    text: z.string().min(1).max(8000),
+    /** Files the owner attached (uploaded first with POST /api/chat/upload): the id it gave back and the name. */
+    attachments: z.array(z.object({ id: z.string().regex(/^[a-f0-9]{16}$/), name: z.string().min(1).max(200) })).max(10).optional(),
+  }),
   z.object({ type: z.literal("stage.event"), objectId: z.string(), event: z.string().max(64) }),
   ApprovalRespond,
   z.object({ type: z.literal("voice.interrupt") }),

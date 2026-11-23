@@ -545,3 +545,14 @@ input, textarea, select, .connector-command { -webkit-user-select: text; user-se
 
 /* a narrower screen: one row that scrolls, never a second row down over the cards */
 @media (max-width: 1023px) { .chip-strip { justify-content: flex-start; pointer-events: auto; } }
+
+/* files attached to a message */
+.attach-chips { list-style: none; margin: 0; padding: 4px 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.attach-chips li { display: flex; align-items: center; gap: 6px; border: 1px solid var(--edge); background: var(--glass); padding: 2px 6px 2px 8px; font-size: 0.85rem; max-width: 100%; }
+.attach-chips li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.attach-chips li i { font-style: normal; opacity: 0.8; }
+.attach-chips li[data-state="failed"] { border-color: #e66; }
+.attach-chips li[data-state="failed"] i { color: #e88; }
+.attach-chips button, .command-bar .attach-chips button { min-width: 0; min-height: 0; border: 0; background: transparent; color: inherit; padding: 0 2px; cursor: pointer; }
+.attach-float { position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 4px; }
+.attach-btn { opacity: 0.85; }

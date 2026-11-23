@@ -111,6 +111,8 @@ export interface AgentDeps {
   integrations?: { summary(): string };
   /** The Office of hired workers. Without it, or when switched off, the office tools report they are unavailable. */
   office?: OfficeApi;
+  /** Files the owner attached to chat messages. Without it attachment.read reports they are unavailable. */
+  attachments?: { read(id: string, part: number): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string } }> };
   /** The safe browser (browser.read, browser.screenshot). Without it, or when switched off, the model is not offered them. */
   browser?: { enabled(): boolean; read(url: string, signal?: AbortSignal): Promise<{ ok: true; text: string } | { ok: false; error: string }>; screenshot(url: string, fullPage: boolean, signal?: AbortSignal): Promise<{ ok: true; mime: string; data: string; note: string } | { ok: false; error: string }> };
   /** The owner's saved notes. Without it the memory tools report they are unavailable. */
@@ -958,6 +960,12 @@ export class Agent {
       const r = await d.market.run(call.name, args, this.abort?.signal);
       d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: r.ok });
       return r.ok ? { text: r.text, isError: false } : fail(r.text);
+    }
+
+    if (call.name === "attachment.read") {
+      if (!d.attachments) return fail("Attached files are not available.");
+      d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: true });
+      return d.attachments.read(String(args.id), typeof args.part === "number" ? args.part : 1);
     }
 
     if (call.name.startsWith("office.")) {

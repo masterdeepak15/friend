@@ -10,7 +10,7 @@ import { SecurityTab } from "./SecurityTab";
 import { TradingTab } from "./TradingTab";
 import { WidgetsTab } from "./WidgetsTab";
 import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, downloadSize, isCatalogVoice } from "@friend/protocol";
-import { DEFAULT_LOOK, diffSettings, type ApprovalMode, type CodeRunnerMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView } from "./settingsApi";
+import { DEFAULT_LOOK, diffSettings, type ApprovalMode, type CodeRunnerMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView, type AttachmentSettings } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
 import { TABS, type SettingsTab } from "./tabs";
@@ -607,7 +607,13 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       {tab === "widgets" && draft.music && draft.hud && <WidgetsTab music={draft.music} hud={draft.hud} onMusic={(p) => setDraft({ ...draft, music: { ...draft.music!, ...p } })} onHud={(p) => setDraft({ ...draft, hud: { ...draft.hud!, ...p } })} />}
       {tab === "system" && <StartupTab auto={draft.updates?.auto ?? true} onAuto={(on) => setDraft({ ...draft, updates: { auto: on } })} />}
       {tab === "office" && draft.office && <OfficeTab office={draft.office} onChange={(p) => setDraft({ ...draft, office: { ...draft.office!, ...p } })} />}
-      {tab === "memory" && draft.memory && <MemoryTab memory={draft.memory} onChange={(p) => setDraft({ ...draft, memory: { ...draft.memory!, ...p } })} />}
+      {tab === "memory" && draft.memory && (
+          <MemoryTab
+            memory={draft.memory}
+            onChange={(p) => setDraft({ ...draft, memory: { ...draft.memory!, ...p } })}
+            {...(draft.attachments ? { attachments: draft.attachments, onAttachments: (p: Partial<AttachmentSettings>) => setDraft({ ...draft, attachments: { ...draft.attachments!, ...p } }) } : {})}
+          />
+        )}
       {tab === "heartbeat" && draft.proactive && <HeartbeatTab proactive={draft.proactive} onChange={(p) => setDraft({ ...draft, proactive: { ...draft.proactive!, ...p } })} />}
       {tab === "soul" && <SoulTab />}
       {tab === "audit" && <AuditTab {...(draft.audit ? { settings: draft.audit, onSettings: (p: Partial<NonNullable<typeof draft.audit>>) => setDraft({ ...draft, audit: { ...draft.audit!, ...p } }) } : {})} />}

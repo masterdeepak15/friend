@@ -140,6 +140,13 @@ export interface AuditSettings {
   unlockMinutes: number;
 }
 
+/** Files attached to chat messages: the most a file may weigh (bytes), how many go with one message, and how many days they are kept. */
+export interface AttachmentSettings {
+  maxBytes: number;
+  maxFiles: number;
+  keepDays: number;
+}
+
 export interface SettingsView {
   provider: ProviderName;
   model: string;
@@ -162,6 +169,7 @@ export interface SettingsView {
   music?: MusicSettings;
   hud?: HudSettings;
   office?: OfficeSettings;
+  attachments?: AttachmentSettings;
   memory?: MemorySettings;
   proactive?: ProactiveSettings;
   look: Look;
@@ -326,6 +334,11 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     }
     if (JSON.stringify(after.hud.launcher) !== JSON.stringify(before.hud.launcher)) changed.launcher = after.hud.launcher;
     if (Object.keys(changed).length) patch.hud = changed;
+  }
+  if (before.attachments && after.attachments) {
+    const changed: Record<string, number> = {};
+    for (const k of ["maxBytes", "maxFiles", "keepDays"] as const) if (before.attachments[k] !== after.attachments[k]) changed[k] = after.attachments[k];
+    if (Object.keys(changed).length) patch.attachments = changed;
   }
   if (before.office && after.office) {
     const changed: Record<string, unknown> = {};

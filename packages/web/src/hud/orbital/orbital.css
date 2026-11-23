@@ -418,3 +418,9 @@
 .ob-approval .ob-appr-text { grid-row: 1; grid-column: 2; }
 @media (max-width: 480px) { .ob-approval .ob-appr-text { grid-column: 1; } }
 .ob-zone .ob-frame-body > .ob-approval { display: grid; } /* the generic "column" rule for instrument bodies had turned it into a stack: the warning sign took a whole row */
+
+
+/* the paperclip sits at the end of the strip; the words never run under it */
+.command-bar-hud .attach-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; min-width: 0; min-height: 0; padding: 0; border: 0; background: none; color: #bdeef7; font-size: 0.95rem; cursor: pointer; }
+.command-bar-hud input { padding-right: 38px; }
+.command-bar-hud .attach-float { bottom: 100%; margin-bottom: 8px; }
