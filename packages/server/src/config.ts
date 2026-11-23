@@ -51,6 +51,8 @@ export interface Config {
   eye: EyeConfig;
   /** Asking you on your phone (Telegram buttons, or a YES / NO reply) when an action needs your approval and you are not at the screen. */
   phoneApprovals: PhoneApprovalsConfig;
+  /** Messages to the owner's phone (only) when someone is trying to break in. */
+  securityAlerts: SecurityAlertsConfig;
   /** The audit trail: how long it is kept, whether old entries are archived, the daily seal, and how long the audit screen stays open after the PIN. */
   audit: AuditConfig;
   /** Messaging channels: Telegram, and SMS and WhatsApp through Twilio. The tokens are secrets and never go to the screen. */
@@ -76,6 +78,18 @@ export interface Config {
   /** Files the owner attaches to chat messages: the most a file may weigh, how many go with one message, and how many days they are kept. */
   attachments: AttachmentsConfig;
   dataDir: string;
+}
+
+export interface SecurityAlertsConfig {
+  enabled: boolean;
+  cooldownMinutes: number;
+  maxPerDay: number;
+}
+
+export function sanitizeSecurityAlerts(raw: unknown): SecurityAlertsConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const num = (v: unknown, lo: number, hi: number, def: number): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : def);
+  return { enabled: r.enabled !== false, cooldownMinutes: num(r.cooldownMinutes, 1, 1440, 15), maxPerDay: num(r.maxPerDay, 1, 200, 20) };
 }
 
 export interface AttachmentsConfig {
@@ -732,8 +746,10 @@ export interface VoiceConfig {
   speakTyped: boolean;
   /** Speaker match at or above this is the owner (0..1). */
   accept: number;
-  /** Speaker match at or above this but below `accept` asks for the PIN; below it the voice is a guest. */
+  /** Speaker match at or above this but below `accept` is "close but not sure"; below it the voice is a guest. */
   challenge: number;
+  /** What happens to a voice that is close but not sure: "pin" holds the words until the owner confirms with the PIN; "guest" answers it as a guest at once (no PIN). */
+  unsure: "pin" | "guest";
   /** The voice for Hindi text (Devanagari). Empty: the main voice reads it. */
   hindiVoice: string;
   /** The voice for Marathi text (Devanagari). Empty: the main voice reads it. */
@@ -929,6 +945,7 @@ export const DEFAULT_VOICE: VoiceConfig = {
   speakTyped: true,
   accept: 0.72,
   challenge: 0.58,
+  unsure: "pin",
   hindiVoice: DEFAULT_HINDI_VOICE,
   marathiVoice: DEFAULT_MARATHI_VOICE,
   duck: true,
@@ -939,7 +956,7 @@ export const DEFAULT_VOICE: VoiceConfig = {
 export function sanitizeVoice(v: VoiceConfig): VoiceConfig {
   const ok = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
   const percent = typeof v.duckPercent === "number" && Number.isFinite(v.duckPercent) ? Math.max(0, Math.min(100, Math.round(v.duckPercent))) : DEFAULT_VOICE.duckPercent;
-  const base = { ...v, duck: typeof v.duck === "boolean" ? v.duck : DEFAULT_VOICE.duck, duckPercent: percent };
+  const base = { ...v, duck: typeof v.duck === "boolean" ? v.duck : DEFAULT_VOICE.duck, duckPercent: percent, unsure: v.unsure === "guest" ? ("guest" as const) : ("pin" as const) };
   if (ok(v.accept) && ok(v.challenge) && v.accept > v.challenge) return base;
   return { ...base, accept: DEFAULT_VOICE.accept, challenge: DEFAULT_VOICE.challenge };
 }
@@ -1003,6 +1020,7 @@ const defaults = (dataDir: string): Config => ({
   codeRunner: "auto",
   eye: sanitizeEye(undefined),
   phoneApprovals: sanitizePhoneApprovals(undefined),
+  securityAlerts: sanitizeSecurityAlerts(undefined),
   audit: sanitizeAudit(undefined),
   channels: sanitizeChannels(DEFAULT_CHANNELS),
   brokers: sanitizeBrokers({}),
@@ -1094,6 +1112,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     codeRunner: sanitizeCodeRunner(stored.codeRunner),
     eye: sanitizeEye(stored.eye),
     phoneApprovals: sanitizePhoneApprovals(stored.phoneApprovals),
+    securityAlerts: sanitizeSecurityAlerts(stored.securityAlerts),
     audit: sanitizeAudit(stored.audit),
     channels: sanitizeChannels(stored.channels),
     brokers: sanitizeBrokers(stored.brokers),

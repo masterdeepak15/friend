@@ -112,7 +112,7 @@ describe("weather.get", () => {
     const p = new FakeProvider([[call("1", "weather.get", { city: "Pune" }), done], [text("no"), done]]);
     await build(p).runTurn("weather", ctx("guest"));
     expect(getWeather).not.toHaveBeenCalled();
-    expect(p.calls[0]!.tools).toEqual([]);
+    expect(((p.calls[0]!.tools ?? []) as { name: string }[]).map((t) => t.name)).toEqual(["security.alert"]); // the one silent tool a stranger has
   });
 });
 

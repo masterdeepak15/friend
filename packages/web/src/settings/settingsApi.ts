@@ -147,6 +147,13 @@ export interface AttachmentSettings {
   keepDays: number;
 }
 
+/** Messages to your phone (only) when someone tries to break in. */
+export interface SecurityAlertsSettings {
+  enabled: boolean;
+  cooldownMinutes: number;
+  maxPerDay: number;
+}
+
 export interface SettingsView {
   provider: ProviderName;
   model: string;
@@ -170,6 +177,7 @@ export interface SettingsView {
   hud?: HudSettings;
   office?: OfficeSettings;
   attachments?: AttachmentSettings;
+  securityAlerts?: SecurityAlertsSettings;
   memory?: MemorySettings;
   proactive?: ProactiveSettings;
   look: Look;
@@ -183,7 +191,7 @@ export interface SettingsView {
   browser?: { installed: boolean; enabled: boolean; chromePath: string; timeoutSec: number; maxChars: number };
   /** Searching the web. The keys are never sent here, only whether they are set. */
   web?: { enabled: boolean; provider: "duckduckgo" | "brave" | "tavily" | "searxng"; searxngUrl: string; braveKeySet: boolean; tavilyKeySet: boolean; tavily?: { installed: boolean; enabled: boolean; depth: "basic" | "advanced"; maxResults: number } };
-  voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; ttsVoice: string; sttModel: string; hindiVoice?: string; marathiVoice?: string; duck?: boolean; duckPercent?: number };
+  voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; unsure?: "pin" | "guest"; ttsVoice: string; sttModel: string; hindiVoice?: string; marathiVoice?: string; duck?: boolean; duckPercent?: number };
 }
 
 export type PresenceStyleName = "sphere" | "orb" | "ring";
@@ -334,6 +342,11 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     }
     if (JSON.stringify(after.hud.launcher) !== JSON.stringify(before.hud.launcher)) changed.launcher = after.hud.launcher;
     if (Object.keys(changed).length) patch.hud = changed;
+  }
+  if (before.securityAlerts && after.securityAlerts) {
+    const changed: Record<string, number | boolean> = {};
+    for (const k of ["enabled", "cooldownMinutes", "maxPerDay"] as const) if (before.securityAlerts[k] !== after.securityAlerts[k]) changed[k] = after.securityAlerts[k];
+    if (Object.keys(changed).length) patch.securityAlerts = changed;
   }
   if (before.attachments && after.attachments) {
     const changed: Record<string, number> = {};
