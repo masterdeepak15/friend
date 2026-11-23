@@ -421,6 +421,12 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       <Field label={`"Ask for my PIN" level: ${draft.voice.challenge.toFixed(2)}`} hint="Voices between this and the level above must be confirmed with the PIN.">
         <input type="range" min={0.2} max={0.9} step={0.01} value={draft.voice.challenge} onChange={(e) => set("voice", "challenge", Number(e.target.value))} />
       </Field>
+      <Field label="When a voice is close to yours but not sure" hint="A family member's voice often lands here. 'Answer as a guest' replies politely at once, with nothing private and no actions, and tells you what was said. 'Ask for my PIN' holds the words until you confirm.">
+        <select aria-label="When a voice is close to yours but not sure" value={draft.voice.unsure ?? "pin"} onChange={(e) => set("voice", "unsure", e.target.value)}>
+          <option value="guest">Answer as a guest (no PIN)</option>
+          <option value="pin">Ask for my PIN</option>
+        </select>
+      </Field>
     </>
   );
 

@@ -235,6 +235,7 @@ export const SettingsPatch = z
         language: z.string().trim().max(10).regex(/^([a-z]{2,3}(-[A-Za-z]{2,4})?)?$/, "Use a language code such as en or hi, or leave it empty"),
         accept: z.number().min(0).max(1),
         challenge: z.number().min(0).max(1),
+        unsure: z.enum(["pin", "guest"]),
         ttsVoice: z.string().trim().min(1).max(80).regex(/^[\w.-]+$/),
         /** A Piper voice name; empty makes the main voice read Hindi too. */
         hindiVoice: z.string().trim().max(80).regex(/^[A-Za-z0-9_-]*$/, "A Piper voice name such as hi_IN-priyamvada-medium, or empty"),
@@ -353,7 +354,7 @@ export interface SettingsView {
   /** The key itself is never sent to the screen. */
   openai: { url: string; model: string; vision: boolean; apiKeySet: boolean };
   claudeCode: Config["claudeCode"];
-  voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "ttsVoice" | "sttModel" | "hindiVoice" | "marathiVoice" | "duck" | "duckPercent">;
+  voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "unsure" | "ttsVoice" | "sttModel" | "hindiVoice" | "marathiVoice" | "duck" | "duckPercent">;
   /** Whether Friend updates itself. */
   updates: Config["updates"];
   /** The memory tree. */
@@ -428,6 +429,7 @@ export function settingsView(c: Config): SettingsView {
       language: c.voice.language,
       accept: c.voice.accept,
       challenge: c.voice.challenge,
+      unsure: c.voice.unsure,
       ttsVoice: c.voice.ttsVoice,
       sttModel: c.voice.sttModel,
       hindiVoice: c.voice.hindiVoice,

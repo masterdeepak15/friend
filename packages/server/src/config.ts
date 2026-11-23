@@ -732,8 +732,10 @@ export interface VoiceConfig {
   speakTyped: boolean;
   /** Speaker match at or above this is the owner (0..1). */
   accept: number;
-  /** Speaker match at or above this but below `accept` asks for the PIN; below it the voice is a guest. */
+  /** Speaker match at or above this but below `accept` is "close but not sure"; below it the voice is a guest. */
   challenge: number;
+  /** What happens to a voice that is close but not sure: "pin" holds the words until the owner confirms with the PIN; "guest" answers it as a guest at once (no PIN). */
+  unsure: "pin" | "guest";
   /** The voice for Hindi text (Devanagari). Empty: the main voice reads it. */
   hindiVoice: string;
   /** The voice for Marathi text (Devanagari). Empty: the main voice reads it. */
@@ -929,6 +931,7 @@ export const DEFAULT_VOICE: VoiceConfig = {
   speakTyped: true,
   accept: 0.72,
   challenge: 0.58,
+  unsure: "pin",
   hindiVoice: DEFAULT_HINDI_VOICE,
   marathiVoice: DEFAULT_MARATHI_VOICE,
   duck: true,
@@ -939,7 +942,7 @@ export const DEFAULT_VOICE: VoiceConfig = {
 export function sanitizeVoice(v: VoiceConfig): VoiceConfig {
   const ok = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
   const percent = typeof v.duckPercent === "number" && Number.isFinite(v.duckPercent) ? Math.max(0, Math.min(100, Math.round(v.duckPercent))) : DEFAULT_VOICE.duckPercent;
-  const base = { ...v, duck: typeof v.duck === "boolean" ? v.duck : DEFAULT_VOICE.duck, duckPercent: percent };
+  const base = { ...v, duck: typeof v.duck === "boolean" ? v.duck : DEFAULT_VOICE.duck, duckPercent: percent, unsure: v.unsure === "guest" ? ("guest" as const) : ("pin" as const) };
   if (ok(v.accept) && ok(v.challenge) && v.accept > v.challenge) return base;
   return { ...base, accept: DEFAULT_VOICE.accept, challenge: DEFAULT_VOICE.challenge };
 }

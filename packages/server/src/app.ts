@@ -1472,12 +1472,13 @@ export async function createApp(opts: AppOptions) {
         broadcast({ type: "voice.heard", text: heard, trust: "member", speaker: person.name });
         audit.log("system", "voice.member", { person: person.id }); // never the words: a family member's talk is not logged
         void runVoiceTurn(heard, ip, epoch, "member", person, spoken).catch(crash);
-      } else if (trust === "challenge") {
+      } else if (trust === "challenge" && config.voice.unsure === "pin") {
         // close, but not sure enough: nothing runs unless the owner confirms with the PIN
         const { challenge, replaced } = challenges.open(heard, ip);
         if (replaced) broadcast({ type: "voice.challenge.end", id: replaced });
         broadcast({ type: "voice.challenge", id: challenge.id, text: heard });
-      } else if (trust === "guest") {
+      } else if (trust === "guest" || trust === "challenge") {
+        // not the owner, or close but not sure and the owner chose "answer as a guest": a polite general answer, no tools, no PIN
         broadcast({ type: "voice.heard", text: heard, trust: "guest" });
         broadcast({ type: "alert", level: "warn", text: `An unrecognized voice said: "${heard.slice(0, 200)}"` });
         audit.log("system", "voice.guest", { text: heard.slice(0, 200) });
