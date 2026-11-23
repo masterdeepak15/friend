@@ -597,6 +597,17 @@ export function createGateway(deps: GatewayDeps) {
         if (!session) return reply.code(401).send({ error: "Unauthorized" });
         if (!attachWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
         if (!deps.onAttachmentUpload) return reply.code(503).send({ error: "Attaching files is not available" });
+        // only this screen may upload: a page from another address cannot use the owner's session (the cookie) to put files here
+        const origin = req.headers.origin;
+        if (origin) {
+          let same = false;
+          try {
+            same = new URL(origin).host === req.headers.host;
+          } catch {
+            same = false;
+          }
+          if (!same) return reply.code(403).send({ error: "Forbidden" });
+        }
       },
     },
     async (req, reply) => {

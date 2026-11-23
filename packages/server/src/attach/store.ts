@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { join } from "node:path";
 import { extractFile, type Extracted } from "./extract";
 
+/** All the attached files together: when a new one would go past this, the oldest are deleted first. */
+export const ATTACHMENT_TOTAL_BYTES = 1024 * 1024 * 1024;
+
 /** The most any single upload may be, whatever the setting says: the file is held in memory while it arrives. */
 export const ATTACHMENT_CEILING_BYTES = 50 * 1024 * 1024;
 
@@ -51,6 +54,7 @@ export class AttachmentStore {
     private dir: string,
     private limits: () => AttachmentLimits,
     private now: () => number = Date.now,
+    private totalBytes: number = ATTACHMENT_TOTAL_BYTES,
   ) {
     mkdirSync(dir, { recursive: true });
     this.prune();
@@ -61,6 +65,7 @@ export class AttachmentStore {
     if (bytes.length === 0) return { ok: false, status: 400, error: "The file is empty." };
     if (bytes.length > Math.min(lim.maxBytes, ATTACHMENT_CEILING_BYTES)) return { ok: false, status: 413, error: `That file is ${megabytes(bytes.length)}; the limit is ${megabytes(Math.min(lim.maxBytes, ATTACHMENT_CEILING_BYTES))} (Settings, Memory).` };
     this.prune();
+    this.makeRoom(bytes.length);
     const id = randomBytes(8).toString("hex");
     const d = join(this.dir, id);
     mkdirSync(d, { recursive: true });
@@ -77,6 +82,29 @@ export class AttachmentStore {
       return { meta, bytes: () => readFileSync(join(this.dir, id, "data.bin")) };
     } catch {
       return undefined;
+    }
+  }
+
+  /** Deletes the oldest files until `extra` more bytes fit under the total. */
+  private makeRoom(extra: number): void {
+    const all: AttachmentMeta[] = [];
+    try {
+      for (const n of readdirSync(this.dir).filter((x) => ID.test(x))) {
+        try {
+          all.push(JSON.parse(readFileSync(join(this.dir, n, "meta.json"), "utf8")) as AttachmentMeta);
+        } catch {
+          /* a folder without its meta file is dealt with by prune */
+        }
+      }
+    } catch {
+      return;
+    }
+    let used = all.reduce((n, m) => n + m.size, 0);
+    for (const m of all.sort((a, b) => a.at - b.at)) {
+      if (used + extra <= this.totalBytes) break;
+      rmSync(join(this.dir, m.id), { recursive: true, force: true });
+      this.cache.delete(m.id);
+      used -= m.size;
     }
   }
 

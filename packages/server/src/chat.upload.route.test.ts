@@ -126,3 +126,23 @@ describe("a chat message with files", () => {
     await until(() => c.of("alert").some((m) => /Only the first 1 files/.test(m.text)));
   });
 });
+
+describe("who may upload", () => {
+  it("refuses a page from another address that uses the owner's session, and accepts this screen's own address and a request with no origin", async () => {
+    await boot();
+    const cookie = await login();
+    const post = (origin: string | null) =>
+      fetch(`${base()}/api/chat/upload?name=a.txt`, { method: "POST", headers: { cookie, "content-type": "application/octet-stream", ...(origin ? { origin } : {}) }, body: "hello" });
+    expect((await post("https://evil.example")).status).toBe(403);
+    expect((await post("not a url")).status).toBe(403);
+    expect((await post(base())).status).toBe(200);
+    expect((await post(null)).status).toBe(200);
+  });
+
+  it("does not take a body of another kind", async () => {
+    await boot();
+    const cookie = await login();
+    const res = await fetch(`${base()}/api/chat/upload?name=a.txt`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ a: 1 }) });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+});

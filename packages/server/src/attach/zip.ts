@@ -1,5 +1,8 @@
 import { inflateRawSync } from "node:zlib";
 
+/** More files than this in one archive is refused: no real document has them. */
+const MAX_ENTRIES = 5000;
+
 /** One file inside a zip archive (a Word, Excel or PowerPoint document is one). */
 export interface ZipEntry {
   name: string;
@@ -21,6 +24,7 @@ export function readZip(buf: Buffer): Map<string, ZipEntry> {
   }
   if (end < 0) throw new Error("not a zip file");
   const count = buf.readUInt16LE(end + 10);
+  if (count > MAX_ENTRIES) throw new Error("the archive lists too many files");
   let p = buf.readUInt32LE(end + 16);
   for (let n = 0; n < count && p + 46 <= buf.length; n++) {
     if (buf.readUInt32LE(p) !== 0x02014b50) break;

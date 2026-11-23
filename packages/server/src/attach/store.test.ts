@@ -104,11 +104,29 @@ describe("reading an attached file", () => {
 
   it("gives a picture as a picture, and says plainly when a file cannot be read or is gone", async () => {
     const { store } = make();
-    const png = save(store, "p.png", Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const png = save(store, "p.png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]));
     expect(await readAttachment(store, png, 1)).toMatchObject({ isError: false, image: { mime: "image/png" } });
     const bin = save(store, "x.bin", Buffer.from([1, 0, 2]));
     expect(await readAttachment(store, bin, 1)).toMatchObject({ isError: true, text: expect.stringMatching(/cannot read/) });
     expect(await readAttachment(store, "0123456789abcdef", 1)).toMatchObject({ isError: true, text: expect.stringMatching(/no attached file/) });
     expect(await readAttachment(store, "../x", 1)).toMatchObject({ isError: true });
+  });
+});
+
+describe("all the files together", () => {
+  it("never fill the disk: when a new file would go past the total, the oldest are deleted first", () => {
+    let t = 1_000_000_000_000;
+    const dir = mkdtempSync(join(tmpdir(), "friend-attach-"));
+    const store = new AttachmentStore(join(dir, "uploads"), () => ({ maxBytes: 10_000, maxFiles: 5, keepDays: 30 }), () => t, 2500);
+    const ids: string[] = [];
+    for (const n of ["a", "b", "c"]) {
+      t += 1000;
+      const r = store.save(n + ".bin", Buffer.alloc(1000, 1));
+      if (!r.ok) throw new Error(r.error);
+      ids.push(r.meta.id);
+    }
+    expect(store.get(ids[0]!)).toBeUndefined(); // the oldest made room
+    expect(store.get(ids[1]!)).toBeDefined();
+    expect(store.get(ids[2]!)).toBeDefined();
   });
 });

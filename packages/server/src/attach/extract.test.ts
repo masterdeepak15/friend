@@ -1,6 +1,6 @@
 import { deflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { extractFile, MAX_TEXT_CHARS } from "./extract";
+import { extractFile, MAX_PDF_PAGES, MAX_TEXT_CHARS } from "./extract";
 import { readEntry, readZip } from "./zip";
 
 /** A zip archive made by hand: stored (0) or deflated (8). The reader does not check CRCs, so they are left 0. */
@@ -43,10 +43,12 @@ function makeZip(files: Record<string, string>, method: 0 | 8 = 8): Buffer {
   return Buffer.concat([...locals, cd, end]);
 }
 
-/** A one-page PDF with one line of text (or none). */
-function makePdf(line: string): Buffer {
+/** A PDF of one or more pages, each with one line of text (or none). */
+function makePdf(line: string, pages = 1): Buffer {
   const stream = line ? `BT /F1 18 Tf 20 100 Td (${line}) Tj ET` : "";
-  const objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>", null, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  const kids = Array.from({ length: pages }, (_, i) => `${5 + i} 0 R`).join(" ");
+  const objs: (string | null)[] = ["<< /Type /Catalog /Pages 2 0 R >>", `<< /Type /Pages /Kids [${kids}] /Count ${pages} >>`, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", null];
+  for (let i = 0; i < pages; i++) objs.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R /Resources << /Font << /F1 3 0 R >> >> >>");
   let out = "%PDF-1.4\n";
   const offs: number[] = [];
   objs.forEach((o, i) => {
@@ -145,8 +147,47 @@ describe("PDF and pictures", () => {
   });
 
   it("hands a picture over as a picture, and refuses one that is too large", async () => {
-    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
     expect(await extractFile("shot.PNG", png)).toEqual({ ok: true, kind: "image", mime: "image/png", data: png.toString("base64") });
     expect(await extractFile("big.jpg", Buffer.alloc(6 * 1024 * 1024))).toMatchObject({ ok: false, error: expect.stringMatching(/too big/) });
+  });
+});
+
+describe("a crafted file cannot use up the PC", () => {
+  it("does not send a text file named .png on as a picture, or a picture that is not what its ending says", async () => {
+    expect(await extractFile("fake.png", Buffer.from("<html>not a picture</html>"))).toMatchObject({ ok: false, error: expect.stringMatching(/not a real \.png/) });
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from("body")]);
+    expect(await extractFile("a.jpg", jpeg)).toMatchObject({ ok: true, kind: "image", mime: "image/jpeg" });
+    expect(await extractFile("a.png", jpeg)).toMatchObject({ ok: false });
+    expect(await extractFile("a.gif", Buffer.from("GIF89a-body"))).toMatchObject({ ok: true, mime: "image/gif" });
+    expect(await extractFile("a.webp", Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WEBPVP8 ")]))).toMatchObject({ ok: true, mime: "image/webp" });
+  });
+
+  it("shows only the first sheets of a workbook that has hundreds", async () => {
+    const sheets = Array.from({ length: 80 }, (_, i) => `<sheet name="S${i + 1}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("");
+    const rels = Array.from({ length: 80 }, (_, i) => `<Relationship Id="rId${i + 1}" Type="x" Target="worksheets/sheet${i + 1}.xml"/>`).join("");
+    const files: Record<string, string> = { "xl/workbook.xml": `<workbook><sheets>${sheets}</sheets></workbook>`, "xl/_rels/workbook.xml.rels": `<Relationships>${rels}</Relationships>` };
+    for (let i = 1; i <= 80; i++) files[`xl/worksheets/sheet${i}.xml`] = `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>v${i}</t></is></c></row></sheetData></worksheet>`;
+    const t = await text("many.xlsx", makeZip(files));
+    expect(t).toContain("## Sheet: S50");
+    expect(t).not.toContain("## Sheet: S51");
+    expect(t).toMatch(/only the first 50 sheets/);
+  });
+
+  it("refuses a document that unpacks to far more than its size, and an archive that lists thousands of files", async () => {
+    const big = "a".repeat(20 * 1024 * 1024);
+    const files: Record<string, string> = { "xl/workbook.xml": `<workbook><sheets>${Array.from({ length: 8 }, (_, i) => `<sheet name="S${i}" r:id="rId${i}"/>`).join("")}</sheets></workbook>`, "xl/_rels/workbook.xml.rels": `<Relationships>${Array.from({ length: 8 }, (_, i) => `<Relationship Id="rId${i}" Target="worksheets/s${i}.xml"/>`).join("")}</Relationships>` };
+    for (let i = 0; i < 8; i++) files[`xl/worksheets/s${i}.xml`] = `<worksheet>${big}</worksheet>`;
+    expect(await extractFile("bomb.xlsx", makeZip(files))).toMatchObject({ ok: false, error: expect.stringMatching(/too large or too complex/) });
+    const many: Record<string, string> = {};
+    for (let i = 0; i < 5100; i++) many[`f${i}.txt`] = "x";
+    expect(await extractFile("many.docx", makeZip(many, 0))).toMatchObject({ ok: false });
+  });
+
+  it("reads only the first pages of a very long PDF, and says so", async () => {
+    const t = await text("long.pdf", makePdf("Page text", 305));
+    expect(t).toContain(`--- page ${MAX_PDF_PAGES} ---`);
+    expect(t).not.toContain(`--- page ${MAX_PDF_PAGES + 1} ---`);
+    expect(t).toMatch(/only the first 300 of 305 pages/);
   });
 });
