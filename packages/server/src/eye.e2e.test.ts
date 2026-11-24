@@ -33,7 +33,7 @@ async function boot() {
   const dataDir = mkdtempSync(join(tmpdir(), "friend-eye-e2e-"));
   // two looks in a row: the model looks, answers, looks again after the owner is asked again
   provider = Object.assign(new FakeProvider([[snap, done], [say("I see Priya."), done], [snap, done], [say("ok"), done]]), { vision: true });
-  app = await createApp({ dataDir, provider, config: { port: 0, roots: [] }, approvalTimeoutMs: 5000, expireIntervalMs: 100 });
+  app = await createApp({ dataDir, provider, config: { port: 0, roots: [], eye: { on: false, autoOffMinutes: 0 } }, approvalTimeoutMs: 5000, expireIntervalMs: 100 });
   const port = (await app.start()).port;
   const base = `http://127.0.0.1:${port}`;
   new People(app.db, dataDir).introduce({ name: "Priya", relation: "sister", embedding: face(1) });
@@ -66,7 +66,7 @@ afterEach(async () => {
 });
 
 describe("the eye, end to end", () => {
-  it("eye off: the owner is asked. Eye on at the screen: Friend looks by itself and says who is there. Signed out: it is off again", async () => {
+  it("eye off: the owner is asked. Eye on at the screen: Friend looks by itself and says who is there. Signed out and in again: it is still on", async () => {
     const t = await boot();
     const asked = () => t.msgs.filter((m) => m.type === "approval.request") as Extract<ServerMsg, { type: "approval.request" }>[];
     const requests = () => t.msgs.filter((m) => m.type === "camera.request") as { id: string; recognise?: boolean }[];
@@ -102,12 +102,11 @@ describe("the eye, end to end", () => {
     expect(everything).not.toContain(String(face(1)[3]));
     expect(app.db.prepare("select count(*) as c from person_faces").get()).toEqual({ c: 1 }); // the stranger was not kept
 
-    // 4. signing out closes the eye
+    // 4. signing out shuts the eye while nobody is signed in, but does not change what the owner chose
     await fetch(`${t.base}/api/logout`, { method: "POST", headers: { cookie: t.cookie } });
     const login = await fetch(`${t.base}/api/login`, { method: "POST", headers: j, body: JSON.stringify({ password: owner.password }) });
     const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
     const view = (await (await fetch(`${t.base}/api/settings`, { headers: { cookie } })).json()) as { eye: { on: boolean } };
-    expect(view.eye.on).toBe(false);
-    expect(kinds("eye.off").length).toBeGreaterThanOrEqual(1);
+    expect(view.eye.on).toBe(true);
   });
 });

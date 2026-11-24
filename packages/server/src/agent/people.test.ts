@@ -177,3 +177,43 @@ describe("people.list, people.remove and people.forget_all", () => {
     expect(people.list()).toHaveLength(2);
   });
 });
+
+describe("people.share", () => {
+  beforeEach(() => {
+    people.introduce({ name: "Priya", relation: "wife", embedding: face(1) });
+  });
+
+  it("needs the owner's approval, then keeps what Priya may be told", async () => {
+    const p = seeing([[call("1", "people.share", { name: "Priya", text: "I am at the office until seven" }), done], [text("ok"), done]]);
+    await build(p).runTurn("Priya may know when I will be home", turn());
+    expect(cards()[0]).toMatchObject({ tool: "people.share", tier: "T2" });
+    expect(cards()[0]!.summary).toMatch(/Priya.*office until seven/);
+    expect(people.match([face(1)])[0]!.share).toBe("I am at the office until seven");
+    expect(lastTool(p)).toMatch(/Noted/);
+  });
+
+  it("an empty text takes the permission away", async () => {
+    people.setShare("Priya", "anything");
+    await build(seeing([[call("1", "people.share", { name: "Priya", text: "" }), done], [text("ok"), done]])).runTurn("tell her nothing", turn());
+    expect(people.match([face(1)])[0]!.share).toBe("");
+  });
+
+  it("does nothing when the owner says no, for someone unknown, or from anywhere but the Friend screen", async () => {
+    decision = "deny";
+    await build(seeing([[call("1", "people.share", { name: "Priya", text: "x" }), done], [text("ok"), done]])).runTurn("x", turn());
+    expect(people.match([face(1)])[0]!.share).toBe("");
+    decision = "approve";
+    const p = seeing([[call("1", "people.share", { name: "Nobody", text: "x" }), done], [text("ok"), done]]);
+    await build(p).runTurn("x", turn());
+    expect(lastTool(p)).toMatch(/do not know anyone called Nobody/);
+    for (const source of ["channel", "office", "task", "voice-unverified", null]) {
+      await build(seeing([[call("1", "people.share", { name: "Priya", text: "I live at 12 Park Road" }), done], [text("ok"), done]])).runTurn("x", turn(source));
+    }
+    expect(people.match([face(1)])[0]!.share).toBe("");
+  });
+
+  it("is not available to a guest or a household member", async () => {
+    for (const trust of ["guest", "member"] as const) await build(seeing([[call("1", "people.share", { name: "Priya", text: "my pin" }), done], [text("ok"), done]])).runTurn("x", turn("voice", trust));
+    expect(people.match([face(1)])[0]!.share).toBe("");
+  });
+});

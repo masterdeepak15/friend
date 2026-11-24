@@ -43,8 +43,12 @@ export interface VoiceChallenge {
 }
 
 export interface CameraView {
-  /** The owner's switch. It is not remembered: a reload turns the camera off again. */
+  /** The owner's switch on this screen. It starts on; the server's eye (Settings) decides whether anything may be looked at. */
   enabled: boolean;
+  /** The stream kept open for watching who is in front of the screen, otherwise null. */
+  watching: MediaStream | null;
+  /** Whether the server's eye is on, so this screen may watch quietly who is in front of it. */
+  eyeOn: boolean;
   /** The live stream while the camera is open for a picture, otherwise null. */
   stream: MediaStream | null;
   /** The last picture the camera took and what was found in it, kept on the screen for a few seconds after a look. */
@@ -155,7 +159,7 @@ export const initialState: StageViewState = {
   deviceOnline: false,
   voice: { mode: "idle", level: 0, available: false, enrolled: false },
   challenge: null,
-  camera: { enabled: false, stream: null },
+  camera: { enabled: true, stream: null, watching: null, eyeOn: false },
   speaker: null,
   ownerName: "",
   assistantName: "",
@@ -189,6 +193,7 @@ export type LocalAction =
   | { type: "camera.closed" }
   | { type: "camera.still"; url: string; note: string }
   | { type: "camera.still.clear" }
+  | { type: "camera.watch"; stream: MediaStream | null }
   | { type: "voice.mode"; mode: VoiceMode }
   | { type: "voice.level"; level: number };
 
@@ -247,8 +252,9 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
     }
     if (local.type === "camera.enable") {
       // switching off also drops any preview that is showing
-      return { ...state, camera: { enabled: local.value, stream: local.value ? state.camera.stream : null } };
+      return { ...state, camera: { enabled: local.value, stream: local.value ? state.camera.stream : null, watching: state.camera.watching, eyeOn: state.camera.eyeOn } };
     }
+    if (local.type === "camera.watch") return { ...state, camera: { ...state.camera, watching: local.stream } };
     if (local.type === "camera.open") return { ...state, camera: { ...state.camera, stream: local.stream } };
     if (local.type === "camera.still") return { ...state, camera: { ...state.camera, still: { url: local.url, note: local.note } } };
     if (local.type === "camera.still.clear") return { ...state, camera: { ...state.camera, still: null } };
@@ -347,6 +353,7 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
           available: m.voiceAvailable ?? state.voice.available,
           enrolled: m.voiceEnrolled ?? state.voice.enrolled,
         },
+        camera: { ...state.camera, eyeOn: m.eyeOn ?? state.camera.eyeOn },
       };
     case "error":
       return { ...state, alerts: [...state.alerts.slice(-3), { id: ++alertSeq, level: "error", text: m.message }] };

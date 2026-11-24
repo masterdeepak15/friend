@@ -22,16 +22,15 @@ export class Eye {
       anySession?: () => boolean;
     },
   ) {
-    // an eye left on in the file by a crash or a power cut is not trusted: it starts closed
-    if (d.config().eye.on) this.switchOff("restart");
   }
 
   private now(): number {
     return (this.d.clock ?? Date.now)();
   }
 
+  /** On when the owner left it on and somebody is signed in: with nobody signed in the eye is shut, without the switch being turned off. */
   isOn(): boolean {
-    return this.d.config().eye.on;
+    return this.d.config().eye.on && (this.d.anySession ? this.d.anySession() : true);
   }
 
   /** Looks at the switch and writes down a change; also ends the eye when its time is up. Called after every settings change and every half minute. */
@@ -46,7 +45,6 @@ export class Eye {
       this.d.audit.log("owner", "eye.off", { reason: this.reason });
       this.reason = "owner";
     }
-    if (cfg.on && this.d.anySession && !this.d.anySession()) return this.switchOff("no session");
     if (cfg.on && cfg.autoOffMinutes > 0 && this.now() - this.since >= cfg.autoOffMinutes * 60_000) this.switchOff("timeout");
   }
 

@@ -633,8 +633,8 @@ export interface EyeConfig {
   autoOffMinutes: number;
 }
 export const sanitizeEye = (e: Partial<EyeConfig> | undefined): EyeConfig => ({
-  on: e?.on === true,
-  autoOffMinutes: typeof e?.autoOffMinutes === "number" && Number.isFinite(e.autoOffMinutes) ? Math.min(1440, Math.max(0, Math.round(e.autoOffMinutes))) : 120,
+  on: e?.on !== false,
+  autoOffMinutes: typeof e?.autoOffMinutes === "number" && Number.isFinite(e.autoOffMinutes) ? Math.min(1440, Math.max(0, Math.round(e.autoOffMinutes))) : 0,
 });
 
 export type CodeRunnerMode = "auto" | "sandbox" | "docker";

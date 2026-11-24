@@ -146,8 +146,8 @@ describe("fitSize", () => {
 });
 
 describe("camera in the store", () => {
-  it("starts switched off and closed", () => {
-    expect(initialState.camera).toEqual({ enabled: false, stream: null });
+  it("starts switched on (the server's eye decides whether anything may be looked at) and closed", () => {
+    expect(initialState.camera).toEqual({ enabled: true, stream: null, watching: null, eyeOn: false });
   });
   it("switches on and off, and holds the stream only while open", () => {
     const { stream } = fakeStream();
@@ -158,7 +158,7 @@ describe("camera in the store", () => {
     s = reduce(s, { type: "camera.closed" });
     expect(s.camera.stream).toBeNull();
     s = reduce(reduce(s, { type: "camera.open", stream }), { type: "camera.enable", value: false });
-    expect(s.camera).toEqual({ enabled: false, stream: null }); // switching off also drops the preview
+    expect(s.camera).toEqual({ enabled: false, stream: null, watching: null, eyeOn: false }); // switching off also drops the preview
   });
   it("leaves the camera messages to the controller", () => {
     expect(reduce(initialState, { type: "camera.request", id: "r1" })).toBe(initialState);

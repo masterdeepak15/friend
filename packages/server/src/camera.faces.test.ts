@@ -76,7 +76,7 @@ describe("recognition through the whole path", () => {
   async function boot(introduce: (people: People) => void = () => {}, script?: ProviderEvent[][]) {
     dataDir = mkdtempSync(join(tmpdir(), "friend-faces-"));
     provider = Object.assign(new FakeProvider(script ?? [[snap, done], [{ type: "text_delta", text: "ok" }, done]]), { vision: true });
-    app = await createApp({ dataDir, provider, config: { port: 0, roots: [] }, approvalTimeoutMs: 5000, expireIntervalMs: 100 });
+    app = await createApp({ dataDir, provider, config: { port: 0, roots: [], eye: { on: false, autoOffMinutes: 0 } }, approvalTimeoutMs: 5000, expireIntervalMs: 100 });
     port = (await app.start()).port;
     introduce(new People(app.db, dataDir));
     const j = { "content-type": "application/json" };

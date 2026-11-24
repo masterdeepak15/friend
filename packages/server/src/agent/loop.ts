@@ -5,6 +5,7 @@ import type { CameraBroker } from "../camera";
 import type { CodeBox } from "../codebox";
 import { LOOK_TOOLS, type EyeGate } from "../eyeGate";
 import { personNotePath, type People } from "../people";
+import type { Presence } from "../presence";
 import type { MediaStore } from "../media";
 import type { BrokerHub } from "../brokers/hub";
 import type { MusicHub } from "../music/hub";
@@ -84,7 +85,9 @@ export interface AgentDeps {
   /** Lets the owner's own looks through the camera go ahead without a card while the eye is on (see eyeGate.ts). */
   eyeGate?: Pick<EyeGate, "decide">;
   /** The people the owner has introduced: who is in a picture, by the numbers of their faces. */
-  people?: Pick<People, "match" | "list" | "introduce" | "find" | "remove" | "forgetAll">;
+  people?: Pick<People, "match" | "list" | "introduce" | "find" | "remove" | "forgetAll" | "setShare">;
+  /** Who the camera shows in front of the screen right now, in words for the model. */
+  presence?: Pick<Presence, "note">;
   /** Takes one picture of the owner's Friend screen through their browser. Without it screen.look reports it is unavailable. */
   screen?: Pick<CameraBroker, "request">;
   /** Asks the owner's screen how a drawing came out (stage.check). Without it the tool reports it is unavailable. */
@@ -394,6 +397,7 @@ export class Agent {
           languageNote(text, ctx.spoken, voiceGender(devanagariLanguage(text) === "mr" || ctx.spoken?.toLowerCase().startsWith("mr") ? "mr" : "hi", { main: d.config.voice.ttsVoice, hindi: d.config.voice.hindiVoice || undefined, marathi: d.config.voice.marathiVoice || undefined })),
           memoryIndex,
           isolated ? undefined : d.soul?.text(),
+          d.presence?.note(guest ? "guest" : member ? "member" : "owner") || undefined,
         );
         for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: isolated ? "guest" : "owner", messages, tools, signal: abort.signal })) {
           if (ev.type === "usage") {
@@ -832,7 +836,7 @@ export class Agent {
       if (!z.installed || !z.enabled || !z.keySet || !z.secretSet) return fail("Zerodha is not set up yet. Check integrations.status zerodha and help the owner finish it; you cannot enter their key or secret.");
     }
     if (call.name.startsWith("people.") && !d.people) return fail("Remembering people is not available.");
-    if (call.name === "people.introduce" || call.name === "people.remove" || call.name === "people.forget_all") {
+    if (call.name === "people.introduce" || call.name === "people.share" || call.name === "people.remove" || call.name === "people.forget_all") {
       // faces are biometric data: only the owner at the Friend screen may add or delete them, never a request from a channel, the Office or a schedule
       if (ctx.source !== "chat" && ctx.source !== "voice") return fail("I can only do that while you are talking to me at the Friend screen.");
       if (call.name === "people.introduce" && !d.camera) return fail("The camera is not available.");
@@ -1184,6 +1188,15 @@ export class Agent {
       d.memoryTree?.write(personNotePath(name), `${name}${relation ? `, the owner's ${relation}` : ""}. The owner introduced them to me on ${localIso(new Date()).slice(0, 10)}.`, { title: name, summary: relation || "a person the owner introduced", source: "agent" });
       d.audit.log("agent", "tool.call", { tool: call.name, args: { name }, tier, ok: true });
       return { text: `I will remember ${name}${relation ? ` (${relation})` : ""}. Only numbers about the face are kept, not the picture.`, isError: false };
+    }
+
+    if (call.name === "people.share") {
+      const found = d.people!.find(String(args.name));
+      if (!found) return fail(`I do not know anyone called ${String(args.name)}.`);
+      const said = typeof args.text === "string" ? args.text : "";
+      d.people!.setShare(found.name, said);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { name: found.name, chars: said.length }, tier, ok: true });
+      return { text: said.trim() ? `Noted. When the camera shows ${found.name}, I may tell them that.` : `Noted. I will tell ${found.name} nothing about you.`, isError: false };
     }
 
     if (call.name === "people.remove") {

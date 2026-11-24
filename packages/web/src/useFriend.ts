@@ -2,7 +2,8 @@ import type { ClientMsg } from "@friend/protocol";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createSocket, type FriendSocket } from "./socket";
 import { initialState, reduce, type LocalAction, type StageViewState } from "./store";
-import { CameraController } from "./camera/controller";
+import { CameraController, openCamera } from "./camera/controller";
+import { PresenceWatcher } from "./camera/presence";
 import { browserFaceFinder } from "./faces";
 import { ScreenController } from "./screen/capture";
 import { analyzeScreen, measureScreen } from "./screen/inspect";
@@ -40,6 +41,7 @@ export function useFriend(onUnauthorized: () => void): {
   const controller = useRef<VoiceController | null>(null);
   const quietRef = useRef(false); // kept here too, so a controller made later (after a reconnect) starts quiet
   const camera = useRef<CameraController | null>(null);
+  const presence = useRef<PresenceWatcher | null>(null);
   const hands = useRef<HandsFree | null>(null);
   const [handsOn, setHandsOn] = useState(false);
   const unauthorized = useRef(onUnauthorized);
@@ -72,6 +74,8 @@ export function useFriend(onUnauthorized: () => void): {
       send: (m) => s.send(m),
       dispatch: (a) => dispatch(a),
       enabled: () => latest.current.camera.enabled,
+      // a look the owner asked for shares the camera that is already open for watching, so neither ends the other
+      open: async () => presence.current?.lend() ?? openCamera(),
       upload: async (id, jpeg) => {
         const res = await fetch(`/api/camera/frame/${encodeURIComponent(id)}`, {
           method: "POST",
@@ -87,6 +91,8 @@ export function useFriend(onUnauthorized: () => void): {
       },
     });
     camera.current = cam;
+    const watcher = new PresenceWatcher({ send: (m) => s.send(m), dispatch: (a) => dispatch(a), faces: (jpeg) => finder.find(jpeg), visible: () => document.visibilityState !== "hidden" });
+    presence.current = watcher;
     const scr = new ScreenController({
       send: (m) => s.send(m),
       dispatch: (a) => dispatch(a),
@@ -120,6 +126,7 @@ export function useFriend(onUnauthorized: () => void): {
         setHandsOn(false);
         ctl.blur(); // another window has Friend now: this one stops listening and speaking
         cam.dispose();
+        watcher.stop();
         scr.dispose();
       }
     });
@@ -130,6 +137,8 @@ export function useFriend(onUnauthorized: () => void): {
       hands.current = null;
       ctl.dispose();
       cam.dispose();
+      watcher.stop();
+      presence.current = null;
       scr.dispose();
       s.close();
       controller.current = null;
@@ -137,6 +146,26 @@ export function useFriend(onUnauthorized: () => void): {
       socket.current = null;
     };
   }, []);
+
+  // the camera of this screen: kept the way the owner left it, and open for watching who is in front only while the eye is on
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("friend.camera") === "off") dispatch({ type: "camera.enable", value: false });
+    } catch {
+      /* no storage: the camera starts on */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("friend.camera", state.camera.enabled ? "on" : "off");
+    } catch {
+      /* not remembered */
+    }
+  }, [state.camera.enabled]);
+  useEffect(() => {
+    if (state.camera.enabled && state.camera.eyeOn && state.connection === "open") presence.current?.start();
+    else presence.current?.stop();
+  }, [state.camera.enabled, state.camera.eyeOn, state.connection]);
 
   // switching the camera off ends any capture that is in progress
   useEffect(() => {

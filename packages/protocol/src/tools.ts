@@ -296,6 +296,14 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "people.share",
+    description:
+      "Set what you may tell one person the owner introduced about the owner, when the camera shows that person and they ask (for example: Priya may be told where I am and when I will be back). The owner says it in their own words; you write it down as a short plain statement. An empty text means nothing may be told. Only the owner at the screen can do this, and each time the owner approves it.",
+    input: z.object({ name: z.string().min(1).max(40), text: z.string().max(300) }),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
     name: "people.remove",
     description: "Forget one person the owner introduced: their saved face numbers and the notes about them are deleted. The owner types their PIN.",
     input: z.object({ name: z.string().min(1).max(40) }),
@@ -1205,6 +1213,8 @@ ${visible(clip(String(a.text ?? ""), 3000))}`;
       return `Take a picture and remember the face in it as ${visible(String(a.name ?? ""))}${a.relation ? ` (${visible(String(a.relation))})` : ""}`;
     case "people.list":
       return "List the people I remember";
+    case "people.share":
+      return `Allow telling ${visible(String(a.name ?? ""))} this about you: ${visible(String(a.text ?? "") || "(nothing)")}`;
     case "people.remove":
       return `Forget ${visible(String(a.name ?? ""))}: delete their saved face numbers and the notes about them`;
     case "people.forget_all":

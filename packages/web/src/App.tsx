@@ -230,7 +230,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
       <Overlay
         approval={state.approval}
         challenge={state.challenge}
-        cameraStream={state.camera.stream}
+        cameraStream={state.camera.stream ?? state.camera.watching}
         cameraStill={state.camera.still ?? null}
         alerts={state.alerts}
         connection={state.connection}

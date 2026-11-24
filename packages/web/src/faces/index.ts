@@ -31,8 +31,17 @@ export class FaceFinder {
 
   constructor(private deps: FaceFinderDeps) {}
 
+  private chain: Promise<unknown> = Promise.resolve();
+
+  /** One picture at a time (the watching of who is there and a look the owner asked for may meet). Never throws. */
+  find(jpeg: Blob): Promise<number[][]> {
+    const run = this.chain.then(() => this.findNow(jpeg));
+    this.chain = run.catch(() => undefined);
+    return run;
+  }
+
   /** Never throws: a model that cannot be loaded or a picture that cannot be read means no faces. */
-  async find(jpeg: Blob): Promise<number[][]> {
+  private async findNow(jpeg: Blob): Promise<number[][]> {
     try {
       this.loaded ??= this.deps.load();
       const { ort, yunet, sface } = await this.loaded;

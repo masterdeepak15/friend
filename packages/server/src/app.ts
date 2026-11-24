@@ -98,6 +98,7 @@ import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
 import { Eye } from "./eye";
 import { People, personNotePath } from "./people";
+import { Presence } from "./presence";
 import { EyeGate, voiceTurnSource } from "./eyeGate";
 import { applySettings, clientLook, COSMETIC_KEYS, onlyClosesTheEye, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
@@ -318,7 +319,9 @@ export async function createApp(opts: AppOptions) {
   let eyeTimer: ReturnType<typeof setInterval> | undefined;
   // the people the owner has introduced (face numbers, encrypted; never pictures)
   const people = new People(db, opts.dataDir);
-  // the eye: off by default, and always off again after a restart
+  const presence = new Presence({ people });
+  let lastPresenceAt = 0;
+  // the eye: on unless the owner switched it off (it also shuts while nobody is signed in)
   const eye = new Eye({
     config: () => config,
     audit,
@@ -618,7 +621,10 @@ export async function createApp(opts: AppOptions) {
       if (!config.office.enabled) office.stop(undefined, "owner"); // switched off: nobody keeps working
       broadcast(office.snapshot());
     }
-    if (applied.changed.some((k) => k === "eye" || k.startsWith("eye."))) eye.sync();
+    if (applied.changed.some((k) => k === "eye" || k.startsWith("eye."))) {
+      eye.sync();
+      broadcast(statusMsg());
+    }
     broadcast(statusMsg());
     return applied;
   }
@@ -893,6 +899,7 @@ export async function createApp(opts: AppOptions) {
     weather: weatherService,
     code: opts.codeBox ?? new CodeBox(undefined, { mode: () => config.codeRunner }),
     eyeGate: new EyeGate({ eye, audit }),
+    presence,
     people,
     camera: {
       request: (emit, signal, clip, recognise) => {
@@ -1032,6 +1039,7 @@ export async function createApp(opts: AppOptions) {
     voiceAvailable: voiceAvailable(),
     // sockets can still close while the app shuts down, after the database is gone
     voiceEnrolled: !stopped && (voiceprint?.exists() ?? false),
+    eyeOn: !stopped && eye.isOn(),
   });
   devices.onChange(() => broadcast(statusMsg()));
 
@@ -1894,7 +1902,8 @@ export async function createApp(opts: AppOptions) {
     },
     onClientMessage: (_session, msg: ClientMsg, conn) => {
       // every message from a screen is written down before it is handled (a chat message is written inside its own request, below)
-      if (msg.type !== "chat.send" && !recordWs(msg)) return void conn.send({ type: "alert", level: "error", text: "That could not be done because it could not be recorded in the audit log." });
+      // who is in front of the screen arrives every few seconds and holds face numbers: it is not written to the audit log message by message (a person arriving is, by number)
+      if (msg.type !== "chat.send" && msg.type !== "presence.faces" && !recordWs(msg)) return void conn.send({ type: "alert", level: "error", text: "That could not be done because it could not be recorded in the audit log." });
       switch (msg.type) {
         case "chat.send":
           // the reply is spoken as it is written, like one to a spoken request, unless the owner turned that off
@@ -1930,6 +1939,13 @@ export async function createApp(opts: AppOptions) {
         case "voice.confirm":
           void confirmChallenge(msg.id, msg.pin, conn).catch((e) => audit.log("system", "voice.confirm_error", { message: (e as Error).message }));
           break;
+        case "presence.faces": {
+          const t = Date.now();
+          if (!eye.isOn() || t - lastPresenceAt < 1500) break;
+          lastPresenceAt = t;
+          for (const a of presence.see(msg.faces).arrived) audit.log("owner", "presence.arrived", { person: a.id });
+          break;
+        }
         case "camera.denied":
           if (camera.deny(msg.id, msg.reason)) {
             audit.log("owner", "camera.denied", { reason: msg.reason });
@@ -2031,7 +2047,7 @@ export async function createApp(opts: AppOptions) {
       }
     },
     onDeviceConnect: (device, ws) => devices.attach(device, ws),
-    onSignOut: () => eye.switchOff("sign-out"),
+    onSignOut: () => eye.sync(), // the eye stays as the owner set it; it is shut while nobody is signed in
     onLock: () => {
       void security.notify("lock", "The emergency lock was used", "Every session was ended and the camera was switched off.");
       eye.switchOff("lock");
