@@ -38,6 +38,7 @@ let dir: string;
 let tree: MemoryTree;
 let people: People;
 let shown: number[][] | undefined;
+let waiting: { embedding: number[]; at: number } | null = null;
 let snap: ReturnType<typeof vi.fn<CameraBroker["request"]>>;
 let build: (provider: FakeProvider & { vision?: boolean }) => Agent;
 
@@ -52,6 +53,7 @@ const cards = () => emitted.filter((m) => m.type === "approval.request") as Extr
 
 beforeEach(async () => {
   emitted = [];
+  waiting = null;
   decision = "approve";
   shown = [face(1)];
   snap = vi.fn<CameraBroker["request"]>(async () => ({ ok: true, mime: "image/jpeg", data: "QUJD", ...(shown ? { faces: shown } : {}) }));
@@ -80,6 +82,7 @@ beforeEach(async () => {
       camera: { request: snap },
       memoryTree: tree,
       people,
+      visitors: { pending: () => waiting, resolve: () => { const w = waiting; waiting = null; return w; }, line: () => "" },
     });
 });
 
@@ -215,5 +218,46 @@ describe("people.share", () => {
   it("is not available to a guest or a household member", async () => {
     for (const trust of ["guest", "member"] as const) await build(seeing([[call("1", "people.share", { name: "Priya", text: "my pin" }), done], [text("ok"), done]])).runTurn("x", turn("voice", trust));
     expect(people.match([face(1)])[0]!.share).toBe("");
+  });
+});
+
+describe("people.answer", () => {
+  beforeEach(() => {
+    waiting = { embedding: face(7), at: Date.now() };
+  });
+
+  it("remembers the person in the photo under the name the owner gave, with what they may be told, from the owner's phone, with no card", async () => {
+    const p = seeing([[call("1", "people.answer", { who: "known", name: "Ravi", relation: "cousin", share: "I am out and back at six" }), done], [text("ok"), done]]);
+    await build(p).runTurn("yes, Ravi, my cousin; tell him I am out", turn("channel"));
+    expect(cards()).toHaveLength(0);
+    expect(people.list()).toMatchObject([{ name: "Ravi", relation: "cousin", usable: true }]);
+    expect(people.match([face(7)])[0]).toMatchObject({ name: "Ravi", share: "I am out and back at six" });
+    expect(waiting).toBeNull();
+    expect(lastTool(p)).toMatch(/Ravi/);
+  });
+
+  it("'stranger' keeps nobody and ends the question", async () => {
+    await build(seeing([[call("1", "people.answer", { who: "stranger" }), done], [text("ok"), done]])).runTurn("no", turn("channel"));
+    expect(people.list()).toEqual([]);
+    expect(waiting).toBeNull();
+  });
+
+  it("needs a name for a known person, and an open question", async () => {
+    const p = seeing([[call("1", "people.answer", { who: "known" }), done], [text("ok"), done]]);
+    await build(p).runTurn("yes", turn("channel"));
+    expect(lastTool(p)).toMatch(/need their name/);
+    expect(people.list()).toEqual([]);
+    waiting = null;
+    const q = seeing([[call("1", "people.answer", { who: "known", name: "Ravi" }), done], [text("ok"), done]]);
+    await build(q).runTurn("yes, Ravi", turn("channel"));
+    expect(lastTool(q)).toMatch(/No unknown person is waiting/);
+    expect(people.list()).toEqual([]);
+  });
+
+  it("is refused for a guest, a household member, the Office or a schedule, and the question stays open", async () => {
+    for (const trust of ["guest", "member"] as const) await build(seeing([[call("1", "people.answer", { who: "known", name: "Mallory" }), done], [text("ok"), done]])).runTurn("x", turn("voice", trust));
+    for (const source of ["office", "task", "voice-unverified", null]) await build(seeing([[call("1", "people.answer", { who: "known", name: "Mallory" }), done], [text("ok"), done]])).runTurn("x", turn(source));
+    expect(people.list()).toEqual([]);
+    expect(waiting).not.toBeNull();
   });
 });

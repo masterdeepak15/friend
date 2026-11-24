@@ -33,7 +33,7 @@ export function personNotePath(name: string): string {
 
 const clean = (s: string, max: number) => s.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max);
 
-function cosine(a: ArrayLike<number>, b: ArrayLike<number>): number {
+export function cosine(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let dot = 0;
   let na = 0;
   let nb = 0;

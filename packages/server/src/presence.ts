@@ -25,12 +25,12 @@ export class Presence {
   }
 
   /** The faces the browser found just now (maybe none). Returns the people who were not there at the last sighting. */
-  see(faces: number[][]): { arrived: Match[] } {
+  see(faces: number[][]): { arrived: Match[]; found: (Match | null)[] } {
     const before = this.fresh();
     const found = faces.length ? this.d.people.match(faces) : [];
     this.last = { at: this.now(), found };
     const was = new Set((before?.found ?? []).filter((m): m is Match => m !== null).map((m) => m.id));
-    return { arrived: found.filter((m): m is Match => m !== null && !was.has(m.id)) };
+    return { arrived: found.filter((m): m is Match => m !== null && !was.has(m.id)), found };
   }
 
   /** The people the camera shows now: the ones recognised, and how many faces nobody introduced. */

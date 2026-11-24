@@ -304,6 +304,14 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "people.answer",
+    description:
+      "Answer the question about an unknown person that was sent to the owner's phone with their photo. Use it only when the owner has replied: who \"known\" with the person's name (and how they are related, and what they may be told about the owner), or who \"stranger\" when the owner does not know them. It works only while such a question is open, and only for the face that was in that photo.",
+    input: z.object({ who: z.enum(["known", "stranger"]), name: z.string().min(1).max(40).optional(), relation: z.string().max(40).optional(), share: z.string().max(300).optional() }),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
     name: "people.remove",
     description: "Forget one person the owner introduced: their saved face numbers and the notes about them are deleted. The owner types their PIN.",
     input: z.object({ name: z.string().min(1).max(40) }),
@@ -1213,6 +1221,8 @@ ${visible(clip(String(a.text ?? ""), 3000))}`;
       return `Take a picture and remember the face in it as ${visible(String(a.name ?? ""))}${a.relation ? ` (${visible(String(a.relation))})` : ""}`;
     case "people.list":
       return "List the people I remember";
+    case "people.answer":
+      return String(a.who) === "known" ? `Remember the person in the photo as ${visible(String(a.name ?? ""))}` : "Mark the person in the photo as a stranger";
     case "people.share":
       return `Allow telling ${visible(String(a.name ?? ""))} this about you: ${visible(String(a.text ?? "") || "(nothing)")}`;
     case "people.remove":

@@ -27,7 +27,7 @@ export const SettingsPatch = z
     /** Where the code the assistant writes runs. Changing it needs the PIN. */
     codeRunner: z.enum(["auto", "sandbox", "docker"]),
     /** The eye. Switching it on needs the PIN; the assistant can never change it. */
-    eye: z.object({ on: z.boolean(), autoOffMinutes: z.number().int().min(0).max(1440) }).partial().strict(),
+    eye: z.object({ on: z.boolean(), autoOffMinutes: z.number().int().min(0).max(1440), askAboutStrangers: z.boolean() }).partial().strict(),
     /** The audit trail. Owner-only. */
     audit: z
       .object({
@@ -378,7 +378,7 @@ export function settingsView(c: Config): SettingsView {
     ownerName: c.ownerName,
     approvals: c.approvals,
     codeRunner: c.codeRunner,
-    eye: { on: c.eye.on, autoOffMinutes: c.eye.autoOffMinutes },
+    eye: { on: c.eye.on, autoOffMinutes: c.eye.autoOffMinutes, askAboutStrangers: c.eye.askAboutStrangers },
     phoneApprovals: { ...c.phoneApprovals },
     audit: { ...c.audit },
     channels: {

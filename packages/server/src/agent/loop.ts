@@ -6,6 +6,7 @@ import type { CodeBox } from "../codebox";
 import { LOOK_TOOLS, type EyeGate } from "../eyeGate";
 import { personNotePath, type People } from "../people";
 import type { Presence } from "../presence";
+import type { Visitors } from "../visitors";
 import type { MediaStore } from "../media";
 import type { BrokerHub } from "../brokers/hub";
 import type { MusicHub } from "../music/hub";
@@ -88,6 +89,8 @@ export interface AgentDeps {
   people?: Pick<People, "match" | "list" | "introduce" | "find" | "remove" | "forgetAll" | "setShare">;
   /** Who the camera shows in front of the screen right now, in words for the model. */
   presence?: Pick<Presence, "note">;
+  /** The stranger who was photographed and asked about on the owner's phone, while the owner's answer is awaited. */
+  visitors?: Pick<Visitors, "pending" | "resolve" | "line">;
   /** Takes one picture of the owner's Friend screen through their browser. Without it screen.look reports it is unavailable. */
   screen?: Pick<CameraBroker, "request">;
   /** Asks the owner's screen how a drawing came out (stage.check). Without it the tool reports it is unavailable. */
@@ -397,7 +400,7 @@ export class Agent {
           languageNote(text, ctx.spoken, voiceGender(devanagariLanguage(text) === "mr" || ctx.spoken?.toLowerCase().startsWith("mr") ? "mr" : "hi", { main: d.config.voice.ttsVoice, hindi: d.config.voice.hindiVoice || undefined, marathi: d.config.voice.marathiVoice || undefined })),
           memoryIndex,
           isolated ? undefined : d.soul?.text(),
-          d.presence?.note(guest ? "guest" : member ? "member" : "owner") || undefined,
+          [d.presence?.note(guest ? "guest" : member ? "member" : "owner"), guest || member ? "" : d.visitors?.line()].filter(Boolean).join("\n") || undefined,
         );
         for await (const ev of d.provider.stream({ system, ...(context ? { context } : {}), session: isolated ? "guest" : "owner", messages, tools, signal: abort.signal })) {
           if (ev.type === "usage") {
@@ -1188,6 +1191,31 @@ export class Agent {
       d.memoryTree?.write(personNotePath(name), `${name}${relation ? `, the owner's ${relation}` : ""}. The owner introduced them to me on ${localIso(new Date()).slice(0, 10)}.`, { title: name, summary: relation || "a person the owner introduced", source: "agent" });
       d.audit.log("agent", "tool.call", { tool: call.name, args: { name }, tier, ok: true });
       return { text: `I will remember ${name}${relation ? ` (${relation})` : ""}. Only numbers about the face are kept, not the picture.`, isError: false };
+    }
+
+    if (call.name === "people.answer") {
+      // the owner's reply can come from the screen, the voice, or their own phone (the chat the photo was sent to)
+      if (ctx.trust !== "owner" || !["chat", "voice", "channel"].includes(ctx.source ?? "")) return fail("Only the owner can answer that.");
+      const waiting = d.visitors?.pending();
+      if (!waiting) return fail("No unknown person is waiting for an answer.");
+      if (args.who === "stranger") {
+        d.visitors!.resolve("stranger");
+        d.audit.log("agent", "tool.call", { tool: call.name, args: { who: "stranger" }, tier, ok: true });
+        return { text: "Understood. I will not ask about that person again for a while, and I will tell them nothing about you.", isError: false };
+      }
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!name) return fail("I need their name. Ask the owner who it is.");
+      const relation = typeof args.relation === "string" ? args.relation : undefined;
+      try {
+        d.people!.introduce({ name, relation, embedding: waiting.embedding });
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+      if (typeof args.share === "string") d.people!.setShare(name, args.share);
+      d.visitors!.resolve("known");
+      d.memoryTree?.write(personNotePath(name), `${name}${relation ? `, the owner's ${relation}` : ""}. The owner told me who they are on ${localIso(new Date()).slice(0, 10)}, when they were in front of the screen.`, { title: name, summary: relation || "a person the owner told me about", source: "agent" });
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { who: "known", name }, tier, ok: true });
+      return { text: `I will remember ${name}${relation ? ` (${relation})` : ""}. Next time I see them I will greet them by name${typeof args.share === "string" && args.share.trim() ? " and tell them only what you allowed" : " and tell them nothing about you"}.`, isError: false };
     }
 
     if (call.name === "people.share") {

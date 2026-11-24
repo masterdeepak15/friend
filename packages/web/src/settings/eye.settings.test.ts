@@ -34,3 +34,12 @@ describe("what the settings screen sends for the eye", () => {
     expect(diff({ on: true, autoOffMinutes: 120 })).toEqual({});
   });
 });
+
+describe("asking about people Friend does not know", () => {
+  it("sends only that switch, and it needs the PIN", () => {
+    const before = { eye: { on: true, autoOffMinutes: 0, askAboutStrangers: false } } as SettingsView;
+    const patch = diffSettings(before, { ...before, eye: { ...before.eye!, askAboutStrangers: true } }, "");
+    expect(patch).toEqual({ eye: { askAboutStrangers: true } });
+    expect(needsPin(patch)).toBe(true);
+  });
+});

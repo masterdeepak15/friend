@@ -118,10 +118,10 @@ describe("watching who is in front of the screen", () => {
   });
   const j = { "content-type": "application/json" };
 
-  async function boot(eyeOn: boolean) {
+  async function boot(eyeOn: boolean, ask = false) {
     const dir = mkdtempSync(join(tmpdir(), "friend-presence-"));
     const provider = new FakeProvider([[{ type: "text_delta", text: "Hello." }, { type: "done" }]]);
-    app = await createApp({ dataDir: dir, provider, config: { port: 0, roots: [], eye: { on: eyeOn, autoOffMinutes: 0 } }, expireIntervalMs: 100 });
+    app = await createApp({ dataDir: dir, provider, config: { port: 0, roots: [], eye: { on: eyeOn, autoOffMinutes: 0, askAboutStrangers: ask } }, expireIntervalMs: 100 });
     const port = (await app.start()).port;
     const base = `http://127.0.0.1:${port}`;
     const people = new People(app.db, dir);
@@ -167,4 +167,27 @@ describe("watching who is in front of the screen", () => {
     expect(t.provider.calls[0]!.context ?? "").not.toContain("Priya");
     expect((app.db.prepare("select count(*) as c from audit_log where kind = 'presence.arrived'").get() as { c: number }).c).toBe(0);
   });
+
+  it("asks about a stranger who stays, but with no phone app linked it asks nobody and says so in the log, and keeps no face numbers", async () => {
+    const t = await boot(true, true);
+    await until(() => t.msgs.some((m) => m.type === "status" && m.eyeOn === true));
+    for (let i = 0; i < 3; i++) {
+      t.ws.send(JSON.stringify({ type: "presence.faces", faces: [face(9)] }));
+      await new Promise((r) => setTimeout(r, 1600));
+    }
+    await until(() => (app.db.prepare("select count(*) as c from audit_log where kind = 'visitor.unasked'").get() as { c: number }).c === 1);
+    const trail = JSON.stringify(app.db.prepare("select * from audit_log").all());
+    expect(trail).toContain("no phone app");
+    expect(trail).not.toContain(String(face(9)[7]));
+  }, 20_000);
+
+  it("never asks while that switch is off", async () => {
+    const t = await boot(true, false);
+    await until(() => t.msgs.some((m) => m.type === "status" && m.eyeOn === true));
+    for (let i = 0; i < 3; i++) {
+      t.ws.send(JSON.stringify({ type: "presence.faces", faces: [face(9)] }));
+      await new Promise((r) => setTimeout(r, 1600));
+    }
+    expect((app.db.prepare("select count(*) as c from audit_log where kind like 'visitor.%'").get() as { c: number }).c).toBe(0);
+  }, 20_000);
 });

@@ -10,22 +10,22 @@ import { applySettings, refuseForAgent } from "./settings";
 
 describe("the eye setting", () => {
   it("is on by default and never times out, and the time-out is kept between 0 and 24 hours", () => {
-    expect(sanitizeEye(undefined)).toEqual({ on: true, autoOffMinutes: 0 });
-    expect(sanitizeEye({ on: false, autoOffMinutes: 30 })).toEqual({ on: false, autoOffMinutes: 30 });
-    expect(sanitizeEye({ on: false, autoOffMinutes: -5 })).toEqual({ on: false, autoOffMinutes: 0 });
+    expect(sanitizeEye(undefined)).toEqual({ on: true, autoOffMinutes: 0, askAboutStrangers: false });
+    expect(sanitizeEye({ on: false, autoOffMinutes: 30 })).toEqual({ on: false, autoOffMinutes: 30, askAboutStrangers: false });
+    expect(sanitizeEye({ on: false, autoOffMinutes: -5 })).toEqual({ on: false, autoOffMinutes: 0, askAboutStrangers: false });
     expect(sanitizeEye({ autoOffMinutes: 99999 }).autoOffMinutes).toBe(1440);
     expect(sanitizeEye({ autoOffMinutes: 12.7 }).autoOffMinutes).toBe(13);
   });
 
   it("is read from the saved file", () => {
-    expect(loadConfig(mkdtempSync(join(tmpdir(), "friend-eye-"))).eye).toEqual({ on: true, autoOffMinutes: 0 });
+    expect(loadConfig(mkdtempSync(join(tmpdir(), "friend-eye-"))).eye).toEqual({ on: true, autoOffMinutes: 0, askAboutStrangers: false });
   });
 
   it("can be changed by the settings patch, but never by the assistant", () => {
     const c = loadConfig(mkdtempSync(join(tmpdir(), "friend-eye-")));
     c.eye.on = false;
     expect(applySettings(c, { eye: { on: true, autoOffMinutes: 45 } }).changed).toEqual(expect.arrayContaining(["eye.on", "eye.autoOffMinutes"]));
-    expect(c.eye).toEqual({ on: true, autoOffMinutes: 45 });
+    expect(c.eye).toEqual({ on: true, autoOffMinutes: 45, askAboutStrangers: false });
     expect(() => refuseForAgent({ eye: { on: true } })).toThrow(/only be changed by the owner/);
     expect(() => refuseForAgent({ eye: { autoOffMinutes: 0 } })).toThrow();
   });

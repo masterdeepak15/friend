@@ -631,9 +631,12 @@ export interface EyeConfig {
   on: boolean;
   /** Minutes until the eye switches itself off; 0 means it stays on until the owner switches it off. */
   autoOffMinutes: number;
+  /** When a person nobody introduced stays in front of the screen while the owner is away, send the owner their photo on the phone and ask who it is. Off until the owner switches it on: the photo passes through Telegram's or WhatsApp's servers. */
+  askAboutStrangers: boolean;
 }
 export const sanitizeEye = (e: Partial<EyeConfig> | undefined): EyeConfig => ({
   on: e?.on !== false,
+  askAboutStrangers: e?.askAboutStrangers === true,
   autoOffMinutes: typeof e?.autoOffMinutes === "number" && Number.isFinite(e.autoOffMinutes) ? Math.min(1440, Math.max(0, Math.round(e.autoOffMinutes))) : 0,
 });
 

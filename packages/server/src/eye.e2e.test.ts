@@ -33,7 +33,7 @@ async function boot() {
   const dataDir = mkdtempSync(join(tmpdir(), "friend-eye-e2e-"));
   // two looks in a row: the model looks, answers, looks again after the owner is asked again
   provider = Object.assign(new FakeProvider([[snap, done], [say("I see Priya."), done], [snap, done], [say("ok"), done]]), { vision: true });
-  app = await createApp({ dataDir, provider, config: { port: 0, roots: [], eye: { on: false, autoOffMinutes: 0 } }, approvalTimeoutMs: 5000, expireIntervalMs: 100 });
+  app = await createApp({ dataDir, provider, config: { port: 0, roots: [], eye: { on: false, autoOffMinutes: 0, askAboutStrangers: false } }, approvalTimeoutMs: 5000, expireIntervalMs: 100 });
   const port = (await app.start()).port;
   const base = `http://127.0.0.1:${port}`;
   new People(app.db, dataDir).introduce({ name: "Priya", relation: "sister", embedding: face(1) });
