@@ -313,4 +313,8 @@ alter table office_workers add column mcp text not null default '[]';`,
     id: 20,
     sql: `alter table office_tickets add column assigned_by text;`,
   },
+  {
+    id: 21,
+    sql: `alter table people add column share text not null default '';`,
+  },
 ];

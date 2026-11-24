@@ -134,6 +134,8 @@ export const ServerMsg = z.discriminatedUnion("type", [
     voiceAvailable: z.boolean().optional(),
     /** Whether the owner's voice has been enrolled for speaker recognition. */
     voiceEnrolled: z.boolean().optional(),
+    /** Whether the owner's eye (the camera) is on. When it is, the screen may watch quietly who is in front of it. */
+    eyeOn: z.boolean().optional(),
     message: z.string().optional(),
   }),
   z.object({
@@ -200,6 +202,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("audio.activity"), active: z.boolean() }),
   z.object({ type: z.literal("voice.confirm"), id: z.string(), pin: z.string().max(32) }),
   z.object({ type: z.literal("voice.cancel"), id: z.string() }),
+  /** Who is in front of the screen: the numbers of the faces the browser found (never a picture), a few seconds apart. */
+  z.object({ type: z.literal("presence.faces"), faces: z.array(z.array(z.number().finite()).length(128)).max(5) }),
   z.object({ type: z.literal("camera.denied"), id: z.string(), reason: z.enum(["off", "no-camera", "permission", "busy"]) }),
   z.object({ type: z.literal("screen.checked"), id: z.string(), lines: z.array(z.string().max(200)).max(12) }),
   z.object({ type: z.literal("screen.denied"), id: z.string(), reason: z.enum(["unsupported", "failed", "busy"]) }),

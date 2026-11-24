@@ -11,6 +11,8 @@ export interface PersonView {
   id: number;
   name: string;
   relation: string;
+  /** What the owner allows Friend to tell this person about the owner. Empty: nothing. */
+  share: string;
   addedAt: number;
   /** False when the saved face numbers cannot be read (the key was lost): the person must be introduced again. */
   usable: boolean;
@@ -19,6 +21,7 @@ export interface Match {
   id: number;
   name: string;
   relation: string;
+  share: string;
   score: number;
 }
 
@@ -30,7 +33,7 @@ export function personNotePath(name: string): string {
 
 const clean = (s: string, max: number) => s.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max);
 
-function cosine(a: ArrayLike<number>, b: ArrayLike<number>): number {
+export function cosine(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let dot = 0;
   let na = 0;
   let nb = 0;
@@ -96,7 +99,7 @@ export class People {
   }
 
   list(): PersonView[] {
-    const rows = this.db.prepare("select id, name, relation, created_at as addedAt from people order by name").all() as Omit<PersonView, "usable">[];
+    const rows = this.db.prepare("select id, name, relation, share, created_at as addedAt from people order by name").all() as Omit<PersonView, "usable">[];
     return rows.map((p) => {
       const faces = this.db.prepare("select id, vec from person_faces where person_id = ?").all(p.id) as { id: number; vec: string }[];
       return { ...p, usable: faces.some((f) => this.vector(f.id, f.vec) !== null) };
@@ -106,18 +109,26 @@ export class People {
   /** For each face (128 numbers), the person it matches best if that is close enough, otherwise null. */
   match(embeddings: number[][]): (Match | null)[] {
     const rows = this.db
-      .prepare("select f.id as fid, f.vec as vec, p.id as pid, p.name as name, p.relation as relation from person_faces f join people p on p.id = f.person_id")
-      .all() as { fid: number; vec: string; pid: number; name: string; relation: string }[];
+      .prepare("select f.id as fid, f.vec as vec, p.id as pid, p.name as name, p.relation as relation, p.share as share from person_faces f join people p on p.id = f.person_id")
+      .all() as { fid: number; vec: string; pid: number; name: string; relation: string; share: string }[];
     const known = rows.map((r) => ({ ...r, v: this.vector(r.fid, r.vec) })).filter((r): r is typeof r & { v: Float32Array } => r.v !== null);
     return embeddings.map((e) => {
       if (e.length !== DIM || e.some((x) => !Number.isFinite(x))) return null;
       let best: Match | null = null;
       for (const k of known) {
         const score = cosine(e, k.v);
-        if (score >= FACE_SIMILARITY_THRESHOLD && (!best || score > best.score)) best = { id: k.pid, name: k.name, relation: k.relation, score };
+        if (score >= FACE_SIMILARITY_THRESHOLD && (!best || score > best.score)) best = { id: k.pid, name: k.name, relation: k.relation, share: k.share, score };
       }
       return best;
     });
+  }
+
+  /** What Friend may tell this person about the owner. Written only by the owner; an empty text means nothing may be told. */
+  setShare(name: string, text: string): boolean {
+    const p = this.find(name);
+    if (!p) return false;
+    this.db.prepare("update people set share = ? where id = ?").run(clean(text, 300).replace(/["`]/g, "'"), p.id);
+    return true;
   }
 
   remove(id: number): void {

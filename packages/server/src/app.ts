@@ -98,6 +98,10 @@ import { FallbackProvider } from "./provider/fallback";
 import { SwitchableProvider } from "./provider/switchable";
 import { Eye } from "./eye";
 import { People, personNotePath } from "./people";
+import { Presence } from "./presence";
+import { Visitors } from "./visitors";
+import { randomUUID as visitorId } from "node:crypto";
+import { rm as dropVisitorFile, writeFile as saveVisitorFile } from "node:fs/promises";
 import { EyeGate, voiceTurnSource } from "./eyeGate";
 import { applySettings, clientLook, COSMETIC_KEYS, onlyClosesTheEye, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
@@ -318,7 +322,39 @@ export async function createApp(opts: AppOptions) {
   let eyeTimer: ReturnType<typeof setInterval> | undefined;
   // the people the owner has introduced (face numbers, encrypted; never pictures)
   const people = new People(db, opts.dataDir);
-  // the eye: off by default, and always off again after a restart
+  const presence = new Presence({ people });
+  let lastPresenceAt = 0;
+  // a person nobody introduced who stays in front of the screen while the owner is away: their photo goes to the owner's phone
+  const visitors = new Visitors({
+    enabled: () => config.eye.askAboutStrangers && eye.isOn(),
+    ask: async () => {
+      const apps = ownerChannels().filter((c) => c !== "sms");
+      if (!apps.length) {
+        audit.log("system", "visitor.unasked", { why: "no phone app" });
+        return false;
+      }
+      const shot = await camera.request(broadcast, new AbortController().signal, undefined, false);
+      if (!shot.ok) {
+        audit.log("system", "visitor.unasked", { why: "no picture" });
+        return false;
+      }
+      const bytes = Buffer.from(shot.data, "base64");
+      const path = join(opts.dataDir, `visitor-${visitorId()}.jpg`);
+      await saveVisitorFile(path, bytes);
+      const caption = "Someone I do not know has been in front of your screen. Do you know this person? Reply with who it is (for example: yes, Ravi, my cousin; you may tell him I am out) or say no.";
+      const sent: string[] = [];
+      try {
+        for (const c of apps) if ((await channelHub.sendFile(c, "me", { path, name: "visitor.jpg", mime: "image/jpeg", size: bytes.length, kind: "image" }, caption)).ok) sent.push(c);
+      } finally {
+        // WhatsApp fetches the picture from this PC a little later: it stays for a few minutes there, and goes at once for Telegram
+        if (apps.includes("whatsapp")) setTimeout(() => void dropVisitorFile(path, { force: true }), 10 * 60_000).unref();
+        else await dropVisitorFile(path, { force: true });
+      }
+      audit.log("system", sent.length ? "visitor.asked" : "visitor.unasked", { sent });
+      return sent.length > 0;
+    },
+  });
+  // the eye: on unless the owner switched it off (it also shuts while nobody is signed in)
   const eye = new Eye({
     config: () => config,
     audit,
@@ -618,7 +654,10 @@ export async function createApp(opts: AppOptions) {
       if (!config.office.enabled) office.stop(undefined, "owner"); // switched off: nobody keeps working
       broadcast(office.snapshot());
     }
-    if (applied.changed.some((k) => k === "eye" || k.startsWith("eye."))) eye.sync();
+    if (applied.changed.some((k) => k === "eye" || k.startsWith("eye."))) {
+      eye.sync();
+      broadcast(statusMsg());
+    }
     broadcast(statusMsg());
     return applied;
   }
@@ -893,6 +932,8 @@ export async function createApp(opts: AppOptions) {
     weather: weatherService,
     code: opts.codeBox ?? new CodeBox(undefined, { mode: () => config.codeRunner }),
     eyeGate: new EyeGate({ eye, audit }),
+    presence,
+    visitors,
     people,
     camera: {
       request: (emit, signal, clip, recognise) => {
@@ -1032,6 +1073,7 @@ export async function createApp(opts: AppOptions) {
     voiceAvailable: voiceAvailable(),
     // sockets can still close while the app shuts down, after the database is gone
     voiceEnrolled: !stopped && (voiceprint?.exists() ?? false),
+    eyeOn: !stopped && eye.isOn(),
   });
   devices.onChange(() => broadcast(statusMsg()));
 
@@ -1128,6 +1170,7 @@ export async function createApp(opts: AppOptions) {
 
   /** Runs the turn for something that was said, then speaks the reply. Guests get the isolated guest turn. */
   async function runVoiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" | "member" = "owner", person?: { id: number; name: string }, spoken?: string, verified = true): Promise<void> {
+    if (trust === "owner" && verified) visitors.ownerActive();
     return ensureRequest("voice", () => voiceTurn(text, ip, epoch, trust, person, spoken, verified));
   }
   async function voiceTurn(text: string, ip: string, epoch: number, trust: "owner" | "guest" | "member", person?: { id: number; name: string }, spoken?: string, verified = true): Promise<void> {
@@ -1894,7 +1937,9 @@ export async function createApp(opts: AppOptions) {
     },
     onClientMessage: (_session, msg: ClientMsg, conn) => {
       // every message from a screen is written down before it is handled (a chat message is written inside its own request, below)
-      if (msg.type !== "chat.send" && !recordWs(msg)) return void conn.send({ type: "alert", level: "error", text: "That could not be done because it could not be recorded in the audit log." });
+      // who is in front of the screen arrives every few seconds and holds face numbers: it is not written to the audit log message by message (a person arriving is, by number)
+      if (msg.type !== "ping" && msg.type !== "presence.faces" && msg.type !== "audio.activity" && msg.type !== "music.state") visitors.ownerActive();
+      if (msg.type !== "chat.send" && msg.type !== "presence.faces" && !recordWs(msg)) return void conn.send({ type: "alert", level: "error", text: "That could not be done because it could not be recorded in the audit log." });
       switch (msg.type) {
         case "chat.send":
           // the reply is spoken as it is written, like one to a spoken request, unless the owner turned that off
@@ -1930,6 +1975,15 @@ export async function createApp(opts: AppOptions) {
         case "voice.confirm":
           void confirmChallenge(msg.id, msg.pin, conn).catch((e) => audit.log("system", "voice.confirm_error", { message: (e as Error).message }));
           break;
+        case "presence.faces": {
+          const t = Date.now();
+          if (!eye.isOn() || t - lastPresenceAt < 1500) break;
+          lastPresenceAt = t;
+          const seen = presence.see(msg.faces);
+          for (const a of seen.arrived) audit.log("owner", "presence.arrived", { person: a.id });
+          visitors.see(msg.faces, seen.found);
+          break;
+        }
         case "camera.denied":
           if (camera.deny(msg.id, msg.reason)) {
             audit.log("owner", "camera.denied", { reason: msg.reason });
@@ -2031,7 +2085,7 @@ export async function createApp(opts: AppOptions) {
       }
     },
     onDeviceConnect: (device, ws) => devices.attach(device, ws),
-    onSignOut: () => eye.switchOff("sign-out"),
+    onSignOut: () => eye.sync(), // the eye stays as the owner set it; it is shut while nobody is signed in
     onLock: () => {
       void security.notify("lock", "The emergency lock was used", "Every session was ended and the camera was switched off.");
       eye.switchOff("lock");

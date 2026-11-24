@@ -565,8 +565,16 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
           </span>
         </label>
         <Field label="Switch off by itself after (minutes, 0 = never)">
-          <input type="number" min={0} max={1440} value={draft.eye?.autoOffMinutes ?? 120} onChange={(e) => setDraft({ ...draft, eye: { on: draft.eye?.on ?? false, autoOffMinutes: Math.min(1440, Math.max(0, Math.round(Number(e.target.value) || 0))) } })} />
+          <input type="number" min={0} max={1440} value={draft.eye?.autoOffMinutes ?? 120} onChange={(e) => setDraft({ ...draft, eye: { ...draft.eye, on: draft.eye?.on ?? false, autoOffMinutes: Math.min(1440, Math.max(0, Math.round(Number(e.target.value) || 0))) } })} />
         </Field>
+        <label className="check">
+          <input type="checkbox" checked={draft.eye?.askAboutStrangers ?? false} onChange={(e) => setDraft({ ...draft, eye: { autoOffMinutes: 0, ...draft.eye, on: draft.eye?.on ?? false, askAboutStrangers: e.target.checked } })} />
+          <span>
+            <b>Ask me about people Friend does not know</b>
+            <br />
+            When someone nobody introduced stays in front of the screen while you are away, send their photo to your Telegram or WhatsApp and ask who it is. Your answer teaches Friend who they are. The photo passes through Telegram's or WhatsApp's servers.
+          </span>
+        </label>
         <small className="auth-note">Pictures go to the AI model you chose. With Claude they are sent to Anthropic; with a local Ollama vision model they stay on this PC. Nothing from a picture is kept.</small>
       </div>
       <PeopleSection />

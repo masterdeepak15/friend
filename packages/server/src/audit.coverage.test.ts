@@ -131,6 +131,7 @@ describe("every message from a screen leaves an entry", () => {
   const SKIPS: Skip[] = [
     { what: "ping", why: "a keep-alive heartbeat, sent every few seconds, that changes nothing" },
     { what: "audio.activity", why: "a level meter telling whether this screen is listening or speaking, many times a minute" },
+    { what: "presence.faces", why: "the numbers of the faces in front of the screen, sent every few seconds: writing each would fill the trail and keep the numbers (a person arriving is recorded, by number only)" },
     { what: "music.state", why: "the player's progress reported once a second, not something the owner did" },
   ];
 

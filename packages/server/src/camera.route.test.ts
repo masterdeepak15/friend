@@ -26,7 +26,7 @@ async function boot(opts: { cameraTimeoutMs?: number; script?: ProviderEvent[][]
   app = await createApp({
     dataDir: mkdtempSync(join(tmpdir(), "friend-camroute-")),
     provider,
-    config: { port: 0, roots: [] },
+    config: { port: 0, roots: [], eye: { on: false, autoOffMinutes: 0, askAboutStrangers: false } }, // the eye off: the owner is asked for each look
     cameraTimeoutMs: opts.cameraTimeoutMs,
     approvalTimeoutMs: 5000,
     expireIntervalMs: 100,

@@ -165,7 +165,7 @@ export interface SettingsView {
   /** How much Friend asks before acting. */
   approvals?: ApprovalMode;
   codeRunner?: CodeRunnerMode;
-  eye?: { on: boolean; autoOffMinutes: number };
+  eye?: { on: boolean; autoOffMinutes: number; askAboutStrangers?: boolean };
   phoneApprovals?: PhoneApprovalsSettings;
   audit?: AuditSettings;
   channels?: ChannelsView;
@@ -304,6 +304,7 @@ export function diffSettings(before: SettingsView, after: SettingsView, apiKey: 
     const eye: Partial<NonNullable<SettingsView["eye"]>> = {};
     if (after.eye.on !== before.eye?.on) eye.on = after.eye.on;
     if (after.eye.autoOffMinutes !== before.eye?.autoOffMinutes) eye.autoOffMinutes = after.eye.autoOffMinutes;
+    if (after.eye.askAboutStrangers !== undefined && after.eye.askAboutStrangers !== before.eye?.askAboutStrangers) eye.askAboutStrangers = after.eye.askAboutStrangers;
     if (Object.keys(eye).length) patch.eye = eye as NonNullable<SettingsView["eye"]>;
   }
   if (apiKey.trim()) patch.apiKey = apiKey.trim();
