@@ -955,6 +955,7 @@ export async function createApp(opts: AppOptions) {
     eyeGate: new EyeGate({ eye, audit }),
     presence,
     visitors,
+    oauth: { start: (target) => connectByName(target) },
     people,
     camera: {
       request: (emit, signal, clip, recognise) => {
@@ -1387,6 +1388,28 @@ export async function createApp(opts: AppOptions) {
       }
       return true;
     },
+  };
+
+  /** The assistant asks; the owner approves on their phone. The link never goes back to the assistant. */
+  const connectByName = async (target: string): Promise<{ ok: boolean; message: string }> => {
+    const name = target.trim().toLowerCase();
+    try {
+      const service = providerById(name);
+      if (service) {
+        const r = await oauthHub.startService(service.id, { toPhone: true });
+        return r.sent ? { ok: true, message: `I sent a link to your phone. Open it to connect ${service.name}; it works once, for ten minutes.` } : { ok: true, message: `There is no phone app linked, so I could not send the link. Open Settings, Connectors and press Connect next to ${service.name}.` };
+      }
+      const c = hub.list().find((x) => x.oauth && (x.id === name || x.name.toLowerCase() === name));
+      if (c) {
+        const r = await oauthApi.connectConnector(c.id, true);
+        if (r.connected) return { ok: true, message: `${c.name} is already connected.` };
+        return r.sent ? { ok: true, message: `I sent a link to your phone. Open it to connect ${c.name}.` } : { ok: true, message: `There is no phone app linked. Open Settings, Connectors and press Connect next to ${c.name}.` };
+      }
+      const names = [...oauthHub.services().map((s) => s.id), ...hub.list().filter((x) => x.oauth).map((x) => x.id)];
+      return { ok: false, message: names.length ? `I do not know that one. These can sign in with a link: ${names.join(", ")}.` : "Nothing is set up to sign in with a link yet." };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message.slice(0, 200) };
+    }
   };
 
   const connectorsApi: ConnectorsApi = {

@@ -91,6 +91,8 @@ export interface AgentDeps {
   presence?: Pick<Presence, "note">;
   /** The stranger who was photographed and asked about on the owner's phone, while the owner's answer is awaited. */
   visitors?: Pick<Visitors, "pending" | "resolve" | "line">;
+  /** Starts a sign-in the owner asked for; the approval link goes to the owner's phone and never back here. */
+  oauth?: { start(target: string): Promise<{ ok: boolean; message: string }> };
   /** Takes one picture of the owner's Friend screen through their browser. Without it screen.look reports it is unavailable. */
   screen?: Pick<CameraBroker, "request">;
   /** Asks the owner's screen how a drawing came out (stage.check). Without it the tool reports it is unavailable. */
@@ -1191,6 +1193,14 @@ export class Agent {
       d.memoryTree?.write(personNotePath(name), `${name}${relation ? `, the owner's ${relation}` : ""}. The owner introduced them to me on ${localIso(new Date()).slice(0, 10)}.`, { title: name, summary: relation || "a person the owner introduced", source: "agent" });
       d.audit.log("agent", "tool.call", { tool: call.name, args: { name }, tier, ok: true });
       return { text: `I will remember ${name}${relation ? ` (${relation})` : ""}. Only numbers about the face are kept, not the picture.`, isError: false };
+    }
+
+    if (call.name === "connect.start") {
+      if (ctx.trust !== "owner" || !["chat", "voice", "channel"].includes(ctx.source ?? "")) return fail("Only the owner can ask for that.");
+      if (!d.oauth) return fail("Signing in with a link is not available.");
+      const r = await d.oauth.start(String(args.service ?? ""));
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { service: String(args.service ?? "").slice(0, 40) }, tier, ok: r.ok });
+      return r.ok ? { text: r.message, isError: false } : fail(r.message);
     }
 
     if (call.name === "people.answer") {

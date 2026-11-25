@@ -312,6 +312,14 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "connect.start",
+    description:
+      "Start signing in to an outside service or connector the owner asked to connect (for example Gmail). Friend sends the owner a one-time approval link on their phone; the owner approves it themselves. You never see the link or any login, and you cannot approve it. Use the service or connector name the owner used.",
+    input: z.object({ service: z.string().min(1).max(40) }),
+    baseTier: "T0",
+    target: "gateway",
+  },
+  {
     name: "people.remove",
     description: "Forget one person the owner introduced: their saved face numbers and the notes about them are deleted. The owner types their PIN.",
     input: z.object({ name: z.string().min(1).max(40) }),
@@ -1223,6 +1231,8 @@ ${visible(clip(String(a.text ?? ""), 3000))}`;
       return "List the people I remember";
     case "people.answer":
       return String(a.who) === "known" ? `Remember the person in the photo as ${visible(String(a.name ?? ""))}` : "Mark the person in the photo as a stranger";
+    case "connect.start":
+      return `Send the owner a link to approve connecting ${visible(String(a.service ?? ""))}`;
     case "people.share":
       return `Allow telling ${visible(String(a.name ?? ""))} this about you: ${visible(String(a.text ?? "") || "(nothing)")}`;
     case "people.remove":
