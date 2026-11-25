@@ -49,6 +49,8 @@ export interface Config {
   codeRunner: CodeRunnerMode;
   /** The eye: while it is on the assistant may look through the camera without asking each time (only for the owner at the screen). Off by default. */
   eye: EyeConfig;
+  /** Sign-in to outside services without pasting keys. The client ID of each known service (Google) is registered once by whoever hosts Friend; it is not a secret. */
+  oauth: OauthConfig;
   /** Asking you on your phone (Telegram buttons, or a YES / NO reply) when an action needs your approval and you are not at the screen. */
   phoneApprovals: PhoneApprovalsConfig;
   /** Messages to the owner's phone (only) when someone is trying to break in. */
@@ -640,6 +642,21 @@ export const sanitizeEye = (e: Partial<EyeConfig> | undefined): EyeConfig => ({
   autoOffMinutes: typeof e?.autoOffMinutes === "number" && Number.isFinite(e.autoOffMinutes) ? Math.min(1440, Math.max(0, Math.round(e.autoOffMinutes))) : 0,
 });
 
+export interface OauthConfig {
+  clients: Record<string, { clientId: string }>;
+}
+export const sanitizeOauth = (o: unknown): OauthConfig => {
+  const clients: OauthConfig["clients"] = {};
+  const src = o && typeof o === "object" ? ((o as { clients?: unknown }).clients as Record<string, unknown> | undefined) : undefined;
+  if (src && typeof src === "object") {
+    for (const [id, v] of Object.entries(src).slice(0, 20)) {
+      const clientId = v && typeof v === "object" ? (v as { clientId?: unknown }).clientId : undefined;
+      if (/^[a-z0-9-]{1,32}$/.test(id) && typeof clientId === "string" && clientId.trim() && clientId.length <= 300 && !/[\s\x00-\x1f\x7f]/.test(clientId.trim())) clients[id] = { clientId: clientId.trim() };
+    }
+  }
+  return { clients };
+};
+
 export type CodeRunnerMode = "auto" | "sandbox" | "docker";
 export const CODE_RUNNER_MODES: readonly CodeRunnerMode[] = ["auto", "sandbox", "docker"];
 export const sanitizeCodeRunner = (v: unknown): CodeRunnerMode => (v === "sandbox" || v === "docker" ? v : "auto");
@@ -1022,6 +1039,7 @@ const defaults = (dataDir: string): Config => ({
   approvals: "manual",
   codeRunner: "auto",
   eye: sanitizeEye(undefined),
+  oauth: sanitizeOauth(undefined),
   phoneApprovals: sanitizePhoneApprovals(undefined),
   securityAlerts: sanitizeSecurityAlerts(undefined),
   audit: sanitizeAudit(undefined),
@@ -1114,6 +1132,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     approvals: stored.approvals === "edits" || stored.approvals === "auto" ? stored.approvals : "manual",
     codeRunner: sanitizeCodeRunner(stored.codeRunner),
     eye: sanitizeEye(stored.eye),
+    oauth: sanitizeOauth(stored.oauth),
     phoneApprovals: sanitizePhoneApprovals(stored.phoneApprovals),
     securityAlerts: sanitizeSecurityAlerts(stored.securityAlerts),
     audit: sanitizeAudit(stored.audit),
