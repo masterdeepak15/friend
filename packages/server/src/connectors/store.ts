@@ -47,6 +47,8 @@ const Http = z
         }
       }, "Use https://, or http:// only for a server on this PC (localhost or 127.0.0.1)"),
     headers: z.record(z.string().regex(HeaderName), z.string().max(2000).refine(noControl)).refine((r) => Object.keys(r).length <= 10, "At most 10 headers").default({}),
+    /** Sign in with a link (OAuth) instead of a pasted key. */
+    auth: z.literal("oauth").optional(),
   })
   .strict();
 
