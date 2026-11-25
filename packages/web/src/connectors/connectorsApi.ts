@@ -1,4 +1,4 @@
-export type ConnectorStatus = "off" | "connecting" | "ready" | "error";
+export type ConnectorStatus = "off" | "connecting" | "ready" | "error" | "needs-approval";
 
 export interface ConnectorView {
   id: string;
@@ -11,6 +11,8 @@ export interface ConnectorView {
   target: string;
   /** A token or key is stored for it. The value is never sent to the screen. */
   secret: boolean;
+  /** It signs in with a link instead of a pasted key. */
+  oauth?: boolean;
 }
 
 export interface Preset {
@@ -32,7 +34,7 @@ export interface ConnectorList {
 /** What the owner fills in. `env` and `headers` are where secrets go; they are saved privately and never shown again. */
 export type NewConnector =
   | { id: string; name: string; kind: "stdio"; command: string; args: string[]; env: Record<string, string> }
-  | { id: string; name: string; kind: "http"; url: string; headers: Record<string, string> };
+  | { id: string; name: string; kind: "http"; url: string; headers: Record<string, string>; auth?: "oauth" };
 
 /** What a one-click connector needs, and whether it is on this PC. */
 export interface QuickCheck {

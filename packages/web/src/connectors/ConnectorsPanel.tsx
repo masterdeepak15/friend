@@ -3,6 +3,8 @@ import { HoloCardList, paginate, pagingFor, type HoloCard } from "../orb/HoloCar
 import { HoloPanel } from "../orb/HoloPanel";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
+import { OAuthSection } from "./OAuthSection";
+import type { OAuthApi } from "./oauthApi";
 import { httpConnectorsApi, parseEnv, parseHeaders, parseLines, type ConnectorList, type ConnectorView, type ConnectorsApi, type NewConnector, type Preset, type QuickCheck } from "./connectorsApi";
 
 type Page =
@@ -15,7 +17,7 @@ type Page =
   | { name: "quick-pin"; preset: Preset; mode: "install" | "connect"; check: QuickCheck }
   | { name: "quick-done"; preset: Preset; ok: boolean; lines: string[] };
 
-const STATUS_TEXT: Record<ConnectorView["status"], string> = { off: "Off", connecting: "Connecting…", ready: "Ready", error: "Not working" };
+const STATUS_TEXT: Record<ConnectorView["status"], string> = { off: "Off", connecting: "Connecting…", ready: "Ready", error: "Not working", "needs-approval": "Waiting for your approval" };
 
 const slug = (s: string) =>
   s
@@ -28,7 +30,7 @@ const slug = (s: string) =>
  * Owner-opened panel: the outside programs and services Friend may use (Gmail, Chrome control, …). Adding or switching
  * one on needs the PIN, because it starts a program or reaches a service. The PIN pad is drawn by the client.
  */
-export function ConnectorsPanel({ api = httpConnectorsApi, onClose, variant = "classic" }: { api?: ConnectorsApi; onClose: () => void; variant?: "classic" | "holo" }) {
+export function ConnectorsPanel({ api = httpConnectorsApi, oauth, onClose, variant = "classic" }: { api?: ConnectorsApi; oauth?: OAuthApi; onClose: () => void; variant?: "classic" | "holo" }) {
   const [list, setList] = useState<ConnectorList | null>(null);
   const [page, setPage] = useState<Page>({ name: "list" });
   const [pin, setPin] = useState("");
@@ -46,6 +48,7 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose, variant = "c
   const [args, setArgs] = useState("");
   const [secrets, setSecrets] = useState("");
   const [url, setUrl] = useState("");
+  const [byLink, setByLink] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -154,7 +157,7 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose, variant = "c
       const connector: NewConnector =
         kind === "stdio"
           ? { id, name: name.trim(), kind, command: command.trim(), args: parseLines(args), env: parseEnv(secrets) }
-          : { id, name: name.trim(), kind, url: url.trim(), headers: parseHeaders(secrets) };
+          : { id, name: name.trim(), kind, url: url.trim(), headers: byLink ? {} : parseHeaders(secrets), ...(byLink ? { auth: "oauth" as const } : {}) };
       if (connector.kind === "stdio" && !connector.command) throw new Error("Enter the program to start.");
       if (connector.kind === "http" && !connector.url) throw new Error("Enter the address of the server.");
       setPage({ name: "pin", connector, preset: page.name === "form" ? page.preset : null });
@@ -365,7 +368,11 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose, variant = "c
             </label>
             <label className="settings-field">
               <span>Secret headers (Name: value, one per line)</span>
-              <textarea rows={2} value={secrets} onChange={(e) => setSecrets(e.target.value)} autoComplete="off" />
+              <textarea rows={2} value={secrets} disabled={byLink} onChange={(e) => setSecrets(e.target.value)} autoComplete="off" />
+            </label>
+            <label className="settings-check">
+              <input type="checkbox" checked={byLink} onChange={(e) => setByLink(e.target.checked)} />
+              <span>Sign in with a link instead (no key to paste)</span>
             </label>
           </>
         )}
@@ -385,7 +392,7 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose, variant = "c
   if (variant === "holo") {
     const connected = list?.connectors ?? [];
     const presets = list?.presets ?? [];
-    const BADGE: Record<ConnectorView["status"], "on" | "off" | "warn" | "error"> = { off: "off", connecting: "warn", ready: "on", error: "error" };
+    const BADGE: Record<ConnectorView["status"], "on" | "off" | "warn" | "error"> = { off: "off", connecting: "warn", ready: "on", error: "error", "needs-approval": "warn" };
     const connectedCards: HoloCard[] = connected.map((c) => ({
       key: c.id,
       name: c.name,
@@ -416,6 +423,7 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose, variant = "c
       <>
         {errorLine}
         {notice && <p className="auth-note">{notice}</p>}
+        <OAuthSection {...(oauth ? { api: oauth } : {})} onChanged={() => void refresh()} />
         <HoloCardList
           tabs={[
             { id: "connected" as const, label: "Connected", count: connectedCards.length },
@@ -439,6 +447,7 @@ export function ConnectorsPanel({ api = httpConnectorsApi, onClose, variant = "c
     <>
       {errorLine}
       {notice && <p className="auth-note">{notice}</p>}
+      <OAuthSection {...(oauth ? { api: oauth } : {})} onChanged={() => void refresh()} />
       <h4 className="plugins-heading">Connected</h4>
       {list && list.connectors.length === 0 && <p className="auth-note">Nothing connected yet. Add one below.</p>}
       <ul className="plugin-list">
