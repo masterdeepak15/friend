@@ -78,6 +78,8 @@ export interface GatewayDeps {
   };
   /** Managing connectors from the owner's screen; the routes answer 503 without it. */
   connectors?: ConnectorsApi;
+  /** Signing in with a link; the routes answer 503 without it. */
+  oauth?: OAuthApi;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
   settings?: SettingsApi;
   /** Says a short sentence in the named voice and returns it as a WAV recording, so the owner can hear a voice before choosing it. */
@@ -201,6 +203,21 @@ export interface ConnectorsApi {
   quickInstall(preset: string, pin: string, ip: string): Promise<unknown>;
   /** Adds the connector with its fixed command and connects it. Needs the PIN. */
   quickConnect(preset: string, pin: string, ip: string): Promise<unknown>;
+}
+
+/** Signing in to outside services with a link. Errors thrown as HttpError are shown to the owner as they are. */
+export interface OAuthApi {
+  /** What is connected and what the host still has to set up. Never a token. */
+  state(): unknown;
+  connectService(id: string, toPhone: boolean): Promise<{ link: string; sent: boolean }>;
+  disconnectService(id: string): Promise<void>;
+  connectConnector(id: string, toPhone: boolean): Promise<{ link?: string; sent?: boolean; connected?: boolean }>;
+  disconnectConnector(id: string): Promise<void>;
+  /** Needs the PIN: it decides which app the owner's accounts are signed in through. */
+  setClient(id: string, clientId: string, clientSecret: string | undefined, pin: string, ip: string): Promise<void>;
+  /** The service's own sign-in address behind an approval link, once. */
+  open(ticket: string): string | null;
+  callback(params: Record<string, string>): Promise<boolean>;
 }
 
 /** What the plugin routes need from the app. Errors thrown as HttpError are shown to the owner as they are. */
@@ -1321,6 +1338,94 @@ export function createGateway(deps: GatewayDeps) {
     audit.log("owner", "connector.failed", { what, message: (e as Error).message }); // raw detail stays in the audit log
     return reply.code(500).send({ error: "That did not work. Try again." });
   };
+  // ---- signing in to outside services with a link ----
+  const oauthWindow = new SlidingWindow(20, 60_000);
+  const oauthPage = (reply: FastifyReply, ok: boolean) =>
+    reply
+      .code(ok ? 200 : 400)
+      .header("cache-control", "no-store")
+      .header("referrer-policy", "no-referrer")
+      .type("text/html; charset=utf-8")
+      .send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Friend</title><body style="font-family:system-ui;margin:3rem auto;max-width:28rem;padding:0 1rem"><h1>${ok ? "Connected" : "That did not work"}</h1><p>${ok ? "You can close this page and go back to Friend." : "Open Friend and press Connect to try again. The link may have been used or may be too old."}</p>`);
+  // The approval link is the proof: random, single use, ten minutes. There is no cookie to check, so it works from a phone.
+  app.get<{ Params: { ticket: string } }>("/api/oauth/start/:ticket", async (req, reply) => {
+    if (!deps.oauth) return reply.code(404).send();
+    if (!oauthWindow.allow(`os:${req.ip}`)) return reply.code(429).header("retry-after", 30).send();
+    const url = typeof req.params.ticket === "string" && req.params.ticket.length <= 100 ? deps.oauth.open(req.params.ticket) : null;
+    if (!url) return oauthPage(reply, false);
+    return reply.header("cache-control", "no-store").header("referrer-policy", "no-referrer").redirect(url);
+  });
+  // The service sends the owner's browser here. The one-time state Friend made is the proof.
+  app.get("/api/oauth/callback", async (req, reply) => {
+    if (!deps.oauth) return reply.code(404).send();
+    if (!oauthWindow.allow(`oc:${req.ip}`)) return reply.code(429).header("retry-after", 30).send();
+    const params: Record<string, string> = {};
+    for (const [k, v] of Object.entries((req.query ?? {}) as Record<string, unknown>)) if (typeof v === "string" && k.length <= 40 && v.length <= 2000) params[k] = v;
+    const ok = await deps.oauth.callback(params).catch(() => false);
+    return oauthPage(reply, ok);
+  });
+  const oauthGuard = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = req.cookies[COOKIE_NAME];
+    const session = token ? auth.resolveSession(token) : null;
+    if (!session) return reply.code(401).send({ error: "Unauthorized" });
+    if (!connectorWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+    if (!deps.oauth) return reply.code(503).send({ error: "Signing in with a link is not available" });
+  };
+  const oauthError = (reply: FastifyReply, e: unknown) => {
+    if (e instanceof HttpError) return reply.code(e.status).send({ error: e.message });
+    audit.log("owner", "oauth.error", { message: (e as Error).message.slice(0, 200) });
+    return reply.code(500).send({ error: "That did not work. Try again." });
+  };
+  const toPhoneBody = z.object({ toPhone: z.boolean().optional() });
+  const idParam = /^[a-z0-9-]{1,32}$/;
+  app.get("/api/oauth", { onRequest: oauthGuard }, async () => deps.oauth!.state());
+  app.post<{ Params: { id: string } }>("/api/oauth/services/:id/connect", { onRequest: oauthGuard }, async (req, reply) => {
+    const body = toPhoneBody.safeParse(req.body ?? {});
+    if (!body.success || !idParam.test(req.params.id)) return reply.code(400).send({ error: "That is not a valid request" });
+    try {
+      return await deps.oauth!.connectService(req.params.id, body.data.toPhone === true);
+    } catch (e) {
+      return oauthError(reply, e);
+    }
+  });
+  app.post<{ Params: { id: string } }>("/api/oauth/services/:id/disconnect", { onRequest: oauthGuard }, async (req, reply) => {
+    if (!idParam.test(req.params.id)) return reply.code(400).send({ error: "That is not a valid request" });
+    try {
+      await deps.oauth!.disconnectService(req.params.id);
+      return { ok: true };
+    } catch (e) {
+      return oauthError(reply, e);
+    }
+  });
+  app.post<{ Params: { id: string } }>("/api/oauth/connectors/:id/connect", { onRequest: oauthGuard }, async (req, reply) => {
+    const body = toPhoneBody.safeParse(req.body ?? {});
+    if (!body.success || !idParam.test(req.params.id)) return reply.code(400).send({ error: "That is not a valid request" });
+    try {
+      return await deps.oauth!.connectConnector(req.params.id, body.data.toPhone === true);
+    } catch (e) {
+      return oauthError(reply, e);
+    }
+  });
+  app.post<{ Params: { id: string } }>("/api/oauth/connectors/:id/disconnect", { onRequest: oauthGuard }, async (req, reply) => {
+    if (!idParam.test(req.params.id)) return reply.code(400).send({ error: "That is not a valid request" });
+    try {
+      await deps.oauth!.disconnectConnector(req.params.id);
+      return { ok: true };
+    } catch (e) {
+      return oauthError(reply, e);
+    }
+  });
+  app.put<{ Params: { id: string } }>("/api/oauth/services/:id/client", { onRequest: oauthGuard }, async (req, reply) => {
+    const body = z.object({ clientId: z.string().min(1).max(300), clientSecret: z.string().max(300).optional(), pin: z.string().min(1).max(32) }).safeParse(req.body);
+    if (!body.success || !idParam.test(req.params.id)) return reply.code(400).send({ error: "Enter the client ID and your PIN" });
+    try {
+      await deps.oauth!.setClient(req.params.id, body.data.clientId, body.data.clientSecret, body.data.pin, req.ip);
+      return { ok: true };
+    } catch (e) {
+      return oauthError(reply, e);
+    }
+  });
+
   app.get("/api/connectors", { onRequest: connectorGuard }, async () => deps.connectors!.list());
   app.post("/api/connectors", { onRequest: connectorGuard }, async (req, reply) => {
     const body = z.object({ pin: z.string().min(1).max(32), connector: z.record(z.string(), z.unknown()) }).safeParse(req.body);
