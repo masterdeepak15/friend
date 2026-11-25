@@ -43,6 +43,9 @@ import { HostPlayer } from "./music/host";
 import { MusicLibrary } from "./music/library";
 import { findMpv, Mpv, type FindResult } from "./music/mpv";
 import { MusicSecrets, MusicTokens, OAuthStates } from "./music/oauth";
+import { OAuthHub } from "./oauth/hub";
+import { VaultOAuthProvider } from "./oauth/mcpProvider";
+import { providerById } from "./oauth/providers";
 import { AudiusHub } from "./music/audius";
 import { SoundCloudHub } from "./music/soundcloud";
 import { LocalSource, MusicSources } from "./music/source";
@@ -87,7 +90,8 @@ import { duckDuckGo } from "./web/providers";
 import { webSearch } from "./web/search";
 import { chooseSearch, runWebTool, type WebToolDeps } from "./web/tools";
 import { DeviceHub } from "./devices";
-import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi, type PluginsApi, type SoulApi, type SystemApi } from "./gateway";
+import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsApi,
+  type OAuthApi, type PluginsApi, type SoulApi, type SystemApi } from "./gateway";
 import { MAX_SOUL_CHARS, Soul } from "./memory/soul";
 import { BrowserHub } from "./browser/hub";
 import { PolicyEngine } from "./policy/engine";
@@ -143,6 +147,8 @@ export interface AppOptions {
   cameraTimeoutMs?: number;
   /** How Zerodha is reached (tests hand in a fake). */
   brokerFetch?: typeof fetch;
+  /** Replaces the network for sign-in calls to outside services (tests). */
+  oauthFetch?: typeof fetch;
   /** For tests: stands in for Spotify's servers. */
   musicFetch?: typeof fetch;
   /** For tests: how names are looked up before Friend fetches audio from them. */
@@ -397,7 +403,22 @@ export async function createApp(opts: AppOptions) {
   const tasks = new Tasks(db);
   const plugins = new Plugins(db, join(opts.dataDir, "plugins"));
   const connectorStore = new ConnectorStore(opts.dataDir);
-  const hub = new McpHub(connectorStore);
+  let oauthHubRef: OAuthHub | null = null;
+  const onThisPc = (url: string): boolean => {
+    try {
+      return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname);
+    } catch {
+      return false;
+    }
+  };
+  const hub = new McpHub(connectorStore, {
+    oauth: {
+      provider: (id, name, url, onConsent) => {
+        if (!oauthHubRef) throw new Error("Signing in with a link is not ready yet.");
+        return new VaultOAuthProvider(`mcp:${id}`, oauthHubRef.vault, oauthHubRef.tickets, oauthHubRef.redirectUri(), `Friend (${name})`, onConsent, onThisPc(url));
+      },
+    },
+  });
   let listenPort = config.port;
   const provisioner = opts.video?.provisioner ?? new Provisioner({ dataDir: opts.dataDir, onError: (name, why) => audit.log("system", "video.provision_failed", { name, why: why.slice(0, 200) }) });
   const videoHub: VideoHub = new VideoHub({
@@ -934,6 +955,7 @@ export async function createApp(opts: AppOptions) {
     eyeGate: new EyeGate({ eye, audit }),
     presence,
     visitors,
+    oauth: { start: (target) => connectByName(target) },
     people,
     camera: {
       request: (emit, signal, clip, recognise) => {
@@ -1284,6 +1306,112 @@ export async function createApp(opts: AppOptions) {
     },
   };
 
+  const oauthHub = new OAuthHub({
+    dataDir: opts.dataDir,
+    config: () => ({ publicUrl: config.publicUrl, port: listenPort, oauth: config.oauth }),
+    audit,
+    send: async (text) => (await alertOwnerPhone(text)).length > 0,
+    ...(opts.oauthFetch ? { fetch: opts.oauthFetch } : {}),
+  });
+  oauthHubRef = oauthHub;
+  /** The same for the sign-in part of the saved file. */
+  const changeOauthConfig = (fn: (o: Config["oauth"]) => void): void => {
+    const saved = loadConfig(opts.dataDir);
+    fn(saved.oauth);
+    fn(config.oauth);
+    saveConfig(saved);
+  };
+  const oauthApi: OAuthApi = {
+    state: () => ({
+      services: oauthHub.services(),
+      connectors: hub
+        .list()
+        .filter((c) => c.oauth)
+        .map((c) => ({ id: c.id, name: c.name, status: c.status, connected: c.status === "ready", account: oauthHub.vault.get(`mcp:${c.id}`).account ?? null })),
+      redirectUri: oauthHub.redirectUri(),
+    }),
+    connectService: async (id, toPhone) => {
+      try {
+        return await oauthHub.startService(id, { toPhone });
+      } catch (e) {
+        throw new HttpError(400, (e as Error).message);
+      }
+    },
+    disconnectService: async (id) => {
+      if (!providerById(id)) throw new HttpError(404, "Friend does not know that service.");
+      await oauthHub.disconnect(`svc:${id}`);
+    },
+    connectConnector: async (id, toPhone) => {
+      let v;
+      try {
+        v = await hub.reload(id);
+      } catch (e) {
+        throw new HttpError(404, (e as Error).message);
+      }
+      if (!v.oauth) throw new HttpError(400, "That connector does not sign in with a link.");
+      if (v.status === "ready") return { connected: true };
+      const consent = hub.takeConsent(id);
+      if (!consent) throw new HttpError(400, v.error ?? "That connector is not waiting for approval.");
+      return oauthHub.approvalForMcp(id, consent, v.name, toPhone);
+    },
+    disconnectConnector: async (id) => {
+      await oauthHub.disconnect(`mcp:${id}`);
+      await hub.reload(id).catch(() => {});
+    },
+    setClient: async (id, clientId, clientSecret, pin, ip) => {
+      const p = providerById(id);
+      if (!p) throw new HttpError(404, "Friend does not know that service.");
+      await requirePin(pin, ip);
+      const cid = clientId.trim();
+      if (!/^[A-Za-z0-9._~-]{8,200}$/.test(cid)) throw new HttpError(400, "A client ID is letters, digits and . _ ~ - only. Copy it from the service's developer console.");
+      const changed = cid !== config.oauth.clients[id]?.clientId;
+      changeOauthConfig((o) => {
+        o.clients[id] = { clientId: cid };
+      });
+      if (clientSecret) oauthHub.setClientSecret(id, clientSecret.trim());
+      if (changed) await oauthHub.disconnect(`svc:${id}`); // a login belongs to the app it was made for
+      audit.log("owner", "oauth.client", { id, ip });
+    },
+    open: (ticket) => oauthHub.openTicket(ticket),
+    callback: async (params) => {
+      const r = await oauthHub.callback(params);
+      if (!r.ok || !r.key) return false;
+      if (r.code && r.key.startsWith("mcp:")) {
+        try {
+          await hub.finishOAuth(r.key.slice(4), r.code);
+          audit.log("owner", "oauth.connected", { key: r.key });
+          return true;
+        } catch {
+          audit.log("owner", "oauth.failed", { key: r.key });
+          return false;
+        }
+      }
+      return true;
+    },
+  };
+
+  /** The assistant asks; the owner approves on their phone. The link never goes back to the assistant. */
+  const connectByName = async (target: string): Promise<{ ok: boolean; message: string }> => {
+    const name = target.trim().toLowerCase();
+    try {
+      const service = providerById(name);
+      if (service) {
+        const r = await oauthHub.startService(service.id, { toPhone: true });
+        return r.sent ? { ok: true, message: `I sent a link to your phone. Open it to connect ${service.name}; it works once, for ten minutes.` } : { ok: true, message: `There is no phone app linked, so I could not send the link. Open Settings, Connectors and press Connect next to ${service.name}.` };
+      }
+      const c = hub.list().find((x) => x.oauth && (x.id === name || x.name.toLowerCase() === name));
+      if (c) {
+        const r = await oauthApi.connectConnector(c.id, true);
+        if (r.connected) return { ok: true, message: `${c.name} is already connected.` };
+        return r.sent ? { ok: true, message: `I sent a link to your phone. Open it to connect ${c.name}.` } : { ok: true, message: `There is no phone app linked. Open Settings, Connectors and press Connect next to ${c.name}.` };
+      }
+      const names = [...oauthHub.services().map((s) => s.id), ...hub.list().filter((x) => x.oauth).map((x) => x.id)];
+      return { ok: false, message: names.length ? `I do not know that one. These can sign in with a link: ${names.join(", ")}.` : "Nothing is set up to sign in with a link yet." };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message.slice(0, 200) };
+    }
+  };
+
   const connectorsApi: ConnectorsApi = {
     // Chrome control is a plugin when this Friend has its own copy: the plugins screen offers it, so it is not offered here a second time
     list: () => ({ connectors: hub.list(), presets: chromeBundled ? PRESETS.filter((p) => p.id !== "chrome") : PRESETS }),
@@ -1338,6 +1466,7 @@ export async function createApp(opts: AppOptions) {
     remove: async (id) => {
       try {
         await hub.remove(id);
+        oauthHub.vault.forget(`mcp:${id}`);
         audit.log("owner", "connector.removed", { id });
       } catch (e) {
         throw new HttpError(404, (e as Error).message);
@@ -1462,6 +1591,7 @@ export async function createApp(opts: AppOptions) {
   const gateway = createGateway({
     ...(tls ? { tls } : {}),
     connectors: connectorsApi,
+    oauth: oauthApi,
     chrome: chromeRemoteApi,
     system: systemApi,
     soul: soulApi,

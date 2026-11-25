@@ -1,12 +1,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import crossSpawn from "cross-spawn";
 import { createHash } from "node:crypto";
 import { ConnectorInput, ConnectorStore, describeTarget, hasSecrets, type ConnectorConfig } from "./store";
 
-export type ConnectorStatus = "off" | "connecting" | "ready" | "error";
+export type ConnectorStatus = "off" | "connecting" | "ready" | "error" | "needs-approval";
 
 /** What the screen and the AI may see about a connector. Never a secret. */
 export interface ConnectorView {
@@ -21,6 +22,8 @@ export interface ConnectorView {
   target: string;
   /** A token or key is stored for it (shown as "secret saved", never the value). */
   secret: boolean;
+  /** It signs in with a link rather than a pasted key. */
+  oauth?: boolean;
 }
 
 export interface McpToolSpec {
@@ -92,6 +95,8 @@ export interface HubOptions {
   callTimeoutMs?: number;
   /** Extra environment for started programs (tests). */
   baseEnv?: Record<string, string>;
+  /** Makes the login of a connector that signs in with a link. onConsent receives the address the owner has to be sent to. */
+  oauth?: { provider(id: string, name: string, url: string, onConsent: (u: URL) => void): OAuthClientProvider };
 }
 
 /**
@@ -101,6 +106,7 @@ export interface HubOptions {
 export class McpHub {
   private live = new Map<string, Live>();
   private names = new Map<string, { id: string; original: string }>();
+  private consents = new Map<string, URL>();
 
   constructor(
     private store: ConnectorStore,
@@ -125,6 +131,7 @@ export class McpHub {
       tools: c.enabled && l?.status === "ready" ? l.tools.length : 0,
       target: describeTarget(c),
       secret: hasSecrets(c),
+      oauth: c.kind === "http" && c.auth === "oauth",
     };
   }
 
@@ -186,6 +193,22 @@ export class McpHub {
     await this.disconnect(id);
     if (c.enabled) await this.tryConnect(id);
     return this.view(this.store.get(id)!);
+  }
+
+  /** The address the owner has to be sent to, once, after a connector asked to sign in. Null when no sign-in is waiting. */
+  takeConsent(id: string): URL | null {
+    const u = this.consents.get(id) ?? null;
+    this.consents.delete(id);
+    return u;
+  }
+
+  /** Finishes a sign-in with the code the service returned, then connects again. */
+  async finishOAuth(id: string, code: string): Promise<ConnectorView> {
+    const cfg = this.store.get(id);
+    if (!cfg || cfg.kind !== "http" || cfg.auth !== "oauth" || !this.opts.oauth) throw new Error(`There is no connector "${id}" that signs in with a link.`);
+    const transport = new StreamableHTTPClientTransport(new URL(cfg.url), { authProvider: this.opts.oauth.provider(id, cfg.name, cfg.url, () => {}) });
+    await transport.finishAuth(code);
+    return this.reload(id);
   }
 
   async remove(id: string): Promise<void> {
@@ -275,6 +298,12 @@ export class McpHub {
         entry.status = "ready";
         entry.error = null;
       } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          entry.status = "needs-approval";
+          entry.error = "Waiting for your approval.";
+          await stopLive(entry);
+          return;
+        }
         entry.status = "error";
         entry.error = `${messageOf(e)}${entry.stderr ? ` (${entry.stderr.trim().split("\n").slice(-2).join(" ").slice(0, 200)})` : ""}`;
         await stopLive(entry);
@@ -298,6 +327,10 @@ export class McpHub {
         entry.stderr = (entry.stderr + d.toString("utf8")).slice(-2000);
       });
       return t;
+    }
+    if (cfg.auth === "oauth" && this.opts.oauth) {
+      const provider = this.opts.oauth.provider(cfg.id, cfg.name, cfg.url, (u) => this.consents.set(cfg.id, u));
+      return new StreamableHTTPClientTransport(new URL(cfg.url), { authProvider: provider, requestInit: { headers: cfg.headers } });
     }
     return new StreamableHTTPClientTransport(new URL(cfg.url), { requestInit: { headers: cfg.headers } });
   }
