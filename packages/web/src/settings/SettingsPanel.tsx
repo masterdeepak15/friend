@@ -9,7 +9,16 @@ import { OfficeTab, officeProblems } from "./OfficeTab";
 import { SecurityTab } from "./SecurityTab";
 import { TradingTab } from "./TradingTab";
 import { WidgetsTab } from "./WidgetsTab";
-import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, ORIGINAL_VOICE, VOICE_CHOICES, downloadSize, isCatalogVoice } from "@friend/protocol";
+import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, OPENAI_PRESETS, ORIGINAL_VOICE, VOICE_CHOICES, downloadSize, isCatalogVoice, presetFor } from "@friend/protocol";
+
+/** Whether two server addresses are the same host (the server drops a saved key when the host changes). */
+function sameHost(a: string, b: string | undefined): boolean {
+  try {
+    return new URL(a).origin === new URL(b ?? "").origin;
+  } catch {
+    return false;
+  }
+}
 import { DEFAULT_LOOK, diffSettings, type ApprovalMode, type CodeRunnerMode, httpSettingsApi, needsPin, playVoicePreview, type Look, type ProviderName, type SettingsApi, type SettingsView, type AttachmentSettings } from "./settingsApi";
 import { STYLES, SWATCHES, THEMES, isTheme } from "./themes";
 
@@ -285,13 +294,28 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
 
       {draft.provider === "openai" && draft.openai && (
         <>
-          <Field label="Server address" hint="Ends in /v1. OmniRoute: http://localhost:20128/v1 (install it with npm install -g omniroute, then run omniroute).">
+          <Field label="Service" hint={presetFor(draft.openai.url)?.hint ?? "Any server that speaks the OpenAI way: type its address below."}>
+            <select
+              aria-label="Service"
+              value={presetFor(draft.openai.url)?.id ?? "custom"}
+              onChange={(e) => {
+                const p = OPENAI_PRESETS.find((x) => x.id === e.target.value);
+                if (p) setDraft({ ...draft, openai: { ...draft.openai!, url: p.url, model: p.model || draft.openai!.model } });
+              }}
+            >
+              {OPENAI_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+              <option value="custom">Another server (type the address)</option>
+            </select>
+          </Field>
+          <Field label="Server address" hint="Ends in /v1 (or the service's own version path).">
             <input value={draft.openai.url} onChange={(e) => setDraft({ ...draft, openai: { ...draft.openai!, url: e.target.value } })} />
           </Field>
           <Field label="Model" hint="The name that server knows. OmniRoute answers to auto.">
             <input value={draft.openai.model} onChange={(e) => setDraft({ ...draft, openai: { ...draft.openai!, model: e.target.value } })} />
           </Field>
-          <Field label="API key" hint={saved.openai?.apiKeySet ? "A key is saved. Type a new one only to replace it." : "Leave empty if the server asks for none."}>
+          <Field label="API key" hint={saved.openai?.apiKeySet ? (sameHost(draft.openai.url, saved.openai?.url) ? "A key is saved. Type a new one only to replace it." : "The saved key belongs to the old server and is removed when you save. Type the key for this one.") : "Leave empty if the server asks for none."}>
             <input type="password" autoComplete="off" placeholder={saved.openai?.apiKeySet ? "saved" : ""} value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} />
           </Field>
           <label className="settings-check">

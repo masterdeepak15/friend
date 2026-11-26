@@ -676,7 +676,17 @@ export function applySettings(config: Config, raw: unknown): Applied {
   if (p.ollama) Object.assign(config.ollama, p.ollama);
   if (p.openai) {
     const { apiKey, ...rest } = p.openai;
+    // a saved key belongs to the server it was typed for: another host never receives it, whoever changed the address
+    const sameHost = (a: string, b: string): boolean => {
+      try {
+        return new URL(a).origin === new URL(b).origin;
+      } catch {
+        return false;
+      }
+    };
+    const moved = rest.url !== undefined && !sameHost(rest.url, config.openai.url);
     Object.assign(config.openai, rest);
+    if (moved) config.openai.apiKey = null;
     if (apiKey) config.openai.apiKey = apiKey;
   }
   if (p.claudeCode) Object.assign(config.claudeCode, p.claudeCode);

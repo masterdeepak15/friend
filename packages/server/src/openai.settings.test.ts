@@ -33,6 +33,18 @@ describe("the OpenAI-compatible provider (OmniRoute) in the settings", () => {
     expect(c.openai).toMatchObject({ apiKey: "sk-secret-1", model: "gpt-4o" });
   });
 
+  it("a saved key is never sent to a different server: moving to another host drops it, staying on the same host keeps it", () => {
+    const c = fresh();
+    applySettings(c, { openai: { url: "https://api.x.ai/v1", apiKey: "sk-xai-1" } });
+    applySettings(c, { openai: { url: "https://api.x.ai/v1/", model: "grok-4" } });
+    expect(c.openai.apiKey).toBe("sk-xai-1");
+    applySettings(c, { openai: { url: "https://openrouter.ai/api/v1" } });
+    expect(c.openai.apiKey).toBeNull();
+    expect(settingsView(c).openai.apiKeySet).toBe(false);
+    applySettings(c, { openai: { url: "https://integrate.api.nvidia.com/v1", apiKey: "nvapi-1" } });
+    expect(c.openai.apiKey).toBe("nvapi-1"); // a key given together with the new address is for that address
+  });
+
   it("never lists the key among the names of what changed", () => {
     const r = applySettings(fresh(), { openai: { apiKey: "sk-secret-2" } });
     expect(JSON.stringify(r)).not.toContain("sk-secret-2");
