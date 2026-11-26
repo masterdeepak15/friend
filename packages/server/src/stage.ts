@@ -394,6 +394,8 @@ export class StageState {
         if (cmd.accent) this.mood.accent = cmd.accent;
         if (cmd.intensity !== undefined) this.mood.intensity = cmd.intensity;
         return { ok: true };
+      case "deck":
+        return { ok: true }; // the presenter holds a presentation; the screens just draw what it sends
     }
   }
 

@@ -243,6 +243,7 @@ export const SettingsPatch = z
         sttModel: z.string().trim().min(1).max(80).regex(/^[\w./-]+$/),
         duck: z.boolean(),
         duckPercent: z.number().int().min(0).max(100),
+        resumeSilenceSeconds: z.number().int().min(0).max(300),
       })
       .partial()
       .strict(),
@@ -356,7 +357,7 @@ export interface SettingsView {
   /** The key itself is never sent to the screen. */
   openai: { url: string; model: string; vision: boolean; apiKeySet: boolean };
   claudeCode: Config["claudeCode"];
-  voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "unsure" | "ttsVoice" | "sttModel" | "hindiVoice" | "marathiVoice" | "duck" | "duckPercent">;
+  voice: Pick<Config["voice"], "enabled" | "speakTyped" | "language" | "accept" | "challenge" | "unsure" | "ttsVoice" | "sttModel" | "hindiVoice" | "marathiVoice" | "duck" | "duckPercent" | "resumeSilenceSeconds">;
   /** Whether Friend updates itself. */
   updates: Config["updates"];
   /** The memory tree. */
@@ -439,6 +440,7 @@ export function settingsView(c: Config): SettingsView {
       marathiVoice: c.voice.marathiVoice,
       duck: c.voice.duck,
       duckPercent: c.voice.duckPercent,
+      resumeSilenceSeconds: c.voice.resumeSilenceSeconds,
     },
     updates: { auto: c.updates.auto },
     memory: { ...c.memory },

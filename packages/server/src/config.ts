@@ -778,6 +778,8 @@ export interface VoiceConfig {
   duck: boolean;
   /** How loud they are then, as a percent of how loud they were (0 to 100). */
   duckPercent: number;
+  /** A presentation the owner interrupted goes on by itself after this many seconds of silence once the assistant has answered (0: it waits to be told). */
+  resumeSilenceSeconds: number;
 }
 
 /** When Friend may speak first. Everything here is the owner's to set; the default is off. */
@@ -970,13 +972,15 @@ export const DEFAULT_VOICE: VoiceConfig = {
   marathiVoice: DEFAULT_MARATHI_VOICE,
   duck: true,
   duckPercent: 25,
+  resumeSilenceSeconds: 20,
 };
 
 /** Bad thresholds in an edited config must never make strangers look like the owner, so they fall back to the defaults. */
 export function sanitizeVoice(v: VoiceConfig): VoiceConfig {
   const ok = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
   const percent = typeof v.duckPercent === "number" && Number.isFinite(v.duckPercent) ? Math.max(0, Math.min(100, Math.round(v.duckPercent))) : DEFAULT_VOICE.duckPercent;
-  const base = { ...v, duck: typeof v.duck === "boolean" ? v.duck : DEFAULT_VOICE.duck, duckPercent: percent, unsure: v.unsure === "guest" ? ("guest" as const) : ("pin" as const) };
+  const resume = typeof v.resumeSilenceSeconds === "number" && Number.isFinite(v.resumeSilenceSeconds) ? Math.max(0, Math.min(300, Math.round(v.resumeSilenceSeconds))) : DEFAULT_VOICE.resumeSilenceSeconds;
+  const base = { ...v, resumeSilenceSeconds: resume, duck: typeof v.duck === "boolean" ? v.duck : DEFAULT_VOICE.duck, duckPercent: percent, unsure: v.unsure === "guest" ? ("guest" as const) : ("pin" as const) };
   if (ok(v.accept) && ok(v.challenge) && v.accept > v.challenge) return base;
   return { ...base, accept: DEFAULT_VOICE.accept, challenge: DEFAULT_VOICE.challenge };
 }

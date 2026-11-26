@@ -21,6 +21,11 @@ const percent = (v: string) => {
   if (v.trim() === "" || !Number.isFinite(n) || n < 0 || n > 100) throw new Error("Expected a number between 0 and 100");
   return Math.round(n);
 };
+const seconds = (v: string) => {
+  const n = Number(v);
+  if (v.trim() === "" || !Number.isFinite(n) || n < 0 || n > 300) throw new Error("Expected a number of seconds between 0 and 300");
+  return Math.round(n);
+};
 const httpUrl = (v: string) => {
   let u: URL;
   try {
@@ -125,6 +130,7 @@ const GROUPS: Record<string, Record<string, (v: string) => unknown>> = {
     speakTyped: bool,
     duck: bool,
     duckPercent: percent,
+    resumeSilenceSeconds: seconds,
     accept: unit,
     challenge: unit,
   },
@@ -242,6 +248,7 @@ export const KEY_HELP: Record<string, string> = {
   "phoneApprovals.allowRisky": "true or false: the phone may also answer the camera and the Office's requests (false: those wait for the screen)",
   "voice.duck": "true or false: turn music and video down while you talk to Friend and while it speaks",
   "voice.duckPercent": "0 to 100: how loud music and video are then, as a percent of how loud they were (25 is a quarter)",
+  "voice.resumeSilenceSeconds": "0 to 300: a presentation you interrupted goes on by itself after this many seconds of silence once Friend has answered (0: it waits until you say continue)",
   "voice.accept": "0 to 1: a voice at or above this match is you",
   "voice.challenge": "0 to 1: a voice between this and accept must be confirmed with your PIN",
   "ollama.url": "address of the Ollama server, for example http://127.0.0.1:11434",
