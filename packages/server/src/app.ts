@@ -105,13 +105,17 @@ import { People, personNotePath } from "./people";
 import { Presence } from "./presence";
 import { Visitors } from "./visitors";
 import { randomUUID as visitorId } from "node:crypto";
-import { rm as dropVisitorFile, writeFile as saveVisitorFile } from "node:fs/promises";
+import { mkdir as makeDir, rm as dropVisitorFile, writeFile as saveVisitorFile } from "node:fs/promises";
 import { EyeGate, voiceTurnSource } from "./eyeGate";
 import { applySettings, clientLook, COSMETIC_KEYS, onlyClosesTheEye, refuseForAgent, settingChanges, settingsView, SettingsError, type Applied } from "./settings";
 import { OllamaProvider } from "./provider/ollama";
 import { OpenAiProvider } from "./provider/openai";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
+import { DeckStore } from "./deck/store";
+import { Presenter } from "./deck/presenter";
+import { deckToHtml } from "./deck/exportHtml";
+import { deckToPptx } from "./deck/exportPptx";
 import { dbWidgetStore } from "./widgets";
 import { ensureTlsCert } from "./tls";
 import { HttpError } from "./http-error";
@@ -914,8 +918,34 @@ export async function createApp(opts: AppOptions) {
   // notes that came over from the older list, or were saved quickly, are filed under topics a little after Friend starts
   const tidyAtStart = setTimeout(() => void memoryOrganizer.maybeRun(), 45_000);
   tidyAtStart.unref();
+  // presentations: the saved decks, the player (it speaks through the same speaker and draws through the same broadcast), and the files
+  const deckStore = new DeckStore(db);
+  const presenter = new Presenter({
+    speak: (text) => (speaker ? speaker.speak(text, (m) => broadcast(m)) : Promise.resolve()),
+    interrupt: () => speaker?.interrupt((m) => broadcast(m)),
+    emit: (m) => broadcast(m),
+    setTimer: (fn, ms) => {
+      const t = setTimeout(fn, ms);
+      return () => clearTimeout(t);
+    },
+    resumeSilenceSeconds: () => config.voice.resumeSilenceSeconds,
+    voiceOn: () => !!speaker && voiceAvailable() && config.voice.enabled,
+  });
+  const exportDeck = async (id: string, format: "pptx" | "html"): Promise<string> => {
+    const deck = deckStore.get(id);
+    if (!deck) throw new Error("No such presentation.");
+    const root = config.roots[0];
+    if (!root) throw new Error("There is no workspace folder to save into. Set one in the settings first.");
+    const dir = join(root, "Presentations");
+    await makeDir(dir, { recursive: true });
+    const name = deck.title.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").slice(0, 60) || "presentation";
+    const path = join(dir, `${name}.${format}`);
+    await saveVisitorFile(path, format === "html" ? deckToHtml(deck) : await deckToPptx(deck));
+    return path;
+  };
   const agent = new Agent({
     auditQuery: new AuditQuery(db),
+    decks: { store: deckStore, presenter, exportDeck },
     notifyOwner: (text, title) => tellOwner(text, title),
     securityAlert: async (text) => {
       const r = await security.notify("assistant", "Someone is trying to get past the rules", `The assistant noticed it while talking: "${text.replace(/\s+/g, " ").trim().slice(0, 300)}"`, 2);
@@ -1218,8 +1248,10 @@ export async function createApp(opts: AppOptions) {
       if (m.type === "caption.delta" && epoch === lockEpoch) talk?.push(m.text); // locked meanwhile: stay silent
       broadcast(m);
     };
+    if (trust === "owner" && verified) presenter.userSpoke(); // a presentation stops where it is while the owner is answered
     await agent.runTurn(text, { trust, emit, ip, source: voiceTurnSource(verified), ...(person ? { person } : {}), ...(spoken ? { spoken } : {}) });
     await talk?.end();
+    presenter.answered();
   }
 
   /** The owner answers "was that you?" with the PIN; only then do the held-back words run, as the owner. */
@@ -2067,6 +2099,8 @@ export async function createApp(opts: AppOptions) {
       clients.add(conn);
       musicHub.attach(conn);
       conn.send({ type: "snapshot", stage: stage.snapshot(), pendingApproval: approvals.pending() });
+      const playing = presenter.view();
+      if (playing) conn.send({ type: "stage", command: { cmd: "deck", view: playing } }); // a screen that joins mid-presentation draws the current slide
       conn.send(statusMsg());
       conn.send(uiMsg());
       conn.send(office.snapshot());
@@ -2101,8 +2135,10 @@ export async function createApp(opts: AppOptions) {
             if (speaker && voiceAvailable() && config.voice.speakTyped) {
               void runVoiceTurn(text, conn.ip, lockEpoch).catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
             } else {
+              presenter.userSpoke();
               void agent
                 .runTurn(text, { trust: "owner", emit: broadcast, ip: conn.ip, source: "chat" })
+                .then(() => presenter.answered())
                 .catch((e) => audit.log("system", "turn.crash", { message: (e as Error).message }));
             }
           });
@@ -2114,6 +2150,10 @@ export async function createApp(opts: AppOptions) {
           break;
         case "voice.interrupt":
           speaker?.interrupt(broadcast);
+          presenter.userSpoke();
+          break;
+        case "deck.control":
+          presenter.control(msg.action, msg.slide);
           break;
         case "audio.activity":
           ducker.set(duckId(conn), msg.active);

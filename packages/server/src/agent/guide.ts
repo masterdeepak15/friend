@@ -4,7 +4,7 @@ import { jarvisCatalog } from "@friend/protocol";
  * every widget with its props and an example, how to arrange them, and when to put something on top or clear the screen.
  */
 
-export const GUIDE_TOPICS = ["all", "widgets", "layout", "overlay", "theme", "files", "recipes"] as const;
+export const GUIDE_TOPICS = ["all", "widgets", "layout", "overlay", "theme", "files", "recipes", "presentations"] as const;
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];
 
 const WIDGETS = `WIDGETS (stage.show {object:{id, type, props, placement?, ttl?, layer?}})
@@ -78,7 +78,17 @@ const RECIPES = `RECIPES
 - Timer: countdown with "to" (an ISO time) and pin it if the owner wants it to stay.
 - Morning briefing: tabs {tabs:[{title:"Today",type:"timeline"},{title:"Tasks",type:"checklist"},{title:"Weather",type:"kv"}]}.`;
 
-const SECTIONS: Record<Exclude<GuideTopic, "all">, string> = { widgets: WIDGETS, layout: LAYOUT, overlay: OVERLAY, theme: THEME, files: FILES, recipes: RECIPES };
+const PRESENTATIONS = `PRESENTATIONS (deck.create, deck.present, deck.control; the owner asks "make a presentation on X", "present it")
+1. Write the whole deck first with deck.create, then offer to present it (or present it at once if the owner asked to). Say what you made in a sentence: the title and how many slides.
+2. One idea per slide. A slide has a title, a layout (title, bullets, visual, two-column, quote, end) and items that appear one by one. A bullets slide fits at most 5 items, a visual slide 1, a two-column slide 8: split anything bigger into two slides. At most 40 slides; around 8 to 12 is a good talk. Start with a title slide and end with an end slide.
+3. Each item has "say": what you say aloud while it appears. Speak like a teacher: short sentences that explain and give an example, never read the bullet word for word, no symbols or markup. Up to 400 characters. The slide text is short; the explanation is in "say".
+4. Items: kind "text" with content {text, style: heading | bullet | quote}, or a real picture: chart, table, stat, graph, timeline, code, a Jarvis component (JTable columns can be plain names and rows plain lists), or sandbox for an animation of your own. Prefer a picture to a long list when it shows the idea better.
+5. animation per item: fade, slide-left, slide-up, grow, type (text typed out), draw (a chart draws in), none. Vary them a little; headings slide or type, charts draw, numbers grow.
+6. While it runs the owner may talk. It pauses, you get a note "A presentation ... is paused at slide N, item M". Answer the question (keep it short), then call deck.control {action:"resume"} to go on (it repeats the item that was interrupted), or ask "shall I continue?". If the owner stays silent it goes on by itself. Do not present a slide's content again in your answer.
+7. deck.control also has next, back, repeat, goto (slide) and stop. deck.edit changes a saved deck ("add a slide on phishing", "change slide 3"). deck.export saves a deck as pptx (to edit in PowerPoint) or html (plays alone in any browser); it asks the owner first. deck.list and deck.show read decks.
+8. A presentation uses the stage while it runs: do not put other pictures on the screen until it stops.`;
+
+const SECTIONS: Record<Exclude<GuideTopic, "all">, string> = { widgets: WIDGETS, layout: LAYOUT, overlay: OVERLAY, theme: THEME, files: FILES, recipes: RECIPES, presentations: PRESENTATIONS };
 
 /** The manual for one topic, or all of it. */
 export function screenGuide(topic: GuideTopic = "all"): string {

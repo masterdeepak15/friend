@@ -122,6 +122,7 @@ describe("every message from a screen leaves an entry", () => {
     "stage.move": { objectId: "x", rect: { x: 0, y: 0, w: 0.5, h: 0.5 } },
     "stage.pin": { objectId: "x", pinned: true },
     "stage.dock": { objectId: "x", docked: false },
+    "deck.control": { action: "stop" },
     "music.remote": { command: { action: "pause" } },
     "office.stop": {},
     "office.fire": { workerId: "nobody" },
