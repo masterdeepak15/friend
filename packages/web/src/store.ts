@@ -1,5 +1,6 @@
 import {
   ServerMsg,
+  type DeckView,
   type HudInstrument,
   type PendingApproval,
   type PresenceState,
@@ -65,6 +66,8 @@ export interface StageViewState {
   objects: StageObject[];
   /** The live instruments of the home screen that the assistant has brought up. */
   widgets: HudInstrument[];
+  /** The presentation being played, or null. */
+  deck: DeckView | null;
   captions: string;
   captionDone: boolean;
   presence: { state: PresenceState; style: PresenceStyle; amplitude: number; pulse: number };
@@ -142,6 +145,7 @@ export const initialState: StageViewState = {
   scene: "conversation",
   objects: [],
   widgets: [],
+  deck: null,
   captions: "",
   captionDone: true,
   presence: { state: "idle", style: "sphere", amplitude: 0, pulse: 0 },
@@ -234,6 +238,8 @@ function applyStage(s: StageViewState, cmd: Extract<ServerMsg, { type: "stage" }
       };
     case "mood":
       return { ...s, mood: { accent: cmd.accent ?? s.mood.accent, intensity: cmd.intensity ?? s.mood.intensity } };
+    case "deck":
+      return { ...s, deck: cmd.view };
   }
 }
 

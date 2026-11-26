@@ -191,7 +191,7 @@ export interface SettingsView {
   browser?: { installed: boolean; enabled: boolean; chromePath: string; timeoutSec: number; maxChars: number };
   /** Searching the web. The keys are never sent here, only whether they are set. */
   web?: { enabled: boolean; provider: "duckduckgo" | "brave" | "tavily" | "searxng"; searxngUrl: string; braveKeySet: boolean; tavilyKeySet: boolean; tavily?: { installed: boolean; enabled: boolean; depth: "basic" | "advanced"; maxResults: number } };
-  voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; unsure?: "pin" | "guest"; ttsVoice: string; sttModel: string; hindiVoice?: string; marathiVoice?: string; duck?: boolean; duckPercent?: number };
+  voice: { enabled: boolean; speakTyped: boolean; language: string | null; accept: number; challenge: number; unsure?: "pin" | "guest"; ttsVoice: string; sttModel: string; hindiVoice?: string; marathiVoice?: string; duck?: boolean; duckPercent?: number; resumeSilenceSeconds?: number };
 }
 
 export type PresenceStyleName = "sphere" | "orb" | "ring";

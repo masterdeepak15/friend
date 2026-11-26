@@ -1,3 +1,4 @@
+import { DECK_CONTROLS } from "./deck";
 import { z } from "zod";
 import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, type HudWidgetId } from "./hud";
 import { MAX_FEED_CHARS, OFFICE_FEED_KINDS, OfficeQuota, OfficeTicketView, OfficeWorkerView } from "./office";
@@ -217,6 +218,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stage.pin"), objectId: z.string().max(64), pinned: z.boolean() }),
   /** The owner tapped a chip (docked false: bring it back) or put a card away (docked true). */
   z.object({ type: z.literal("stage.dock"), objectId: z.string().max(64), docked: z.boolean() }),
+  /** The owner steers the presentation from the control bar. */
+  z.object({ type: z.literal("deck.control"), action: z.enum(DECK_CONTROLS), slide: z.number().int().min(1).optional() }),
   z.object({ type: z.literal("music.state"), state: MusicState }),
   /** A screen's button press for the PC's player (only used while the output is the PC). */
   z.object({ type: z.literal("music.remote"), command: MusicCommand }),

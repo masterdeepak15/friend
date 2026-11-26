@@ -1,3 +1,4 @@
+import { DeckView } from "../deck/DeckView";
 import { ChipStrip } from "./ChipStrip";
 import type { ClientMsg } from "@friend/protocol";
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -228,6 +229,7 @@ export function Stage({ state, send, dispatch, voice, slash, onMenu, hudLayer, p
         {autos.length > 0 && <div className="auto-grid">{autos.map(renderObject)}</div>}
         {fixed.map(renderObject)}
       </div>
+      {state.deck && <DeckView view={state.deck} onControl={(action) => send({ type: "deck.control", action })} />}
       {overlays.length > 0 && (
         <div className="overlay-layer" data-testid="overlay">
           {overlays.some(({ object }) => object.role !== "note") && <div

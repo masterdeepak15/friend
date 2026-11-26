@@ -358,6 +358,9 @@ export function SettingsPanel({ api = httpSettingsApi, onClose, initialTab = "mo
       <Field label={`Volume while talking: ${draft.voice.duckPercent ?? 25}%`} hint="How loud music and video are then, compared with how loud you have them. They come back as they were when nothing is happening.">
         <input type="range" min={0} max={100} step={5} value={draft.voice.duckPercent ?? 25} disabled={draft.voice.duck === false} onChange={(e) => set("voice", "duckPercent", Number(e.target.value))} />
       </Field>
+      <Field label={`Presentations: go on by itself after ${draft.voice.resumeSilenceSeconds ?? 20} seconds of silence`} hint="When you interrupt a presentation and Friend has answered, it asks to continue and goes on by itself after this much silence. 0 means it always waits until you say continue.">
+        <input type="number" min={0} max={300} step={5} aria-label="Resume a presentation after silence (seconds)" value={draft.voice.resumeSilenceSeconds ?? 20} onChange={(e) => set("voice", "resumeSilenceSeconds", Math.max(0, Math.min(300, Math.round(Number(e.target.value) || 0))))} />
+      </Field>
       <Field label="Spoken language" hint="Leave empty to detect it by itself: best when you mix English, Hindi and Marathi. Or force one: en, hi, mr.">
         <input value={draft.voice.language ?? ""} maxLength={10} onChange={(e) => set("voice", "language", e.target.value.trim() === "" ? null : e.target.value.trim())} />
       </Field>
