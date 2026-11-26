@@ -317,4 +317,12 @@ alter table office_workers add column mcp text not null default '[]';`,
     id: 21,
     sql: `alter table people add column share text not null default '';`,
   },
+  {
+    id: 22,
+    sql: `create table decks (
+  id text primary key,
+  deck_json text not null,
+  created_at integer not null
+);`,
+  },
 ];
