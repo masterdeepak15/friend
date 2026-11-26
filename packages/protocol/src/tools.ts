@@ -1,4 +1,5 @@
 import { z, type ZodTypeAny } from "zod";
+import { DECK_CONTROLS, DECK_LIMITS, DeckItemInput, DeckSlideInput } from "./deck";
 import { ViewPreset } from "./messages";
 import { OBJECT_TYPES, ObjectRole, Placement, PresenceState, PresenceStyle, SceneMode, StageObject } from "./stage";
 import type { Tier } from "./tiers";
@@ -622,6 +623,73 @@ export const TOOL_DEFS: ToolDef[] = [
     target: "gateway",
   },
   {
+    name: "deck.create",
+    description: "Write a presentation and save it. Give a title and the slides. Each slide: title, layout (title | bullets | visual | two-column | quote | end), optional notes for the owner, and items that appear one by one. Each item: kind (text with content {text, style?: heading|bullet|quote}, or any stage object type such as chart, table, stat, graph, timeline, code, or a Jarvis component, with its props as content), say (what you say aloud while it appears: short spoken sentences that explain, not read the text out), animation (fade | slide-left | slide-up | grow | type | draw | none), optional hold seconds. One idea per slide. A bullets slide fits at most 5 items, a visual slide 1, a two-column slide 8: split bigger slides. At most 40 slides. Make the deck complete, then offer to present it (deck.present).",
+    input: z.object({ title: z.string().min(1).max(DECK_LIMITS.title), topic: z.string().max(200).optional(), slides: z.array(DeckSlideInput).min(1).max(DECK_LIMITS.slides) }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "deck.edit",
+    description: "Change a saved deck. op: add-slide (slideData, at? 1-based position, default end), replace-slide (slide, slideData), move-slide (slide, to), delete-slide (slide), add-item (slide, itemData, at?), replace-item (slide, item, itemData), delete-item (slide, item). Slide and item numbers start at 1. The same limits as deck.create apply; a change that breaks them is refused with the reason.",
+    input: z.object({
+      id: z.string().max(40),
+      op: z.enum(["add-slide", "replace-slide", "move-slide", "delete-slide", "add-item", "replace-item", "delete-item"]),
+      slide: z.number().int().min(1).optional(),
+      item: z.number().int().min(1).optional(),
+      at: z.number().int().min(1).optional(),
+      to: z.number().int().min(1).optional(),
+      slideData: DeckSlideInput.optional(),
+      itemData: DeckItemInput.optional(),
+    }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "deck.list",
+    description: "List the saved presentations (id, title, number of slides).",
+    input: z.object({}),
+    baseTier: "T0",
+    target: "gateway",
+    readOnly: true,
+  },
+  {
+    name: "deck.show",
+    description: "Read a saved deck as a text outline (slide titles, items, what is said). It does not draw it; use deck.present to present.",
+    input: z.object({ id: z.string().max(40) }),
+    baseTier: "T0",
+    target: "gateway",
+    readOnly: true,
+  },
+  {
+    name: "deck.present",
+    description: "Present a saved deck on the screen: it shows each slide's items one by one with their animation and says them aloud, slide after slide, until the end. The owner may talk at any time: you are then asked to answer, and the presentation waits (it goes on by itself after a silence, or when you call deck.control resume). Optional slide and item (1-based) to start from.",
+    input: z.object({ id: z.string().max(40), slide: z.number().int().min(1).optional(), item: z.number().int().min(1).optional() }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "deck.control",
+    description: "Steer the presentation that is running or paused: next, back, pause, resume (goes on from the item that was interrupted, repeating it), repeat, goto (with slide, 1-based), stop. After answering the owner's question while a presentation is paused, call resume, or ask them whether to continue.",
+    input: z.object({ action: z.enum(DECK_CONTROLS), slide: z.number().int().min(1).optional() }),
+    baseTier: "T1",
+    target: "gateway",
+  },
+  {
+    name: "deck.export",
+    description: "Save a deck as a file the owner can keep: pptx (opens and edits in PowerPoint, the spoken lines are in the notes) or html (one file that plays in any browser with the same reveals and animations).",
+    input: z.object({ id: z.string().max(40), format: z.enum(["pptx", "html"]) }),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
+    name: "deck.delete",
+    description: "Delete a saved presentation.",
+    input: z.object({ id: z.string().max(40) }),
+    baseTier: "T2",
+    target: "gateway",
+  },
+  {
     name: "connectors.list",
     description: "List the owner's connectors (outside programs and services you can use through their tools, such as Gmail or Chrome control) with whether each works and how many tools it gives you. Their tools are named mcp.<connector>.<tool> and appear in your tool list when the connector is on.",
     input: z.object({}),
@@ -1174,6 +1242,22 @@ ${visible(clip(String(a.text ?? ""), 3000))}`;
       return `Change the look: ${visible(clip(JSON.stringify(a), 300))}`;
     case "view.set":
       return a.layout ? `Change the screen layout to ${visible(String(a.layout))}` : `Change the view to ${visible(String(a.view ?? ""))}`;
+    case "deck.create":
+      return `Write the presentation "${visible(String(a.title ?? ""))}"`;
+    case "deck.edit":
+      return `Change a presentation (${visible(String(a.op ?? ""))})`;
+    case "deck.list":
+      return "List the presentations";
+    case "deck.show":
+      return "Read a presentation";
+    case "deck.present":
+      return "Present a deck on the screen";
+    case "deck.control":
+      return `Presentation: ${visible(String(a.action ?? ""))}`;
+    case "deck.export":
+      return `Save a presentation as a ${visible(String(a.format ?? ""))} file`;
+    case "deck.delete":
+      return "Delete a presentation";
     case "connectors.list":
       return "List the connectors";
     case "connectors.add": {

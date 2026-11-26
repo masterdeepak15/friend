@@ -1,3 +1,4 @@
+import { DeckView } from "./deck";
 import { z } from "zod";
 import { JARVIS_TYPES } from "./jarvis";
 
@@ -70,6 +71,8 @@ export const StageCommand = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("place"), id: z.string(), placement: Placement }),
   z.object({ cmd: z.literal("presence"), state: PresenceState.optional(), style: PresenceStyle.optional() }),
   z.object({ cmd: z.literal("mood"), accent: z.string().max(16).optional(), intensity: unit.optional() }),
+  /** A presentation: the slide to draw and how much of it is shown; null puts it away. */
+  z.object({ cmd: z.literal("deck"), view: DeckView.nullable() }),
 ]);
 export type StageCommand = z.infer<typeof StageCommand>;
 
