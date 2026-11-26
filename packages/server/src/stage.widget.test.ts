@@ -30,6 +30,27 @@ describe("the live instruments of the home screen", () => {
     expect(s.snapshot().widgets).toEqual([]);
   });
 
+  it("says so when an instrument is on because of the owner's settings: hide cannot take it down", () => {
+    const s = new StageState();
+    s.trackInstruments(() => ["voice", "feed", "tickets"]); // switched on in the settings, not brought up by the assistant
+    const none = run(s, { hide: ["voice", "feed", "tickets"] });
+    expect(none.r.ok).toBe(false);
+    expect(none.r.ok === false && none.r.error).toMatch(/voice, feed, tickets/);
+    expect(none.r.ok === false && none.r.error).toMatch(/Settings/);
+    expect(none.sent).toEqual([]);
+  });
+
+  it("puts away what it brought up and names what the settings keep", () => {
+    const s = new StageState();
+    run(s, { show: ["system"] });
+    s.trackInstruments(() => ["voice", ...(s.snapshot().widgets ?? [])]);
+    const { r } = run(s, { hide: ["system", "voice"] });
+    expect(s.snapshot().widgets).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.output).toMatch(/voice/);
+    expect(r.ok && r.output).toMatch(/owner/);
+  });
+
   it("stage.clear puts them away too, but leaves the owner's pinned widgets", () => {
     const s = new StageState();
     run(s, { show: ["radar", "tickets"] });

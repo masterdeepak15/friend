@@ -1,4 +1,4 @@
-import { riskOf, type ServerMsg, type StageCommand, type Tier, type ToolDef, type Trust, type ViewPreset } from "@friend/protocol";
+import { HUD_DENSITIES, HUD_LAYOUTS, HUD_WIDGET_IDS, riskOf, type ServerMsg, type StageCommand, type Tier, type ToolDef, type Trust, type ViewPreset } from "@friend/protocol";
 import type { Approvals } from "../approvals";
 import type { Audit } from "../audit";
 import type { CameraBroker } from "../camera";
@@ -20,7 +20,7 @@ import { weatherScene, weatherSummary, type WeatherService } from "../weather";
 import { toolLabel } from "./activity";
 import { detectIntents } from "./intents";
 import { promisesAction } from "./promise";
-import type { Config } from "../config";
+import { OFFICE_AUTONOMY, type Config } from "../config";
 import type { Db } from "../db";
 import type { Memory } from "../memory";
 import { MemoryTree, capIndex, inboxName } from "../memory/tree";
@@ -211,6 +211,14 @@ function urlsIn(text: string): Set<string> {
 
 const clipArgs = (args: unknown): unknown =>
   JSON.parse(JSON.stringify(args ?? {}, (_k, v) => (typeof v === "string" && v.length > 200 ? v.slice(0, 200) + "…" : v)));
+
+/** What a setting can be set to, given with settings.get so the assistant never has to guess (and be refused). */
+const SETTING_CHOICES = {
+  "hud.layout": [...HUD_LAYOUTS],
+  "hud.density": [...HUD_DENSITIES],
+  "hud.widgets": [...HUD_WIDGET_IDS],
+  "office.autonomy": [...OFFICE_AUTONOMY],
+};
 
 export class Agent {
   private busy = false;
@@ -1007,7 +1015,7 @@ export class Agent {
       try {
         const text =
           call.name === "settings.get"
-            ? JSON.stringify(d.settings.get())
+            ? JSON.stringify({ ...(d.settings.get() as object), choices: SETTING_CHOICES })
             : call.name === "view.set"
               ? [args.layout ? (d.settings.setLayout ? d.settings.setLayout(args.layout as "classic" | "orbital") : "The layout cannot be changed here.") : "", args.view ? d.settings.setView(args.view as ViewPreset) : ""].filter(Boolean).join(" ")
               : call.name === "look.set"

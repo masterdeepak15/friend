@@ -170,6 +170,12 @@ export class StageState {
     this.instruments = read;
   }
 
+  /** Of these instruments, the ones that are up because of the owner's settings (Settings → Widgets): hide cannot take those down. */
+  keptBySettings(ids: readonly HudInstrument[]): HudInstrument[] {
+    const on = new Set<string>(this.instruments ? this.instruments() : []);
+    return ids.filter((id) => on.has(id) && !this.widgets.has(id));
+  }
+
   private composeState(keepChips = false): ComposeState {
     return {
       ...(keepChips ? { keepChips: true } : {}),
@@ -518,6 +524,15 @@ export function runStageTool(
     const placed = placeObject(command.object, stage.snapshot().objects, stage.openPanels(), stage.screenInfo());
     command = { cmd: "show", object: placed.object };
     note = placed.note;
+  }
+  if (command.cmd === "widget" && command.hide?.length) {
+    const kept = stage.keptBySettings(command.hide);
+    if (kept.length) {
+      const why = `${kept.join(", ")} ${kept.length === 1 ? "is" : "are"} switched on in the owner's settings (Settings → Widgets), so hide cannot take ${kept.length === 1 ? "it" : "them"} down: it only puts away instruments you brought up yourself. Only the owner can switch ${kept.length === 1 ? "it" : "them"} off there. For a plain screen without them, view.set with layout "classic".`;
+      const rest = command.hide.filter((id) => !kept.includes(id));
+      if (rest.length === 0 && !command.show?.length && !command.reset) return { ok: false, error: why };
+      note = why;
+    }
   }
   const applied = stage.apply(command);
   if (!applied.ok) return { ok: false, error: applied.error };

@@ -54,6 +54,15 @@ describe("the AI and the settings", () => {
     expect(toolResult(b.provider as FakeProvider)).toContain("claude-code");
   });
 
+  it("tells which values a setting can take, so nothing has to be guessed", async () => {
+    const b = build({ provider: new FakeProvider([[call("settings.get", {}), done], [done]]) });
+    await b.agent.runTurn("what layouts are there?", ctx());
+    const out = toolResult(b.provider as FakeProvider);
+    expect(out).toContain("choices");
+    expect(out).toMatch(/hud\.layout[^\]]*classic[^\]]*orbital/);
+    expect(out).toMatch(/office\.autonomy[^\]]*low[^\]]*medium[^\]]*high[^\]]*judge[^\]]*self[^\]]*hybrid/);
+  });
+
   it("needs the owner's PIN to change them, and then changes them", async () => {
     const b = build();
     await b.agent.runTurn("use haiku", ctx());
