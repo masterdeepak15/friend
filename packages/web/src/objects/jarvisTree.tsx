@@ -1,6 +1,6 @@
 import * as J from "@masterdeepak15/jarvis-ui";
 import "@masterdeepak15/jarvis-ui/styles";
-import { JARVIS_COMPONENTS, type JarvisNode } from "@friend/protocol";
+import { JARVIS_COMPONENTS, jarvisPropsFor, type JarvisNode } from "@friend/protocol";
 import type { ReactNode } from "react";
 
 const clampN = (v: unknown, lo: number, hi: number, d: number): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : d);
@@ -19,7 +19,7 @@ function draw(n: JarvisNode | string, key: number): ReactNode {
   if (n.c === "Grid") return <div key={key} className="jv-grid" style={{ gap, gridTemplateColumns: `repeat(${clampN(n.p?.columns, 1, 6, 2)}, minmax(0, 1fr))` }}>{kids}</div>;
   const Comp = (JARVIS_COMPONENTS[n.c] ? (J as unknown as Record<string, unknown>)[n.c] : undefined) as ((props: Record<string, unknown>) => ReactNode) | undefined;
   if (!Comp) return null;
-  return <Comp key={key} {...(DEFAULTS[n.c] ?? {})} {...(n.p ?? {})} {...slots}>{kids.length ? kids : undefined}</Comp>;
+  return <Comp key={key} {...(DEFAULTS[n.c] ?? {})} {...jarvisPropsFor(n.c, n.p)} {...slots}>{kids.length ? kids : undefined}</Comp>;
 }
 
 /** The checked tree, drawn. */

@@ -67,6 +67,19 @@ export const JARVIS_COMPONENTS: Record<string, { props: string[]; note?: string;
 export const JARVIS_TYPES: string[] = Object.keys(JARVIS_COMPONENTS).filter((n) => !["Row", "Column", "Grid"].includes(n));
 export const isJarvisType = (type: string): boolean => JARVIS_TYPES.includes(type);
 
+/**
+ * Props as the component wants them, when the assistant gave them the way the plain widgets take them. A JTable draws its rows from
+ * objects keyed by column; the plain table takes lists, and columns as bare names, so those rows came out empty.
+ */
+export function jarvisPropsFor(type: string, p: Record<string, unknown> | undefined): Record<string, unknown> {
+  const props = p ?? {};
+  if (type !== "JTable" || !Array.isArray(props.columns)) return props;
+  const columns = (props.columns as unknown[]).map((c, i) => (c && typeof c === "object" ? (c as Record<string, unknown>) : { key: `c${i}`, label: String(c) }));
+  const keys = columns.map((c, i) => (typeof c.key === "string" ? c.key : `c${i}`));
+  const rows = Array.isArray(props.rows) ? (props.rows as unknown[]).map((r) => (Array.isArray(r) ? Object.fromEntries(keys.map((k, i) => [k, r[i]])) : r)) : props.rows;
+  return { ...props, columns: columns.map((c, i) => ({ ...c, key: keys[i] })), ...(rows !== undefined ? { rows } : {}) };
+}
+
 /** What an object of a Jarvis type draws: the component named by its type, with the rest of its props, and kids and slots for the parts inside. */
 export function jarvisTreeOf(type: string, props: Record<string, unknown>): JarvisNode {
   const { kids, slots, ...p } = props;

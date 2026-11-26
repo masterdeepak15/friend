@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OBJECT_TYPES } from "./stage";
-import { JARVIS_COMPONENTS, JARVIS_LIMITS, JARVIS_TYPES, isJarvisType, jarvisCatalog, jarvisNaturalSize, jarvisObjectProblem, jarvisProblem, jarvisTreeOf } from "./jarvis";
+import { JARVIS_COMPONENTS, JARVIS_LIMITS, JARVIS_TYPES, isJarvisType, jarvisCatalog, jarvisNaturalSize, jarvisObjectProblem, jarvisProblem, jarvisPropsFor, jarvisTreeOf } from "./jarvis";
 
 const ok = (ui: unknown) => jarvisProblem({ ui });
 
@@ -148,3 +148,18 @@ describe("the Jarvis components are object types like the others", () => {
     expect(jarvisObjectProblem("JCard", { kids: [{ c: "JDesktop" }] })).toMatch(/JDesktop/);
   });
 });
+
+describe("a JTable given its rows the way the plain table takes them", () => {
+  it("turns bare column names and list rows into what the component draws", () => {
+    const p = jarvisPropsFor("JTable", { columns: ["Tool", "Use"], rows: [["nmap", "scan"], ["burp", "proxy"]] });
+    expect(p.columns).toEqual([{ key: "c0", label: "Tool" }, { key: "c1", label: "Use" }]);
+    expect(p.rows).toEqual([{ c0: "nmap", c1: "scan" }, { c0: "burp", c1: "proxy" }]);
+  });
+  it("keeps the keys of columns that have them, fills list rows by them, and leaves proper rows and other components alone", () => {
+    const p = jarvisPropsFor("JTable", { columns: [{ key: "a", label: "A" }], rows: [[1], { a: 2 }] });
+    expect(p.rows).toEqual([{ a: 1 }, { a: 2 }]);
+    const other = { columns: ["x"] };
+    expect(jarvisPropsFor("JBadge", other)).toBe(other);
+  });
+});
+
