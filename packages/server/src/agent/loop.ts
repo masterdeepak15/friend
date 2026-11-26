@@ -23,6 +23,9 @@ import { promisesAction } from "./promise";
 import { OFFICE_AUTONOMY, type Config } from "../config";
 import type { Db } from "../db";
 import type { Memory } from "../memory";
+import type { DeckStore } from "../deck/store";
+import type { Presenter } from "../deck/presenter";
+import { runDeckTool } from "../deck/tools";
 import { MemoryTree, capIndex, inboxName } from "../memory/tree";
 import type { Soul } from "../memory/soul";
 import { localIso, type Tasks } from "../tasks";
@@ -145,6 +148,8 @@ export interface AgentDeps {
   weather?: Pick<WeatherService, "get">;
   /** Reading and changing the owner's settings. Without it the settings tools report they are unavailable. */
   settings?: AgentSettings;
+  /** Presentations: the saved decks, the player and the export. Without it the deck tools report they are unavailable. */
+  decks?: { store: DeckStore; presenter: Presenter; exportDeck(id: string, format: "pptx" | "html"): Promise<string> };
   /** The tools of the owner's connectors (Gmail, Chrome control, …). Without it there are none. */
   mcp?: McpApi;
   /** Managing connectors and plugins for the AI. Without it those tools report they are unavailable. */
@@ -407,7 +412,7 @@ export class Agent {
           notes,
           localIso(new Date(d.tasks?.now() ?? Date.now())),
           isolated ? undefined : d.plugins?.skills(),
-          isolated ? undefined : [d.mcp?.summary(), d.integrations?.summary(), d.ownerReach?.(), officeBrief(d.config.office)].filter(Boolean).join("\n") || undefined,
+          isolated ? undefined : [d.mcp?.summary(), d.integrations?.summary(), d.ownerReach?.(), officeBrief(d.config.office), ctx.trust === "owner" ? d.decks?.presenter.contextLine() : undefined].filter(Boolean).join("\n") || undefined,
           member ? ctx.person!.name : undefined,
           languageNote(text, ctx.spoken, voiceGender(devanagariLanguage(text) === "mr" || ctx.spoken?.toLowerCase().startsWith("mr") ? "mr" : "hi", { main: d.config.voice.ttsVoice, hindi: d.config.voice.hindiVoice || undefined, marathi: d.config.voice.marathiVoice || undefined })),
           memoryIndex,
@@ -882,10 +887,11 @@ export class Agent {
       }
     }
     if (decision === "ask" || decision === "ask_with_pin") {
+      d.decks?.presenter.approvalPending(true); // an approval comes first: the presentation waits
       const outcome = await d.approvals.request(
         { ...(outside ? { origin: outside } : {}), ...(call.name === "shell.run" ? { warnings: riskOf(String(args.command)) } : {}), tool: call.name, args: shown, tier: !insideRoots && tier !== "T3" ? "T2" : tier, needsPin: decision === "ask_with_pin", device, remote: ctx.trust !== "voice-device" },
         ctx.emit,
-      );
+      ).finally(() => d.decks?.presenter.approvalPending(false));
       if (!outcome.approved) {
         rec.outcome = "refused";
         d.audit.log("agent", "tool.not_approved", { tool: call.name, args: call.name.startsWith("web.") ? {} : clipArgs(args), reason: outcome.reason });
@@ -1027,6 +1033,13 @@ export class Agent {
         d.audit.log("agent", "tool.call", { tool: call.name, args: {}, tier, ok: false });
         return fail((e as Error).message);
       }
+    }
+
+    if (call.name.startsWith("deck.")) {
+      if (!d.decks) return fail("Presentations are not available.");
+      const r = await runDeckTool(call.name, args, { ...d.decks, trust: ctx.trust });
+      d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: !r.isError });
+      return r;
     }
 
     if (call.name.startsWith("soul.")) {
