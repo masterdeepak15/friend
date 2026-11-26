@@ -1,6 +1,6 @@
 # Presentations: the assistant makes a deck and presents it live
 
-Status: awaiting owner approval. Size: a project. PC agents stay on hold.
+Status: approved by the owner (2026-11-26). Size: a project. PC agents stay on hold.
 
 ## Why
 
@@ -47,7 +47,7 @@ A deck is saved in the database (owner-private, like the pinned widgets):
 
 ```
 Deck  { id, title, topic, createdAt, slides: Slide[] }          // at most 40 slides
-Slide { id, title, layout, notes?, items: Item[] }              // at most 8 items
+Slide { id, title, layout, notes?, items: Item[] }              // items that fit the layout (see Limits)
 Item  { id, kind, content, say, animation?, hold? }
 ```
 
@@ -77,7 +77,7 @@ Rules:
 - When the owner starts speaking (voice activity while playing), the player calls `Speaker.interrupt()` and goes `paused` on the current item. The item that was being spoken is remembered with how far it got.
 - The owner's words go to the assistant as an ordinary turn, with one added line in its context: "A presentation of <title> is paused at slide 3, item 2 ('…'). Answer, then use `deck.control` to continue, repeat, skip or stop." So she can answer a question, explain more, or change the deck.
 - She resumes with `deck.control {action: "resume"}`. By default resume repeats the interrupted item from its start, then goes on. The owner can also say "continue", "go on", "skip this" or "go back".
-- If the owner does not say anything for a while after an answer, she asks once: "Shall I continue?" It does not resume by itself without her asking (a setting could change that later; not in this project).
+- After she has answered, she asks once: "Shall I continue?" If the owner stays silent, the player resumes by itself after `presentation.resumeSilenceSeconds` (a setting; default 20, 0 = never resume by itself, always wait for "continue"). Any new speech or typing in that time cancels the countdown and she answers that first. (Owner decision.)
 - Typed messages also pause the player the same way. The owner's own controls on the screen (a small bar: back, play or pause, next, stop, slide count) work at any time.
 
 ## Tools for the assistant
@@ -110,7 +110,7 @@ All are owner-only. Creating and presenting need no approval (they draw on the s
 
 ## Limits and safety
 
-- At most 40 slides, 8 items a slide, 400 characters a spoken line, and the same size limits as stage objects. A deck larger than that is refused with the sentence saying which limit.
+- At most 40 slides (the owner: enough), 400 characters a spoken line, and items per slide limited by how the slide looks: each layout has a number of items that fit (for example 5 for `bullets`, 2 for `two-column` columns of 4, 1 for `visual`); a slide with more is refused with a sentence telling her to split it, and the same size limits as stage objects. A deck larger than that is refused with the sentence saying which limit.
 - Nothing in a deck can run on the main page; text is data. Pictures come only from files the owner approved with `file.present`.
 - Speaking uses the owner's voice settings and `voice.enabled`; with voice off the deck plays with captions only.
 - Every `deck.*` call is audited with the deck id and slide count.
@@ -133,5 +133,4 @@ All are owner-only. Creating and presenting need no approval (they draw on the s
 
 ## Open questions for the owner
 
-1. Is "pause, answer, resume by asking" right, or should it resume by itself after her answer when the owner says nothing for a few seconds?
-2. Is 40 slides and 8 items a slide enough?
+None open: the owner approved it, chose auto-resume after silence (a setting) and said 40 slides is enough and that items per slide depend on how the slide looks.
