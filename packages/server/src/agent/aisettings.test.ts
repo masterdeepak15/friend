@@ -25,6 +25,7 @@ function build(opts: { approve?: boolean; withSettings?: boolean; provider?: Fak
     get: vi.fn(() => ({ provider: "claude-code" })),
     set: vi.fn(async () => "Saved."),
     setView: vi.fn((v) => `The view is now ${v}.`),
+    setLayout: vi.fn((l) => `The layout is now ${l}.`),
     setLook: vi.fn(() => "The look is updated and saved."),
   };
   const provider = opts.provider ?? new FakeProvider([[call("settings.set", { settings: { claudeCode: { model: "haiku" } } }), done], [done]]);
@@ -74,6 +75,21 @@ describe("the AI and the settings", () => {
     await b.agent.runTurn("show me everything", ctx());
     expect(b.request).not.toHaveBeenCalled();
     expect(b.settings.setView).toHaveBeenCalledWith("workspace");
+  });
+
+  it("switches the screen layout (classic or orbital) without a PIN card, and refuses one that does not exist", async () => {
+    const b = build({ provider: new FakeProvider([[call("view.set", { layout: "classic" }), done], [done]]) });
+    await b.agent.runTurn("go back to the classic screen", ctx());
+    expect(b.request).not.toHaveBeenCalled();
+    expect(b.settings.setLayout).toHaveBeenCalledWith("classic");
+    expect(b.settings.setView).not.toHaveBeenCalled();
+    const bad = build({ provider: new FakeProvider([[call("view.set", { layout: "office" }), done], [done]]) });
+    await bad.agent.runTurn("x", ctx());
+    expect(bad.settings.setLayout).not.toHaveBeenCalled();
+    expect(toolResult(bad.provider as FakeProvider)).toMatch(/Invalid arguments/);
+    const none = build({ provider: new FakeProvider([[call("view.set", {}), done], [done]]) });
+    await none.agent.runTurn("x", ctx());
+    expect(toolResult(none.provider as FakeProvider)).toMatch(/Invalid arguments/);
   });
 
   it("refuses a view that does not exist", async () => {

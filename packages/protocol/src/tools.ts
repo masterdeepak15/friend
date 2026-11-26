@@ -616,8 +616,8 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "view.set",
-    description: "Change what the owner's screen shows besides your pictures: minimal (only the voice presence), companion (plus a status line and a clock) or workspace (plus the chat and the schedule panels). Use it when the owner asks for a cleaner or fuller screen.",
-    input: z.object({ view: ViewPreset }),
+    description: "Change what the owner's screen shows besides your pictures: minimal (only the voice presence), companion (plus a status line and a clock) or workspace (plus the chat and the schedule panels). Use it when the owner asks for a cleaner or fuller screen. layout switches the whole screen between classic (the corner widgets and panels) and orbital (the round HUD with nodes around the presence): use it when the owner asks to change the layout, the look of the home screen, or to go back to the old one. Give view, layout, or both.",
+    input: z.object({ view: ViewPreset.optional(), layout: z.enum(["classic", "orbital"]).optional() }).refine((a) => a.view !== undefined || a.layout !== undefined, { message: "Give a view, a layout, or both." }),
     baseTier: "T1",
     target: "gateway",
   },
@@ -1173,7 +1173,7 @@ ${visible(clip(String(a.text ?? ""), 3000))}`;
     case "look.set":
       return `Change the look: ${visible(clip(JSON.stringify(a), 300))}`;
     case "view.set":
-      return `Change the view to ${visible(String(a.view ?? ""))}`;
+      return a.layout ? `Change the screen layout to ${visible(String(a.layout))}` : `Change the view to ${visible(String(a.view ?? ""))}`;
     case "connectors.list":
       return "List the connectors";
     case "connectors.add": {

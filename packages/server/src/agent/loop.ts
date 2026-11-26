@@ -166,6 +166,8 @@ export interface AgentSettings {
   /** Applies a change the owner has just approved with the PIN; resolves with what to tell the model. */
   set(patch: unknown): Promise<string>;
   setView(view: ViewPreset): string;
+  /** Classic or orbital screen. Only this one field of the screen widgets is the assistant's to change. */
+  setLayout?(layout: "classic" | "orbital"): string;
   /** Changes how the presence looks (the owner asked for it). */
   setLook(look: Record<string, unknown>): string;
 }
@@ -1007,7 +1009,7 @@ export class Agent {
           call.name === "settings.get"
             ? JSON.stringify(d.settings.get())
             : call.name === "view.set"
-              ? d.settings.setView(args.view as ViewPreset)
+              ? [args.layout ? (d.settings.setLayout ? d.settings.setLayout(args.layout as "classic" | "orbital") : "The layout cannot be changed here.") : "", args.view ? d.settings.setView(args.view as ViewPreset) : ""].filter(Boolean).join(" ")
               : call.name === "look.set"
                 ? d.settings.setLook(args)
                 : await d.settings.set(args.settings);

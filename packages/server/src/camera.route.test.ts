@@ -131,6 +131,35 @@ describe("camera round trip", () => {
     expect(toolResultText()).toContain("The owner has the camera switched off.");
   });
 
+  it("one screen with its camera switched off does not speak for the others: the look waits for the screen that can answer", async () => {
+    await boot();
+    const cookie = await login();
+    const first = await Client.connect(cookie);
+    const second = await Client.connect(cookie);
+    const id = await askAndApprove(first);
+    await until(() => second.of("camera.request").length === 1);
+    second.send({ type: "camera.denied", id, reason: "off" }); // e.g. the phone or another tab, where the camera switch is off
+    await pause();
+    expect(app.camera.pendingId()).toBe(id);
+    expect(first.of("camera.cancel")).toEqual([]);
+    expect((await upload(cookie, id)).status).toBe(200);
+    await until(() => provider.calls.length === 2);
+    expect(provider.calls[1]!.messages.at(-1)!.content[1]).toEqual({ type: "image", mime: "image/jpeg", data: JPEG.toString("base64") });
+  });
+
+  it("when every screen denies, the model gets the reason", async () => {
+    await boot();
+    const cookie = await login();
+    const first = await Client.connect(cookie);
+    const second = await Client.connect(cookie);
+    const id = await askAndApprove(first);
+    await until(() => second.of("camera.request").length === 1);
+    first.send({ type: "camera.denied", id, reason: "off" });
+    second.send({ type: "camera.denied", id, reason: "off" });
+    await until(() => provider.calls.length === 2);
+    expect(toolResultText()).toContain("The owner has the camera switched off.");
+  });
+
   it("gives up when the browser never answers", async () => {
     await boot({ cameraTimeoutMs: 200 });
     const cookie = await login();

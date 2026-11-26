@@ -757,6 +757,10 @@ export async function createApp(opts: AppOptions) {
       commitSettings({ view }, { actor: "agent" });
       return `The view is now ${view}.`;
     },
+    setLayout: (layout) => {
+      commitSettings({ hud: { layout } }, { actor: "agent" });
+      return `The screen layout is now ${layout}.`;
+    },
     setLook: (look) => {
       commitSettings({ look }, { actor: "agent" });
       return "The look is updated and saved.";
@@ -1000,6 +1004,18 @@ export async function createApp(opts: AppOptions) {
   const clients = new Set<ClientConn>();
   const broadcast = (m: ServerMsg) => {
     for (const c of clients) c.send(m);
+  };
+  /** Who said no to each picture request. A request asked of every screen is only refused once all the screens still connected have refused it. */
+  const cameraDenials = new Map<string, Set<ClientConn>>();
+  const screenDenials = new Map<string, Set<ClientConn>>();
+  const allDenied = (seen: Map<string, Set<ClientConn>>, id: string, conn: ClientConn): boolean => {
+    const who = seen.get(id) ?? new Set<ClientConn>();
+    who.add(conn);
+    seen.set(id, who);
+    while (seen.size > 20) seen.delete(seen.keys().next().value as string);
+    for (const c of clients) if (!who.has(c)) return false;
+    seen.delete(id);
+    return true;
   };
   broadcastLate = broadcast;
   hostEmit = (state) => broadcast({ type: "music.host", state });
@@ -2115,6 +2131,8 @@ export async function createApp(opts: AppOptions) {
           break;
         }
         case "camera.denied":
+          // every open screen is asked; one with its switch off (a phone, an old tab) must not speak for the rest: the look ends only when all have said no
+          if (!allDenied(cameraDenials, msg.id, conn)) break;
           if (camera.deny(msg.id, msg.reason)) {
             audit.log("owner", "camera.denied", { reason: msg.reason });
             broadcast({ type: "camera.cancel", id: msg.id });
@@ -2124,6 +2142,7 @@ export async function createApp(opts: AppOptions) {
           screenCheck.reply(msg.id, msg.lines);
           break;
         case "screen.denied":
+          if (!allDenied(screenDenials, msg.id, conn)) break;
           if (screenShot.deny(msg.id, msg.reason)) {
             audit.log("owner", "screen.denied", { reason: msg.reason });
             broadcast({ type: "screen.cancel", id: msg.id });
