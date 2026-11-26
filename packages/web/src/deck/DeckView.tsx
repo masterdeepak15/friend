@@ -47,21 +47,28 @@ export function DeckView({ view, onControl }: DeckViewProps) {
   });
 
   const paused = state === "paused";
+  const current = visible.at(-1);
+  const progress = Math.min(1, (view.index + (slide.items.length ? shown / slide.items.length : 1)) / view.total);
   return (
     <section className={`deck deck-${slide.layout}`} data-testid="deck" aria-label={`Presentation: ${view.title}`}>
+      <div className="deck-progress" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
+        <span style={{ width: `${progress * 100}%` }} />
+      </div>
       <header className="deck-head">
         <h2 className="deck-title">{slide.title}</h2>
       </header>
       <div className="deck-items">
         {visible.map((item) => {
           const a = animations.get(item.id);
+          const now = item.id === current?.id && state === "playing";
           return (
-            <div key={item.id} data-item={item.id} className={`deck-item${a && a !== "none" ? ` anim-${a}` : ""}`}>
+            <div key={item.id} data-item={item.id} className={`deck-item${now ? " deck-now" : ""}${a && a !== "none" ? ` anim-${a}` : ""}`}>
               <Content item={item} />
             </div>
           );
         })}
       </div>
+      {current && state !== "ended" && <p className="deck-say" data-testid="deck-say">{current.say}</p>}
       <footer className="deck-bar">
         <button type="button" aria-label="Previous slide" onClick={() => onControl("back")}>⏮</button>
         {paused ? (

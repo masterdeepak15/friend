@@ -921,7 +921,7 @@ export async function createApp(opts: AppOptions) {
   // presentations: the saved decks, the player (it speaks through the same speaker and draws through the same broadcast), and the files
   const deckStore = new DeckStore(db);
   const presenter = new Presenter({
-    speak: (text) => (speaker ? speaker.speak(text, (m) => broadcast(m)) : Promise.resolve()),
+    speak: (text) => (speaker ? speaker.say(text, (m) => broadcast(m)) : Promise.resolve()), // ends when it has been heard, so the next item comes at the right time
     interrupt: () => speaker?.interrupt((m) => broadcast(m)),
     emit: (m) => broadcast(m),
     setTimer: (fn, ms) => {

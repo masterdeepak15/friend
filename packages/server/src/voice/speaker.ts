@@ -74,7 +74,32 @@ export interface SpeechStream {
   push(text: string): void;
   /** The reply is finished: says what is left. Resolves when the last clip has been sent. */
   end(): Promise<void>;
+  /** Resolves when everything sent so far has had time to play on the screens (or at once when it was interrupted). When no sound could be made, the time it takes to read the fallback text. */
+  playedOut(fallbackText?: string): Promise<void>;
 }
+
+/** How long a WAV clip plays, in milliseconds, or null when it cannot be read. */
+export function wavMs(wav: Buffer): number | null {
+  if (wav.length < 44 || wav.toString("ascii", 0, 4) !== "RIFF" || wav.toString("ascii", 8, 12) !== "WAVE") return null;
+  let off = 12;
+  let bytesPerSecond = 0;
+  while (off + 8 <= wav.length) {
+    const id = wav.toString("ascii", off, off + 4);
+    const size = wav.readUInt32LE(off + 4);
+    if (id === "fmt " && off + 20 <= wav.length) bytesPerSecond = wav.readUInt32LE(off + 16);
+    if (id === "data") {
+      const length = Math.min(size, wav.length - off - 8); // a clip written as a stream says 0 or a huge size: what is there is what plays
+      return bytesPerSecond > 0 ? (length / bytesPerSecond) * 1000 : null;
+    }
+    off += 8 + size + (size % 2);
+  }
+  return null;
+}
+
+/** When a clip's length cannot be read: about how long the words take to say. */
+const guessMs = (text: string): number => Math.max(600, text.trim().split(/\s+/).length * 380);
+/** The quiet after a spoken text, so one thing is not run into the next. */
+const GAP_MS = 350;
 
 const fenceCount = (text: string) => (text.match(/```/g) ?? []).length;
 
@@ -106,11 +131,19 @@ export class Speaker {
     private languages?: () => { hindi?: string | undefined; marathi?: string | undefined },
   ) {}
 
-  /** Says a whole text, sentence by sentence. */
+  /** Says a whole text, sentence by sentence. Resolves when the last clip has been sent (it may still be playing). */
   async speak(text: string, emit: (m: ServerMsg) => void): Promise<void> {
     const s = this.stream(emit);
     s.push(text);
     await s.end();
+  }
+
+  /** Says a text and resolves when it has been heard, not only sent: for a presentation, which goes on to the next item only then. */
+  async say(text: string, emit: (m: ServerMsg) => void): Promise<void> {
+    const s = this.stream(emit);
+    s.push(text);
+    await s.end();
+    await s.playedOut(text);
   }
 
   /**
@@ -127,6 +160,10 @@ export class Speaker {
     let ended = false;
     let wake: (() => void) | null = null;
     let clip = 0;
+    /** When the first clip went out and how much sound has been sent: the screens play the clips one after the other, so this is when the last one ends. */
+    let firstAt = 0;
+    let soundMs = 0;
+    const begun = Date.now();
     const poke = () => {
       const w = wake;
       wake = null;
@@ -163,6 +200,8 @@ export class Speaker {
           const chunks = chunkBase64(wav);
           const id = `${job}-${clip++}`;
           chunks.forEach((data, seq) => emit({ type: "audio.chunk", id, seq, last: seq === chunks.length - 1, mime: "audio/wav", data }));
+          if (firstAt === 0) firstAt = Date.now();
+          soundMs += wavMs(wav) ?? guessMs(part.text);
         }
       }
     })().finally(() => {
@@ -192,6 +231,14 @@ export class Speaker {
         if (alive()) take(true);
         poke();
         return worker;
+      },
+      playedOut: async (fallbackText) => {
+        while (alive()) {
+          const until = firstAt > 0 ? firstAt + soundMs + GAP_MS : begun + (fallbackText ? guessMs(speechText(fallbackText)) : 0); // no sound: the time to read it
+          const left = until - Date.now();
+          if (left <= 0) return;
+          await new Promise<void>((r) => setTimeout(r, Math.min(left, 200)));
+        }
       },
     };
   }

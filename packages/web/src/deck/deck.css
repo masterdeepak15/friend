@@ -51,3 +51,10 @@
 @media (prefers-reduced-motion: reduce) {
   [class*="anim-"] { animation: none !important; }
 }
+
+.deck-progress { height: 3px; border-radius: 2px; background: var(--edge, rgba(120, 200, 255, 0.2)); overflow: hidden; margin: -10px 0 -4px; }
+.deck-progress span { display: block; height: 100%; background: var(--accent, #3fd8ff); transition: width 0.6s ease; }
+.deck-items .deck-item { opacity: 0.6; transition: opacity 0.4s ease; }
+.deck-items .deck-item.deck-now { opacity: 1; }
+.deck-items .deck-item:last-child { opacity: 1; }
+.deck-say { margin: 0; font-size: 14px; line-height: 1.4; opacity: 0.75; font-style: italic; border-left: 2px solid var(--accent, #3fd8ff); padding-left: 10px; }

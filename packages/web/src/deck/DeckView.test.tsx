@@ -68,6 +68,14 @@ describe("a presentation on the screen", () => {
     expect(await screen.findByText("scan")).toBeTruthy();
   });
 
+  it("shows what is being said under the slide, the current item stands out, and a bar shows how far it is", () => {
+    const { container } = render(<DeckView view={view({ shown: 2 })} onControl={() => {}} />);
+    expect(screen.getByTestId("deck-say").textContent).toBe("say b");
+    expect(container.querySelector('[data-item="b"]')!.className).toMatch(/deck-now/);
+    expect(container.querySelector('[data-item="a"]')!.className).not.toMatch(/deck-now/);
+    expect(Number(screen.getByRole("progressbar").getAttribute("aria-valuenow"))).toBeGreaterThan(0);
+  });
+
   it("says it has ended", () => {
     render(<DeckView view={view({ state: "ended", shown: 3 })} onControl={() => {}} />);
     expect(screen.getByText(/The end|Finished/)).toBeTruthy();

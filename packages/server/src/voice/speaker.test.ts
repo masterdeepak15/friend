@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Audit } from "../audit";
 import { openDb } from "../db";
 import { FakeVoice, type VoiceService } from "./service";
-import { Speaker, chunkBase64, speechText, splitSentences } from "./speaker";
+import { Speaker, chunkBase64, speechText, splitSentences, wavMs } from "./speaker";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -157,5 +157,74 @@ describe("Speaker", () => {
     await Promise.all([one, two]);
     const ids = new Set((sent.filter((m) => m.type === "audio.chunk") as Extract<ServerMsg, { type: "audio.chunk" }>[]).map((c) => c.id));
     expect(ids.size).toBe(1); // only the new reply was spoken
+  });
+});
+
+/** A mono 16-bit WAV of silence that plays for `ms`. */
+function wav(ms: number, rate = 8000): Buffer {
+  const data = Buffer.alloc(Math.round((rate * 2 * ms) / 1000));
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0, "ascii");
+  h.writeUInt32LE(36 + data.length, 4);
+  h.write("WAVEfmt ", 8, "ascii");
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(rate, 24);
+  h.writeUInt32LE(rate * 2, 28);
+  h.writeUInt16LE(2, 32);
+  h.writeUInt16LE(16, 34);
+  h.write("data", 36, "ascii");
+  h.writeUInt32LE(data.length, 40);
+  return Buffer.concat([h, data]);
+}
+const voiceOf = (ms: number): VoiceService => ({ ...new FakeVoice(), available: () => true, synthesize: async () => wav(ms) }) as unknown as VoiceService;
+
+describe("how long a clip plays", () => {
+  it("reads it from the WAV header, and says null for what is not a WAV", () => {
+    expect(Math.round(wavMs(wav(1500))!)).toBe(1500);
+    expect(wavMs(Buffer.from("not audio at all, just some text that is long enough to have a header"))).toBeNull();
+  });
+});
+
+describe("saying something and waiting until it has been heard", () => {
+  const audit = () => new Audit(openDb(mkdtempSync(join(tmpdir(), "friend-speaker-say-"))));
+
+  it("speak ends when the audio is sent; say ends only when it has had time to play", async () => {
+    const speaker = new Speaker(voiceOf(400), audit());
+    const t0 = Date.now();
+    await speaker.speak("One sentence here.", () => {});
+    const sent = Date.now() - t0;
+    expect(sent).toBeLessThan(300);
+    const t1 = Date.now();
+    await speaker.say("One sentence here.", () => {});
+    expect(Date.now() - t1).toBeGreaterThanOrEqual(380); // the clip is 400 ms long
+  });
+
+  it("adds up all the sentences of a text", async () => {
+    const speaker = new Speaker(voiceOf(250), audit());
+    const t = Date.now();
+    await speaker.say("First sentence. Second sentence. Third sentence.", () => {});
+    expect(Date.now() - t).toBeGreaterThanOrEqual(720); // three clips of 250 ms
+  });
+
+  it("stops waiting the moment it is interrupted", async () => {
+    const speaker = new Speaker(voiceOf(5000), audit());
+    const t = Date.now();
+    const done = speaker.say("A long one.", () => {});
+    await new Promise((r) => setTimeout(r, 150));
+    speaker.interrupt(() => {});
+    await done;
+    expect(Date.now() - t).toBeLessThan(1500);
+  });
+});
+
+describe("when no sound can be made", () => {
+  it("say waits about as long as the words take to read, instead of running on", async () => {
+    const broken = { ...new FakeVoice(), available: () => true, synthesize: async () => { throw new Error("no voice"); } } as unknown as VoiceService;
+    const speaker = new Speaker(broken, new Audit(openDb(mkdtempSync(join(tmpdir(), "friend-speaker-none-")))));
+    const t = Date.now();
+    await speaker.say("One two three four five.", () => {});
+    expect(Date.now() - t).toBeGreaterThanOrEqual(1500); // five words, about 380 ms each
   });
 });
