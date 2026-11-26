@@ -1,6 +1,6 @@
 # Presentations: the assistant makes a deck and presents it live
 
-Status: approved by the owner (2026-11-26). Size: a project. PC agents stay on hold.
+Status: approved by the owner (2026-11-26). Built in 0.1.95. Size: a project. PC agents stay on hold.
 
 ## Why
 
@@ -77,7 +77,7 @@ Rules:
 - When the owner starts speaking (voice activity while playing), the player calls `Speaker.interrupt()` and goes `paused` on the current item. The item that was being spoken is remembered with how far it got.
 - The owner's words go to the assistant as an ordinary turn, with one added line in its context: "A presentation of <title> is paused at slide 3, item 2 ('…'). Answer, then use `deck.control` to continue, repeat, skip or stop." So she can answer a question, explain more, or change the deck.
 - She resumes with `deck.control {action: "resume"}`. By default resume repeats the interrupted item from its start, then goes on. The owner can also say "continue", "go on", "skip this" or "go back".
-- After she has answered, she asks once: "Shall I continue?" If the owner stays silent, the player resumes by itself after `presentation.resumeSilenceSeconds` (a setting; default 20, 0 = never resume by itself, always wait for "continue"). Any new speech or typing in that time cancels the countdown and she answers that first. (Owner decision.)
+- After she has answered, she asks once: "Shall I continue?" If the owner stays silent, the player resumes by itself after `voice.resumeSilenceSeconds` (a setting; default 20, 0 = never resume by itself, always wait for "continue"). Any new speech or typing in that time cancels the countdown and she answers that first. (Owner decision.)
 - Typed messages also pause the player the same way. The owner's own controls on the screen (a small bar: back, play or pause, next, stop, slide count) work at any time.
 
 ## Tools for the assistant
@@ -102,7 +102,7 @@ All are owner-only. Creating and presenting need no approval (they draw on the s
 
 ## Export (decided: both formats; PDF later)
 
-- **.pptx**: one slide per slide, the title as a title, text items as bullets, charts, tables and lists as native PowerPoint tables or as pictures when no native form fits, speaker script in the slide's notes, and the animation as PowerPoint's entrance effect where one matches (fade, wipe in, appear), otherwise none. Opens and edits in PowerPoint, Keynote and Google Slides. Built with a small, well-known writer library added as a server dependency (decided at planning; a hand-made zip only if the library is too heavy).
+- **.pptx**: one slide per slide, the title as a title, text items as bullets, charts, tables and lists as native PowerPoint tables or as pictures when no native form fits, speaker script in the slide's notes, and no animations (the library cannot write PowerPoint entrance effects; the HTML export keeps the animations). Opens and edits in PowerPoint, Keynote and Google Slides. Built with a small, well-known writer library added as a server dependency (decided at planning; a hand-made zip only if the library is too heavy).
 - **HTML**: one standalone file with its own styles, scripts and pictures inline. It plays by itself in any browser with the same reveals and animations, arrow keys and click to move, and the `say` lines shown as captions (no speaking, no network). Sandbox pages stay in their isolated frames.
 - The file goes to the owner's files area and is offered as a download link, never written elsewhere. The assistant says where it is.
 - **PDF** is not in this project: the safe browser could print the HTML to PDF later with little work.

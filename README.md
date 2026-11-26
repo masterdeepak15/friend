@@ -427,6 +427,18 @@ The Office lets Friend hire **workers**: separate Claude Code sessions that work
 
 Besides the simple widgets, Every component of the Jarvis HUD library that is safe to draw (stat cards, gauges, bar, line and donut charts, tables, status pills, node graphs, tabs and about forty more) is an object type of its own, by its own name (`JStatCard`, `JGaugeChart`, `JTable`, ...), in the same list as the basic widgets, and the best looking: Friend picks them first. Parts inside a card go in `kids` and `slots`; it is data, never code. Every component and prop is checked against an allow-list before it is drawn, so nothing can run or restyle the screen. `stage.guide` lists the components for him.
 
+## Presentations: it makes a deck and presents it live
+
+Say "make a presentation on hacking". The assistant writes a whole deck (slides, each with items that appear one by one, a spoken line for every item, and an animation per item), saves it, and can present it on your screen: each item appears with its animation and is spoken, slide after slide, like a teacher in class. It does not call the model while a slide plays, so playing is fast and costs nothing extra.
+
+- **Talk while it presents.** Speak or type and it stops where it is (the speech stops at once). The assistant answers, then says "continue" and the interrupted item is said again from its start. If you stay silent after the answer, it goes on by itself after a while: `voice.resumeSilenceSeconds` (default 20; `0` means it always waits until you say continue). Settings: Voice.
+- **Controls.** A small bar on the slide: previous, pause or continue, next, stop, and "3 / 12". By voice: "next slide", "go back", "go to slide 5", "stop".
+- **Limits.** Up to 40 slides. How many items fit a slide depends on the layout (5 bullets on a bullets slide, 1 on a visual slide, 8 in two columns); a bigger slide is refused with "split it in two". A spoken line is at most 400 characters.
+- **Items** are text (a heading, a bullet or a quote) or any picture the stage can draw: chart, table, stat, graph, timeline, code, the Jarvis components. Animations: fade, slide-left, slide-up, grow, type, draw, none; people who ask for less motion see no animation.
+- **Edit it.** "Add a slide on phishing", "change slide 3", "move slide 5 to the start". `deck.list` and `deck.show` read saved decks.
+- **Export.** "Save it as a PowerPoint" or "as a web page". A `.pptx` opens and edits in PowerPoint, Keynote or Google Slides (titles, points, tables, and the notes and spoken lines in each slide's notes; animations are not carried over). A `.html` is one file that plays alone in any browser with the same reveals and animations, and shows the spoken lines as captions. Both go to `Presentations` in your first workspace folder, and saving asks you first.
+- Only the owner makes, changes, presents and deletes decks. A pending approval card pauses the presentation and it goes on afterwards. Without a voice it only shows the items, for the time it takes to read them.
+
 ## Pictures first: weather, stats and graphics
 
 Friend is meant to show answers, not only say them. It controls the whole screen and picks the object that fits (gauge, chart, table, timeline, graph, or its own animated page).
