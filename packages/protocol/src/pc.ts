@@ -13,6 +13,10 @@ export const PcPermissions = z.object({
   files: z.enum(["off", "read", "write"]),
   /** The folders files and terminal sessions may use. Anything outside is refused, never asked. */
   folders: z.array(z.string().max(300)).max(20),
+  /** The owner's own patterns (regular expressions) for shell commands and button names that ask. Added to the fixed list, never replacing it. */
+  askPatterns: z.array(z.string().max(100)).max(30).optional(),
+  /** The owner's own window titles that are never clicked, added to the fixed list. */
+  denyWindows: z.array(z.string().max(100)).max(30).optional(),
 });
 export type PcPermissions = z.infer<typeof PcPermissions>;
 export const NO_PC_PERMISSIONS: PcPermissions = { control: false, screen: false, shell: false, registry: false, process: false, files: "off", folders: [] };
@@ -81,8 +85,8 @@ export const PC_TOOL_DEFS: ToolDef[] = [
   ),
   def(
     "pc.tasks",
-    "Queue work for a PC (add), see its tasks (list) or cancel one. One task runs at a time under the control session; the others wait. Tasks and their state are kept on the PC and survive a restart (a running task comes back paused).",
-    z.object({ pc, action: z.enum(["add", "list", "cancel"]), title: z.string().max(200).optional(), id: z.string().max(40).optional() }),
+    "Queue work for a PC (add title), see its tasks (list), take one up (start id), finish it (done or fail, with an optional note) or cancel it. The PC shows the running task in its status. One task runs at a time under the control session; the others wait. Tasks and their state are kept on the PC and survive a restart (a running task comes back paused).",
+    z.object({ pc, action: z.enum(["add", "list", "start", "done", "fail", "cancel"]), title: z.string().max(200).optional(), id: z.string().max(40).optional(), note: z.string().max(300).optional() }),
     "T1",
   ),
   def(

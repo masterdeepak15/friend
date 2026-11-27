@@ -546,6 +546,8 @@ namespace FriendHelper
                 case "unseal": return Text(Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(Args.S(a, "text", "")), Encoding.UTF8.GetBytes("friend-pc-agent"), DataProtectionScope.CurrentUser)));
                 case "window": return WindowInfo();
                 case "element": return ElementInfo(a);
+                case "at": return ElementAt(a);
+                case "notify": return Notify(a);
                 default:
                     object r; if (Terminals.TryDispatch(op, a, out r)) return r;
                     throw new ArgumentException("Unknown operation: " + op);
@@ -567,8 +569,30 @@ namespace FriendHelper
 
         static object ElementInfo(Dictionary<string, object> a)
         {
-            var e = Ui.ByLabel(Args.I(a, "label", 0));
-            return Text(e.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") + "|" + e.Current.Name);
+            var e = Ui.ByLabel(Args.I(a, "label", 0)); string name = "", type = "";
+            try { name = e.Current.Name; type = e.Current.ControlType.ProgrammaticName.Replace("ControlType.", ""); } catch (ElementNotAvailableException) { throw new InvalidOperationException("That element is gone from the screen. Take a new pc.snapshot."); }
+            return Text(type + "|" + name + "|" + Ui.Title(Native.GetForegroundWindow()));
+        }
+
+        /// <summary>The element under a point, so a click by position can be checked like a click by number.</summary>
+        static object ElementAt(Dictionary<string, object> a)
+        {
+            string name = "", type = "";
+            try { var e = AutomationElement.FromPoint(new System.Windows.Point(Args.I(a, "x", 0), Args.I(a, "y", 0))); name = e.Current.Name; type = e.Current.ControlType.ProgrammaticName.Replace("ControlType.", ""); } catch (Exception) { }
+            return Text(type + "|" + name + "|" + Ui.Title(Native.GetForegroundWindow()));
+        }
+
+        static object Notify(Dictionary<string, object> a)
+        {
+            var t = new Thread(delegate ()
+            {
+                using (var n = new NotifyIcon { Icon = SystemIcons.Information, Visible = true })
+                {
+                    n.ShowBalloonTip(5000, Args.S(a, "title", "Friend"), Args.S(a, "message", ""), ToolTipIcon.Info); Thread.Sleep(5500);
+                }
+            });
+            t.IsBackground = true; t.SetApartmentState(ApartmentState.STA); t.Start();
+            return Text("Notification shown.");
         }
 
         static object Snapshot(Dictionary<string, object> a)
