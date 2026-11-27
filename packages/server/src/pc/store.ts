@@ -111,6 +111,12 @@ export class PcStore {
     return this.db.prepare("update pcs set revoked = 1 where id = ?").run(id).changes > 0;
   }
 
+  /** Lets a revoked PC sign in again (with a new enrollment). Its name and permissions stay as they were; its old tokens are already gone. */
+  restore(id: number): boolean {
+    this.db.prepare("delete from pc_tokens where pc_id = ?").run(id);
+    return this.db.prepare("update pcs set revoked = 0, status_json = '' where id = ?").run(id).changes > 0;
+  }
+
   remove(id: number): boolean {
     return this.db.prepare("delete from pcs where id = ?").run(id).changes > 0;
   }

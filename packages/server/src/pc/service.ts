@@ -72,9 +72,11 @@ export class PcService {
   async reissue(id: number, pin: string, ip: string): Promise<{ enrollmentId: string }> {
     await this.pin(pin, ip);
     const pc = this.store.get(id);
-    if (!pc || pc.revoked) throw new HttpError(404, "There is no such PC.");
+    if (!pc) throw new HttpError(404, "There is no such PC.");
+    // a revoked PC is added again with the same name and permissions: it signs in afresh with the new command
+    if (pc.revoked) this.store.restore(id);
     const enrollmentId = this.store.newEnrollment(id);
-    this.deps.audit.log("owner", "pc.reissued", { pc: pc.name, ip });
+    this.deps.audit.log("owner", pc.revoked ? "pc.readded" : "pc.reissued", { pc: pc.name, ip });
     return { enrollmentId };
   }
 

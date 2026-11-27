@@ -176,3 +176,35 @@ describe("approving on the screen, and starting a control session", () => {
   });
 });
 
+describe("adding a revoked PC again", () => {
+  it("gives it a new install command with the same name and permissions, and it signs in afresh while the old sign-in stays dead", async () => {
+    const t = await boot();
+    const perms = { control: true, screen: true, shell: true, registry: false, process: false, files: "off", folders: [] };
+    const added = (await (await t.api("/api/pc", send({ name: "Office", pin: owner.pin, permissions: perms }))).json()) as { pc: { id: number }; enrollmentId: string };
+    const enrol = async (enrollmentId: string) => {
+      const verifier = randomBytes(32).toString("base64url");
+      const challenge = createHash("sha256").update(verifier).digest("base64url");
+      const s = (await (await t.anon("/api/pc/enroll/start", send({ enrollmentId, challenge, os: "Windows 11", host: "X" }))).json()) as { deviceCode: string; userCode: string };
+      await t.api(`/api/pc/enroll/${s.userCode}/approve`, send({ pin: owner.pin }));
+      return (await (await t.anon("/api/pc/enroll/token", send({ deviceCode: s.deviceCode, verifier }))).json()) as { access: string; refresh: string };
+    };
+    const first = await enrol(added.enrollmentId);
+    await t.api(`/api/pc/${added.pc.id}/revoke`, send({ pin: owner.pin }));
+    expect((await t.anon("/api/pc/token/refresh", send({ refresh: first.refresh }))).status).toBe(401);
+    // the name is still taken by the revoked PC, so adding "Office" as new is refused
+    expect((await t.api("/api/pc", send({ name: "Office", pin: owner.pin }))).status).toBe(400);
+
+    expect((await t.api(`/api/pc/${added.pc.id}/enrollment`, send({ pin: "000000" }))).status).toBe(403);
+    const again = (await (await t.api(`/api/pc/${added.pc.id}/enrollment`, send({ pin: owner.pin }))).json()) as { enrollmentId: string; install: { command: string } | null };
+    expect(again.install!.command).toContain(again.enrollmentId);
+    const list = (await (await t.api("/api/pc")).json()) as { pcs: { name: string; revoked: boolean; permissions: { shell: boolean } }[] };
+    expect(list.pcs).toMatchObject([{ name: "Office", revoked: false, permissions: { shell: true } }]);
+
+    const second = await enrol(again.enrollmentId);
+    expect(second.access).toBeTruthy();
+    expect((await t.anon("/api/pc/token/refresh", send({ refresh: second.refresh }))).status).toBe(200);
+    expect((await t.anon("/api/pc/token/refresh", send({ refresh: first.refresh }))).status).toBe(401); // the old sign-in is still dead
+    expect(new Audit(t.db).list(100).map((r) => r.kind)).toContain("pc.readded");
+  });
+});
+

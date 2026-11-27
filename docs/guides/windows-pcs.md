@@ -55,6 +55,13 @@ The assistant can open a terminal on a PC (it needs the *Commands and terminals*
 - Programs running as administrator, the UAC prompt, the lock screen and games cannot be controlled. A very busy app (a browser with many tabs) gives a long list of elements: it is cut to a size the assistant can use.
 - The installer is a script, not a program, so SmartScreen has nothing to warn about; some antivirus tools are wary of any "download and run" command. If one blocks it, use the `.cmd` file, or tell your antivirus to allow `%LOCALAPPDATA%\Friend\pc-agent`.
 
+## Revoke a PC, and add it again
+
+- **Revoke** (PIN) signs the PC out at once: its agent is told, stops, removes its own logon task and cannot connect any more. The PC stays in the list as *revoked*.
+- To use that PC again press **Add again** (PIN). Friend makes a **new install command** for it (it keeps its name and permissions) and the old sign-in stays dead.
+- On that PC open PowerShell and **run the new command**. It is safe to run over the old install: it reuses the files already there, registers the logon task again, starts the agent, and opens the approval page. Approve it with your PIN and the PC is online again.
+- For a PC you never finished adding (the command was lost, or the page was never approved), use **New install command** next to it instead.
+
 ## Remove a PC
 
 **Revoke** in Friend signs it out at once (it stops and cannot connect again). To take the agent off the PC: run `node.exe agent.cjs --uninstall` in `%LOCALAPPDATA%\Friend\pc-agent`, or delete the task "Friend PC Agent" in Task Scheduler and the folder.

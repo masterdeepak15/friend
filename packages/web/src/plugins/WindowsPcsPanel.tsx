@@ -158,7 +158,7 @@ export function WindowsPcsPanel({ api = httpPcsApi, pollMs = 4000, onBack }: { a
   );
 
   if (step.kind === "pin") {
-    const words = { add: `Add the PC "${step.name}"?`, perms: `Save what ${step.pc?.name} may do?`, revoke: `Revoke ${step.pc?.name}? It is signed out at once and must be added again.`, remove: `Remove ${step.pc?.name} for good?`, reissue: `Make a new install command for ${step.pc?.name}? The old one stops working.` }[step.what];
+    const words = { add: `Add the PC "${step.name}"?`, perms: `Save what ${step.pc?.name} may do?`, revoke: `Revoke ${step.pc?.name}? It is signed out at once and must be added again.`, remove: `Remove ${step.pc?.name} for good?`, reissue: step.pc?.revoked ? `Add ${step.pc?.name} again? You get a new install command to run on that PC. It keeps its name and permissions.` : `Make a new install command for ${step.pc?.name}? The old one stops working.` }[step.what];
     return (
       <div className="pc-panel">
         <p className="auth-note">{words} Enter your PIN to confirm.</p>
@@ -256,7 +256,7 @@ export function WindowsPcsPanel({ api = httpPcsApi, pollMs = 4000, onBack }: { a
           <li key={pc.id} data-pc={pc.name}>
             <div className="plugin-info">
               <strong>{pc.name}</strong> <small className={pc.online ? "pc-on" : "pc-off"}>{pc.revoked ? "revoked" : pc.online ? "online" : "offline"}</small>
-              <div className="auth-note">{pc.revoked ? "Signed out. Add the PC again to use it." : statusLine(pc)}</div>
+              <div className="auth-note">{pc.revoked ? "Signed out. Press Add again for a new install command, then run it on that PC." : statusLine(pc)}</div>
               <div className="auth-note">
                 {[pc.os, pc.host].filter(Boolean).join(", ")}
                 {pc.permissions.control ? "" : " | control is off"}
@@ -297,9 +297,14 @@ export function WindowsPcsPanel({ api = httpPcsApi, pollMs = 4000, onBack }: { a
                   Revoke
                 </button>
               ) : (
-                <button type="button" style={touch} className="danger" disabled={busy} onClick={() => setStep({ kind: "pin", what: "remove", pc, permissions: pc.permissions })}>
-                  Remove
-                </button>
+                <>
+                  <button type="button" style={touch} className="primary" disabled={busy} onClick={() => setStep({ kind: "pin", what: "reissue", pc, permissions: pc.permissions })}>
+                    Add again
+                  </button>
+                  <button type="button" style={touch} className="danger" disabled={busy} onClick={() => setStep({ kind: "pin", what: "remove", pc, permissions: pc.permissions })}>
+                    Remove
+                  </button>
+                </>
               )}
             </div>
           </li>

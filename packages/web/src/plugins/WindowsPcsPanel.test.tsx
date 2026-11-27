@@ -146,7 +146,15 @@ describe("what a PC may do, control, and revoking", () => {
     const revoked = setup([pc({ revoked: true, online: false })]);
     expect(await screen.findByText(/Signed out/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Permissions" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+    // add it again: a new install command, with the same name
+    await userEvent.click(screen.getByRole("button", { name: "Add again" }));
+    expect(screen.getByText(/keeps its name and permissions/)).toBeTruthy();
+    await typePin("123456");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(revoked.api.reissue).toHaveBeenCalledWith(1, "123456"));
+    expect(await screen.findByTestId("pc-command")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Remove" }));
     await typePin("123456");
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() => expect(revoked.api.remove).toHaveBeenCalledWith(1, "123456"));
