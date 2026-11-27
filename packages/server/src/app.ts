@@ -115,6 +115,7 @@ import { StageState } from "./stage";
 import { DeckStore } from "./deck/store";
 import { PcService } from "./pc/service";
 import { PcHub } from "./pc/hub";
+import { AgentFile } from "./pc/agentBundle";
 import { PcTools } from "./pc/tools";
 import { Presenter } from "./deck/presenter";
 import { deckToHtml } from "./deck/exportHtml";
@@ -180,6 +181,8 @@ export interface AppOptions {
   defaultPlugins?: readonly string[];
   /** Folder with the bundled plugins (one folder per plugin). Defaults to `plugins/` in the repository. */
   pluginCatalogDir?: string;
+  /** The Windows PC agent file the PCs download (made by `pnpm --filter @friend/pc-agent bundle`). Defaults to the one next to the program or in the repository. */
+  pcAgentPath?: string;
   /** Starting Friend when the computer starts, and updating it. Everything has a real default; tests hand in their own. */
   system?: {
     /** The program that starts Friend (Node and the Friend program file). */
@@ -922,8 +925,18 @@ export async function createApp(opts: AppOptions) {
   const tidyAtStart = setTimeout(() => void memoryOrganizer.maybeRun(), 45_000);
   tidyAtStart.unref();
   // Windows PCs: the list and sign-in, the connected PCs, and the assistant's pc.* tools
-  const pcService: PcService = new PcService({ db, auth, audit, online: (id) => pcHub.isOnline(id), onRevoke: (id) => pcHub.revoke(id) });
-  const pcHub: PcHub = new PcHub({ store: pcService.store });
+  const pcHere = dirname(fileURLToPath(import.meta.url));
+  // the agent file: next to the program when installed from npm, in the repository when run from source
+  const pcAgentFile = new AgentFile([opts.pcAgentPath, resolve(pcHere, "pc-agent", "agent.js"), resolve(pcHere, "../../pc-agent/dist/agent.js"), resolve(pcHere, "../../../pc-agent/dist/agent.js")]);
+  const pcService: PcService = new PcService({ db, auth, audit, online: (id) => pcHub.isOnline(id), onRevoke: (id) => pcHub.revoke(id), onPermissions: (id, p) => pcHub.sendPermissions(id, p) });
+  const pcHub: PcHub = new PcHub({
+    store: pcService.store,
+    // a PC that runs an older agent file is told to update itself
+    onHello: (pcId, hello) => {
+      const b = pcAgentFile.get();
+      if (b && hello.agentSha256 && hello.agentSha256 !== b.sha256) pcHub.send(pcId, { type: "update", url: "/api/pc/agent.js", sha256: b.sha256 });
+    },
+  });
   const pcTools = new PcTools({ hub: pcHub, store: pcService.store, audit, extraPatterns: () => [] });
   // presentations: the saved decks, the player (it speaks through the same speaker and draws through the same broadcast), and the files
   const deckStore = new DeckStore(db);
@@ -1647,7 +1660,12 @@ export async function createApp(opts: AppOptions) {
   const gateway = createGateway({
     ...(tls ? { tls } : {}),
     pc: pcService,
-    onPcConnect: (pcId, ws) => pcHub.attach(pcId, ws),
+    pcAgent: () => pcAgentFile.get(),
+    onPcConnect: (pcId, ws) => {
+      pcHub.attach(pcId, ws);
+      const pc = pcService.store.get(pcId);
+      if (pc) pcHub.sendPermissions(pcId, pc.permissions); // the PC always starts from what the owner chose
+    },
     connectors: connectorsApi,
     oauth: oauthApi,
     chrome: chromeRemoteApi,

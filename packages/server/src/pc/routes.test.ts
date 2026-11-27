@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -16,7 +16,9 @@ afterEach(async () => {
 
 async function boot() {
   const dir = mkdtempSync(join(tmpdir(), "friend-pcroutes-"));
-  app = await createApp({ dataDir: dir, provider: new FakeProvider([[{ type: "done" }]] as never), config: { port: 0, roots: [] }, pluginCatalogDir: join(dir, "none") });
+  const agentPath = join(dir, "agent.js");
+  writeFileSync(agentPath, "console.log('the agent');");
+  app = await createApp({ dataDir: dir, provider: new FakeProvider([[{ type: "done" }]] as never), config: { port: 0, roots: [] }, pluginCatalogDir: join(dir, "none"), pcAgentPath: agentPath });
   const { port } = await app.start();
   const base = `http://127.0.0.1:${port}`;
   const j = { "content-type": "application/json" };
@@ -25,7 +27,7 @@ async function boot() {
   const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
   const api = (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, headers: { ...(init.body ? j : {}), cookie } });
   const anon = (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, headers: init.body ? j : {} });
-  return { api, anon, db: app.db };
+  return { api, anon, db: app.db, base };
 }
 const send = (body: unknown, method = "POST") => ({ method, body: JSON.stringify(body) });
 
@@ -105,3 +107,47 @@ describe("adding a Windows PC over HTTP", () => {
     expect((await t.api("/api/pc", send({ name: "office", pin: owner.pin }))).status).toBe(400);
   });
 });
+
+describe("what a new PC downloads", () => {
+  it("gives the owner the install command and the links, and serves the script to a valid enrollment only", async () => {
+    const t = await boot();
+    const added = (await (await t.api("/api/pc", send({ name: "Office", pin: owner.pin }))).json()) as { enrollmentId: string; install: { command: string; ps1Url: string; cmdUrl: string } | null };
+    expect(added.install).toBeTruthy();
+    expect(added.install!.command).toContain(`install.ps1?enrollment=${added.enrollmentId}`);
+    expect(added.install!.command).toContain("-ExecutionPolicy Bypass");
+    const ps1 = await t.anon(`/api/pc/install.ps1?enrollment=${added.enrollmentId}`);
+    expect(ps1.status).toBe(200);
+    const text = await ps1.text();
+    expect(text).toContain("$pcName = 'Office'");
+    expect(text).toMatch(/\$agentSha = '[0-9a-f]{64}'/);
+    expect((await t.anon("/api/pc/install.ps1?enrollment=not-a-real-one")).status).toBe(404);
+    expect((await t.anon("/api/pc/install.ps1")).status).toBe(404);
+    const cmd = await t.anon(`/api/pc/install.cmd?enrollment=${added.enrollmentId}`);
+    expect(cmd.status).toBe(200);
+    expect(cmd.headers.get("content-disposition")).toContain("install-friend-pc-agent.cmd");
+  });
+
+  it("serves the agent file to an install link or to a signed-in PC, with its checksum, and to nobody else", async () => {
+    const t = await boot();
+    const added = (await (await t.api("/api/pc", send({ name: "Office", pin: owner.pin }))).json()) as { pc: { id: number }; enrollmentId: string };
+    expect((await t.anon("/api/pc/agent.js")).status).toBe(401);
+    expect((await t.anon("/api/pc/agent.js?enrollment=nope")).status).toBe(401);
+    const file = await t.anon(`/api/pc/agent.js?enrollment=${added.enrollmentId}`);
+    expect(file.status).toBe(200);
+    expect(await file.text()).toContain("the agent");
+    expect(file.headers.get("x-agent-sha256")).toMatch(/^[0-9a-f]{64}$/);
+
+    const verifier = randomBytes(32).toString("base64url");
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    const s = (await (await t.anon("/api/pc/enroll/start", send({ enrollmentId: added.enrollmentId, challenge, os: "Windows 11", host: "X" }))).json()) as { deviceCode: string; userCode: string };
+    await t.api(`/api/pc/enroll/${s.userCode}/approve`, send({ pin: owner.pin }));
+    const tok = (await (await t.anon("/api/pc/enroll/token", send({ deviceCode: s.deviceCode, verifier }))).json()) as { access: string };
+    const withToken = await fetch(`${t.base}/api/pc/agent.js`, { headers: { authorization: `Bearer ${tok.access}` } });
+    expect(withToken.status).toBe(200);
+    // the install link is used up: it no longer serves the file
+    expect((await t.anon(`/api/pc/agent.js?enrollment=${added.enrollmentId}`)).status).toBe(401);
+    await t.api(`/api/pc/${added.pc.id}/revoke`, send({ pin: owner.pin }));
+    expect((await fetch(`${t.base}/api/pc/agent.js`, { headers: { authorization: `Bearer ${tok.access}` } })).status).toBe(401);
+  });
+});
+

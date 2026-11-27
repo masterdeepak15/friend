@@ -50,6 +50,14 @@ export class PcStore {
     return { pc: this.get(id)!, enrollmentId };
   }
 
+  /** The PC an enrollment id belongs to, when it was not used and has not run out. */
+  validEnrollment(enrollmentId: string): Pc | null {
+    const r = this.db.prepare("select pc_id, expires_at, used from pc_enroll where id = ?").get(enrollmentId) as { pc_id: number; expires_at: number; used: number } | undefined;
+    if (!r || r.used || r.expires_at < this.clock()) return null;
+    const pc = this.get(r.pc_id);
+    return pc && !pc.revoked ? pc : null;
+  }
+
   /** A new one-time enrollment id for a PC that never signed in (the old ones stop working). */
   newEnrollment(pcId: number): string {
     const now = this.clock();

@@ -86,6 +86,8 @@ export interface GatewayDeps {
   oauth?: OAuthApi;
   /** The Windows PCs: the list, signing in a PC, permissions and revoking. */
   pc?: PcService;
+  /** The agent file the PCs download. */
+  pcAgent?: () => import("./pc/agentBundle").AgentBundle | null;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
   settings?: SettingsApi;
   /** Says a short sentence in the named voice and returns it as a WAV recording, so the owner can hear a voice before choosing it. */
@@ -1080,6 +1082,8 @@ export function createGateway(deps: GatewayDeps) {
   if (deps.pc) {
     registerPcRoutes(app, {
       svc: deps.pc,
+      agent: () => deps.pcAgent?.() ?? null,
+      baseUrl: (req) => (config.publicUrl ? String(config.publicUrl).replace(/\/+$/, "") : `${req.protocol}://${req.headers.host ?? "127.0.0.1"}`),
       ownerGuard: async (req, reply) => {
         const token = req.cookies[COOKIE_NAME];
         const session = token ? auth.resolveSession(token) : null;

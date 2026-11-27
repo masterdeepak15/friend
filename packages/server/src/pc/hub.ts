@@ -37,7 +37,10 @@ export class PcHub {
   private readonly clock: () => number;
   private readonly store: PcStore;
 
-  constructor(deps: { store: PcStore; clock?: () => number }) {
+  private readonly onHello: ((pcId: number, hello: { os: string; host: string; version: string; agentSha256?: string | undefined }) => void) | undefined;
+
+  constructor(deps: { store: PcStore; clock?: () => number; onHello?: (pcId: number, hello: { os: string; host: string; version: string; agentSha256?: string | undefined }) => void }) {
+    this.onHello = deps.onHello;
     this.store = deps.store;
     this.clock = deps.clock ?? Date.now;
   }
@@ -77,6 +80,7 @@ export class PcHub {
     switch (m.type) {
       case "hello":
         this.store.setIdentity(pcId, m.os, m.host);
+        this.onHello?.(pcId, m);
         return;
       case "status":
         conn.status = m.status;

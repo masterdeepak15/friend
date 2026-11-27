@@ -27,6 +27,8 @@ export interface PcServiceDeps {
   online?: (pcId: number) => boolean;
   /** A PC was revoked or removed: close its socket and end what it was doing. */
   onRevoke?: (pcId: number) => void;
+  /** The owner changed what a PC may do: tell the PC if it is connected. */
+  onPermissions?: (pcId: number, permissions: PcPermissions) => void;
 }
 
 /** Everything the owner and the PCs do with the list of PCs, with the PIN and the audit trail in one place. */
@@ -108,6 +110,7 @@ export class PcService {
     const before = this.store.get(id);
     if (!before || !this.store.setPermissions(id, permissions)) throw new HttpError(404, "There is no such PC, or those permissions are not valid.");
     this.deps.audit.log("owner", "pc.permissions", { pc: before.name, from: before.permissions, to: permissions, ip });
+    this.deps.onPermissions?.(id, permissions);
     return this.view(this.store.get(id)!);
   }
 
