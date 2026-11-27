@@ -5,7 +5,9 @@ import { TelegramForm, TwilioForm, httpChannelsApi, type ChannelStatus, type Cha
 import { httpSettingsApi, type AlexaView, type BrokersView, type ChannelsView, type SettingsApi } from "../settings/settingsApi";
 import { AlexaForm, alexaProblem, httpAlexaApi, type AlexaApi } from "./AlexaForm";
 import { ChromeForm, httpChromeApi, type ChromeApi } from "./ChromeForm";
+import { MailboxesPanel } from "./MailboxesPanel";
 import { WindowsPcsPanel } from "./WindowsPcsPanel";
+import { httpMailApi, type MailApi } from "./mailApi";
 import { httpPcsApi, type PcsApi } from "./pcsApi";
 import { SoundCloudForm, httpSoundCloudApi, type SoundCloudApi } from "./SoundCloudForm";
 import { SpotifyForm, httpSpotifyApi, type SpotifyApi } from "./SpotifyForm";
@@ -45,6 +47,7 @@ export function IntegrationConfig({
   chromeApi = httpChromeApi,
   videoApi = httpVideoApi,
   pcsApi = httpPcsApi,
+  mailApi = httpMailApi,
 }: {
   integration: IntegrationEntry;
   onBack: () => void;
@@ -57,6 +60,7 @@ export function IntegrationConfig({
   chromeApi?: ChromeApi;
   videoApi?: VideoApi;
   pcsApi?: PcsApi;
+  mailApi?: MailApi;
 }) {
   const [saved, setSaved] = useState<ChannelsView | null>(null);
   const [draft, setDraft] = useState<ChannelsView>(EMPTY);
@@ -81,9 +85,10 @@ export function IntegrationConfig({
   const isChrome = integration.id === "chrome";
   const isVideo = integration.id === "video";
   const isPcs = integration.id === "windows-pcs";
+  const isMail = integration.id === "mail";
   const isTavily = integration.id === "tavily";
   const isBrowser = integration.id === "browser";
-  const nothingToSave = isSpotify || isSoundCloud || isAudius || isChrome || isVideo || isTavily || isBrowser || isPcs;
+  const nothingToSave = isSpotify || isSoundCloud || isAudius || isChrome || isVideo || isTavily || isBrowser || isPcs || isMail;
 
   useEffect(() => {
     alive.current = true;
@@ -215,6 +220,7 @@ export function IntegrationConfig({
       {isChrome && <ChromeForm api={chromeApi} />}
       {isVideo && <VideoForm api={videoApi} />}
       {isPcs && <WindowsPcsPanel api={pcsApi} />}
+      {isMail && <MailboxesPanel api={mailApi} />}
       {isTavily && <TavilyForm api={settingsApi} />}
       {isBrowser && <BrowserForm api={settingsApi} found={String(integration.settings?.chrome ?? "")} />}
       {isAlexa && savedA && <AlexaForm view={draftA} setView={setDraftA} api={alexaApi} />}
@@ -227,6 +233,7 @@ export function IntegrationConfig({
         !isChrome &&
         !isVideo &&
         !isPcs &&
+        !isMail &&
         !isTavily &&
         !isBrowser &&
         saved &&
