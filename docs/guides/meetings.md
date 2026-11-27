@@ -65,9 +65,13 @@ It is on unless you say "In meetings, only write in the chat" (`meeting.setup sp
 
 When live captions are off, Friend listens to the sound of the call itself and reads it with **the same voice engine it already uses for the app** (the one you talk to with Space). Nothing to install or set up, no separate model: if the voice engine is running, meetings use it, for listening and for speaking.
 
-How it works: the browser hands Friend the sound of the other people (the call's incoming audio tracks, not your PC's speakers), in pieces cut at the pauses. Pieces with no speech in them are never sent to the engine, and the sound is never saved. Each piece becomes a line from "Someone" and goes through the same rules as captions (answers by name, tells you what concerns you, notes). If the voice engine is not running there is nothing to read the sound with, and Friend says so.
+How it works: the browser hands Friend the sound of the other people (the call's incoming audio tracks, not your PC's speakers), in pieces cut at the pauses. Pieces with no speech in them are never sent to the engine, and the sound is never saved. Each piece becomes a line, from the person whose voiceprint Friend knows (you, and the people you added under Voice) or from "Someone" and goes through the same rules as captions (answers by name, tells you what concerns you, notes). If the voice engine is not running there is nothing to read the sound with, and Friend says so.
 
-Limits: it cannot tell who is speaking, so your own words are not skipped and the owner is not recognised by name; it is a few seconds behind the conversation; and the engine sometimes mishears names. Captions are used again as soon as they come back.
+Limits: it can name only voices Friend has been taught (enrol yours in the app first), everyone else is "Someone"; it is a few seconds behind the conversation; and the engine sometimes mishears names. Captions are used again as soon as they come back.
+## Talking like a person
+
+It listens all the time and watches for the room going quiet, so it never starts over someone and answers a moment after the pause. For 45 seconds after it was called or answered, a follow-up counts as meant for it even without its name; it stays quiet if the line is clearly people talking among themselves. It does not listen to its own voice (sound that arrives while it speaks, and for 3 seconds after, is ignored), and a name the speech engine garbled ("Umayyad" for "Maya") still counts.
+
 ## Not built
 
 Recognising the owner by voice, joining from mail without you, and calendar integration.

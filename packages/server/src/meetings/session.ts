@@ -32,7 +32,7 @@ export interface SessionEvents {
   status(status: MeetingStatus, detail: string): void;
   lines(lines: Line[]): void;
   /** The assistant was called by name: the line, and what was said just before it. */
-  addressed(line: Line, context: Line[]): void;
+  addressed(line: Line, context: Line[], followUp?: boolean): void;
   /** Something that concerns the owner was said. */
   ownerRelevant(line: Line, context: Line[]): void;
   /** Time to bring the notes up to date. */
@@ -77,7 +77,9 @@ export class MeetingSession {
   private ownerSpokeAt = 0;
   private lastChat = 0;
   private cool = new Cooldown(60_000);
-  private pending: { line: Line; due: number; limit: number } | null = null;
+  private pending: { line: Line; due: number; limit: number; follow?: boolean } | null = null;
+  /** For a little while after it was called or answered, the next thing said is most likely meant for it too, whether or not it says its name again. */
+  private conversationUntil = 0;
   private linesSinceNotes = 0;
   private lastNotes: number;
   private done: Promise<void> | null = null;
@@ -85,6 +87,8 @@ export class MeetingSession {
   private audioMode = false;
   private lastHeard = 0;
   private lastSpoke = 0;
+  /** Sound that arrives while it speaks (and just after) is its own voice coming back through someone's speakers: not listened to. */
+  private deafUntil = 0;
 
   constructor(private d: SessionDeps) {
     this.tracker = new CaptionTracker(d.settleMs ?? 2500);
@@ -130,14 +134,19 @@ export class MeetingSession {
     if (this.now() - this.lastSpoke < 20_000) return { ok: false, message: "It spoke a moment ago: wait twenty seconds between spoken answers." };
     this.lastSpoke = this.now();
     // a person does not talk over someone
-    for (let w = 0; this.now() - this.lastHeard < 1500 && w < 20; w++) await this.sleep(400);
+    // (in audio mode what counts is the sound itself, not the line made from it a few seconds later)
+    const quietFor = () => (d.hearing && this.audioMode ? Date.now() - d.hearing.lastVoiceAt : this.now() - this.lastHeard);
+    for (let w = 0; quietFor() < (this.audioMode ? 500 : 1500) && w < 40; w++) await this.sleep(150);
     const wav = await d.speech(text.slice(0, 400)).catch(() => null);
     if (!wav) return { ok: false, message: "This PC has no voice to speak with." };
     if (!(await d.page.mic(true).catch(() => false))) return { ok: false, message: "It could not switch the microphone on in the meeting." };
     let ok = false;
+    this.deafUntil = Number.MAX_SAFE_INTEGER;
     try {
       ok = await d.page.speak(wav).catch(() => false);
     } finally {
+      this.deafUntil = this.now() + 3000;
+      this.conversationUntil = this.now() + 45_000; // the answer may be followed by a question
       await d.page.mic(false).catch(() => false);
     }
     return ok ? { ok: true, message: "Said aloud." } : { ok: false, message: "It could not play the sound into the meeting." };
@@ -196,7 +205,7 @@ export class MeetingSession {
           this.set("failed", reason);
           return void (await d.page.close());
         }
-        await this.sleep(poll);
+        await this.sleep(this.audioMode ? Math.min(poll, 300) : poll);
       }
       if (this.stopped) reason = this.stopped;
     } finally {
@@ -249,7 +258,7 @@ export class MeetingSession {
       d.events.problem("Live captions are off in this meeting, so it is listening to the sound instead. It cannot tell who is speaking.");
     }
     const pcm = await d.page.audio?.().catch(() => null);
-    if (pcm) d.hearing?.push(pcm);
+    if (pcm && this.now() >= this.deafUntil) d.hearing?.push(pcm);
     const lines = d.hearing?.take() ?? [];
     if (lines.length) this.take(lines);
   }
@@ -266,23 +275,31 @@ export class MeetingSession {
     this.linesSinceNotes += lines.length;
     d.events.lines(lines);
     for (const l of lines) {
-      if (isAddressed(l, d.names(), d.selfName)) {
+      const byName = isAddressed(l, d.names(), d.selfName, this.audioMode);
+      const follow = !byName && this.now() < this.conversationUntil && l.speaker.trim().toLowerCase() !== d.selfName.trim().toLowerCase() && l.text.trim().split(/\s+/).length >= 3;
+      if (byName || follow) {
+        if (byName) this.conversationUntil = this.now() + 45_000;
         // wait for the speaker to finish: a later line from the same person pushes the answer back a little
-        const due = this.now() + (d.replyDelayMs ?? 1500);
-        this.pending = this.pending && this.pending.line.speaker === l.speaker ? { line: l, due: Math.min(due, this.pending.limit), limit: this.pending.limit } : { line: l, due, limit: this.now() + 8000 };
+        const due = this.now() + this.replyDelay();
+        this.pending = this.pending && this.pending.line.speaker === l.speaker ? { line: l, due: Math.min(due, this.pending.limit), limit: this.pending.limit, ...(follow && this.pending.follow ? { follow } : {}) } : { line: l, due, limit: this.now() + 8000, ...(follow ? { follow } : {}) };
       } else if (this.pending && this.pending.line.speaker === l.speaker) {
-        this.pending = { ...this.pending, due: Math.min(this.now() + (d.replyDelayMs ?? 1500), this.pending.limit) };
+        this.pending = { ...this.pending, due: Math.min(this.now() + this.replyDelay(), this.pending.limit) };
       } else if (concernsOwner(l, prefs.ownerNames, prefs.keywords) && this.cool.take("owner", this.now())) {
         d.events.ownerRelevant(l, this.transcript());
       }
     }
   }
 
+  /** How long it waits after someone stops before it answers: captions arrive a while after the speech, sound is cut at the pause already. */
+  private replyDelay(): number {
+    return this.d.replyDelayMs ?? (this.audioMode ? 300 : 1500);
+  }
+
   private tick(): void {
     const p = this.pending;
     if (p && this.now() >= p.due) {
       this.pending = null;
-      this.d.events.addressed(p.line, this.transcript());
+      this.d.events.addressed(p.line, this.transcript(), p.follow);
     }
     const every = this.d.prefs().notesEveryMinutes * 60_000;
     if (this.linesSinceNotes >= 4 && this.now() - this.lastNotes >= every) {

@@ -1079,7 +1079,21 @@ export async function createApp(opts: AppOptions) {
       if (opts.meetingVoice?.hearing) return opts.meetingVoice.hearing();
       const v = opts.voice;
       if (!v?.available()) return null;
-      return new AudioHearing({ transcribe: async (pcm) => (await v.transcribe(pcmToWav(pcm, 16000), "audio/wav", config.voice.language)).text });
+      // who is talking is told by the voiceprints Friend already keeps (the owner, and the people of the household); anyone else is "Someone"
+      return new AudioHearing({
+        transcribe: async (pcm) => {
+          const t = await v.transcribe(pcmToWav(pcm, 16000), "audio/wav", config.voice.language, { embed: true });
+          let speaker: string | undefined;
+          try {
+            const who = judge(t.embedding ?? null);
+            if (who.trust === "owner") speaker = meetingStore.prefs().ownerNames[0] || "Owner";
+            else if (who.trust === "member" && who.person) speaker = who.person.name;
+          } catch {
+            /* not recognised: Someone */
+          }
+          return { text: t.text, ...(speaker ? { speaker } : {}) };
+        },
+      });
     },
     tellOwner: (text, title) => void tellOwner(text, title ?? "Meeting"),
     runTurn: async (prompt, c) => {

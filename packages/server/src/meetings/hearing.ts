@@ -1,7 +1,7 @@
 import type { Line } from "./logic";
 
 /** Turns 16 kHz 16-bit mono sound into the words in it. */
-export type Transcriber = (pcm: Buffer) => Promise<string>;
+export type Transcriber = (pcm: Buffer) => Promise<string | { text: string; /** Who it sounded like, when the voice could be recognised. */ speaker?: string }>;
 
 const RATE = 16000;
 const FRAME = RATE / 10; // 100 ms
@@ -23,7 +23,12 @@ export function cleanTranscript(raw: string): string {
     .replace(/\s+/g, " ")
     .trim();
   if (!/[\p{L}\p{N}]/u.test(t)) return "";
-  if (/^(thanks for watching|thank you for watching|please subscribe|you|bye)[.!]?$/i.test(t)) return "";
+  if (/^(thanks for watching|thank you for watching|please subscribe|you|bye|thank you|thanks|you'?re welcome|okay|ok)[.!]?$/i.test(t)) return "";
+  // what a model that learned from videos writes when it is given silence
+  if (/(for watching|like,? (share|comment)|subscribe|subtitles by|amara\.org|see you (in the )?next)/i.test(t)) return "";
+  // the same word over and over is what a speech engine makes of noise
+  const words = t.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+  if (words.length >= 4 && new Set(words).size <= Math.ceil(words.length / 4)) return "";
   return t;
 }
 
@@ -51,11 +56,21 @@ export class AudioHearing {
   private o: Required<Omit<HearingOptions, "transcribe">> & { transcribe: Transcriber };
 
   constructor(o: HearingOptions) {
-    this.o = { speaker: "Someone", silence: 0.012, minSeconds: 4, maxSeconds: 14, ...o };
+    this.o = { speaker: "Someone", silence: 0.012, minSeconds: 1.2, maxSeconds: 10, ...o };
   }
+
+  /** When someone was last heard talking (milliseconds, Date.now): it never starts to speak over them. */
+  lastVoiceAt = 0;
+  private floor = 0.004;
 
   push(pcm: Buffer): void {
     if (!pcm.length) return;
+    // every 100 ms: is this somebody talking, against the background noise of the room that is learned as it goes
+    for (let i = 0; i + FRAME * 2 <= pcm.length; i += FRAME * 2) {
+      const e = rms(pcm, i, i + FRAME * 2);
+      this.floor = e < this.floor ? e * 0.5 + this.floor * 0.5 : this.floor * 0.995 + e * 0.005;
+      if (e >= Math.max(this.o.silence, this.floor * 3)) this.lastVoiceAt = Date.now();
+    }
     this.buf = Buffer.concat([this.buf, pcm]);
     const seconds = this.buf.length / 2 / RATE;
     if (seconds < this.o.minSeconds) return;
@@ -80,13 +95,13 @@ export class AudioHearing {
     const chunk = this.buf;
     this.buf = Buffer.alloc(0);
     // a stretch with hardly any speech in it is not sent: that is where a model makes things up
-    let voiced = 0;
-    let frames = 0;
-    for (let i = 0; i + FRAME * 2 <= chunk.length; i += FRAME * 2) {
-      frames++;
-      if (rms(chunk, i, i + FRAME * 2) >= this.o.silence) voiced++;
-    }
-    if (frames < 8 || voiced / frames < 0.12) return;
+    const energy: number[] = [];
+    for (let i = 0; i + FRAME * 2 <= chunk.length; i += FRAME * 2) energy.push(rms(chunk, i, i + FRAME * 2));
+    if (energy.length < 8) return;
+    // speech has to stand out from the room: well above its background noise, which is learned from the quiet moments over the whole call
+    const bar = Math.max(this.o.silence, this.floor * 3);
+    const voiced = energy.filter((e) => e >= bar).length;
+    if (voiced / energy.length < 0.12) return;
     this.queue.push(chunk);
     if (this.queue.length > 3) this.queue.shift(); // the model is behind: the oldest is dropped rather than everything running late
     void this.work();
@@ -97,8 +112,9 @@ export class AudioHearing {
     this.busy = true;
     try {
       for (let c = this.queue.shift(); c; c = this.queue.shift()) {
-        const text = cleanTranscript(await this.o.transcribe(c).catch(() => ""));
-        if (text) this.ready.push({ speaker: this.o.speaker, text });
+        const heard = await this.o.transcribe(c).catch(() => "");
+        const text = cleanTranscript(typeof heard === "string" ? heard : heard.text);
+        if (text) this.ready.push({ speaker: (typeof heard === "object" && heard.speaker) || this.o.speaker, text });
       }
     } finally {
       this.busy = false;

@@ -89,9 +89,37 @@ export function mentions(text: string, names: readonly string[]): boolean {
 }
 
 /** Whether a line is the assistant being called: one of its names, said by somebody other than itself. */
-export function isAddressed(line: Line, names: readonly string[], selfName: string): boolean {
+export function isAddressed(line: Line, names: readonly string[], selfName: string, fuzzy = false): boolean {
   if (line.speaker.trim().toLowerCase() === selfName.trim().toLowerCase()) return false;
-  return mentions(line.text, names);
+  return mentions(line.text, names) || (fuzzy && soundsLike(line.text, names));
+}
+
+const within1 = (a: string, b: string): boolean => {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (i === a.length && i === b.length) return true;
+  const rest = (s: string, from: number) => s.slice(from);
+  return rest(a, i + 1) === rest(b, i + 1) || rest(a, i + 1) === rest(b, i) || rest(a, i) === rest(b, i + 1);
+};
+
+/**
+ * For speech read by a speech engine, which often garbles a name ("Umayyad" for "Maya"): a spoken word that is one letter off a name, or that has a
+ * one-letter-off copy of the name inside it. Names under four letters are never matched this way: too many ordinary words are close to them.
+ */
+export function soundsLike(text: string, names: readonly string[]): boolean {
+  const words = text.toLowerCase().match(/[\p{L}]+/gu) ?? [];
+  for (const n of names) {
+    const name = n.trim().toLowerCase();
+    if (name.length < 4 || /\s/.test(name)) continue;
+    for (const w of words) {
+      if (w.length < name.length) continue; // a shorter word (\"May\" for \"Maya\") is far more likely a real word
+      if (within1(w, name)) return true;
+      // a name with something run into the front of it (\"Umayyad\"); not one that merely starts a longer word (\"maybe\", \"mayor\")
+      for (let i = 1; i + name.length <= w.length; i++) if (within1(w.slice(i, i + name.length), name)) return true;
+    }
+  }
+  return false;
 }
 
 /** Whether a line concerns the owner: their name, or a topic they asked to hear about. The owner's own lines never do. */
