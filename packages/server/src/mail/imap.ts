@@ -24,6 +24,7 @@ export interface ImapClient {
 
 export interface SmtpTransport {
   sendMail(m: Record<string, unknown>): Promise<{ messageId: string }>;
+  verify?(): Promise<unknown>;
 }
 
 export interface ImapSmtpSettings {
@@ -77,6 +78,18 @@ export class ImapSmtpProvider implements MailProvider {
     }
     this.client = c;
     this.usable = true;
+  }
+
+  /** Whether both the reading side and the sending side accept the login. Throws a MailAuthError or MailNetworkError that says which. */
+  async check(): Promise<void> {
+    await this.connect();
+    await this.disconnect();
+    const transport = this.deps.smtp ? this.deps.smtp() : (nodemailer.createTransport({ host: this.s.smtp.host, port: this.s.smtp.port, secure: this.s.smtp.secure, auth: { user: this.s.username, pass: this.s.password } }) as unknown as SmtpTransport);
+    try {
+      await transport.verify?.();
+    } catch (e) {
+      throw this.wrap(e, this.s.smtp.host);
+    }
   }
 
   async disconnect(): Promise<void> {

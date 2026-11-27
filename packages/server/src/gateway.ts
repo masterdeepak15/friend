@@ -18,6 +18,8 @@ import { RateLimiter } from "./ratelimit";
 import type { Config } from "./config";
 import { HttpError } from "./http-error";
 import { registerPcRoutes } from "./pc/routes";
+import { registerMailRoutes } from "./mail/routes";
+import type { MailAccounts } from "./mail/accounts";
 import type { PcService } from "./pc/service";
 import { chromeAddresses, keyFromRequest, proxyMcp, relayExtension, sameKey, type ChromeAccess } from "./connectors/chromeRemote";
 
@@ -86,6 +88,8 @@ export interface GatewayDeps {
   oauth?: OAuthApi;
   /** The Windows PCs: the list, signing in a PC, permissions and revoking. */
   pc?: PcService;
+  /** Adding, changing and removing mailboxes (the Mailboxes plugin). */
+  mail?: MailAccounts;
   /** The agent file the PCs download. */
   pcAgent?: () => import("./pc/agentBundle").AgentBundle | null;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
@@ -1090,6 +1094,22 @@ export function createGateway(deps: GatewayDeps) {
         if (!session) return reply.code(401).send({ error: "Unauthorized" });
         if (!pcWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
         if (!config.pcs.installed) return reply.code(409).send({ error: "Windows PCs is not installed. Install it in Plugins first." });
+        reply.header("cache-control", "no-store");
+      },
+    });
+  }
+
+  // ---- Mailboxes (owner session; closed until the plugin is installed) ----
+  if (deps.mail) {
+    const mailWindow = new SlidingWindow(60, 60_000);
+    registerMailRoutes(app, {
+      accounts: deps.mail,
+      ownerGuard: async (req, reply) => {
+        const token = req.cookies[COOKIE_NAME];
+        const session = token ? auth.resolveSession(token) : null;
+        if (!session) return reply.code(401).send({ error: "Unauthorized" });
+        if (!mailWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+        if (!config.mail.installed) return reply.code(409).send({ error: "Mailboxes is not installed. Install it in Plugins first." });
         reply.header("cache-control", "no-store");
       },
     });

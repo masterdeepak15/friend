@@ -119,6 +119,7 @@ import { AgentFile } from "./pc/agentBundle";
 import { PcTools } from "./pc/tools";
 import { MailAuthError } from "./mail/provider";
 import { ImapSmtpProvider } from "./mail/imap";
+import { MailAccounts } from "./mail/accounts";
 import { MailService } from "./mail/service";
 import { MailSecrets, MailStore } from "./mail/store";
 import { MailSync } from "./mail/sync";
@@ -189,6 +190,8 @@ export interface AppOptions {
   pluginCatalogDir?: string;
   /** The Windows PC agent file the PCs download (made by `pnpm --filter @friend/pc-agent bundle`). Defaults to the one next to the program or in the repository. */
   pcAgentPath?: string;
+  /** Tries a mailbox login. Tests give a stand-in so nothing reaches a mail server. */
+  mailCheck?: (settings: import("./mail/imap").ImapSmtpSettings) => Promise<void>;
   /** Starting Friend when the computer starts, and updating it. Everything has a real default; tests hand in their own. */
   system?: {
     /** The program that starts Friend (Node and the Friend program file). */
@@ -988,6 +991,17 @@ export async function createApp(opts: AppOptions) {
   };
   let mailSync!: MailSync;
   const mailService = new MailService({ store: mailStore, provider: (id) => mailSync.use(id), audit });
+  const mailAccounts = new MailAccounts({
+    store: mailStore,
+    secrets: mailSecrets,
+    auth,
+    audit,
+    check: opts.mailCheck ?? ((s) => new ImapSmtpProvider(s).check()),
+    changed: async (id) => {
+      await mailSync.forget(id);
+      if (mailStore.getAccount(id)?.enabled && config.mail.installed && config.mail.enabled) void mailSync.syncNow(id).catch(() => {});
+    },
+  });
   const mailTools = new MailTools({ service: mailService, store: mailStore, provider: (id) => mailSync.use(id), audit, enabled: () => config.mail.installed && config.mail.enabled });
   const pcTools = new PcTools({ hub: pcHub, store: pcService.store, audit, extraPatterns: () => [], enabled: () => config.pcs.installed && config.pcs.enabled });
   // presentations: the saved decks, the player (it speaks through the same speaker and draws through the same broadcast), and the files
@@ -1737,6 +1751,7 @@ ${todo.text}`;
   const gateway = createGateway({
     ...(tls ? { tls } : {}),
     pc: pcService,
+    mail: mailAccounts,
     pcAgent: () => pcAgentFile.get(),
     onPcConnect: (pcId, ws) => {
       pcHub.attach(pcId, ws);
