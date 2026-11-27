@@ -176,6 +176,9 @@ Example: `friend config set voice.speakTyped false` keeps typed messages silent.
 | `FRIEND_DAEMON` | Set to `1` by `friend daemon start` for the Friend it starts in the background. Only a background Friend may restart itself to install an update; one running in a terminal never does. You do not set it yourself. |
 | `FRIEND_SECRET_KEY` | A passphrase to lock the saved keys, tokens and passwords with, instead of the `secret.key` file Friend makes in its data folder. Keys in `config.json` are always stored encrypted (on every system); with this set, the unlocking key is not on the disk at all. Set the same value on every start; if it is lost, those keys must be entered again. |
 | `FRIEND_ANTHROPIC_KEY` | An API key to use when none is saved. |
+| `FRIEND_PC_DIR` | On a Windows PC: the folder where the PC agent keeps its data and its log (default `%LOCALAPPDATA%\Friend\pc-agent`). |
+| `FRIEND_PC_NO_BROWSER` | On a Windows PC: set to `1` so the PC agent does not open the approval page in a browser (for runs with nobody at the screen). |
+| `FRIEND_PC_AGENT_VERSION` | Set when the PC agent file is built: the version it reports to Friend. You do not set it yourself. |
 | `FRIEND_PYTHON` | The Python program to use for voice, if the usual ones are not the right version. |
 | `FRIEND_WEB_DIR`, `FRIEND_PLUGIN_CATALOG`, `FRIEND_VOICE_DIR`, `FRIEND_CHROME_CONTROL` | Where the web app, the bundled plugins, the Python voice code and the Chrome control program (its `index.js`) are, for unusual installs. |
 | `CHROME_BRIDGE_PORT`, `CHROME_BRIDGE_HTTP_PORT` | Where Chrome control itself listens on this PC (its extension port, default 8765, and its MCP port, default 8766). Friend reaches both for you: other PCs only need Friend's own address. |
