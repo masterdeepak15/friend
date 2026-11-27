@@ -86,9 +86,10 @@ export function IntegrationConfig({
   const isVideo = integration.id === "video";
   const isPcs = integration.id === "windows-pcs";
   const isMail = integration.id === "mail";
+  const isMeetings = integration.id === "meetings";
   const isTavily = integration.id === "tavily";
   const isBrowser = integration.id === "browser";
-  const nothingToSave = isSpotify || isSoundCloud || isAudius || isChrome || isVideo || isTavily || isBrowser || isPcs || isMail;
+  const nothingToSave = isSpotify || isSoundCloud || isAudius || isChrome || isVideo || isTavily || isBrowser || isPcs || isMail || isMeetings;
 
   useEffect(() => {
     alive.current = true;
@@ -234,6 +235,7 @@ export function IntegrationConfig({
         !isVideo &&
         !isPcs &&
         !isMail &&
+        !isMeetings &&
         !isTavily &&
         !isBrowser &&
         saved &&

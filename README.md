@@ -444,6 +444,10 @@ Add as many Windows PCs as you want: install the **Windows PCs** plugin (Plugins
 
 Give Friend an address (Gmail, Microsoft 365 or any IMAP and SMTP mailbox) from **Plugins, Mailboxes**. It reads new mail, searches it, and answers or sends from it. **Only mail proven to come from you** (your address, with the mail server's DKIM or SPF check passing) can give it an order; mail from anyone else is only information and can never make it forward, write to a third person or ignore a rule. Every send asks you first unless you allowed it for that kind of mail and a person the mailbox already knows; it never answers newsletters, no-reply addresses or robots. The password is kept sealed in the vault. See [docs/guides/mailboxes.md](docs/guides/mailboxes.md).
 
+## Meetings: it joins your Teams calls and takes notes
+
+Give Friend a Teams invitation link ("join this meeting at 3pm") from **Plugins, Meetings**. It joins as a guest in a private Chrome of its own, writes in the chat that it is an AI taking notes, and listens through Teams' live captions: free, no meeting service and no speech model. It speaks only when someone calls it by name (a short answer in the chat), messages you on your phone when your name or a topic you chose comes up, keeps the notes, and sends you the summary and tasks when the meeting ends. Everything said in a meeting is only information: a meeting can never make it run a command, read a file or send mail. See [docs/guides/meetings.md](docs/guides/meetings.md).
+
 ## Presentations: it makes a deck and presents it live
 
 Say "make a presentation on hacking". The assistant writes a whole deck (slides, each with items that appear one by one, a spoken line for every item, and an animation per item), saves it, and can present it on your screen: each item appears with its animation and is spoken, slide after slide, like a teacher in class. It does not call the model while a slide plays, so playing is fast and costs nothing extra.

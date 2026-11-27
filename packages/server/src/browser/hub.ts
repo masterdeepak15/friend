@@ -59,7 +59,7 @@ export class BrowserHub {
     const root = this.o.tmpRoot!;
     try {
       for (const name of readdirSync(root)) {
-        if (!/^friend-browser-/.test(name)) continue;
+        if (!/^friend-(browser|meeting)-/.test(name)) continue;
         const dir = join(root, name);
         if (Date.now() - statSync(dir).mtimeMs > 3_600_000) rmSync(dir, { recursive: true, force: true });
       }
@@ -249,7 +249,7 @@ function abortion(signal: AbortSignal): Promise<never> {
 }
 
 /** Chrome writes the port it listens on into its profile folder when it is ready. */
-async function endpoint(profile: string, signal: AbortSignal): Promise<string> {
+export async function endpoint(profile: string, signal: AbortSignal): Promise<string> {
   for (;;) {
     signal.throwIfAborted();
     try {
@@ -263,7 +263,7 @@ async function endpoint(profile: string, signal: AbortSignal): Promise<string> {
 }
 
 /** Deletes the private profile. Windows keeps a file locked for a moment after its program ends, so this tries again for a few seconds. */
-async function removeProfile(dir: string): Promise<void> {
+export async function removeProfile(dir: string): Promise<void> {
   for (let i = 0; i < 20; i++) {
     try {
       rmSync(dir, { recursive: true, force: true });
@@ -275,7 +275,7 @@ async function removeProfile(dir: string): Promise<void> {
 }
 
 /** Stops Chrome and everything it started. */
-async function shutdown(child: ChildProcess | null): Promise<void> {
+export async function shutdown(child: ChildProcess | null): Promise<void> {
   if (!child || child.pid === undefined) return;
   const pid = child.pid;
   if (process.platform === "win32") {

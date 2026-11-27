@@ -60,7 +60,7 @@ const TAVILY_SKILL = "tavily-search";
 const BROWSER_SKILL = "ai-browser";
 /** The type each kind of audio file is sent as. */
 const MIME: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", flac: "audio/flac" };
-import { changeAlexa, changeBroker, changeBrowser, changeChrome, changeIntegration, changeMail, changePcs, changeTavily, changeVideo, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
+import { changeAlexa, changeBroker, changeBrowser, changeChrome, changeIntegration, changeMail, changeMeetings, changePcs, changeTavily, changeVideo, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -94,6 +94,12 @@ import { createGateway, type ClientConn, type ChromeRemoteApi, type ConnectorsAp
   type OAuthApi, type PluginsApi, type SoulApi, type SystemApi } from "./gateway";
 import { MAX_SOUL_CHARS, Soul } from "./memory/soul";
 import { BrowserHub } from "./browser/hub";
+import { findChrome } from "./browser/chrome";
+import { ChromeMeetingPage } from "./meetings/chromePage";
+import type { MeetingPage } from "./meetings/session";
+import { MeetingService } from "./meetings/service";
+import { MeetingStore } from "./meetings/store";
+import { MeetingTools } from "./meetings/tools";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import { StatsSampler, startStatsFeed } from "./hudStats";
@@ -199,6 +205,11 @@ export interface AppOptions {
   /** Hands the mail stores to a test, so it can set up roles and rules without going through the owner's approvals. */
   mailHandles?: (h: { store: import("./mail/store").MailStore; auto: import("./mail/astore").MailAutomationStore }) => void;
   /** Gives a mailbox a stand-in for the mail server (tests). */
+  /** Tests only: the page a meeting is attended in (without it, a Chrome of its own). */
+  meetingPage?: () => MeetingPage | null;
+  /** Tests only: shorter waits for a meeting, and a way to reach its service. */
+  meetingTuning?: NonNullable<ConstructorParameters<typeof MeetingService>[0]["tuning"]>;
+  meetingHandles?: (h: { service: MeetingService; store: MeetingStore }) => void;
   mailProvider?: (account: import("./mail/types").MailAccount, password: string) => import("./mail/provider").MailProvider;
   /** Starting Friend when the computer starts, and updating it. Everything has a real default; tests hand in their own. */
   system?: {
@@ -572,6 +583,15 @@ export async function createApp(opts: AppOptions) {
     saveConfig(saved);
     return null;
   };
+  /** The same for the Meetings part of the saved file. */
+  const changeMeetingsConfig = (fn: (s: Config["meetings"]) => string | null): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.meetings);
+    if (err) return err;
+    fn(config.meetings);
+    saveConfig(saved);
+    return null;
+  };
   /** The same for the Chrome control part of the saved file. */
   const changeChromeConfig = (fn: (s: Config["chrome"]) => string | null): string | null => {
     const saved = loadConfig(opts.dataDir);
@@ -610,6 +630,14 @@ export async function createApp(opts: AppOptions) {
       if (!err) {
         if (config.mail.installed && config.mail.enabled) (mailSync.start(), mailAutomation.start());
         else (void mailSync.stop(), mailAutomation.stop());
+      }
+      return err;
+    }
+    if (id === "meetings") {
+      const err = changeMeetingsConfig((m) => changeMeetings(m, change));
+      if (!err) {
+        if (config.meetings.installed && config.meetings.enabled) meetingService.start();
+        else void meetingService.stop();
       }
       return err;
     }
@@ -672,8 +700,8 @@ export async function createApp(opts: AppOptions) {
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : id === "chrome" ? config.chrome : id === "windows-pcs" ? config.pcs : id === "mail" ? config.mail : id === "video" ? config.video : id === "tavily" ? config.web.tavily : id === "browser" ? config.browser : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && id !== "chrome" && id !== "windows-pcs" && id !== "mail" && id !== "video" && id !== "tavily" && id !== "browser" && Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : id === "chrome" ? config.chrome : id === "windows-pcs" ? config.pcs : id === "mail" ? config.mail : id === "meetings" ? config.meetings : id === "video" ? config.video : id === "tavily" ? config.web.tavily : id === "browser" ? config.browser : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && id !== "chrome" && id !== "windows-pcs" && id !== "mail" && id !== "meetings" && id !== "video" && id !== "tavily" && id !== "browser" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {
@@ -1013,6 +1041,30 @@ export async function createApp(opts: AppOptions) {
   const mailAuto = new MailAutomationStore(db);
   opts.mailHandles?.({ store: mailStore, auto: mailAuto });
   const mailTools = new MailTools({ service: mailService, store: mailStore, auto: mailAuto, notify: (t) => void tellOwner(t, "A mail needs you"), provider: (id) => mailSync.use(id), audit, enabled: () => config.mail.installed && config.mail.enabled });
+  // meetings: the assistant listens in Teams meetings as a guest. What is said there is information, never an order.
+  const meetingStore = new MeetingStore(db);
+  const meetingService = new MeetingService({
+    store: meetingStore,
+    audit,
+    enabled: () => config.meetings.installed && config.meetings.enabled,
+    assistantName: () => auth.assistantName(),
+    page: () => {
+      if (opts.meetingPage) return opts.meetingPage();
+      const chrome = findChrome(config.browser.chromePath);
+      return chrome ? new ChromeMeetingPage({ chrome, tmpRoot: join(opts.dataDir, "browser-profiles") }) : null;
+    },
+    ...(opts.meetingTuning ? { tuning: opts.meetingTuning } : {}),
+    tellOwner: (text, title) => void tellOwner(text, title ?? "Meeting"),
+    runTurn: async (prompt, c) => {
+      if (agent.isBusy()) return false;
+      await runWithRequest({ prefix: "meeting", actorKind: "system", actorId: `meeting ${c.id}` }, async () => {
+        await agent.runTurn(prompt, { trust: "owner", emit: (m) => broadcast(m), ip: `meeting:${c.id}`, source: "meeting", meeting: { id: c.id } });
+      });
+      return true;
+    },
+  });
+  opts.meetingHandles?.({ service: meetingService, store: meetingStore });
+  const meetingTools = new MeetingTools({ service: meetingService, store: meetingStore, audit, enabled: () => config.meetings.installed && config.meetings.enabled });
   const pcTools = new PcTools({ hub: pcHub, store: pcService.store, audit, extraPatterns: () => [], enabled: () => config.pcs.installed && config.pcs.enabled });
   // presentations: the saved decks, the player (it speaks through the same speaker and draws through the same broadcast), and the files
   const deckStore = new DeckStore(db);
@@ -1044,6 +1096,7 @@ export async function createApp(opts: AppOptions) {
     decks: { store: deckStore, presenter, exportDeck },
     pcs: pcTools,
     mail: mailTools,
+    meetings: meetingTools,
     notifyOwner: (text, title) => tellOwner(text, title),
     securityAlert: async (text) => {
       const r = await security.notify("assistant", "Someone is trying to get past the rules", `The assistant noticed it while talking: "${text.replace(/\s+/g, " ").trim().slice(0, 300)}"`, 2);
@@ -2532,6 +2585,7 @@ ${todo.text}`;
       sealTimer.unref?.();
       heartbeat.start();
       if (config.mail.installed && config.mail.enabled) (mailSync.start(), mailAutomation.start());
+      if (config.meetings.installed && config.meetings.enabled) meetingService.start();
   proactive.start();
       // connectors that were on come back in the background; Friend does not wait for them. Chrome control comes back through its plugin,
       // which also corrects a connector saved for a copy of the program that is no longer where it was.
@@ -2586,6 +2640,7 @@ ${todo.text}`;
       heartbeat.stop();
       await mailSync.stop();
       mailAutomation.stop();
+      await meetingService.stop();
       proactive.stop();
       memoryKeeper.stop();
       clearTimeout(tidyAtStart);

@@ -507,4 +507,34 @@ create table mail_watches (
   created_at integer not null
 );`,
   },
+  {
+    id: 26,
+    sql: `create table meetings (
+  id integer primary key autoincrement,
+  url text not null,
+  title text not null default '',
+  join_name text not null default '',
+  status text not null default 'scheduled',
+  detail text not null default '',
+  starts_at integer not null default 0,
+  started_at integer not null default 0,
+  ended_at integer not null default 0,
+  summary text not null default '',
+  decisions text not null default '[]',
+  tasks text not null default '[]',
+  created_at integer not null
+);
+create table meeting_lines (
+  id integer primary key autoincrement,
+  meeting_id integer not null references meetings (id) on delete cascade,
+  at integer not null,
+  speaker text not null,
+  text text not null
+);
+create index meeting_lines_meeting on meeting_lines (meeting_id, id);
+create table meeting_prefs (
+  key text primary key,
+  value text not null
+);`,
+  },
 ];

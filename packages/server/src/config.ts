@@ -73,6 +73,8 @@ export interface Config {
   pcs: PcsConfig;
   /** Mailboxes the assistant and its workers can read and write from (a plugin the owner installs and switches on). */
   mail: MailConfig;
+  /** Online meetings the assistant can attend as a guest and take notes in (a plugin the owner installs and switches on). */
+  meetings: MeetingsConfig;
   /** Playing videos from the internet (YouTube and other sites), on the screen or in a PC window. */
   video: VideoConfig;
   /** The safe browser: a private, throwaway Chrome the assistant can read and photograph a public page with. */
@@ -162,6 +164,12 @@ export interface ChromeConfig {
 
 /** The Windows PCs plugin: installed from the plugins screen, then switched on. The PCs themselves are kept in the database. */
 export interface PcsConfig {
+  installed: boolean;
+  enabled: boolean;
+}
+
+/** The Meetings plugin: installed from the plugins screen, then switched on. The meetings and what was said in them are in the database. */
+export interface MeetingsConfig {
   installed: boolean;
   enabled: boolean;
 }
@@ -295,6 +303,11 @@ export function sanitizeChrome(raw: unknown): ChromeConfig {
 }
 
 export function sanitizeMail(raw: unknown): MailConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true };
+}
+
+export function sanitizeMeetings(raw: unknown): MeetingsConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true };
 }
@@ -1081,6 +1094,7 @@ const defaults = (dataDir: string): Config => ({
   chrome: sanitizeChrome({}),
   pcs: sanitizePcs({}),
   mail: sanitizeMail({}),
+  meetings: sanitizeMeetings({}),
   video: sanitizeVideo({}),
   browser: sanitizeBrowser({}),
   hud: sanitizeHud({}),
@@ -1176,6 +1190,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     chrome: sanitizeChrome(stored.chrome),
     pcs: sanitizePcs(stored.pcs),
     mail: sanitizeMail(stored.mail),
+    meetings: sanitizeMeetings(stored.meetings),
     video: sanitizeVideo(stored.video),
     browser: sanitizeBrowser(stored.browser),
     hud: sanitizeHud(stored.hud),

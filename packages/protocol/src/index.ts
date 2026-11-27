@@ -19,4 +19,5 @@ export * from "./openaiPresets";
 export * from "./deck";
 export * from "./pc";
 export * from "./mail";
+export * from "./meeting";
 export * from "./pcGuard";

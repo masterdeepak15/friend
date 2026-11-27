@@ -27,6 +27,7 @@ import type { DeckStore } from "../deck/store";
 import type { Presenter } from "../deck/presenter";
 import type { PcTools, PreparedPc } from "../pc/tools";
 import { MAIL_TURN_TOOLS, mailAuditArgs, type MailTools, type PreparedMail } from "../mail/tools";
+import { MEETING_TURN_TOOLS, meetingAuditArgs, type MeetingTools, type PreparedMeeting } from "../meetings/tools";
 import { runDeckTool } from "../deck/tools";
 import { MemoryTree, capIndex, inboxName } from "../memory/tree";
 import type { Soul } from "../memory/soul";
@@ -155,6 +156,8 @@ export interface AgentDeps {
   pcs?: PcTools;
   /** The mailboxes: the assistant's email.* tools. Without it they report they are unavailable. */
   mail?: MailTools;
+  /** The meetings: the assistant's meeting.* tools. Without it they report they are unavailable. */
+  meetings?: MeetingTools;
   decks?: { store: DeckStore; presenter: Presenter; exportDeck(id: string, format: "pptx" | "html"): Promise<string> };
   /** The tools of the owner's connectors (Gmail, Chrome control, …). Without it there are none. */
   mcp?: McpApi;
@@ -195,6 +198,8 @@ export interface TurnCtx {
   source?: string;
   /** Set when someone else's mail started this turn: only the mail tools exist for it, and it can answer that person only. */
   mail?: { from: string; roleAuto: boolean; caseId: number };
+  /** Set when a meeting started this turn: only the meeting tools exist for it, and only about that meeting. */
+  meeting?: { id: number };
 }
 
 /** What a household member said and was answered in the last while, kept in memory only: it is never written to disk. */
@@ -381,6 +386,8 @@ export class Agent {
       const tools = (
         ctx.mail
           ? toolSpecs().filter((t) => MAIL_TURN_TOOLS.has(t.name))
+          : ctx.meeting
+          ? toolSpecs().filter((t) => MEETING_TURN_TOOLS.has(t.name))
           : ctx.trust === "owner"
           ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])]
           : member
@@ -817,6 +824,12 @@ export class Agent {
       d.audit.log("agent", "tool.denied", { tool: call.name, reason: "mail turn" });
       return fail("That is not possible while answering someone else's mail.");
     }
+    // a turn that a meeting started can do nothing but write in that meeting, tell the owner and keep the notes, whatever was said there
+    if (ctx.meeting && !MEETING_TURN_TOOLS.has(call.name)) {
+      rec.outcome = "refused";
+      d.audit.log("agent", "tool.denied", { tool: call.name, reason: "meeting turn" });
+      return fail("That is not possible while handling a meeting.");
+    }
     const plugin = call.name.startsWith("plugin.") ? d.plugins?.tool(call.name) : undefined;
     // every plugin tool needs the owner's approval, whatever the plugin says about itself
     // a connector's tool is asked about every time (T2), whatever the connector says about itself
@@ -857,6 +870,19 @@ export class Agent {
         return fail(prep.error);
       }
       mailPrep = prep;
+      tier = prep.tier;
+    }
+    // a meeting: only the owner; the plugin must be on; joining and changing settings ask the owner
+    let meetPrep: PreparedMeeting | null = null;
+    if (call.name.startsWith("meeting.")) {
+      if (!d.meetings) return fail("Meetings are not available.");
+      if (ctx.trust !== "owner") return fail("Only the owner can use the meetings.");
+      const prep = d.meetings.prepare(call.name, args, ctx.meeting ? { inMeeting: ctx.meeting.id } : {});
+      if ("error" in prep) {
+        rec.outcome = "refused";
+        return fail(prep.error);
+      }
+      meetPrep = prep;
       tier = prep.tier;
     }
     const p = pathArg(call.name, args);
@@ -940,6 +966,19 @@ export class Agent {
         return fail(`The owner did not approve this action (${outcome.reason ?? "denied"}).`);
       }
       approvedOutside = !insideRoots;
+    }
+
+    if (meetPrep) {
+      const r = await meetPrep.run(async (reason, detail) => {
+        d.decks?.presenter.approvalPending(true);
+        const o = await d.approvals
+          .request({ tool: call.name, args: { ...args, reason, detail }, tier: "T2", needsPin: false, device: null, remote: ctx.trust !== "voice-device" }, ctx.emit)
+          .finally(() => d.decks?.presenter.approvalPending(false));
+        if (!o.approved) d.audit.log("agent", "tool.not_approved", { tool: call.name, reason: o.reason });
+        return o.approved;
+      }, signal);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: meetingAuditArgs(args), tier, ok: !r.isError });
+      return r.isError ? fail(r.text) : { text: r.text, isError: false };
     }
 
     if (mailPrep) {

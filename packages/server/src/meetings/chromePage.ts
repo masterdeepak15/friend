@@ -1,0 +1,147 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Cdp } from "../browser/cdp";
+import { endpoint, removeProfile, shutdown } from "../browser/hub";
+import type { CaptionItem } from "./logic";
+import type { MeetingPage, Phase } from "./session";
+import { ADVANCE, CAPTIONS, CLICK_CAPTIONS, CLICK_CONFIRM, CLICK_LANGUAGE, FOCUS_CHAT, HANG_UP, OPEN_MORE } from "./teamsDom";
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+export interface ChromePageOptions {
+  chrome: string;
+  /** Where the throwaway profile is made (Friend's own folder, so leftovers can be swept). */
+  tmpRoot?: string;
+  /** Tests point the page at a local fixture instead of Teams. */
+  headless?: boolean;
+  /** Tests only: do not insist the page is a Microsoft one. */
+  anyHost?: boolean;
+}
+
+/**
+ * One meeting in a Chrome of its own: a fresh private profile with nothing in it (no sign-ins, no cookies), a fake camera and
+ * microphone that are never switched on, and nothing kept afterwards. The profile is deleted when the meeting is left.
+ */
+export class ChromeMeetingPage implements MeetingPage {
+  private child: ChildProcess | null = null;
+  private cdp: Cdp | null = null;
+  private sessionId = "";
+  private profile = "";
+  private tries = 0;
+
+  constructor(private o: ChromePageOptions) {}
+
+  async open(url: string): Promise<void> {
+    const root = this.o.tmpRoot ?? tmpdir();
+    mkdirSync(root, { recursive: true });
+    this.profile = mkdtempSync(join(root, "friend-meeting-"));
+    this.child = spawn(
+      this.o.chrome,
+      [
+        ...(this.o.headless === false ? [] : ["--headless=new"]),
+        `--user-data-dir=${this.profile}`,
+        "--remote-debugging-port=0",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-extensions",
+        "--disable-sync",
+        "--disable-component-update",
+        "--disable-default-apps",
+        "--disable-breakpad",
+        "--use-fake-ui-for-media-stream",
+        "--use-fake-device-for-media-stream",
+        "--autoplay-policy=no-user-gesture-required",
+        "--mute-audio",
+        "--lang=en-US",
+        "--window-size=1366,900",
+        "about:blank",
+      ],
+      { stdio: "ignore", windowsHide: true, detached: process.platform !== "win32" },
+    );
+    this.child.on("error", () => {});
+    const ac = AbortSignal.timeout(30_000);
+    this.cdp = await Cdp.connect(await endpoint(this.profile, ac));
+    const c = this.cdp;
+    const { targetId } = await c.send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
+    const { sessionId } = await c.send<{ sessionId: string }>("Target.attachToTarget", { targetId, flatten: true });
+    this.sessionId = sessionId;
+    c.on((method, p, sid) => {
+      // a pop-up window or a download is never wanted
+      if (method === "Target.targetCreated" && p.targetInfo?.targetId !== targetId && p.targetInfo?.type === "page") void c.send("Target.closeTarget", { targetId: p.targetInfo.targetId }).catch(() => {});
+      if (sid === sessionId && method === "Page.javascriptDialogOpening") void c.send("Page.handleJavaScriptDialog", { accept: false }, sessionId).catch(() => {});
+    });
+    await c.send("Target.setDiscoverTargets", { discover: true });
+    await c.send("Browser.setDownloadBehavior", { behavior: "deny" }).catch(() => {});
+    await this.send("Page.enable");
+    // a headless Chrome names itself so; Teams does not like that
+    const v = await c.send<{ userAgent?: string }>("Browser.getVersion").catch(() => ({}) as { userAgent?: string });
+    if (v.userAgent) await this.send("Emulation.setUserAgentOverride", { userAgent: v.userAgent.replace("HeadlessChrome", "Chrome"), acceptLanguage: "en-US,en" });
+    await this.send("Emulation.setDeviceMetricsOverride", { width: 1366, height: 900, deviceScaleFactor: 1, mobile: false });
+    await this.send("Page.navigate", { url });
+  }
+
+  private send<R = Record<string, any>>(method: string, params: Record<string, unknown> = {}): Promise<R> {
+    if (!this.cdp) return Promise.reject(new Error("The browser is not open."));
+    return this.cdp.send<R>(method, params, this.sessionId);
+  }
+
+  private async run<R>(expression: string): Promise<R> {
+    const r = await this.send<{ result?: { value?: R }; exceptionDetails?: unknown }>("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+    if (r.exceptionDetails) throw new Error("The page could not be read.");
+    return r.result?.value as R;
+  }
+
+  async advance(name: string): Promise<{ phase: Phase; detail: string }> {
+    return (await this.run<{ phase: Phase; detail: string }>(ADVANCE(name, this.o.anyHost)).catch(() => ({ phase: "loading" as Phase, detail: "The page is loading." }))) ?? { phase: "loading", detail: "" };
+  }
+
+  async captions(): Promise<CaptionItem[] | null> {
+    const r = await this.run<{ on: boolean; items: CaptionItem[] }>(CAPTIONS).catch(() => null);
+    return r && r.on ? r.items : null;
+  }
+
+  async enableCaptions(): Promise<void> {
+    this.tries++;
+    if (this.tries % 2 === 0) {
+      // Ctrl+Shift+U switches live captions on or off in Teams
+      for (const type of ["rawKeyDown", "keyUp"]) await this.send("Input.dispatchKeyEvent", { type, modifiers: 10, key: "U", code: "KeyU", windowsVirtualKeyCode: 85 });
+      await sleep(800);
+      return;
+    }
+    if (!(await this.run<boolean>(OPEN_MORE))) return;
+    await sleep(600);
+    if (!(await this.run<boolean>(CLICK_LANGUAGE))) return;
+    await sleep(600);
+    if (!(await this.run<boolean>(CLICK_CAPTIONS))) return;
+    await sleep(800);
+    await this.run<boolean>(CLICK_CONFIRM).catch(() => false); // it asks which language is spoken the first time
+  }
+
+  async chat(text: string): Promise<boolean> {
+    try {
+      if (!(await this.run<boolean>(FOCUS_CHAT))) return false;
+      await this.send("Input.insertText", { text: text.slice(0, 600) });
+      await sleep(150);
+      for (const type of ["rawKeyDown", "keyUp"]) await this.send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async leave(): Promise<void> {
+    await this.run<boolean>(HANG_UP).catch(() => false);
+    await sleep(500);
+  }
+
+  async close(): Promise<void> {
+    this.cdp?.close();
+    this.cdp = null;
+    await shutdown(this.child);
+    this.child = null;
+    if (this.profile) await removeProfile(this.profile);
+    this.profile = "";
+  }
+}
