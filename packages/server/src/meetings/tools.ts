@@ -18,6 +18,8 @@ export interface PreparedMeeting {
 /** The only tools a turn about a meeting may use: it can write in that meeting's chat, tell the owner, and keep the notes. */
 export const MEETING_TURN_TOOLS: ReadonlySet<string> = new Set(["meeting.chat", "meeting.speak", "meeting.tell_owner", "meeting.save_notes", "meeting.notes"]);
 
+const OWNER_IN_MEETING: ReadonlySet<string> = new Set(["meeting.leave", "meeting.list", "meeting.setup"]);
+
 /** What the audit trail keeps of a call: never the words. */
 export function meetingAuditArgs(a: Record<string, unknown>): Record<string, unknown> {
   const { text: _t, summary: _s, decisions: _d, tasks: _k, url, ...rest } = a;
@@ -47,11 +49,12 @@ export class MeetingTools {
   constructor(private readonly d: MeetingToolsDeps) {}
 
   /** `inMeeting` is set for a turn the meeting itself started: only the meeting tools, and only about that meeting. */
-  prepare(name: string, rawArgs: Record<string, unknown>, ctx: { inMeeting?: number } = {}): { error: string } | PreparedMeeting {
+  prepare(name: string, rawArgs: Record<string, unknown>, ctx: { inMeeting?: number; owner?: boolean } = {}): { error: string } | PreparedMeeting {
     if (!this.d.enabled()) return { error: "Meetings are not switched on. The owner can switch them on under Plugins." };
     const def = MEETING_TOOL_DEFS.find((t) => t.name === name);
     if (!def) return { error: `Unknown tool: ${name}` };
-    if (ctx.inMeeting !== undefined && !MEETING_TURN_TOOLS.has(name)) return { error: "That is not possible while handling a meeting." };
+    // (a turn the owner started by voice may also leave, list and read the settings; joining another meeting is not for a call in progress)
+    if (ctx.inMeeting !== undefined && !MEETING_TURN_TOOLS.has(name) && !(ctx.owner && OWNER_IN_MEETING.has(name))) return { error: "That is not possible while handling a meeting." };
     const parsed = def.input.safeParse(rawArgs);
     if (!parsed.success) return { error: `Invalid arguments for ${name}: ${parsed.error.message}` };
     const args = parsed.data as Record<string, unknown>;

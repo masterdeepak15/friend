@@ -8,6 +8,8 @@ export interface CaptionItem {
 export interface Line {
   speaker: string;
   text: string;
+  /** Set only by the voice engine when the voice matched the owner's voiceprint: a name in a caption can be chosen by anyone, this cannot. */
+  verified?: boolean;
 }
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();

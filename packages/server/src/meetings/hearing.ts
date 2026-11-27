@@ -1,7 +1,7 @@
 import type { Line } from "./logic";
 
 /** Turns 16 kHz 16-bit mono sound into the words in it. */
-export type Transcriber = (pcm: Buffer) => Promise<string | { text: string; /** Who it sounded like, when the voice could be recognised. */ speaker?: string }>;
+export type Transcriber = (pcm: Buffer) => Promise<string | { text: string; /** Who it sounded like, when the voice could be recognised. */ speaker?: string; /** The voice matched the owner's voiceprint. */ verified?: boolean }>;
 
 const RATE = 16000;
 const FRAME = RATE / 10; // 100 ms
@@ -114,7 +114,7 @@ export class AudioHearing {
       for (let c = this.queue.shift(); c; c = this.queue.shift()) {
         const heard = await this.o.transcribe(c).catch(() => "");
         const text = cleanTranscript(typeof heard === "string" ? heard : heard.text);
-        if (text) this.ready.push({ speaker: (typeof heard === "object" && heard.speaker) || this.o.speaker, text });
+        if (text) this.ready.push({ speaker: (typeof heard === "object" && heard.speaker) || this.o.speaker, text, ...(typeof heard === "object" && heard.verified ? { verified: true } : {}) });
       }
     } finally {
       this.busy = false;

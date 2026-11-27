@@ -80,7 +80,7 @@ describe("a meeting the assistant attends", () => {
     const reply = r.turns.find((t) => t.kind === "reply")!;
     expect(reply.prompt).toContain("<untrusted-meeting>");
     expect(reply.prompt).toContain("how is the release going");
-    expect(reply.prompt).toContain("meeting.chat");
+    expect(reply.prompt).toMatch(/meeting\.(chat|speak)/); // how to answer: in the chat or aloud, whichever is on
     expect(page.chats[0]).toMatch(/AI assistant.*only speak if someone asks me by name/);
     expect(r.turns.some((t) => t.kind === "final")).toBe(true);
     expect(r.told.at(-1)).toMatch(/Weekly sync.*They planned the release.*Send the notes \(Ann\)/s);

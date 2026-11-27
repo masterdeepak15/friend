@@ -199,7 +199,7 @@ export interface TurnCtx {
   /** Set when someone else's mail started this turn: only the mail tools exist for it, and it can answer that person only. */
   mail?: { from: string; roleAuto: boolean; caseId: number };
   /** Set when a meeting started this turn: only the meeting tools exist for it, and only about that meeting. */
-  meeting?: { id: number };
+  meeting?: { id: number; /** The line that started the turn was said by the owner, recognised by their voiceprint: the turn has all the owner's tools. */ owner?: boolean };
 }
 
 /** What a household member said and was answered in the last while, kept in memory only: it is never written to disk. */
@@ -386,7 +386,7 @@ export class Agent {
       const tools = (
         ctx.mail
           ? toolSpecs().filter((t) => MAIL_TURN_TOOLS.has(t.name))
-          : ctx.meeting
+          : ctx.meeting && !ctx.meeting.owner
           ? toolSpecs().filter((t) => MEETING_TURN_TOOLS.has(t.name))
           : ctx.trust === "owner"
           ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])]
@@ -398,7 +398,8 @@ export class Agent {
 
       // Clear requests for real data (weather in a named city, the computer's stats) are answered with the real tools
       // right away: the pictures appear at once, and the model only has to say a short summary.
-      if (!isolated) {
+      // (not for a turn a meeting started for someone other than the owner: what is said in a call must not start tools by its words)
+      if (!isolated && !(ctx.meeting && !ctx.meeting.owner)) {
         for (const [i, auto] of detectIntents(text).entries()) {
           const id = `auto-${Date.now().toString(36)}-${i}`;
           const callMsg: Msg = { role: "assistant", content: [{ type: "tool_use", id, name: auto.name, input: auto.args }] };
@@ -825,7 +826,7 @@ export class Agent {
       return fail("That is not possible while answering someone else's mail.");
     }
     // a turn that a meeting started can do nothing but write in that meeting, tell the owner and keep the notes, whatever was said there
-    if (ctx.meeting && !MEETING_TURN_TOOLS.has(call.name)) {
+    if (ctx.meeting && !ctx.meeting.owner && !MEETING_TURN_TOOLS.has(call.name)) {
       rec.outcome = "refused";
       d.audit.log("agent", "tool.denied", { tool: call.name, reason: "meeting turn" });
       return fail("That is not possible while handling a meeting.");
@@ -877,7 +878,7 @@ export class Agent {
     if (call.name.startsWith("meeting.")) {
       if (!d.meetings) return fail("Meetings are not available.");
       if (ctx.trust !== "owner") return fail("Only the owner can use the meetings.");
-      const prep = d.meetings.prepare(call.name, args, ctx.meeting ? { inMeeting: ctx.meeting.id } : {});
+      const prep = d.meetings.prepare(call.name, args, ctx.meeting ? { inMeeting: ctx.meeting.id, ...(ctx.meeting.owner ? { owner: true } : {}) } : {});
       if ("error" in prep) {
         rec.outcome = "refused";
         return fail(prep.error);

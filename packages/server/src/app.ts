@@ -1084,14 +1084,17 @@ export async function createApp(opts: AppOptions) {
         transcribe: async (pcm) => {
           const t = await v.transcribe(pcmToWav(pcm, 16000), "audio/wav", config.voice.language, { embed: true });
           let speaker: string | undefined;
+          let verified = false;
           try {
             const who = judge(t.embedding ?? null);
-            if (who.trust === "owner") speaker = meetingStore.prefs().ownerNames[0] || "Owner";
-            else if (who.trust === "member" && who.person) speaker = who.person.name;
+            if (who.trust === "owner") {
+              speaker = meetingStore.prefs().ownerNames[0] || "Owner";
+              verified = true;
+            } else if (who.trust === "member" && who.person) speaker = who.person.name;
           } catch {
             /* not recognised: Someone */
           }
-          return { text: t.text, ...(speaker ? { speaker } : {}) };
+          return { text: t.text, ...(speaker ? { speaker } : {}), ...(verified ? { verified } : {}) };
         },
       });
     },
@@ -1099,7 +1102,7 @@ export async function createApp(opts: AppOptions) {
     runTurn: async (prompt, c) => {
       if (agent.isBusy()) return false;
       await runWithRequest({ prefix: "meeting", actorKind: "system", actorId: `meeting ${c.id}` }, async () => {
-        await agent.runTurn(prompt, { trust: "owner", emit: (m) => broadcast(m), ip: `meeting:${c.id}`, source: "meeting", meeting: { id: c.id } });
+        await agent.runTurn(prompt, { trust: "owner", emit: (m) => broadcast(m), ip: `meeting:${c.id}`, source: "meeting", meeting: { id: c.id, ...(c.owner ? { owner: true } : {}) } });
       });
       return true;
     },

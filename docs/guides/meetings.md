@@ -29,7 +29,7 @@ Friend can join a Microsoft Teams, Google Meet or Zoom meeting as a **guest**, l
 
 ## What always holds
 
-- **Only you give orders.** Everything said in a meeting comes from other people and is information. A turn that a meeting starts can use four tools only: write in that meeting's chat, message you, read and save notes. It cannot run commands, read files, send mail or join another meeting, whatever is said.
+- **Only you give orders.** What other people say in a meeting is information. A turn started by anyone else can use only a few tools: write in that meeting's chat, speak, message you, read and save notes. It cannot run commands, read files, send mail or join another meeting, whatever is said. **When you speak and the voice engine recognises you** (your enrolled voiceprint, not a name on a caption, which anyone can choose), your words are orders and Maya has all her usual tools in the call, including leaving it (meeting.leave): say Maya, leave the call or ask her to look something up or do something for you.
 - **Only meeting addresses of the three sites are opened**: Teams (`teams.microsoft.com`, `teams.live.com`, `teams.cloud.microsoft`), Google Meet (`meet.google.com/abc-defg-hij`) and Zoom (`zoom.us/j/number`, which Friend opens in the browser version). Over https, with no port or login in the address.
 - **The browser is private:** a fresh profile with no sign-ins or cookies, deleted afterwards. If the page goes anywhere that is not a Microsoft address it stops.
 - **One meeting at a time.** At most six messages to you in ten minutes.
@@ -68,6 +68,10 @@ When live captions are off, Friend listens to the sound of the call itself and r
 How it works: the browser hands Friend the sound of the other people (the call's incoming audio tracks, not your PC's speakers), in pieces cut at the pauses. Pieces with no speech in them are never sent to the engine, and the sound is never saved. Each piece becomes a line, from the person whose voiceprint Friend knows (you, and the people you added under Voice) or from "Someone" and goes through the same rules as captions (answers by name, tells you what concerns you, notes). If the voice engine is not running there is nothing to read the sound with, and Friend says so.
 
 Limits: it can name only voices Friend has been taught (enrol yours in the app first), everyone else is "Someone"; it is a few seconds behind the conversation; and the engine sometimes mishears names. Captions are used again as soon as they come back.
+## Memory in a call
+
+A meeting turn is short: a small note and only the lines said since her last turn, not the whole call again. What was said before is in her memory like any conversation, and she reads it back with the notes tool (meeting.notes with lines) or her memory when she needs it. This keeps long calls fast and the chat history small.
+
 ## Talking like a person
 
 It listens all the time and watches for the room going quiet, so it never starts over someone and answers a moment after the pause. For 45 seconds after it was called or answered, a follow-up counts as meant for it even without its name; it stays quiet if the line is clearly people talking among themselves. It does not listen to its own voice (sound that arrives while it speaks, and for 3 seconds after, is ignored), and a name the speech engine garbled ("Umayyad" for "Maya") still counts.
