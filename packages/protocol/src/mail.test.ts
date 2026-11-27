@@ -62,11 +62,11 @@ describe("what the model is shown", () => {
 });
 
 describe("the email tools", () => {
-  it("are all named email.* and are part of the tool list", () => {
+  it("are all named email.* (or watch.*) and are part of the tool list", () => {
     const names = MAIL_TOOL_DEFS.map((d) => d.name);
     expect(names).toEqual(expect.arrayContaining(["email.inbox", "email.read", "email.search", "email.send", "email.reply", "email.forward", "email.draft", "email.mark_read", "email.archive", "email.attachments"]));
     for (const d of MAIL_TOOL_DEFS) {
-      expect(d.name.startsWith("email.")).toBe(true);
+      expect(d.name.startsWith("email.") || d.name.startsWith("watch.")).toBe(true);
       expect(TOOL_DEFS.some((t) => t.name === d.name)).toBe(true);
     }
   });

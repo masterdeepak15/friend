@@ -7,6 +7,7 @@ import { Audit } from "../audit";
 import { openDb } from "../db";
 import { FakeMailProvider } from "./fake";
 import { MailService } from "./service";
+import { MailAutomationStore } from "./astore";
 import { MailStore } from "./store";
 import { MailTools } from "./tools";
 
@@ -19,7 +20,7 @@ function rig(opts: { on?: boolean; accounts?: number } = {}) {
   const audit = new Audit(db);
   const service = new MailService({ store, provider: async () => provider, audit });
   let on = opts.on ?? true;
-  const tools = new MailTools({ service, store, provider: async () => provider, audit, enabled: () => on });
+  const tools = new MailTools({ service, store, auto: new MailAutomationStore(db), provider: async () => provider, audit, enabled: () => on });
   const keep = (m: Partial<MailMessage> & { from: MailMessage["from"] }, cls: "owner" | "system" | "other" = "other", acct = accounts[0]!.id) =>
     store.saveMessage({ id: "", accountId: acct, providerId: `1-${Math.random()}`, threadId: "t", to: [{ address: "support@corp.com" }], cc: [], subject: "Question", date: Date.now(), text: "help me", headers: { "message-id": "<q@x>" }, attachments: [], ...m }, cls).id;
   const ask = vi.fn(async () => true);

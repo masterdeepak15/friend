@@ -171,3 +171,34 @@ describe("what to do with a mail that arrived", () => {
     expect(r.svc.inbound(mail({ headers: { ...OWNER, "auto-submitted": "auto-replied" } }), "owner").action).toBe("keep");
   });
 });
+
+describe("a role that may answer by itself", () => {
+  const ctx = { cause: "inbound-other" as const, inboundFrom: "cust@y.com", roleAuto: true, tainted: true };
+  it("answers the person who wrote without asking, and nobody else", async () => {
+    const r = rig();
+    const id = r.keep({ from: { address: "cust@y.com" }, subject: "Invoice" });
+    expect(await r.svc.send(r.account.id, { kind: "reply", to: ["cust@y.com"], subject: "Invoice", text: "Sent today", inReplyToId: id }, ctx, r.ask)).toMatchObject({ ok: true, approver: "auto" });
+    expect(r.ask).not.toHaveBeenCalled();
+    expect(r.provider.sent[0]).toMatchObject({ to: ["cust@y.com"], autoSubmitted: true });
+    expect(await r.svc.send(r.account.id, { kind: "reply", to: ["x@evil.com"], subject: "s", text: "t", inReplyToId: id }, ctx, r.ask)).toMatchObject({ ok: false });
+    expect(await r.svc.send(r.account.id, { kind: "forward", to: ["cust@y.com"], subject: "s", text: "t", inReplyToId: id }, ctx, r.ask)).toMatchObject({ ok: false });
+    expect(await r.svc.send(r.account.id, { kind: "send", to: ["cust@y.com"], subject: "s", text: "t" }, ctx, r.ask)).toMatchObject({ ok: true, approver: "owner" }); // a new mail is not an answer: it asks
+    expect(r.provider.sent).toHaveLength(2);
+  });
+
+  it("still never answers robots, and still stops at the hourly limit", async () => {
+    const r = rig();
+    const robot = r.keep({ from: { address: "no-reply@shop.com" } });
+    expect(await r.svc.send(r.account.id, { kind: "reply", to: ["no-reply@shop.com"], subject: "s", text: "t", inReplyToId: robot }, { ...ctx, inboundFrom: "no-reply@shop.com" }, r.ask)).toMatchObject({ ok: false, reason: expect.stringMatching(/automatic|bulk/i) });
+    const id = r.keep({ from: { address: "cust@y.com" } });
+    for (let i = 0; i < 3; i++) expect(await r.svc.send(r.account.id, { kind: "reply", to: ["cust@y.com"], subject: "s", text: "t", inReplyToId: id }, ctx, r.ask)).toMatchObject({ ok: true });
+    expect(await r.svc.send(r.account.id, { kind: "reply", to: ["cust@y.com"], subject: "s", text: "t", inReplyToId: id }, ctx, r.ask)).toMatchObject({ ok: false, reason: expect.stringMatching(/too many/i) });
+  });
+
+  it("without the owner's allowance the same reply asks", async () => {
+    const r = rig();
+    const id = r.keep({ from: { address: "cust@y.com" } });
+    await r.svc.send(r.account.id, { kind: "reply", to: ["cust@y.com"], subject: "s", text: "t", inReplyToId: id }, { ...ctx, roleAuto: false }, r.ask);
+    expect(r.ask).toHaveBeenCalledTimes(1);
+  });
+});

@@ -120,6 +120,7 @@ import { PcTools } from "./pc/tools";
 import { MailAuthError } from "./mail/provider";
 import { ImapSmtpProvider } from "./mail/imap";
 import { MailAccounts } from "./mail/accounts";
+import { MailAutomationStore } from "./mail/astore";
 import { MailService } from "./mail/service";
 import { MailSecrets, MailStore } from "./mail/store";
 import { MailSync } from "./mail/sync";
@@ -1004,7 +1005,8 @@ export async function createApp(opts: AppOptions) {
       if (mailStore.getAccount(id)?.enabled && config.mail.installed && config.mail.enabled) void mailSync.syncNow(id).catch(() => {});
     },
   });
-  const mailTools = new MailTools({ service: mailService, store: mailStore, provider: (id) => mailSync.use(id), audit, enabled: () => config.mail.installed && config.mail.enabled });
+  const mailAuto = new MailAutomationStore(db);
+  const mailTools = new MailTools({ service: mailService, store: mailStore, auto: mailAuto, provider: (id) => mailSync.use(id), audit, enabled: () => config.mail.installed && config.mail.enabled });
   const pcTools = new PcTools({ hub: pcHub, store: pcService.store, audit, extraPatterns: () => [], enabled: () => config.pcs.installed && config.pcs.enabled });
   // presentations: the saved decks, the player (it speaks through the same speaker and draws through the same broadcast), and the files
   const deckStore = new DeckStore(db);

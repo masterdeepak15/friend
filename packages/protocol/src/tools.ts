@@ -1122,7 +1122,7 @@ export function describeCall(name: string, args: unknown, device?: string): stri
   const a = (args ?? {}) as Record<string, unknown>;
   const where = device ? ` on ${visible(device)}` : "";
   if (name.startsWith("pc.")) return visible(describePcCall(name, a));
-  if (name.startsWith("email.")) return visible(describeMailCall(name, a));
+  if (name.startsWith("email.") || name.startsWith("watch.")) return visible(describeMailCall(name, a));
   switch (name) {
     case "shell.run":
       return `Run shell command${where}: ${visible(String(a.command ?? ""))}${a.cwd ? ` (in ${visible(String(a.cwd))})` : ""}`;

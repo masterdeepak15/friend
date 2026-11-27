@@ -103,6 +103,51 @@ export const MAIL_TOOL_DEFS: ToolDef[] = [
   def("email.attachments", "List an email's attachments (name, type, size). They are never opened or run.", z.object({ account, id: idArg }), "T1", true),
 ];
 
+const word = z.string().min(1).max(60);
+const ACTION = (list: [string, ...string[]]) => z.enum(list as [string, ...string[]]);
+const sender = z.string().min(3).max(254);
+
+/** Templates, rules, roles, cases, schedules and watches. Anything that sets a standing order asks the owner first. */
+export const MAIL_AUTOMATION_DEFS: ToolDef[] = [
+  def(
+    "email.template",
+    "Saved mail templates ({{name}} marks a value to fill in). list; save (name, subject, text); remove (name); send (name, to, vars: the values, optional account): fills the template and sends it through the usual approval ladder. Use it for alerts and reports the owner designed.",
+    z.object({ action: ACTION(["list", "save", "remove", "send"]), name: word.optional(), subject: z.string().max(300).optional(), text: z.string().max(20000).optional(), vars: z.record(z.string().max(40), z.string().max(2000)).optional(), to: z.array(address).max(20).optional(), account }),
+    "T1",
+  ),
+  def(
+    "email.rule",
+    "Rules for mail that arrives in a mailbox (not mail from the owner, which is an order). list; add (name, conditions: from, to, subjectContains, subjectRegex, bodyContains, hasAttachment, attachmentType; then: ignore, notify (tell the owner) or role (hand it to a role)); remove (name). The first matching rule wins. Changes ask the owner.",
+    z.object({ action: ACTION(["list", "add", "remove"]), name: word.optional(), from: z.array(sender).max(20).optional(), to: z.array(sender).max(20).optional(), subjectContains: z.string().max(200).optional(), subjectRegex: z.string().max(200).optional(), bodyContains: z.string().max(200).optional(), hasAttachment: z.boolean().optional(), attachmentType: z.string().max(60).optional(), then: ACTION(["ignore", "notify", "role"]).optional(), role: word.optional(), account }),
+    "T1",
+  ),
+  def(
+    "email.role",
+    "Roles: a job for a mailbox with written guidelines (for example a support agent, or an IT monitor). list; create (name, guidelines, autoAnswer: may answer the sender by itself, default false); update (name, guidelines, autoAnswer, enabled); remove (name). A role works only through the mailbox's tools and can only answer the person who wrote. Changes ask the owner, showing the full guidelines.",
+    z.object({ action: ACTION(["list", "create", "update", "remove"]), name: word.optional(), guidelines: z.string().min(10).max(8000).optional(), autoAnswer: z.boolean().optional(), enabled: z.boolean().optional(), account }),
+    "T1",
+  ),
+  def(
+    "email.case",
+    "The conversations a role is handling. list (status optional: open, waiting, done, escalated); update (id, status, note). Keep the note short: what was asked and what was done.",
+    z.object({ action: ACTION(["list", "update"]), id: z.number().int().optional(), status: ACTION(["open", "waiting", "done", "escalated"]).optional(), note: z.string().max(1000).optional() }),
+    "T1",
+  ),
+  def(
+    "email.schedule",
+    "Things to do on a time: list; add (name, daily: 'HH:MM' or everyMinutes (at least 5), instruction: what to do, written for yourself, for example 'Email me the status of my servers with the template daily-status'); remove (name). Adding asks the owner.",
+    z.object({ action: ACTION(["list", "add", "remove"]), name: word.optional(), daily: z.string().regex(/^\d{1,2}:\d{2}$/).optional(), everyMinutes: z.number().int().min(5).max(10080).optional(), instruction: z.string().min(5).max(2000).optional() }),
+    "T1",
+  ),
+  def(
+    "watch.manage",
+    "Watches check something by themselves and wake you only when it changes (down after two failed checks, up again after one good one). list; add (name, kind: http with an address, or tcp with host:port, everySeconds (at least 30), expectText: text the page must contain, instruction: what to do when it changes, for example 'Email me an alert with the template server-down'); remove (name); check (name: look now). Adding asks the owner.",
+    z.object({ action: ACTION(["list", "add", "remove", "check"]), name: word.optional(), kind: ACTION(["http", "tcp"]).optional(), target: z.string().max(500).optional(), everySeconds: z.number().int().min(30).max(86400).optional(), expectText: z.string().max(200).optional(), instruction: z.string().min(5).max(2000).optional() }),
+    "T1",
+  ),
+];
+MAIL_TOOL_DEFS.push(...MAIL_AUTOMATION_DEFS);
+
 /** What the owner is told about a call: who, to whom, what subject. Never the body. */
 export function describeMailCall(name: string, a: Record<string, unknown>): string {
   const base = describeBase(name, a);
@@ -123,6 +168,14 @@ function describeBase(name: string, a: Record<string, unknown>): string {
       return `Forward email ${q(a.id, 80)}${box} to ${to}`;
     case "email.draft":
       return `Write a draft${box} to ${to}, subject "${q(a.subject, 150)}"`;
+    case "email.template":
+    case "email.rule":
+    case "email.role":
+    case "email.schedule":
+    case "watch.manage":
+      return `${name} ${q(a.action, 20)} ${q(a.name, 80)}`.trim();
+    case "email.case":
+      return `${name} ${q(a.action, 20)}${a.id !== undefined ? ` ${q(a.id, 20)}` : ""}`;
     case "email.inbox":
       return `List mail${box}`;
     case "email.search":
