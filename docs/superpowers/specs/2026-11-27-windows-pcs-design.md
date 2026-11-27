@@ -1,6 +1,6 @@
 # Windows PCs: the assistant uses a Windows PC like a person
 
-Status: awaiting owner approval. Size: a project. **Replaces** the PC agents design of 2026-11-25 (that file is marked superseded). Modelled on the open-source Windows-MCP (CursorTouch, MIT), rebuilt as Friend's own thing.
+Status: approved by the owner (2026-11-27), with the three answers "yes" and the terminal-session requirement below. Size: a project. **Replaces** the PC agents design of 2026-11-25 (that file is marked superseded). Modelled on the open-source Windows-MCP (CursorTouch, MIT), rebuilt as Friend's own thing.
 
 ## Why
 
@@ -69,10 +69,21 @@ All take `pc` (the PC's name). With one PC online it may be left out; with sever
 - **See**: `pc.snapshot` (screenshot with element numbers, the list of clickable and typeable elements, open windows, scrollable areas; options: vision, region, display), `pc.screenshot`, `pc.displays`.
 - **Act**: `pc.click` (by element number or position; left, right, middle; double; hover), `pc.type` (into an element; clear first; press Enter; checks the text arrived), `pc.scroll`, `pc.move` (move and drag), `pc.shortcut`, `pc.multi_select`, `pc.multi_edit`, `pc.app` (launch by name or path, switch, resize, move, close), `pc.clipboard`.
 - **Wait**: `pc.wait`, `pc.wait_for` (a window, text, an element present or enabled, focus; with a timeout).
+- **Terminal**: `pc.term.open`, `pc.term.list`, `pc.term.read`, `pc.term.send`, `pc.term.wait`, `pc.term.close`, `pc.claude.sessions` (see the next section).
 - **System**: `pc.shell` (PowerShell), `pc.files` (read, write, copy, move, delete, list, search), `pc.process` (list, end), `pc.registry`, `pc.notify`.
 - **Control and tasks**: `pc.control` (start, stop, status, with a time limit), `pc.tasks` (add, list, cancel), `pc.list` (the PCs and their status).
 - Not copied: Windows-MCP's `Scrape` (Friend already has `web.read` with its own safety), telemetry.
 - Human-like: moves follow a short eased path (150 to 400 ms), keys have small natural gaps, and a step can ask for a fresh snapshot after the action so the assistant sees the result.
+
+## Terminal sessions: the assistant operates Claude Code (and any CLI) on a PC (owner requirement, 2026-11-27)
+
+The owner wants to say "open the shop project in Claude Code, resume yesterday's session, and tell it to fix the tests", and have the assistant read what the CLI shows, choose options in its menus, answer its prompts, type instructions and check its status, the way a person sitting at that terminal would.
+
+- **How**: the agent owns the terminal itself through a Windows pseudo console (ConPTY, started by the helper), not by clicking a window. A terminal emulator in the agent (`@xterm/headless`, pure JavaScript) turns the program's output into the exact screen text, so the assistant reads a clean screen, not pixels. Keys (arrows, Enter, Esc, Ctrl+C, Tab, text) go in as real key input. This needs no control session (no mouse or desktop is touched) but it needs the **Shell** permission, because it starts a program.
+- **Sessions live on the PC**: a terminal session keeps running between the assistant's turns, is listed in the status, survives the assistant being busy elsewhere, and ends when closed, when the program exits, or when the agent stops. The owner can watch the same screen in Friend (a terminal card on the stage, text, live).
+- **Claude Code specifics**: `pc.claude.sessions` lists the previous sessions of a project from Claude Code's own session files on that PC (id, last message, time), so "resume yesterday's" can be chosen; `pc.term.open` starts `claude`, `claude --continue` or `claude --resume <id>` in the project folder. Reading the screen reports whether the program looks idle, busy or waiting at a prompt or menu, and the visible options.
+- **Safety**: the assistant never answers a prompt the screen shows as destructive (delete, rm -rf, force push, drop, format, install, run this command with admin rights, and similar words in the prompt) without the owner: the same approval card, naming the PC, with the screen text. The deny list and the folder limits apply (the working folder must be an allowed folder). Typed text is audited as a length only.
+- **Tools**: `pc.term.open`, `pc.term.list`, `pc.term.read` (screen, cursor, idle or waiting, options), `pc.term.send` (text and named keys), `pc.term.wait` (until idle, until text, with a timeout), `pc.term.close`, `pc.claude.sessions`.
 
 ## Permissions per PC (from the old design, kept)
 
@@ -91,7 +102,7 @@ Set by the owner per PC, held on the server, enforced on the server and again on
 
 ## The agent (TypeScript, in `packages/pc-agent`)
 
-`store` (`node:sqlite`: config, sealed token, tasks, events, status) · `link` (WSS, backoff, token refresh) · `control` (lease state machine, input watcher, hotkey, banner) · `tasks` (queue, resume as paused) · `tools` (the list above) · `helper` (one PowerShell process with embedded C#, JSON lines over stdio: UI Automation tree, SendInput, screenshots, windows, clipboard, DPI) · `guard` (deny list, critical floor, permissions copy) · `install` (copy, Scheduled Task, uninstall).
+`store` (`node:sqlite`: config, sealed token, tasks, events, status) · `link` (WSS, backoff, token refresh) · `control` (lease state machine, input watcher, hotkey, banner) · `tasks` (queue, resume as paused) · `tools` (the list above) · `helper` (one PowerShell process with embedded C#, JSON lines over stdio: UI Automation tree, SendInput, screenshots, windows, clipboard, DPI, and the ConPTY terminal sessions) · `term` (the terminal emulator and the session list) · `guard` (deny list, critical floor, permissions copy) · `install` (copy, Scheduled Task, uninstall).
 
 ## Risks and limits (honest)
 
