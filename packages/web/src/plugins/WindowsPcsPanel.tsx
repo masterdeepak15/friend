@@ -75,7 +75,7 @@ function PermissionsForm({ value, onChange }: { value: PcPermissions; onChange: 
  * The Windows PCs: the list with what each is doing, adding a PC (the install command to copy), what each may do, a control session,
  * and revoking. Everything that changes something asks for the PIN.
  */
-export function WindowsPcsPanel({ api = httpPcsApi, pollMs = 4000, onBack }: { api?: PcsApi; pollMs?: number; onBack: () => void }) {
+export function WindowsPcsPanel({ api = httpPcsApi, pollMs = 4000, onBack }: { api?: PcsApi; pollMs?: number; onBack?: () => void }) {
   const [pcs, setPcs] = useState<PcView[] | null>(null);
   const [step, setStep] = useState<Step>({ kind: "list" });
   const [name, setName] = useState("");
@@ -152,7 +152,7 @@ export function WindowsPcsPanel({ api = httpPcsApi, pollMs = 4000, onBack }: { a
     </p>
   );
   const back = (
-    <button type="button" style={touch} onClick={() => (step.kind === "list" ? onBack() : (setStep({ kind: "list" }), setError(null), void refresh()))}>
+    <button type="button" style={touch} onClick={() => (step.kind === "list" ? onBack?.() : (setStep({ kind: "list" }), setError(null), void refresh()))}>
       Back
     </button>
   );
@@ -309,7 +309,7 @@ export function WindowsPcsPanel({ api = httpPcsApi, pollMs = 4000, onBack }: { a
         <button type="button" style={touch} className="primary" onClick={() => { setStep({ kind: "add" }); setError(null); }}>
           Add a PC
         </button>
-        {back}
+        {onBack && back}
       </div>
     </div>
   );

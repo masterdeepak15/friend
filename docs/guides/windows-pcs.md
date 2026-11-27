@@ -6,7 +6,8 @@ Nothing of Friend is installed on those PCs. Each one runs a small agent that co
 
 ## Add a PC
 
-1. In Friend: **Plugins, Windows PCs, Add a PC**. Give it a name and choose what it may do (everything starts off). Enter your PIN.
+0. **Once:** in Friend open **Plugins**, find **Windows PCs** under *Available*, press **Install** (PIN), then **Turn on** (PIN). It then sits under *Installed* with **Configure**, **Turn off** and **Remove**, like Chrome control.
+1. Press **Configure**, then **Add a PC**. Give it a name and choose what it may do (everything starts off). Enter your PIN.
 2. Friend shows one line. On the new PC press Start, type `powershell`, paste the line, press Enter. (Or download the small `.cmd` file and double-click it: it is a text file that runs the same line.)
 3. The line installs the official **Node.js** (the signature is checked: it must be signed by the OpenJS Foundation) and Friend's **agent** (its checksum is checked) into your own user folder `%LOCALAPPDATA%\Friend\pc-agent`, registers a task that starts the agent at every logon, and starts it. It does not need administrator rights and changes no system setting.
 4. A page opens in the browser on that PC. Sign in to Friend there if you are not signed in, check the PC's name, choose what it may do, enter your PIN and approve. (The page is `<your Friend>/pc/approve?code=...`; you can also open it from another device with the code shown on the PC.)

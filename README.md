@@ -432,7 +432,7 @@ Besides the simple widgets, Every component of the Jarvis HUD library that is sa
 
 ## Windows PCs: the assistant uses a PC like a person
 
-Add as many Windows PCs as you want (Plugins, Windows PCs). The assistant can then look at the screen, click, type, open apps, wait for things, run commands, work with files, and drive a terminal such as Claude Code (open a project, resume an earlier session, answer its menus, give it instructions, check its status). Each PC runs a small agent that connects out to your Friend; **nothing of Friend is installed on it**.
+Add as many Windows PCs as you want: install the **Windows PCs** plugin (Plugins, Available, Install, then Turn on), press **Configure** and **Add a PC**. The assistant can then look at the screen, click, type, open apps, wait for things, run commands, work with files, and drive a terminal such as Claude Code (open a project, resume an earlier session, answer its menus, give it instructions, check its status). Each PC runs a small agent that connects out to your Friend; **nothing of Friend is installed on it**.
 
 - **Add a PC:** one PowerShell line (or a small `.cmd` file) installs the official Node.js (its signature is checked) and the agent (its checksum is checked) into your own user folder, starts it at every logon, and opens a page to approve the PC with your PIN (device authorization with PKCE). No administrator rights, no unsigned program.
 - **Permissions per PC**, all off to start: control the screen, screenshots, commands and terminals, programs, registry, files (off, read, read and write, only inside listed folders).

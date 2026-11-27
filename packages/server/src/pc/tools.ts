@@ -25,6 +25,8 @@ export interface PcToolsDeps {
   audit: Audit;
   /** The owner's own patterns for shell commands that ask. */
   extraPatterns: () => string[];
+  /** Whether the plugin is installed and switched on. */
+  enabled?: () => boolean;
 }
 
 /** What these tools type or put in: never written to the audit trail, only how long it was. */
@@ -74,6 +76,7 @@ export class PcTools {
   prepare(name: string, args: unknown): PreparedPc | { error: string } {
     const { hub, store } = this.deps;
     const a = (args ?? {}) as Record<string, unknown>;
+    if (this.deps.enabled && !this.deps.enabled()) return { error: "The Windows PCs plugin is not switched on. Ask the owner to install it and switch it on in Plugins (Windows PCs)." };
     if (name === "pc.list") return { pcName: "", tier: "T1", run: async () => ({ text: this.list(), isError: false }) };
 
     const which = hub.resolve(typeof a.pc === "string" ? a.pc : undefined);

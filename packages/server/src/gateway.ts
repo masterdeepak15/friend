@@ -1089,6 +1089,7 @@ export function createGateway(deps: GatewayDeps) {
         const session = token ? auth.resolveSession(token) : null;
         if (!session) return reply.code(401).send({ error: "Unauthorized" });
         if (!pcWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+        if (!config.pcs.installed) return reply.code(409).send({ error: "Windows PCs is not installed. Install it in Plugins first." });
         reply.header("cache-control", "no-store");
       },
     });

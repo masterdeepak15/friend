@@ -6,12 +6,12 @@ import type { VideoStatus } from "./video/types";
 import type { AudiusHub } from "./music/audius";
 import type { SoundCloudHub } from "./music/soundcloud";
 import type { SpotifyHub } from "./music/spotify";
-import { DEFAULT_CHANNELS, type AlexaConfig, type BrowserConfig, type BrokersConfig, type ChannelsConfig, type ChromeConfig, type Config, type MusicConfig, type VideoConfig, type WebConfig } from "./config";
+import { DEFAULT_CHANNELS, type AlexaConfig, type BrowserConfig, type BrokersConfig, type ChannelsConfig, type ChromeConfig, type Config, type MusicConfig, type PcsConfig, type VideoConfig, type WebConfig } from "./config";
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
 export type ChannelIntegrationId = "telegram" | "twilio";
-export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius" | "browser" | "tavily" | "chrome" | "video";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "browser", "tavily", "chrome", "video"];
+export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius" | "browser" | "tavily" | "chrome" | "video" | "windows-pcs";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "browser", "tavily", "chrome", "video", "windows-pcs"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -45,6 +45,7 @@ const META: Record<IntegrationId, { name: string; description: string }> = {
   soundcloud: { name: "SoundCloud", description: "Play and search your own SoundCloud account from Friend: ask for a track or an artist. Sign-in is through SoundCloud's own page. Needs a free app of your own at soundcloud.com/you/apps (SoundCloud decides who gets one), and some tracks only play with the right SoundCloud plan." },
   audius: { name: "Audius", description: "Free music from Audius, an open music service: ask for a track or an artist. No account, no key and no payment: install it and switch it on. Mostly independent artists." },
   chrome: { name: "Chrome control", description: "Lets Friend open pages, read them, click and type in your own Chrome, through an extension. It comes with Friend: nothing else to install. Every action still asks for your approval, and while it is on, Friend can act as you on the sites it allows." },
+  "windows-pcs": { name: "Windows PCs", description: "Lets Friend use your Windows PCs like a person: see the screen, click, type, open apps, run commands and work in a terminal such as Claude Code. Add as many PCs as you want. Each one runs a small agent that you install with one line (nothing of Friend is installed on it), and you choose what it may do. Anything that cannot be undone asks you first." },
   video: { name: "Web video", description: "Play videos from YouTube and almost any video site, on your Friend screen or in a window on this PC: ask for a video by name or give a link. Uses the free programs yt-dlp and ffmpeg (and mpv for a PC window), which you install once; nothing is downloaded to your disk." },
   tavily: { name: "Tavily search", description: "Better web search for Friend: news and finance searches, \"this week\" filters and site filters, built for assistants. Needs your own Tavily API key (tavily.com has a free monthly allowance; check their current limits). The key stays on this PC and is never shown to the AI. Without it, or when switched off, Friend keeps its free search." },
   browser: { name: "Safe browser", description: "Lets Friend open a public web page in a private Chrome of its own, to read pages that need scripts and to see how a page looks. It starts fresh each time with no cookies or logins, cannot open addresses on this PC or your network, and is deleted afterwards. It does not try to get past logins, paywalls or bot checks. Uses the Chrome or Edge already on this PC; nothing to download." },
@@ -62,11 +63,12 @@ export const PUBLIC_SETTINGS: Record<IntegrationId, readonly string[]> = {
   audius: [],
   chrome: [],
   video: [],
+  "windows-pcs": [],
   tavily: [],
   browser: [],
 };
 
-export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }, audius?: Pick<AudiusHub, "status">, chrome?: { status(): ChromeStatus }, video?: { status(): VideoStatus | null }, browser?: { status(): { chrome: string | null } }): IntegrationView[] {
+export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">, brokers?: Pick<BrokerHub, "status">, alexa?: Pick<AlexaHub, "status">, spotify?: Pick<SpotifyHub, "status">, soundcloud?: Pick<SoundCloudHub, "status"> & { secretSet(): boolean }, audius?: Pick<AudiusHub, "status">, chrome?: { status(): ChromeStatus }, video?: { status(): VideoStatus | null }, browser?: { status(): { chrome: string | null } }, pcs?: { counts(): { total: number; online: number } }): IntegrationView[] {
   const status = hub.status();
   const t = config.channels.telegram;
   const w = config.channels.twilio;
@@ -113,6 +115,20 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     if (chs.extension === "off") return { state: "needs-setup", detail: "Load the extension in Chrome and switch it on (press Configure)." };
     if (chs.extension === "connected") return { state: "online", detail: "Connected to your Chrome. Every action still asks for your approval." };
     return { state: "online", detail: "Running. Check that the extension is switched on in Chrome (click its icon)." };
+  };
+  const pc = config.pcs;
+  const pcn = pcs?.counts() ?? { total: 0, online: 0 };
+  const pcSteps: IntegrationStep[] = [
+    { text: "Switch the plugin on.", done: pc.enabled },
+    { text: "Press Configure, then Add a PC: copy the one line it shows into PowerShell on that PC.", done: pcn.total > 0 },
+    { text: "Approve the PC on the page that opens there, and choose what it may do. It then stays connected by itself.", done: pcn.online > 0 },
+  ];
+  const pcState = (): Pick<IntegrationView, "state" | "detail"> => {
+    if (!pc.installed) return { state: "not-installed", detail: "" };
+    if (!pc.enabled) return { state: "off", detail: "Switched off: the assistant cannot use your PCs." };
+    if (pcn.total === 0) return { state: "needs-setup", detail: "No PC yet. Press Configure, then Add a PC." };
+    if (pcn.online === 0) return { state: "connecting", detail: `${pcn.total} PC${pcn.total === 1 ? "" : "s"}, none online right now.` };
+    return { state: "online", detail: `${pcn.online} of ${pcn.total} PC${pcn.total === 1 ? "" : "s"} online. Use a PC by asking Friend; a control session starts only with your approval.` };
   };
   const vd = config.video;
   const vs = video?.status();
@@ -278,6 +294,7 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { id: "tavily", ...META.tavily, kind: "integration", installed: tv.installed, enabled: tv.enabled, ...tvState(), steps: tvSteps, settings: { depth: tv.depth, maxResults: String(tv.maxResults) }, secrets: { apiKey: tvKey } },
     { id: "chrome", ...META.chrome, kind: "integration", installed: ch.installed, enabled: ch.enabled, ...chState(), steps: chSteps, settings: chs?.extensionFolder ? { extensionFolder: chs.extensionFolder } : {}, secrets: {} },
     { id: "video", ...META.video, kind: "integration", installed: vd.installed, enabled: vd.enabled, ...vdState(), steps: vdSteps, settings: {}, secrets: {} },
+    { id: "windows-pcs", ...META["windows-pcs"], kind: "integration", installed: pc.installed, enabled: pc.enabled, ...pcState(), steps: pcSteps, settings: {}, secrets: {} },
   ];
 }
 
@@ -428,6 +445,21 @@ export function changeVideo(video: VideoConfig, change: { install: true } | { re
   }
   if (!video.installed) return `${META.video.name} is not installed yet.`;
   video.enabled = change.enabled;
+  return null;
+}
+
+/** The Windows PCs plugin: installed, then switched on. Removing it keeps the PCs that were added (they are in the database). */
+export function changePcs(pcs: PcsConfig, change: { install: true } | { remove: true } | { enabled: boolean }): string | null {
+  if ("install" in change) {
+    pcs.installed = true;
+    return null;
+  }
+  if ("remove" in change) {
+    Object.assign(pcs, { installed: false, enabled: false });
+    return null;
+  }
+  if (!pcs.installed) return `${META["windows-pcs"].name} is not installed yet.`;
+  pcs.enabled = change.enabled;
   return null;
 }
 

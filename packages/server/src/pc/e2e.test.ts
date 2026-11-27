@@ -26,7 +26,7 @@ async function boot() {
   const dir = mkdtempSync(join(tmpdir(), "friend-pce2e-"));
   const agentPath = join(dir, "agent.js");
   writeFileSync(agentPath, "// the agent file the server hands out");
-  app = await createApp({ dataDir: dir, provider: new FakeProvider([[{ type: "done" }]] as never), config: { port: 0, roots: [] }, pluginCatalogDir: join(dir, "none"), pcAgentPath: agentPath });
+  app = await createApp({ dataDir: dir, provider: new FakeProvider([[{ type: "done" }]] as never), config: { port: 0, roots: [], pcs: { installed: true, enabled: true } }, pluginCatalogDir: join(dir, "none"), pcAgentPath: agentPath });
   const { port } = await app.start();
   const base = `http://127.0.0.1:${port}`;
   const j = { "content-type": "application/json" };

@@ -42,7 +42,7 @@ describe("the chrome setting", () => {
 describe("chrome among the integrations", () => {
   it("is one of them, next to last", () => {
     expect(isIntegrationId("chrome")).toBe(true);
-    expect(INTEGRATION_IDS[INTEGRATION_IDS.length - 2]).toBe("chrome");
+    expect(INTEGRATION_IDS[INTEGRATION_IDS.length - 3]).toBe("chrome");
   });
   it("starts as not installed, and says what it is", () => {
     const v = view(cfg());

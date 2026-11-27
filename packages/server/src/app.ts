@@ -60,7 +60,7 @@ const TAVILY_SKILL = "tavily-search";
 const BROWSER_SKILL = "ai-browser";
 /** The type each kind of audio file is sent as. */
 const MIME: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", flac: "audio/flac" };
-import { changeAlexa, changeBroker, changeBrowser, changeChrome, changeIntegration, changeTavily, changeVideo, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
+import { changeAlexa, changeBroker, changeBrowser, changeChrome, changeIntegration, changePcs, changeTavily, changeVideo, changeAudius, changeSoundcloud, changeSpotify, integrationSummary, integrationViews, isIntegrationId, type IntegrationId } from "./integrations";
 import { CodeBox } from "./codebox";
 import { Heartbeat } from "./heartbeat";
 import { Memory } from "./memory";
@@ -530,6 +530,22 @@ export async function createApp(opts: AppOptions) {
     saveConfig(saved);
     return null;
   };
+  /** How many PCs there are and how many are online (for the plugin card). */
+  const pcCounts = {
+    counts: () => {
+      const all = pcService.store.list().filter((p) => !p.revoked);
+      return { total: all.length, online: all.filter((p) => pcHub.isOnline(p.id)).length };
+    },
+  };
+  /** The same for the Windows PCs part of the saved file. */
+  const changePcsConfig = (fn: (s: Config["pcs"]) => string | null): string | null => {
+    const saved = loadConfig(opts.dataDir);
+    const err = fn(saved.pcs);
+    if (err) return err;
+    fn(config.pcs);
+    saveConfig(saved);
+    return null;
+  };
   /** The same for the Chrome control part of the saved file. */
   const changeChromeConfig = (fn: (s: Config["chrome"]) => string | null): string | null => {
     const saved = loadConfig(opts.dataDir);
@@ -562,6 +578,7 @@ export async function createApp(opts: AppOptions) {
       if (!err && "remove" in change) plugins.remove(TAVILY_SKILL);
       return err;
     }
+    if (id === "windows-pcs") return changePcsConfig((p) => changePcs(p, change));
     if (id === "video") {
       const err = changeVideoConfig((v) => changeVideo(v, change));
       if (!err && ("install" in change || ("enabled" in change && change.enabled))) void videoHub.prepare().catch(() => {});
@@ -617,12 +634,12 @@ export async function createApp(opts: AppOptions) {
       },
     },
     integrations: {
-      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub),
+      views: () => integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub, pcCounts),
       install: (id) => changeAny(id, { install: true }),
       remove: (id) => changeAny(id, { remove: true }),
       configure: (id, { enabled, settings }) => {
-        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : id === "chrome" ? config.chrome : id === "video" ? config.video : id === "tavily" ? config.web.tavily : id === "browser" ? config.browser : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
-        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && id !== "chrome" && id !== "video" && id !== "tavily" && id !== "browser" && Object.keys(settings).length) {
+        if (!(id === "zerodha" ? config.brokers.zerodha : id === "alexa" ? config.alexa : id === "spotify" ? config.music.spotify : id === "soundcloud" ? config.music.soundcloud : id === "audius" ? config.music.audius : id === "chrome" ? config.chrome : id === "windows-pcs" ? config.pcs : id === "video" ? config.video : id === "tavily" ? config.web.tavily : id === "browser" ? config.browser : config.channels[id]).installed) return `${id} is not installed yet. Install it first with plugins.install.`;
+        if (id !== "zerodha" && id !== "alexa" && id !== "spotify" && id !== "soundcloud" && id !== "audius" && id !== "chrome" && id !== "windows-pcs" && id !== "video" && id !== "tavily" && id !== "browser" && Object.keys(settings).length) {
           try {
             commitSettings({ channels: { [id]: settings } }, { actor: "agent" });
           } catch (e) {
@@ -937,7 +954,7 @@ export async function createApp(opts: AppOptions) {
       if (b && hello.agentSha256 && hello.agentSha256 !== b.sha256) pcHub.send(pcId, { type: "update", url: "/api/pc/agent.js", sha256: b.sha256 });
     },
   });
-  const pcTools = new PcTools({ hub: pcHub, store: pcService.store, audit, extraPatterns: () => [] });
+  const pcTools = new PcTools({ hub: pcHub, store: pcService.store, audit, extraPatterns: () => [], enabled: () => config.pcs.installed && config.pcs.enabled });
   // presentations: the saved decks, the player (it speaks through the same speaker and draws through the same broadcast), and the files
   const deckStore = new DeckStore(db);
   const presenter = new Presenter({
@@ -1049,7 +1066,7 @@ export async function createApp(opts: AppOptions) {
     video: videoHub,
     office,
     attachments: { read: (id, part) => readAttachment(attachments, id, part) },
-    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub)) },
+    integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub, pcCounts)) },
   });
 
   const clients = new Set<ClientConn>();
@@ -1323,7 +1340,7 @@ export async function createApp(opts: AppOptions) {
       void chromePlugin.refresh(); // so the next look at the screen knows whether the extension was switched on since
       const installed = plugins.list();
       const have = new Set(installed.map((p) => p.id));
-      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub) };
+      return { installed, catalog: listCatalog(catalogDir).map((c) => ({ ...c, installed: have.has(c.id) })), integrations: integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub, pcCounts) };
     },
     install: async (id, pin, ip) => {
       if (isIntegrationId(id)) {

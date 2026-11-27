@@ -69,6 +69,8 @@ export interface Config {
   music: MusicConfig;
   /** Chrome control, the plugin that lets Friend use the owner's own Chrome (it comes with Friend). Only the owner changes it. */
   chrome: ChromeConfig;
+  /** Windows PCs the assistant can use like a person (a plugin the owner installs and switches on). */
+  pcs: PcsConfig;
   /** Playing videos from the internet (YouTube and other sites), on the screen or in a PC window. */
   video: VideoConfig;
   /** The safe browser: a private, throwaway Chrome the assistant can read and photograph a public page with. */
@@ -154,6 +156,12 @@ export interface ChromeConfig {
   enabled: boolean;
   /** Chrome control may also be reached from other PCs on Friend's own address (/chrome/mcp, /chrome/ws), with its key. Off unless the owner switches it on. */
   remote: boolean;
+}
+
+/** The Windows PCs plugin: installed from the plugins screen, then switched on. The PCs themselves are kept in the database. */
+export interface PcsConfig {
+  installed: boolean;
+  enabled: boolean;
 }
 
 export interface MusicConfig {
@@ -276,6 +284,11 @@ export function sanitizeVideo(raw: unknown): VideoConfig {
 export function sanitizeChrome(raw: unknown): ChromeConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true, remote: r.remote === true };
+}
+
+export function sanitizePcs(raw: unknown): PcsConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true };
 }
 
 function sanitizeAudius(raw: unknown): MusicConfig["audius"] {
@@ -1053,6 +1066,7 @@ const defaults = (dataDir: string): Config => ({
   alexa: sanitizeAlexa({}),
   music: sanitizeMusic({}),
   chrome: sanitizeChrome({}),
+  pcs: sanitizePcs({}),
   video: sanitizeVideo({}),
   browser: sanitizeBrowser({}),
   hud: sanitizeHud({}),
@@ -1146,6 +1160,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     alexa: sanitizeAlexa(stored.alexa),
     music: sanitizeMusic(stored.music),
     chrome: sanitizeChrome(stored.chrome),
+    pcs: sanitizePcs(stored.pcs),
     video: sanitizeVideo(stored.video),
     browser: sanitizeBrowser(stored.browser),
     hud: sanitizeHud(stored.hud),
