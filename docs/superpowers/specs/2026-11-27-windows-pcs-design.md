@@ -4,7 +4,7 @@ Status: awaiting owner approval. Size: a project. **Replaces** the PC agents des
 
 ## Why
 
-The owner wants the assistant to operate a Windows PC the way a person does: look at the screen, click, type, open apps, wait for things, run commands. Many PCs can be added from a plugin, the way Chrome control is a plugin. Each PC runs a small program (an .exe) that carries its own server details, signs in once, then stays connected, starts again after a restart, and keeps its own record of tasks and status.
+The owner wants the assistant to operate a Windows PC the way a person does: look at the screen, click, type, open apps, wait for things, run commands. Many PCs can be added from a plugin, the way Chrome control is a plugin. Each PC runs a small agent that is installed by one command, carries its own server details, signs in once, then stays connected, starts again after a restart, and keeps its own record of tasks and status. Nothing of Friend is installed on it, and no unsigned program is downloaded.
 
 ## Today (found in the code and the Windows-MCP repo)
 
@@ -15,8 +15,8 @@ The owner wants the assistant to operate a Windows PC the way a person does: loo
 ## Goals
 
 - **Windows PCs plugin**: list (name, online, status line, current task, last seen), Add PC, Download, Revoke, permissions, control on/off.
-- **Add flow**: name the PC, download an .exe, run it, approve once (sign-in with device authorization and PKCE). It then stays connected, with no code to type.
-- **The exe carries its details**: server address, PC name and enrollment id are inside the file.
+- **Add flow**: name the PC, copy one command (or download a tiny `.cmd` that runs the same command) and run it on the PC, approve once (device authorization with PKCE). It then stays connected, with no code to type.
+- **The installer carries its details**: the command holds the server address, the PC name and a one-time enrollment id.
 - **Starts again after a restart** and reconnects by itself; survives a Friend restart too.
 - **Control sessions (owner decision)**: one control session per PC at a time; several tasks can wait their turn; the status is always kept and always shown.
 - **Like a human**: the assistant sees (snapshot with element numbers and a marked screenshot), acts (click, type, scroll, drag, shortcuts, apps), waits for what it expects, and checks the result. Movement is smooth, not a teleport.
@@ -29,7 +29,7 @@ The owner wants the assistant to operate a Windows PC the way a person does: loo
 - macOS and Linux agents: not in this project (the existing `friend node` stays for shell and files there).
 - Not controlling games, secure desktop prompts (UAC) or windows of a higher privilege than the agent.
 - No cloud relay of ours; the PC connects out to the owner's own Friend.
-- No code signing in this project (see Risks).
+- No code-signing certificate needed: the only program that runs as an executable is the official Node.js, which is already signed (see Approaches).
 
 ## Anti-goals
 
@@ -41,15 +41,16 @@ The owner wants the assistant to operate a Windows PC the way a person does: loo
 
 ## Approaches (my pick: A; the owner handed me the how)
 
-- **A. One Windows exe made with Node's single-executable feature.** The agent is TypeScript in this repo (shares the protocol, zod and tests); built-in `node:sqlite` for its data; a long-lived PowerShell process with embedded C# does the Windows parts (UI Automation, SendInput, screenshots, windows, clipboard). Nothing to install on the PC (~90 MB). **Chosen.**
+- **A. Portable signed Node.js plus our agent as a plain script. Chosen (revised after the owner pointed out the unsigned-exe problem and that `friend node` would mean installing Friend on every PC).** One PowerShell command downloads the official `node.exe` (signed by the OpenJS Foundation, so SmartScreen and antivirus know it; its signature and SHA-256 are checked) and our agent (`agent.js`, one bundled file from the owner's Friend, its SHA-256 checked) into `%LOCALAPPDATA%\Friend\pc-agent\`. The agent is TypeScript in this repo (shares the protocol and tests) and uses Node's built-in `node:sqlite`. A long-lived PowerShell process with embedded C# does the Windows parts (UI Automation, SendInput, screenshots, windows, clipboard). Nothing to install first; no unsigned executable; no Friend on the PC; the agent updates itself from the owner's Friend.
+- A2. The same agent as a single exe (Node's single-executable feature). Rejected for now: unsigned, so SmartScreen warns. Can be added later with a signing certificate (SignPath Foundation signs open-source projects free; Azure Trusted Signing is low cost), reusing the same agent.
 - B. A small C# exe built with the .NET Framework compiler that every Windows has. Tiny and native, but a second language and toolchain, no SQLite without a native DLL, and no shared tests with the server.
 - C. Wrap the upstream Python Windows-MCP. Rejected: Python 3.14 on every PC, telemetry, no per-PC model, not "our own".
 
 ## The flow
 
 1. **Add PC (screen)**: Plugins → Windows PCs → Add: a name and the permissions to start with (all off by default) → the server makes a pending PC and an enrollment id.
-2. **Download**: the server builds the exe: a cached *template* (the agent bundled into Node's single executable for Windows x64) plus a small signed trailer appended to the file: `{ server address, pcId, pcName, enrollmentId, server fingerprint }`. Any host OS can do this (it only appends bytes). The template comes from a platform package `friend-pc-agent-win32-x64`, published with each release and fetched on first use into the data folder (my pick; the builder may choose another source).
-3. **Install**: run the exe. It copies itself to `%LOCALAPPDATA%\Friend\pc-agent\`, registers a per-user Scheduled Task "Friend PC Agent" (at logon, restart on failure; it must run in the user's session, never as a service, because a service cannot see the desktop), starts, and opens the approval page.
+2. **Install command**: the screen shows one command to run in PowerShell on the new PC, and a "Download .cmd" button that holds the same command (a small file, not a program). The command contains the server address, the PC name, a one-time enrollment id and the SHA-256 of `agent.js`. It runs with `-ExecutionPolicy Bypass` for this one run, so the PC's script policy is not changed. Nothing is downloaded to the PC as a browser file, so there is no "mark of the web".
+3. **Install** (the command does this): download `node.exe` from nodejs.org at a pinned version and check its Authenticode signature (publisher OpenJS Foundation) and SHA-256; download `agent.js` from the owner's Friend and check its SHA-256; put both in `%LOCALAPPDATA%\Friend\pc-agent\`; register a per-user Scheduled Task "Friend PC Agent" (at logon, restart on failure; it must run in the user's session, never as a service, because a service cannot see the desktop); start it; open the approval page. If the PC has no internet access to nodejs.org, the owner's Friend can serve the same `node.exe` (cached after its first fetch).
 4. **First sign-in (device authorization with PKCE, as in the OAuth design)**: the agent makes a `code_verifier` and sends its S256 `code_challenge` with the enrollment id; the server returns a `user_code`, a `device_code` and a link; the owner opens the link (on the screen or the phone), logs in, sees "Add PC <name>: Windows 11, host, ip", picks permissions and approves with the PIN. The agent polls with the verifier and gets a short access token and a rotating refresh token. They are stored in the agent's SQLite sealed with Windows DPAPI (current user).
 5. **Always connected**: the agent opens an outbound WSS connection with the access token, sends `hello {os, host, agent version}`, reconnects with backoff, rotates the token. **Revoke** closes the socket at once and the refresh fails. The enrollment id cannot be used twice.
 
@@ -94,8 +95,8 @@ Set by the owner per PC, held on the server, enforced on the server and again on
 
 ## Risks and limits (honest)
 
-- **Unsigned exe**: Windows SmartScreen shows "unknown publisher" and some antivirus tools dislike single-executable apps. A code-signing certificate is a later step (paid); the guide says how to proceed.
-- **SQLite in a single executable** is not confirmed by the docs: **Task 0 is a spike**; the fallback is a WebAssembly SQLite.
+- **A download-and-run command can look suspicious to antivirus** (the pattern is the same as legitimate installers like Scoop). It runs nothing unsigned except a script the owner can read, and every download is checked. **Task 0 is a spike**: run the installer on a real Windows 11 PC with Defender on and see what it says; the fallback is the `.cmd` file, then a signed exe later.
+- `node:sqlite` is part of Node 24, so no native add-on or single-executable question remains; the Node version is pinned to one that has it.
 - UAC and elevated windows cannot be controlled unless the agent runs elevated (not by default; a later option). A locked screen or a minimized remote-desktop window cannot be captured.
 - Electron and Chromium apps give a huge element tree: words are merged and there is a size cap. Text selection inside a paragraph and games are not supported (same as Windows-MCP).
 - The helper needs Windows PowerShell 5.1 (on every Windows 10 and 11).
@@ -103,7 +104,7 @@ Set by the owner per PC, held on the server, enforced on the server and again on
 ## Testing (what the plan must cover)
 
 - Enrollment: PKCE success, wrong verifier, expired and reused codes, revoke at once, token rotation.
-- The exe builder: the trailer round trip, a changed trailer is refused, the missing-template message.
+- The installer script: it carries the right details, refuses a `node.exe` with a wrong signature or hash and an `agent.js` with a wrong hash, is safe to run twice, and an uninstall removes the task and the folder.
 - Control state machine with a fake clock and fake input: one session at a time, user input pauses, countdown, hotkey, idle timeout, disconnect and revoke end it, tasks resume as paused.
 - Guard: deny list, critical words, folders, per-PC permissions, the PC re-checks what the server allowed.
 - Tools through a fake helper; the assistant picks the PC by name and asks when unclear.
@@ -112,10 +113,10 @@ Set by the owner per PC, held on the server, enforced on the server and again on
 
 ## Left to the builder
 
-Message shapes on the socket, the helper's C# internals, where the template package is published and fetched, the banner and border drawing, exact wording of the guide.
+Message shapes on the socket, the helper's C# internals, how the agent updates itself, the banner and border drawing, exact wording of the guide.
 
 ## Questions for the owner
 
 1. My readings of "1 control session and multi task with holding always status" (above). Right?
 2. The old `friend node` pairing stays for macOS and Linux shell and files; Windows PCs use the new agent. OK?
-3. An unsigned exe at first (a SmartScreen warning). OK for now?
+3. Is a copyable one-line command (plus a small `.cmd` file) acceptable instead of a downloaded .exe? (It is what avoids the SmartScreen warning.)
