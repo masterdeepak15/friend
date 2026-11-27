@@ -183,6 +183,11 @@ export class MailStore {
     return r ? toMail(r) : null;
   }
 
+  getMessageByProviderId(accountId: number, providerId: string): StoredMail | null {
+    const r = this.db.prepare("select * from mail_messages where account_id = ? and provider_id = ?").get(accountId, providerId) as MessageRow | undefined;
+    return r ? toMail(r) : null;
+  }
+
   /** Newest first, not archived. `before` is a message id from an earlier page. */
   recentMessages(accountId: number, limit: number, before?: number): StoredMail[] {
     const rows = this.db.prepare("select * from mail_messages where account_id = ? and archived = 0 and id < ? order by id desc limit ?").all(accountId, before ?? Number.MAX_SAFE_INTEGER, Math.min(Math.max(limit, 1), 200)) as MessageRow[];
