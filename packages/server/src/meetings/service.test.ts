@@ -135,6 +135,7 @@ describe("the meeting tools", () => {
       return "error" in p ? { isError: true, text: p.error } : p.run(ask, new AbortController().signal);
     };
     expect(await run("meeting.join", { url: "https://evil.com/meet/1" })).toMatchObject({ isError: true });
+    expect(await run("meeting.join", { url: "https://meet.google.com.evil.com/abc-defg-hij" })).toMatchObject({ isError: true });
     expect(await run("meeting.join", { url: "http://127.0.0.1/meet/1" })).toMatchObject({ isError: true });
     expect(ask).not.toHaveBeenCalled();
     const ok = await run("meeting.join", { url: "https://teams.live.com/meet/5", at: new Date(Date.now() + 7_200_000).toISOString(), title: "Planning" });

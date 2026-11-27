@@ -4,20 +4,7 @@
  * inside the page and returns plain data.
  */
 
-const HELPERS = `
-const txt = (e) => ((e && (e.innerText || e.textContent)) || "").replace(/\\s+/g, " ").trim();
-const vis = (e) => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
-const all = (sel) => Array.from(document.querySelectorAll(sel)).filter(vis);
-const label = (e) => (e.getAttribute("aria-label") || "") + " " + txt(e);
-const CLICKABLE = "button, [role=button], a, [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=option]";
-const byText = (re, sel) => all(sel || CLICKABLE).find((e) => re.test(label(e)));
-const setValue = (el, v) => {
-  const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value");
-  d.set.call(el, v);
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-  el.dispatchEvent(new Event("change", { bubbles: true }));
-};
-`;
+import { HELPERS, type DomSet } from "./domKit";
 
 const ENDED = String.raw`/(you['’]ve left|you left|you have left) the (meeting|call)|the (meeting|call) (has )?ended|this meeting has ended|(you were|you['’]ve been|you have been) removed from the (meeting|call)|removed you from the (meeting|call)/i`;
 const LOBBY = String.raw`/waiting for (someone|the organi[sz]er|the host)[^.]{0,40}(let|admit)|someone in the meeting (will|should) let you in|we['’]ll let (people|them) know you['’]re (here|waiting)|let you in (soon|shortly)|someone will let you in/i`;
@@ -89,3 +76,13 @@ export const FOCUS_CHAT = `(() => { ${HELPERS}
 })()`;
 
 export const HANG_UP = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="hangup-button"], #hangup-button') || byText(/^\\s*(leave|hang up)\\b/i, "button, [role=button]"); if (!b) return false; b.click(); return true; })()`;
+
+export const TEAMS: DomSet = {
+  advance: ADVANCE,
+  captions: CAPTIONS,
+  captionSteps: [OPEN_MORE, CLICK_LANGUAGE, CLICK_CAPTIONS, CLICK_CONFIRM],
+  // Ctrl+Shift+U switches live captions on or off in Teams
+  shortcut: { key: "U", code: "KeyU", vk: 85, modifiers: 10 },
+  focusChat: FOCUS_CHAT,
+  hangUp: HANG_UP,
+};

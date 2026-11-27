@@ -20,6 +20,9 @@ import { HttpError } from "./http-error";
 import { registerPcRoutes } from "./pc/routes";
 import { registerMailRoutes } from "./mail/routes";
 import type { MailAccounts } from "./mail/accounts";
+import { registerMeetingRoutes } from "./meetings/routes";
+import type { MeetingService } from "./meetings/service";
+import type { MeetingStore } from "./meetings/store";
 import type { PcService } from "./pc/service";
 import { chromeAddresses, keyFromRequest, proxyMcp, relayExtension, sameKey, type ChromeAccess } from "./connectors/chromeRemote";
 
@@ -90,6 +93,8 @@ export interface GatewayDeps {
   pc?: PcService;
   /** Adding, changing and removing mailboxes (the Mailboxes plugin). */
   mail?: MailAccounts;
+  /** The meetings screen (the Meetings plugin). */
+  meetings?: { service: MeetingService; store: MeetingStore };
   /** The agent file the PCs download. */
   pcAgent?: () => import("./pc/agentBundle").AgentBundle | null;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
@@ -1110,6 +1115,22 @@ export function createGateway(deps: GatewayDeps) {
         if (!session) return reply.code(401).send({ error: "Unauthorized" });
         if (!mailWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
         if (!config.mail.installed) return reply.code(409).send({ error: "Mailboxes is not installed. Install it in Plugins first." });
+        reply.header("cache-control", "no-store");
+      },
+    });
+  }
+
+  // ---- Meetings (owner session; closed until the plugin is installed) ----
+  if (deps.meetings) {
+    const meetingWindow = new SlidingWindow(60, 60_000);
+    registerMeetingRoutes(app, {
+      ...deps.meetings,
+      ownerGuard: async (req, reply) => {
+        const token = req.cookies[COOKIE_NAME];
+        const session = token ? auth.resolveSession(token) : null;
+        if (!session) return reply.code(401).send({ error: "Unauthorized" });
+        if (!meetingWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+        if (!config.meetings.installed) return reply.code(409).send({ error: "Meetings is not installed. Install it in Plugins first." });
         reply.header("cache-control", "no-store");
       },
     });

@@ -137,3 +137,42 @@ export class Cooldown {
     return true;
   }
 }
+
+export type Platform = "teams" | "meet" | "zoom";
+
+const plain = (u: URL) => u.protocol === "https:" && !u.username && !u.password && !u.port;
+
+/** Which meeting site an address is, or null when it is not a meeting link of one of them. Only these are ever opened. */
+export function meetingPlatform(url: string): Platform | null {
+  if (isTeamsMeetingUrl(url)) return "teams";
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (!plain(u)) return null;
+  const host = u.hostname.toLowerCase();
+  if (host === "meet.google.com" && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/i.test(u.pathname)) return "meet";
+  if ((host === "zoom.us" || host.endsWith(".zoom.us") || host === "zoom.com" || host.endsWith(".zoom.com")) && /^\/(j|wc\/join)\/\d{8,12}\/?$/.test(u.pathname)) return "zoom";
+  return null;
+}
+
+export const isMeetingUrl = (url: string): boolean => meetingPlatform(url) !== null;
+
+/** Zoom's own page asks to open the app; the browser version is the same meeting at /wc/join. */
+export function normalizeMeetingUrl(url: string): string {
+  if (meetingPlatform(url) !== "zoom") return url;
+  const u = new URL(url);
+  u.pathname = u.pathname.replace(/^\/j\//, "/wc/join/");
+  return u.toString();
+}
+
+/** The first meeting link of any supported site in a text, or null. */
+export function findMeetingLink(text: string): string | null {
+  for (const m of text.matchAll(/https:\/\/[^\s<>"')\]]+/gi)) {
+    const url = m[0].replace(/[.,;:!?]+$/, "");
+    if (isMeetingUrl(url)) return url;
+  }
+  return null;
+}

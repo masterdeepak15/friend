@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { findChrome } from "../browser/chrome";
 import { ChromeMeetingPage } from "./chromePage";
+import { domFor } from "./dom";
 import type { Line } from "./logic";
 import { MeetingSession } from "./session";
 import { DEFAULT_PREFS, type MeetingStatus } from "./store";
@@ -68,5 +69,20 @@ describe.skipIf(!chrome)("a real Chrome on a page shaped like Teams", () => {
     await session.stop("test over");
     await done;
     expect(status.at(-1)).toBe("ended");
+  }, 60_000);
+});
+
+describe.skipIf(!chrome)("the Meet and Zoom scripts in a real Chrome", () => {
+  it("run on an ordinary page without errors and say it is still loading", async () => {
+    const page = new ChromeMeetingPage({ chrome: chrome!, tmpRoot: mkdtempSync(join(tmpdir(), "friend-mtg-")), anyHost: true });
+    await page.open("data:text/html,<body><p>hello</p></body>");
+    for (const p of ["teams", "meet", "zoom"] as const) {
+      (page as unknown as { dom: unknown }).dom = domFor(p);
+      expect(await page.advance("Maya")).toMatchObject({ phase: "loading" });
+      expect(await page.captions()).toBeNull();
+      expect(await page.chat("hi")).toBe(false);
+      await page.enableCaptions().catch((e) => { throw e; });
+    }
+    await page.close();
   }, 60_000);
 });

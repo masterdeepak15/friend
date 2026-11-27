@@ -6,6 +6,8 @@ import { httpSettingsApi, type AlexaView, type BrokersView, type ChannelsView, t
 import { AlexaForm, alexaProblem, httpAlexaApi, type AlexaApi } from "./AlexaForm";
 import { ChromeForm, httpChromeApi, type ChromeApi } from "./ChromeForm";
 import { MailboxesPanel } from "./MailboxesPanel";
+import { MeetingsPanel } from "./MeetingsPanel";
+import { httpMeetingsApi, type MeetingsApi } from "./meetingsApi";
 import { WindowsPcsPanel } from "./WindowsPcsPanel";
 import { httpMailApi, type MailApi } from "./mailApi";
 import { httpPcsApi, type PcsApi } from "./pcsApi";
@@ -48,6 +50,7 @@ export function IntegrationConfig({
   videoApi = httpVideoApi,
   pcsApi = httpPcsApi,
   mailApi = httpMailApi,
+  meetingsApi = httpMeetingsApi,
 }: {
   integration: IntegrationEntry;
   onBack: () => void;
@@ -61,6 +64,7 @@ export function IntegrationConfig({
   videoApi?: VideoApi;
   pcsApi?: PcsApi;
   mailApi?: MailApi;
+  meetingsApi?: MeetingsApi;
 }) {
   const [saved, setSaved] = useState<ChannelsView | null>(null);
   const [draft, setDraft] = useState<ChannelsView>(EMPTY);
@@ -222,6 +226,7 @@ export function IntegrationConfig({
       {isVideo && <VideoForm api={videoApi} />}
       {isPcs && <WindowsPcsPanel api={pcsApi} />}
       {isMail && <MailboxesPanel api={mailApi} />}
+      {isMeetings && integration.installed && <MeetingsPanel api={meetingsApi} />}
       {isTavily && <TavilyForm api={settingsApi} />}
       {isBrowser && <BrowserForm api={settingsApi} found={String(integration.settings?.chrome ?? "")} />}
       {isAlexa && savedA && <AlexaForm view={draftA} setView={setDraftA} api={alexaApi} />}

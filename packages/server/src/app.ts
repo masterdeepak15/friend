@@ -98,6 +98,7 @@ import { findChrome } from "./browser/chrome";
 import { ChromeMeetingPage } from "./meetings/chromePage";
 import type { MeetingPage } from "./meetings/session";
 import { MeetingService } from "./meetings/service";
+import { findMeetingLink } from "./meetings/logic";
 import { MeetingStore } from "./meetings/store";
 import { MeetingTools } from "./meetings/tools";
 import { PolicyEngine } from "./policy/engine";
@@ -1182,6 +1183,7 @@ export async function createApp(opts: AppOptions) {
     integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub, pcCounts, mailCounts)) },
   });
   // the owner's schedules and watches wake the assistant with their instruction (the instruction is the owner's, so it runs as the owner)
+  let invitationTimes: number[] = [];
   const mailAutomation = new MailAutomation({
     store: mailAuto,
     audit,
@@ -1210,6 +1212,15 @@ export async function createApp(opts: AppOptions) {
       const todo = mailService.inbound(msg, cls);
       const account = mailStore.getAccount(msg.accountId);
       const box = account?.name ?? "mailbox";
+      // a meeting invitation in someone else's mail is only pointed out to the owner (at most five an hour); the owner says whether to join
+      if (todo.action !== "order" && config.meetings.installed && config.meetings.enabled && !isAutomatic(msg) && msg.from.address.toLowerCase() !== account?.address.toLowerCase() && findMeetingLink(`${msg.subject}\n${msg.text}`)) {
+        const now = Date.now();
+        invitationTimes = invitationTimes.filter((t) => now - t < 3_600_000);
+        if (invitationTimes.length < 5) {
+          invitationTimes.push(now);
+          void tellOwner(`A meeting invitation arrived in ${box} from ${msg.from.address}: "${msg.subject.slice(0, 100)}". Tell me to join it (and when) if you want me there.`, "Meeting invitation");
+        }
+      }
       if (todo.action !== "order") {
         // not an order: the owner's rules say what to do with it. Robots and the mailbox's own mail never start a role.
         const rule = mailAuto.listRules(msg.accountId).find((r) => r.enabled && matchRule(r.conditions, msg));
@@ -1852,6 +1863,7 @@ ${todo.text}`;
     ...(tls ? { tls } : {}),
     pc: pcService,
     mail: mailAccounts,
+    meetings: { service: meetingService, store: meetingStore },
     pcAgent: () => pcAgentFile.get(),
     onPcConnect: (pcId, ws) => {
       pcHub.attach(pcId, ws);

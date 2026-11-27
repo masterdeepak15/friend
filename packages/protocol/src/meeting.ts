@@ -11,7 +11,7 @@ const id = z.number().int().min(1);
 export const MEETING_TOOL_DEFS: ToolDef[] = [
   def(
     "meeting.join",
-    "Join a Microsoft Teams meeting as a guest and listen: give the invitation link (https://teams.microsoft.com/... or https://teams.live.com/...). With at (ISO 8601 with a UTC offset) it joins then, by itself; without it, now. It shows as a guest named after the assistant and says in the chat that it is taking notes. The owner is asked before it joins or is scheduled.",
+    "Join an online meeting as a guest and listen: give the invitation link of Microsoft Teams (teams.microsoft.com, teams.live.com), Google Meet (meet.google.com/abc-defg-hij) or Zoom (zoom.us/j/number). With at (ISO 8601 with a UTC offset) it joins then, by itself; without it, now. It shows as a guest named after the assistant and says in the chat that it is taking notes. The owner is asked before it joins or is scheduled.",
     z.object({ url: z.string().min(10).max(2000), at: z.string().max(40).optional(), title: z.string().max(120).optional() }),
     "T2",
   ),
@@ -39,7 +39,7 @@ export function describeMeetingCall(name: string, a: Record<string, unknown>): s
   const q = (v: unknown, n = 160) => String(v ?? "").slice(0, n);
   switch (name) {
     case "meeting.join":
-      return `Join the Teams meeting${a.title ? ` "${q(a.title, 80)}"` : ""}${a.at ? ` at ${q(a.at, 40)}` : " now"} as a guest`;
+      return `Join the online meeting${a.title ? ` "${q(a.title, 80)}"` : ""}${a.at ? ` at ${q(a.at, 40)}` : " now"} as a guest`;
     case "meeting.leave":
       return `Leave the meeting${a.id ? ` ${q(a.id, 10)}` : ""}`;
     case "meeting.setup":

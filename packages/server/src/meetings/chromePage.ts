@@ -6,7 +6,9 @@ import { Cdp } from "../browser/cdp";
 import { endpoint, removeProfile, shutdown } from "../browser/hub";
 import type { CaptionItem } from "./logic";
 import type { MeetingPage, Phase } from "./session";
-import { ADVANCE, CAPTIONS, CLICK_CAPTIONS, CLICK_CONFIRM, CLICK_LANGUAGE, FOCUS_CHAT, HANG_UP, OPEN_MORE } from "./teamsDom";
+import { domFor } from "./dom";
+import type { DomSet } from "./domKit";
+import { meetingPlatform } from "./logic";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -30,10 +32,12 @@ export class ChromeMeetingPage implements MeetingPage {
   private sessionId = "";
   private profile = "";
   private tries = 0;
+  private dom: DomSet = domFor("teams");
 
   constructor(private o: ChromePageOptions) {}
 
   async open(url: string): Promise<void> {
+    this.dom = domFor(meetingPlatform(url) ?? "teams");
     const root = this.o.tmpRoot ?? tmpdir();
     mkdirSync(root, { recursive: true });
     this.profile = mkdtempSync(join(root, "friend-meeting-"));
@@ -94,34 +98,34 @@ export class ChromeMeetingPage implements MeetingPage {
   }
 
   async advance(name: string): Promise<{ phase: Phase; detail: string }> {
-    return (await this.run<{ phase: Phase; detail: string }>(ADVANCE(name, this.o.anyHost)).catch(() => ({ phase: "loading" as Phase, detail: "The page is loading." }))) ?? { phase: "loading", detail: "" };
+    return (await this.run<{ phase: Phase; detail: string }>(this.dom.advance(name, !!this.o.anyHost)).catch(() => ({ phase: "loading" as Phase, detail: "The page is loading." }))) ?? { phase: "loading", detail: "" };
   }
 
   async captions(): Promise<CaptionItem[] | null> {
-    const r = await this.run<{ on: boolean; items: CaptionItem[] }>(CAPTIONS).catch(() => null);
+    const r = await this.run<{ on: boolean; items: CaptionItem[] }>(this.dom.captions).catch(() => null);
     return r && r.on ? r.items : null;
   }
 
   async enableCaptions(): Promise<void> {
     this.tries++;
-    if (this.tries % 2 === 0) {
-      // Ctrl+Shift+U switches live captions on or off in Teams
-      for (const type of ["rawKeyDown", "keyUp"]) await this.send("Input.dispatchKeyEvent", { type, modifiers: 10, key: "U", code: "KeyU", windowsVirtualKeyCode: 85 });
+    const k = this.dom.shortcut;
+    if (k && this.tries % 2 === 0) {
+      // the site's own keyboard shortcut switches live captions on or off
+      for (const type of ["rawKeyDown", "keyUp"]) await this.send("Input.dispatchKeyEvent", { type, modifiers: k.modifiers, key: k.key, code: k.code, windowsVirtualKeyCode: k.vk });
       await sleep(800);
       return;
     }
-    if (!(await this.run<boolean>(OPEN_MORE))) return;
-    await sleep(600);
-    if (!(await this.run<boolean>(CLICK_LANGUAGE))) return;
-    await sleep(600);
-    if (!(await this.run<boolean>(CLICK_CAPTIONS))) return;
-    await sleep(800);
-    await this.run<boolean>(CLICK_CONFIRM).catch(() => false); // it asks which language is spoken the first time
+    // the menu way: each step finds its button, and the last may be a question asked the first time (which language is spoken)
+    for (const [i, step] of this.dom.captionSteps.entries()) {
+      const found = await this.run<boolean>(step).catch(() => false);
+      if (!found && i < this.dom.captionSteps.length - 1) return;
+      await sleep(i < 2 ? 600 : 800);
+    }
   }
 
   async chat(text: string): Promise<boolean> {
     try {
-      if (!(await this.run<boolean>(FOCUS_CHAT))) return false;
+      if (!(await this.run<boolean>(this.dom.focusChat))) return false;
       await this.send("Input.insertText", { text: text.slice(0, 600) });
       await sleep(150);
       for (const type of ["rawKeyDown", "keyUp"]) await this.send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
@@ -132,7 +136,7 @@ export class ChromeMeetingPage implements MeetingPage {
   }
 
   async leave(): Promise<void> {
-    await this.run<boolean>(HANG_UP).catch(() => false);
+    await this.run<boolean>(this.dom.hangUp).catch(() => false);
     await sleep(500);
   }
 

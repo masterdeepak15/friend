@@ -55,7 +55,8 @@ async function boot(script: ConstructorParameters<typeof FakeProvider>[0], page:
   });
   const { port } = await app.start();
   await fetch(`http://127.0.0.1:${port}/api/setup`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "correct horse battery", pin: "123456", assistantName: "Maya" }) });
-  return { model, service: h.service!, store: h.store! };
+  const base = `http://127.0.0.1:${port}`;
+  return { model, service: h.service!, store: h.store!, base };
 }
 
 describe("a real Friend in a meeting", () => {
@@ -98,5 +99,21 @@ describe("a real Friend in a meeting", () => {
     const results = JSON.stringify(t.model.calls[1]!.messages);
     expect(results).toContain("not possible while handling a meeting");
     expect(t.store.list().filter((m) => m.url.endsWith("/999"))).toEqual([]); // no second meeting was joined
+  }, 30_000);
+
+  it("shows the meetings list and lets the owner make it leave, but only to someone signed in", async () => {
+    const page = new Page([[]]);
+    const t = await boot([[{ type: "done" }]], page);
+    expect((await fetch(`${t.base}/api/meetings`)).status).toBe(401);
+    const j = { "content-type": "application/json" };
+    const login = await fetch(`${t.base}/api/login`, { method: "POST", headers: j, body: JSON.stringify({ password: "correct horse battery" }) });
+    const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
+    const m = t.store.create({ url: "https://teams.live.com/meet/5", title: "Later", joinName: "Maya", startsAt: Date.now() + 3_600_000 });
+    const list = (await (await fetch(`${t.base}/api/meetings`, { headers: { cookie } })).json()) as { meetings: { id: number; host: string; status: string }[] };
+    expect(list.meetings[0]).toMatchObject({ id: m.id, host: "teams.live.com", status: "scheduled" });
+    const left = await fetch(`${t.base}/api/meetings/${m.id}/leave`, { method: "POST", headers: { cookie } });
+    expect(((await left.json()) as { message: string }).message).toMatch(/cancelled/);
+    expect((await fetch(`${t.base}/api/meetings/${m.id}`, { method: "DELETE", headers: { cookie } })).status).toBe(200);
+    expect(t.store.get(m.id)).toBeNull();
   }, 30_000);
 });

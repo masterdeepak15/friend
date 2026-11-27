@@ -1,7 +1,7 @@
 import { MEETING_TOOL_DEFS } from "@friend/protocol";
 import type { Audit } from "../audit";
 import type { AskOwner } from "../mail/service";
-import { isTeamsMeetingUrl } from "./logic";
+import { isMeetingUrl, normalizeMeetingUrl } from "./logic";
 import type { MeetingService } from "./service";
 import type { Meeting, MeetingStore } from "./store";
 
@@ -65,8 +65,9 @@ export class MeetingTools {
     if (ctx.inMeeting !== undefined && typeof a.id === "number" && a.id !== ctx.inMeeting) return bad("That is a different meeting.");
     switch (name) {
       case "meeting.join": {
-        const url = String(a.url);
-        if (!isTeamsMeetingUrl(url)) return bad("That is not a Microsoft Teams meeting link (https://teams.microsoft.com/... or https://teams.live.com/...). Only those are opened.");
+        const given = String(a.url);
+        if (!isMeetingUrl(given)) return bad("That is not a meeting link I can join: Microsoft Teams (teams.microsoft.com, teams.live.com), Google Meet (meet.google.com/abc-defg-hij) or Zoom (zoom.us/j/number). Only those are opened.");
+        const url = normalizeMeetingUrl(given);
         let at: number | undefined;
         if (typeof a.at === "string" && a.at) {
           at = Date.parse(a.at);
