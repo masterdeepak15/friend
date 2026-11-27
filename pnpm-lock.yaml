@@ -91,12 +91,21 @@ importers:
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
+      imapflow:
+        specifier: 2.11.0
+        version: 2.11.0
       just-bash:
         specifier: 3.6.0
         version: 3.6.0
+      mailparser:
+        specifier: 3.14.3
+        version: 3.14.3
       music-metadata:
         specifier: ^12.1.0
         version: 12.1.0
+      nodemailer:
+        specifier: 10.5.0
+        version: 10.5.0
       pptxgenjs:
         specifier: ^4.0.1
         version: 4.0.1
