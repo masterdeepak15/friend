@@ -1,0 +1,22 @@
+{
+  "name": "@friend/pc-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/main.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "bundle": "node scripts/bundle.mjs"
+  },
+  "dependencies": {
+    "@friend/protocol": "workspace:*",
+    "ws": "^8.22.0",
+    "@xterm/headless": "^5.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15"
+  }
+}
