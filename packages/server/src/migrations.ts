@@ -437,4 +437,74 @@ create table mail_drafts (
   created_at integer not null
 );`,
   },
+  {
+    id: 25,
+    sql: `create table mail_templates (
+  id integer primary key autoincrement,
+  name text not null unique collate nocase,
+  subject text not null,
+  body text not null,
+  created_at integer not null
+);
+create table mail_roles (
+  id integer primary key autoincrement,
+  account_id integer not null references mail_accounts (id) on delete cascade,
+  name text not null unique collate nocase,
+  guidelines text not null,
+  auto_answer integer not null default 0,
+  enabled integer not null default 1,
+  created_at integer not null
+);
+create table mail_rules (
+  id integer primary key autoincrement,
+  account_id integer not null references mail_accounts (id) on delete cascade,
+  name text not null,
+  conditions_json text not null,
+  action text not null,
+  role_id integer references mail_roles (id) on delete cascade,
+  enabled integer not null default 1,
+  created_at integer not null
+);
+create table mail_cases (
+  id integer primary key autoincrement,
+  account_id integer not null references mail_accounts (id) on delete cascade,
+  role_id integer references mail_roles (id) on delete set null,
+  thread_id text not null,
+  subject text not null,
+  from_addr text not null,
+  status text not null default 'open',
+  note text not null default '',
+  last_mail_id text not null default '',
+  created_at integer not null,
+  updated_at integer not null,
+  unique (account_id, thread_id)
+);
+create table mail_schedules (
+  id integer primary key autoincrement,
+  name text not null unique collate nocase,
+  kind text not null,
+  at text not null default '',
+  minutes integer not null default 0,
+  instruction text not null,
+  enabled integer not null default 1,
+  last_run integer not null default 0,
+  created_at integer not null
+);
+create table mail_watches (
+  id integer primary key autoincrement,
+  name text not null unique collate nocase,
+  kind text not null,
+  target text not null,
+  interval_sec integer not null,
+  expect_text text not null default '',
+  instruction text not null,
+  state text not null default 'unknown',
+  fails integer not null default 0,
+  last_check integer not null default 0,
+  last_change integer not null default 0,
+  detail text not null default '',
+  enabled integer not null default 1,
+  created_at integer not null
+);`,
+  },
 ];
