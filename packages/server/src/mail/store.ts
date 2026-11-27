@@ -243,6 +243,15 @@ export class MailStore {
     return (this.db.prepare("select count(*) as n from mail_sends where account_id = ? and result = 'sent' and created_at > ? and to_json like ? escape '\\'").get(accountId, since, like) as { n: number }).n;
   }
 
+  saveDraft(accountId: number, d: { to: string[]; subject: string; text: string; inReplyTo?: string }): number {
+    return Number(this.db.prepare("insert into mail_drafts (account_id, to_json, subject, body, in_reply_to, created_at) values (?,?,?,?,?,?)").run(accountId, JSON.stringify(d.to.map((a) => a.toLowerCase())), d.subject.slice(0, 300), d.text.slice(0, 20000), d.inReplyTo ?? "", this.clock()).lastInsertRowid);
+  }
+
+  listDrafts(accountId: number): MailDraft[] {
+    const rows = this.db.prepare("select * from mail_drafts where account_id = ? order by id desc").all(accountId) as { id: number; account_id: number; to_json: string; subject: string; body: string; in_reply_to: string; created_at: number }[];
+    return rows.map((r) => ({ id: r.id, accountId: r.account_id, to: parse<string[]>(r.to_json, []), subject: r.subject, text: r.body, inReplyTo: r.in_reply_to, createdAt: r.created_at }));
+  }
+
   /** An address this mailbox has written to, or heard from. Anyone else is a new recipient and needs an approval. */
   knownRecipient(accountId: number, address: string): boolean {
     const a = address.toLowerCase();
@@ -252,9 +261,19 @@ export class MailStore {
   }
 }
 
+export interface MailDraft {
+  id: number;
+  accountId: number;
+  to: string[];
+  subject: string;
+  text: string;
+  inReplyTo: string;
+  createdAt: number;
+}
+
 /** The mailbox login, kept sealed in the vault under `mail:<id>`: set once, never read back to a screen, a log or the assistant. */
 export class MailSecrets {
-  constructor(private readonly vault: OAuthVault) {}
+  constructor(private readonly vault: Pick<OAuthVault, "get" | "patch" | "forget">) {}
   private key = (id: number) => `mail:${id}`;
   set(id: number, secret: string): void {
     this.vault.patch(this.key(id), { secret });

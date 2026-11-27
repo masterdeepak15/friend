@@ -105,6 +105,12 @@ export const MAIL_TOOL_DEFS: ToolDef[] = [
 
 /** What the owner is told about a call: who, to whom, what subject. Never the body. */
 export function describeMailCall(name: string, a: Record<string, unknown>): string {
+  const base = describeBase(name, a);
+  return typeof a.reason === "string" && a.reason ? `${base}. ${a.reason}${typeof a.detail === "string" && a.detail ? `:
+${a.detail.slice(0, 1200)}` : ""}` : base;
+}
+
+function describeBase(name: string, a: Record<string, unknown>): string {
   const q = (v: unknown, n = 200) => String(v ?? "").slice(0, n);
   const box = typeof a.account === "string" && a.account ? ` from ${q(a.account, 60)}` : "";
   const to = Array.isArray(a.to) ? a.to.map((t) => q(t, 120)).join(", ") : "";

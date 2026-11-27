@@ -71,6 +71,8 @@ export interface Config {
   chrome: ChromeConfig;
   /** Windows PCs the assistant can use like a person (a plugin the owner installs and switches on). */
   pcs: PcsConfig;
+  /** Mailboxes the assistant and its workers can read and write from (a plugin the owner installs and switches on). */
+  mail: MailConfig;
   /** Playing videos from the internet (YouTube and other sites), on the screen or in a PC window. */
   video: VideoConfig;
   /** The safe browser: a private, throwaway Chrome the assistant can read and photograph a public page with. */
@@ -160,6 +162,12 @@ export interface ChromeConfig {
 
 /** The Windows PCs plugin: installed from the plugins screen, then switched on. The PCs themselves are kept in the database. */
 export interface PcsConfig {
+  installed: boolean;
+  enabled: boolean;
+}
+
+/** The Mailboxes plugin: installed from the plugins screen, then switched on. The mailboxes themselves are kept in the database, their logins in the vault. */
+export interface MailConfig {
   installed: boolean;
   enabled: boolean;
 }
@@ -284,6 +292,11 @@ export function sanitizeVideo(raw: unknown): VideoConfig {
 export function sanitizeChrome(raw: unknown): ChromeConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true, remote: r.remote === true };
+}
+
+export function sanitizeMail(raw: unknown): MailConfig {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true };
 }
 
 export function sanitizePcs(raw: unknown): PcsConfig {
@@ -1067,6 +1080,7 @@ const defaults = (dataDir: string): Config => ({
   music: sanitizeMusic({}),
   chrome: sanitizeChrome({}),
   pcs: sanitizePcs({}),
+  mail: sanitizeMail({}),
   video: sanitizeVideo({}),
   browser: sanitizeBrowser({}),
   hud: sanitizeHud({}),
@@ -1161,6 +1175,7 @@ export function loadConfig(dataDir: string = defaultDataDir()): Config {
     music: sanitizeMusic(stored.music),
     chrome: sanitizeChrome(stored.chrome),
     pcs: sanitizePcs(stored.pcs),
+    mail: sanitizeMail(stored.mail),
     video: sanitizeVideo(stored.video),
     browser: sanitizeBrowser(stored.browser),
     hud: sanitizeHud(stored.hud),

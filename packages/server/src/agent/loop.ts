@@ -26,6 +26,7 @@ import type { Memory } from "../memory";
 import type { DeckStore } from "../deck/store";
 import type { Presenter } from "../deck/presenter";
 import type { PcTools, PreparedPc } from "../pc/tools";
+import { mailAuditArgs, type MailTools, type PreparedMail } from "../mail/tools";
 import { runDeckTool } from "../deck/tools";
 import { MemoryTree, capIndex, inboxName } from "../memory/tree";
 import type { Soul } from "../memory/soul";
@@ -152,6 +153,8 @@ export interface AgentDeps {
   /** Presentations: the saved decks, the player and the export. Without it the deck tools report they are unavailable. */
   /** The Windows PCs: the assistant's pc.* tools. Without it they report they are unavailable. */
   pcs?: PcTools;
+  /** The mailboxes: the assistant's email.* tools. Without it they report they are unavailable. */
+  mail?: MailTools;
   decks?: { store: DeckStore; presenter: Presenter; exportDeck(id: string, format: "pptx" | "html"): Promise<string> };
   /** The tools of the owner's connectors (Gmail, Chrome control, …). Without it there are none. */
   mcp?: McpApi;
@@ -833,6 +836,19 @@ export class Agent {
       pcPrep = prep;
       tier = prep.tier;
     }
+    // a mailbox: only the owner; the plugin must be on, and the mailbox's own approval ladder decides what asks
+    let mailPrep: PreparedMail | null = null;
+    if (call.name.startsWith("email.")) {
+      if (!d.mail) return fail("Mailboxes are not available.");
+      if (ctx.trust !== "owner") return fail("Only the owner can use the mailboxes.");
+      const prep = d.mail.prepare(call.name, args, { cause: ctx.source === "mail" ? "owner-order" : "owner-chat" });
+      if ("error" in prep) {
+        rec.outcome = "refused";
+        return fail(prep.error);
+      }
+      mailPrep = prep;
+      tier = prep.tier;
+    }
     const p = pathArg(call.name, args);
     // a page the model chose by itself (an address nobody said and no search returned) could be a way to send private data out in the
     // address, so it is asked about like anything else outside what the owner has allowed
@@ -914,6 +930,20 @@ export class Agent {
         return fail(`The owner did not approve this action (${outcome.reason ?? "denied"}).`);
       }
       approvedOutside = !insideRoots;
+    }
+
+    if (mailPrep) {
+      const r = await mailPrep.run(async (reason, detail) => {
+        d.decks?.presenter.approvalPending(true);
+        const { text: _body, note: _note, ...shownArgs } = args;
+        const o = await d.approvals
+          .request({ tool: call.name, args: { ...shownArgs, reason, detail }, tier: "T2", needsPin: false, device: null, remote: ctx.trust !== "voice-device" }, ctx.emit)
+          .finally(() => d.decks?.presenter.approvalPending(false));
+        if (!o.approved) d.audit.log("agent", "tool.not_approved", { tool: call.name, reason: o.reason });
+        return o.approved;
+      }, signal);
+      d.audit.log("agent", "tool.call", { tool: call.name, args: mailAuditArgs(args), tier, ok: !r.isError });
+      return r.isError ? fail(r.text) : { text: r.text, isError: false };
     }
 
     if (pcPrep) {

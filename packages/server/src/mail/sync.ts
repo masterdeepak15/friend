@@ -64,7 +64,8 @@ export class MailSync {
     return run;
   }
 
-  private async provider(accountId: number): Promise<MailProvider> {
+  /** The provider for a mailbox, opened once and kept. */
+  async use(accountId: number): Promise<MailProvider> {
     let p = this.providers.get(accountId);
     if (!p) {
       p = await this.d.open(accountId);
@@ -82,7 +83,7 @@ export class MailSync {
     const account = store.getAccount(accountId);
     if (!account || !account.enabled || account.status === "needs-sign-in") return;
     try {
-      const p = await this.provider(accountId);
+      const p = await this.use(accountId);
       await p.connect();
       for (;;) {
         const fresh = store.getAccount(accountId)!;

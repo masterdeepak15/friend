@@ -895,7 +895,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "stage.guide",
     description:
       "Read the screen manual: every widget with its props and an example, how to arrange things, when to put something on top (layer overlay) or clear the screen, the theme, files and recipes. Call it before building a screen you have not built before, or when unsure. topic: all (default), widgets, layout, overlay, theme, files or recipes.",
-    input: z.object({ topic: z.enum(["all", "widgets", "layout", "overlay", "theme", "files", "recipes", "presentations", "pcs"]).optional() }),
+    input: z.object({ topic: z.enum(["all", "widgets", "layout", "overlay", "theme", "files", "recipes", "presentations", "pcs", "mail"]).optional() }),
     baseTier: "T0",
     target: "gateway",
   },

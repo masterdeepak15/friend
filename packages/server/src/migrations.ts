@@ -426,6 +426,15 @@ create table mail_sends (
   result text not null,
   created_at integer not null
 );
-create index mail_sends_account on mail_sends (account_id, created_at);`,
+create index mail_sends_account on mail_sends (account_id, created_at);
+create table mail_drafts (
+  id integer primary key autoincrement,
+  account_id integer not null references mail_accounts (id) on delete cascade,
+  to_json text not null,
+  subject text not null,
+  body text not null,
+  in_reply_to text not null default '',
+  created_at integer not null
+);`,
   },
 ];

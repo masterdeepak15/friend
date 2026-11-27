@@ -95,7 +95,7 @@ describe("replies", () => {
 
   it("are never sent to bulk, automatic or no-reply mail", async () => {
     const r = rig();
-    for (const m of [{ from: { address: "no-reply@shop.com" } }, { from: { address: "news@shop.com" }, headers: { "list-unsubscribe": "<mailto:u@x>", "message-id": "<n@x>" } }, { from: { address: "x@y.com" }, headers: { "auto-submitted": "auto-replied", "message-id": "<a@x>" } }]) {
+    for (const m of [{ from: { address: "no-reply@shop.com" } }, { from: { address: "news@shop.com" }, headers: { "list-unsubscribe": "<mailto:u@x>", "message-id": "<n@x>" } }, { from: { address: "x@y.com" }, headers: { "auto-submitted": "auto-replied", "message-id": "<a@x>" } }] as (Partial<MailMessage> & { from: MailMessage["from"] })[]) {
       const id = r.keep(m);
       const res = await r.svc.send(r.account.id, { kind: "reply", to: [m.from.address], subject: "s", text: "t", inReplyToId: id }, { cause: "owner-chat" }, r.ask);
       expect(res).toMatchObject({ ok: false, reason: expect.stringMatching(/automatic|bulk/i) });

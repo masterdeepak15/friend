@@ -41,7 +41,7 @@ const lower = (a: string) => a.trim().toLowerCase();
 export class MailService {
   constructor(private readonly d: MailServiceDeps) {}
 
-  async send(accountId: number, req: SendRequest, ctx: { cause: SendCause; inboundFrom?: string }, ask: AskOwner): Promise<SendResult> {
+  async send(accountId: number, req: SendRequest, ctx: { cause: SendCause; inboundFrom?: string; tainted?: boolean }, ask: AskOwner): Promise<SendResult> {
     const { store, audit } = this.d;
     const account = store.getAccount(accountId);
     if (!account) return { ok: false, reason: "There is no such mailbox." };
@@ -72,7 +72,7 @@ export class MailService {
     for (const t of to) if (!owners.has(t) && store.countSends(accountId, HOUR, t) >= PER_PERSON_PER_HOUR) return refuse(`Too many mails to ${t} in the last hour.`);
 
     const known = to.every((t) => owners.has(t) || store.knownRecipient(accountId, t));
-    const mustAsk = account.ladder[req.kind] !== "auto" || !known || ctx.cause === "inbound-other";
+    const mustAsk = account.ladder[req.kind] !== "auto" || !known || ctx.cause === "inbound-other" || ctx.tainted === true;
     let approver: "owner" | "auto" = "auto";
     if (mustAsk) {
       const detail = `From ${account.name} <${account.address}>\nTo: ${to.join(", ")}${req.cc?.length ? `\nCc: ${req.cc.join(", ")}` : ""}\nSubject: ${req.subject}\n\n${req.text.slice(0, 800)}${req.text.length > 800 ? "\n…" : ""}`;
