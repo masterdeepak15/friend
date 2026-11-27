@@ -1,6 +1,6 @@
 # Many PCs, one assistant: the PC agents plugin
 
-Status: awaiting owner approval. Size: a project. Built after the OAuth design (it reuses its approval link).
+Status: **superseded by `2026-11-27-windows-pcs-design.md`** (the owner replaced the PC agents idea with a Windows PCs plugin that operates the PC like a person). Kept for its permission model, which the new design reuses.
 
 ## Why
 
