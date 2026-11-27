@@ -1,4 +1,5 @@
 import { isAutomatic, wrapUntrusted, type MailClass, type MailMessage } from "@friend/protocol";
+import { hasNewWords, threadKey } from "./closing";
 import type { Audit } from "../audit";
 import { MailAuthError, type MailProvider } from "./provider";
 import type { MailStore } from "./store";
@@ -26,6 +27,8 @@ export interface MailServiceDeps {
   store: MailStore;
   provider: (accountId: number) => Promise<MailProvider>;
   audit: Audit;
+  /** The most answers one conversation (same person, same subject) gets in a day: a setting, 3 unless changed. */
+  maxRepliesPerThread?: () => number;
 }
 
 const HOUR = 3600_000;
@@ -41,7 +44,7 @@ const lower = (a: string) => a.trim().toLowerCase();
 export class MailService {
   constructor(private readonly d: MailServiceDeps) {}
 
-  async send(accountId: number, req: SendRequest, ctx: { cause: SendCause; inboundFrom?: string; tainted?: boolean; roleAuto?: boolean }, ask: AskOwner): Promise<SendResult> {
+  async send(accountId: number, req: SendRequest, ctx: { cause: SendCause; inboundFrom?: string; tainted?: boolean; roleAuto?: boolean; why?: string }, ask: AskOwner): Promise<SendResult> {
     const { store, audit } = this.d;
     const account = store.getAccount(accountId);
     if (!account) return { ok: false, reason: "There is no such mailbox." };
@@ -65,7 +68,15 @@ export class MailService {
     if (req.kind === "reply" || req.kind === "forward") {
       original = req.inReplyToId ? store.getMessage(accountId, req.inReplyToId) : null;
       if (!original) return refuse("I cannot find the mail to answer.");
-      if (req.kind === "reply" && isAutomatic(original)) return refuse("That is automatic or bulk mail (a newsletter, a no-reply address or a robot). It is never answered.");
+      if (req.kind === "reply" && isAutomatic(original)) return refuse("That is automatic or bulk mail (a newsletter, a no-reply address, an automatic answer, a delivery notice or a robot). It is never answered.");
+      // knowing when to stop: what needs an answer is the model's judgement (it must say why); code only holds the structural limits
+      if (req.kind === "reply" && !owners.has(lower(original.from.address))) {
+        if (!hasNewWords(original.text)) return refuse("That mail holds nothing new to answer (only the earlier mail quoted back).");
+        if (ctx.cause === "inbound-other" && (ctx.why ?? "").trim().length < 8) return refuse("Say why this mail needs an answer from you (a question, a request, a decision) in `why`. If it only thanks, confirms or ends the conversation, do not reply: close the case with a note instead.");
+        const cap = Math.max(1, this.d.maxRepliesPerThread?.() ?? 3);
+        const to1 = to[0] ?? lower(original.from.address);
+        if (store.countSendsAbout(accountId, 24 * HOUR, to1, threadKey(original.subject)) >= cap) return refuse(`I have already answered ${cap} times in this conversation today. It can go on in a day, or the owner can take over.`);
+      }
     }
 
     if (store.countSends(accountId, HOUR) >= PER_MAILBOX_PER_HOUR) return refuse("Too many mails from this mailbox in the last hour.");

@@ -79,7 +79,7 @@ describe("sending", () => {
     const r = rig();
     r.store.updateAccount(r.account.id, { ladder: { send: "auto", reply: "auto", forward: "ask" } });
     const id = r.keep({ from: { address: "cust@y.com" } });
-    const res = await r.svc.send(r.account.id, { kind: "reply", to: ["cust@y.com"], subject: "Question", text: "Here you go", inReplyToId: id }, { cause: "inbound-other", inboundFrom: "cust@y.com" }, r.ask);
+    const res = await r.svc.send(r.account.id, { kind: "reply", to: ["cust@y.com"], subject: "Question", text: "Here you go", inReplyToId: id }, { cause: "inbound-other", inboundFrom: "cust@y.com", why: "The customer asked a question" }, r.ask);
     expect(res).toMatchObject({ ok: true, approver: "owner" });
     expect(r.ask).toHaveBeenCalledTimes(1);
   });
@@ -173,7 +173,7 @@ describe("what to do with a mail that arrived", () => {
 });
 
 describe("a role that may answer by itself", () => {
-  const ctx = { cause: "inbound-other" as const, inboundFrom: "cust@y.com", roleAuto: true, tainted: true };
+  const ctx = { cause: "inbound-other" as const, inboundFrom: "cust@y.com", roleAuto: true, tainted: true, why: "The customer asked a question" };
   it("answers the person who wrote without asking, and nobody else", async () => {
     const r = rig();
     const id = r.keep({ from: { address: "cust@y.com" }, subject: "Invoice" });

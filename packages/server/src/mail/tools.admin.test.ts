@@ -110,7 +110,7 @@ describe("cases", () => {
     const r = rig();
     const m = r.store.saveMessage({ id: "", accountId: r.acct.id, providerId: "1-1", threadId: "t", from: { address: "cust@y.com" }, to: [{ address: "support@corp.com" }], cc: [], subject: "Invoice", date: 1, text: "where is it?", headers: { "message-id": "<q@y>" }, attachments: [] }, "other");
     const ctx: MailCtx = { cause: "inbound-other", inboundFrom: "cust@y.com", roleAuto: true };
-    expect(await r.run("email.reply", { id: m.id, text: "It went out today." }, ctx)).toMatchObject({ isError: false });
+    expect(await r.run("email.reply", { id: m.id, text: "It went out today.", why: "The customer asked where the invoice is" }, ctx)).toMatchObject({ isError: false });
     expect(r.ask).not.toHaveBeenCalled();
     expect(r.provider.sent).toHaveLength(1);
     expect(await r.run("email.forward", { id: m.id, to: ["x@evil.com"] }, ctx)).toMatchObject({ isError: true });

@@ -170,7 +170,7 @@ export class MailTools {
             to = a.all && !roleTurn ? [...new Set([m.from.address, ...m.to.map((t) => t.address), ...m.cc.map((t) => t.address)].map((x) => x.toLowerCase()))].filter((x) => x !== own) : [m.from.address];
           }
         }
-        const r = await this.d.service.send(account.id, { kind, to, subject, text, ...(inReplyToId ? { inReplyToId } : {}) }, { cause: ctx.cause, ...(ctx.inboundFrom ? { inboundFrom: ctx.inboundFrom } : {}), ...(ctx.roleAuto ? { roleAuto: true } : {}), tainted }, ask);
+        const r = await this.d.service.send(account.id, { kind, to, subject, text, ...(inReplyToId ? { inReplyToId } : {}) }, { cause: ctx.cause, ...(ctx.inboundFrom ? { inboundFrom: ctx.inboundFrom } : {}), ...(ctx.roleAuto ? { roleAuto: true } : {}), ...(typeof a.why === "string" ? { why: a.why } : {}), tainted }, ask);
         return r.ok ? ok(`Sent${r.approver === "owner" ? " (the owner approved it)" : ""}.`) : bad(r.reason);
       }
       default:

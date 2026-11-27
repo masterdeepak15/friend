@@ -83,3 +83,13 @@ Say: "Make support@example.com answer billing questions." Friend adds the mailbo
 ## Later
 
 Pages for roles and cases in the Mailboxes screen (today you see and change them by asking Friend), and sign-in with Google or Microsoft instead of an app password. See `docs/superpowers/specs/2026-11-27-agent-mailboxes-design.md`.
+
+## Knowing when to stop
+
+Friend answers a mail only when it needs an answer, and the judgement is the model's own, not a list of words: before it answers mail from someone else it decides whether there is a question, a request or a decision, and it must say why in one line (the why of email.reply; an answer with no reason is refused). A mail that only thanks, confirms, informs or ends the conversation gets no answer: the case is closed with a note. Answers never end with an invitation to write more, so a conversation can end.
+
+What code holds on to, whatever the model decides (structural limits, no word lists):
+
+- Mail that marks itself automatic (a list, a bulk or auto-reply header, a bounce, a no-reply sender) is never answered, and neither is a mail with nothing new in it (only the earlier mail quoted back).
+- **One conversation (same person, same subject) gets at most 3 answers a day**, then it is left to you. This is the setting mail.maxRepliesPerThread (1 to 10) in the config file.
+- At most 3 mails an hour to one person and 30 an hour from one mailbox, as before. Every answer from Friend carries the auto-submitted mark, so another Friend or a mail server does not answer it either.

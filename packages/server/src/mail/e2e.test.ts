@@ -25,7 +25,7 @@ async function boot(script: ConstructorParameters<typeof FakeProvider>[0], handl
   const dir = mkdtempSync(join(tmpdir(), "friend-maile2e-"));
   const model = new FakeProvider(script);
   const box = new FakeMailProvider();
-  app = await createApp({ dataDir: dir, provider: model, config: { port: 0, roots: [], mail: { installed: true, enabled: true } }, pluginCatalogDir: join(dir, "none"), mailCheck: async () => {}, mailProvider: () => box, ...(handles ? { mailHandles: handles } : {}) });
+  app = await createApp({ dataDir: dir, provider: model, config: { port: 0, roots: [], mail: { installed: true, enabled: true, maxRepliesPerThread: 3 } }, pluginCatalogDir: join(dir, "none"), mailCheck: async () => {}, mailProvider: () => box, ...(handles ? { mailHandles: handles } : {}) });
   const { port } = await app.start();
   const base = `http://127.0.0.1:${port}`;
   const j = { "content-type": "application/json" };
@@ -81,7 +81,7 @@ describe("a role handling mail from customers", () => {
 
   it("answers the customer by itself when the owner allowed it, and keeps the case", async () => {
     const s = seed(true);
-    const t = await boot([[{ type: "tool_call", id: "1", name: "email.reply", args: { id: "1", text: "Your invoice 42 went out today." } }], [{ type: "tool_call", id: "2", name: "email.case", args: { action: "update", status: "done", note: "Sent invoice 42" } }], [{ type: "done" }]], s.handles);
+    const t = await boot([[{ type: "tool_call", id: "1", name: "email.reply", args: { id: "1", text: "Your invoice 42 went out today.", why: "The customer asked about invoice 42" } }], [{ type: "tool_call", id: "2", name: "email.case", args: { action: "update", status: "done", note: "Sent invoice 42" } }], [{ type: "done" }]], s.handles);
     const h = s.set();
     t.box.deliver(customer);
     await until(() => t.box.sent.length === 1);

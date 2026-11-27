@@ -178,6 +178,8 @@ export interface MeetingsConfig {
 export interface MailConfig {
   installed: boolean;
   enabled: boolean;
+  /** The most answers one conversation (same person, same subject) gets in a day before it is left to the owner. */
+  maxRepliesPerThread: number;
 }
 
 export interface MusicConfig {
@@ -304,7 +306,8 @@ export function sanitizeChrome(raw: unknown): ChromeConfig {
 
 export function sanitizeMail(raw: unknown): MailConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true };
+  const cap = typeof r.maxRepliesPerThread === "number" && Number.isFinite(r.maxRepliesPerThread) ? Math.max(1, Math.min(10, Math.round(r.maxRepliesPerThread))) : 3;
+  return { installed: r.installed === true || (r.installed === undefined && r.enabled === true), enabled: r.enabled === true, maxRepliesPerThread: cap };
 }
 
 export function sanitizeMeetings(raw: unknown): MeetingsConfig {

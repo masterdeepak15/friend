@@ -33,7 +33,7 @@ describe("Mailboxes as a plugin on the plugins screen", () => {
     expect(changeMail(c.mail, { enabled: true })).toBeNull();
     expect(card(c)).toMatchObject({ enabled: true, state: "needs-setup", detail: expect.stringMatching(/Add a mailbox/) });
     expect(changeMail(c.mail, { remove: true })).toBeNull();
-    expect(c.mail).toEqual({ installed: false, enabled: false });
+    expect(c.mail).toMatchObject({ installed: false, enabled: false });
   });
 
   it("shows how many mailboxes work, and asks to fix a refused password", () => {
@@ -73,7 +73,7 @@ describe("the mailbox routes", () => {
     expect((await t.api("/api/mail/accounts", t.body({ ...account, password: "pw", pin: owner.pin }))).status).toBe(409);
     await install(t);
     expect((await t.api("/api/mail/accounts")).status).toBe(200);
-    expect(loadConfig(t.dir).mail).toEqual({ installed: true, enabled: true });
+    expect(loadConfig(t.dir).mail).toMatchObject({ installed: true, enabled: true });
   });
 
   it("add a mailbox with the PIN after its login was tried, and never give the password back", async () => {

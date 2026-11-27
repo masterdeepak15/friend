@@ -243,6 +243,14 @@ export class MailStore {
     return (this.db.prepare("select count(*) as n from mail_sends where account_id = ? and result = 'sent' and created_at > ? and to_json like ? escape '\\'").get(accountId, since, like) as { n: number }).n;
   }
 
+  /** How many mails went to one address about one conversation (the subject without Re: in front) in the last `windowMs`. */
+  countSendsAbout(accountId: number, windowMs: number, to: string, subjectKey: string): number {
+    const since = this.clock() - windowMs;
+    const like = `%"${to.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}"%`;
+    const subj = `%${subjectKey.replace(/[\\%_]/g, (c) => `\\${c}`)}`;
+    return (this.db.prepare("select count(*) as n from mail_sends where account_id = ? and result = 'sent' and created_at > ? and to_json like ? escape '\\' and lower(subject) like ? escape '\\'").get(accountId, since, like, subj) as { n: number }).n;
+  }
+
   saveDraft(accountId: number, d: { to: string[]; subject: string; text: string; inReplyTo?: string }): number {
     return Number(this.db.prepare("insert into mail_drafts (account_id, to_json, subject, body, in_reply_to, created_at) values (?,?,?,?,?,?)").run(accountId, JSON.stringify(d.to.map((a) => a.toLowerCase())), d.subject.slice(0, 300), d.text.slice(0, 20000), d.inReplyTo ?? "", this.clock()).lastInsertRowid);
   }
