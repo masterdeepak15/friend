@@ -1,9 +1,4 @@
-import { execFile } from "node:child_process";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { Line } from "./logic";
-import { pcmToWav } from "./speech";
 
 /** Turns 16 kHz 16-bit mono sound into the words in it. */
 export type Transcriber = (pcm: Buffer) => Promise<string>;
@@ -109,49 +104,4 @@ export class AudioHearing {
       this.busy = false;
     }
   }
-}
-
-export interface WhisperOptions {
-  exe: string;
-  model: string;
-  /** Where the short sound files are written while they are read; deleted at once. */
-  tmpRoot?: string;
-  language?: string;
-  /** Tests: stands in for starting the program. */
-  run?: (exe: string, args: string[]) => Promise<string>;
-}
-
-/** What is wrong with a whisper.cpp setup, or null when both files are there. */
-export function checkWhisper(exe: string, model: string): string | null {
-  const file = (p: string) => {
-    try {
-      return statSync(p).isFile();
-    } catch {
-      return false;
-    }
-  };
-  if (!exe || !file(exe)) return "The whisper program was not found at that path.";
-  if (!model || !file(model)) return "The whisper model file was not found at that path.";
-  return null;
-}
-
-/** whisper.cpp (free, runs on this PC, no account): `whisper-cli -m model -f sound.wav -nt -np`. */
-export function whisperTranscriber(o: WhisperOptions): Transcriber {
-  const run =
-    o.run ??
-    ((exe, args) =>
-      new Promise<string>((resolve, reject) => {
-        execFile(exe, args, { timeout: 90_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (e, out) => (e ? reject(e) : resolve(out)));
-      }));
-  return async (pcm) => {
-    const dir = mkdtempSync(join(o.tmpRoot ?? tmpdir(), "friend-hear-"));
-    try {
-      const wav = join(dir, "in.wav");
-      writeFileSync(wav, pcmToWav(pcm, RATE));
-      const out = await run(o.exe, ["-m", o.model, "-f", wav, "-nt", "-np", "-l", o.language ?? "auto"]);
-      return out;
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  };
 }

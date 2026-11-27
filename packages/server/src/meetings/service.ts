@@ -20,7 +20,7 @@ export interface MeetingServiceDeps {
   tellOwner: (text: string, title?: string) => void;
   /** The voice to speak with when the owner has switched speaking aloud on, or null. */
   speech?: () => Speech | null;
-  /** Something that reads the sound of a call when it has no captions (whisper.cpp set up by the owner), or null. */
+  /** Something that reads the sound of a call when it has no captions (the voice engine), or null. */
   hearing?: () => AudioHearing | null;
   now?: () => number;
   /** Tests make the waits short. */

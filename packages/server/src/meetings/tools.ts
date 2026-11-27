@@ -1,7 +1,6 @@
 import { MEETING_TOOL_DEFS } from "@friend/protocol";
 import type { Audit } from "../audit";
 import type { AskOwner } from "../mail/service";
-import { checkWhisper } from "./hearing";
 import { isMeetingUrl, normalizeMeetingUrl } from "./logic";
 import type { MeetingService } from "./service";
 import type { Meeting, MeetingStore } from "./store";
@@ -95,10 +94,8 @@ export class MeetingTools {
       case "meeting.setup": {
         const p = store.prefs();
         const change: Record<string, unknown> = {};
-        for (const k of ["names", "ownerNames", "keywords", "joinName", "notesEveryMinutes", "speak", "whisperExe", "whisperModel"] as const) if (a[k] !== undefined) change[k] = a[k];
-        const hear = checkWhisperChange(change, p);
-        if (hear) return bad(hear);
-        if (!Object.keys(change).length) return ok(`Answers to: ${[...p.names].join(", ") || "its own name only"}. Owner's names: ${p.ownerNames.join(", ") || "not set"}. Topics: ${p.keywords.join(", ") || "none"}. Joins as: ${p.joinName || "its own name"}. Notes every ${p.notesEveryMinutes} minutes. Speaks aloud: ${p.speak ? "yes" : "no"}. Hears without captions: ${p.whisperExe && p.whisperModel ? "yes (whisper.cpp)" : "no"}.`);
+        for (const k of ["names", "ownerNames", "keywords", "joinName", "notesEveryMinutes", "speak"] as const) if (a[k] !== undefined) change[k] = a[k];
+        if (!Object.keys(change).length) return ok(`Answers to: ${[...p.names].join(", ") || "its own name only"}. Owner's names: ${p.ownerNames.join(", ") || "not set"}. Topics: ${p.keywords.join(", ") || "none"}. Joins as: ${p.joinName || "its own name"}. Notes every ${p.notesEveryMinutes} minutes. Speaks aloud: ${p.speak ? "yes" : "no"}.`);
         if (!(await ask("Change meeting settings", Object.entries(change).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("\n")))) return bad("The owner declined.");
         store.setPrefs(change);
         return ok("Saved.");
@@ -121,13 +118,4 @@ export class MeetingTools {
         return bad(`Unknown tool: ${name}`);
     }
   }
-}
-
-/** A whisper program and model the owner names must be real files, both set together. */
-function checkWhisperChange(change: Record<string, unknown>, now: { whisperExe: string; whisperModel: string }): string | null {
-  if (change.whisperExe === undefined && change.whisperModel === undefined) return null;
-  const exe = typeof change.whisperExe === "string" ? change.whisperExe : now.whisperExe;
-  const model = typeof change.whisperModel === "string" ? change.whisperModel : now.whisperModel;
-  if (!exe && !model) return null; // switching it off
-  return checkWhisper(exe, model);
 }

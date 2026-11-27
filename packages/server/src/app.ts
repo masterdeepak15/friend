@@ -101,8 +101,8 @@ import { MeetingService } from "./meetings/service";
 import { findMeetingLink } from "./meetings/logic";
 import { MeetingStore } from "./meetings/store";
 import { MeetingTools } from "./meetings/tools";
-import { AudioHearing, checkWhisper, whisperTranscriber } from "./meetings/hearing";
-import { systemSpeech } from "./meetings/speech";
+import { AudioHearing } from "./meetings/hearing";
+import { pcmToWav, systemSpeech } from "./meetings/speech";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import { StatsSampler, startStatsFeed } from "./hudStats";
@@ -1059,12 +1059,27 @@ export async function createApp(opts: AppOptions) {
       return chrome ? new ChromeMeetingPage({ chrome, tmpRoot: join(opts.dataDir, "browser-profiles") }) : null;
     },
     ...(opts.meetingTuning ? { tuning: opts.meetingTuning } : {}),
-    speech: () => (opts.meetingVoice && "speech" in opts.meetingVoice ? opts.meetingVoice.speech ?? null : systemSpeech()),
+    // the voice of the meeting is the voice Friend already has (the same speech engine as the app): it speaks the answers and reads the sound of the call when there are no captions; this PC's own voice is only the fallback for speaking
+    speech: () => {
+      if (opts.meetingVoice && "speech" in opts.meetingVoice) return opts.meetingVoice.speech ?? null;
+      const own = systemSpeech();
+      return async (text) => {
+        const v = opts.voice;
+        if (v?.available()) {
+          try {
+            return await v.synthesize(text, config.voice.ttsVoice);
+          } catch {
+            /* the engine failed: this PC's voice instead */
+          }
+        }
+        return own(text);
+      };
+    },
     hearing: () => {
       if (opts.meetingVoice?.hearing) return opts.meetingVoice.hearing();
-      const p = meetingStore.prefs();
-      if (!p.whisperExe || !p.whisperModel || checkWhisper(p.whisperExe, p.whisperModel)) return null;
-      return new AudioHearing({ transcribe: whisperTranscriber({ exe: p.whisperExe, model: p.whisperModel, tmpRoot: join(opts.dataDir, "tmp") }) });
+      const v = opts.voice;
+      if (!v?.available()) return null;
+      return new AudioHearing({ transcribe: async (pcm) => (await v.transcribe(pcmToWav(pcm, 16000), "audio/wav", config.voice.language)).text });
     },
     tellOwner: (text, title) => void tellOwner(text, title ?? "Meeting"),
     runTurn: async (prompt, c) => {

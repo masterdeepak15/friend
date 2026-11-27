@@ -32,12 +32,9 @@ export interface MeetingPrefs {
   notesEveryMinutes: number;
   /** Answer aloud when called by name (in a computer voice); on unless the owner turns it off. If speaking fails it writes in the chat. */
   speak: boolean;
-  /** The whisper.cpp program and model on this PC: used to hear the meeting when it has no live captions. */
-  whisperExe: string;
-  whisperModel: string;
 }
 
-export const DEFAULT_PREFS: MeetingPrefs = { names: [], ownerNames: [], keywords: [], joinName: "", notesEveryMinutes: 5, speak: true, whisperExe: "", whisperModel: "" };
+export const DEFAULT_PREFS: MeetingPrefs = { names: [], ownerNames: [], keywords: [], joinName: "", notesEveryMinutes: 5, speak: true };
 
 interface Row {
   id: number;
@@ -154,7 +151,6 @@ export class MeetingStore {
       const v = parse<unknown>(r.value, null);
       if (r.key === "joinName" && typeof v === "string") out.joinName = v;
       else if (r.key === "speak" && typeof v === "boolean") out.speak = v;
-      else if ((r.key === "whisperExe" || r.key === "whisperModel") && typeof v === "string") out[r.key] = v;
       else if (r.key === "notesEveryMinutes" && typeof v === "number") out.notesEveryMinutes = Math.max(2, Math.min(30, Math.round(v)));
       else if ((r.key === "names" || r.key === "ownerNames" || r.key === "keywords") && Array.isArray(v)) out[r.key] = v.filter((x): x is string => typeof x === "string");
     }

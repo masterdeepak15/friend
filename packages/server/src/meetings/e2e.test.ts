@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import { FakeProvider } from "../provider/fake";
+import { FakeVoice } from "../voice/service";
 import type { CaptionItem } from "./logic";
 import type { MeetingService } from "./service";
 import type { MeetingPage, Phase } from "./session";
@@ -29,7 +30,7 @@ class Page implements MeetingPage {
   async advance() {
     return { phase: (this.n++ > 40 ? "ended" : "in") as Phase, detail: "" };
   }
-  async captions() {
+  async captions(): Promise<CaptionItem[] | null> {
     return this.frames.length > 1 ? this.frames.shift()! : (this.frames[0] ?? []);
   }
   async enableCaptions() {}
@@ -167,27 +168,39 @@ describe("a real Friend that answers aloud", () => {
     expect(page.played).toBe(0);
   }, 30_000);
 
-  it("only accepts a whisper program and model that are real files, and saves them once the owner agrees", async () => {
-    const t = await boot([[{ type: "done" }]], new Page([[]]));
-    const tools = new MeetingTools({ service: t.service, store: t.store, audit: undefined as never, enabled: () => true });
-    const run = async (args: Record<string, unknown>, yes = true) => {
-      const p = tools.prepare("meeting.setup", args);
-      if ("error" in p) throw new Error(p.error);
-      return p.run(async () => yes, new AbortController().signal);
-    };
-    t.store.setPrefs({ speak: false });
-    const dir = mkdtempSync(join(tmpdir(), "friend-wh-"));
-    expect(await run({ whisperExe: join(dir, "nope.exe"), whisperModel: join(dir, "m.bin") })).toMatchObject({ isError: true, text: expect.stringMatching(/program was not found/) });
-    writeFileSync(join(dir, "w.exe"), "x");
-    writeFileSync(join(dir, "m.bin"), "x");
-    expect(await run({ whisperExe: join(dir, "w.exe"), whisperModel: join(dir, "m.bin"), speak: true }, false)).toMatchObject({ isError: true, text: "The owner declined." });
-    expect(t.store.prefs().speak).toBe(false);
-    expect(await run({ whisperExe: join(dir, "w.exe"), whisperModel: join(dir, "m.bin"), speak: true })).toMatchObject({ isError: false });
-    expect(t.store.prefs()).toMatchObject({ speak: true, whisperExe: join(dir, "w.exe"), whisperModel: join(dir, "m.bin") });
-    expect((await run({})).text).toMatch(/Speaks aloud: yes\. Hears without captions: yes/);
-  }, 30_000);
+  it("uses the voice engine Friend already has: it reads a meeting without captions and speaks with the same voice", async () => {
+    class NoCaptions extends Page {
+      sound = [Buffer.alloc(16000), Buffer.concat([Buffer.alloc(16000 * 5 * 2).map((_, i) => (i % 2 ? 0x23 : (i >> 1) % 90)), Buffer.alloc(16000 * 2)])];
+      async captions() {
+        return null;
+      }
+      async audio() {
+        return this.sound.shift() ?? Buffer.alloc(0);
+      }
+    }
+    const page = new NoCaptions([[]]);
+    const voice = new FakeVoice({ transcripts: ["Maya, what is the status of the release?"] });
+    const dir = mkdtempSync(join(tmpdir(), "friend-meetvoice-"));
+    const h: { service?: MeetingService; store?: MeetingStore } = {};
+    app = await createApp({
+      dataDir: dir,
+      provider: new FakeProvider([[{ type: "tool_call", id: "1", name: "meeting.speak", args: { text: "It is on track." } }], [{ type: "done" }]]),
+      voice,
+      config: { port: 0, roots: [], meetings: { installed: true, enabled: true } },
+      pluginCatalogDir: join(dir, "none"),
+      meetingPage: () => page,
+      meetingTuning: { pollMs: 3, settleMs: 40, replyDelayMs: 20, retryMs: 10 },
+      meetingHandles: (x) => Object.assign(h, x),
+    });
+    const { port } = await app.start();
+    await fetch(`http://127.0.0.1:${port}/api/setup`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "correct horse battery", pin: "123456", assistantName: "Maya" }) });
+    await h.service!.join("https://teams.live.com/meet/90", {});
+    await until(() => page.played === 1, 20_000);
+    expect(voice.transcribed[0]!.subarray(0, 4).toString()).toBe("RIFF"); // what it heard went to the engine as a WAV
+    expect(h.store!.lines(h.store!.current()!.id, { last: 5 }).map((l) => l.speaker)).toContain("Someone");
+    expect(voice.synthesized).toEqual(["It is on track."]); // and it spoke with the engine's voice
+  }, 40_000);
 });
-
 describe("joining on the owner's word", () => {
   it("does not ask the owner again to join a meeting they asked for, nor to schedule one", async () => {
     const t = await boot([[{ type: "done" }]], new Page([[]]));

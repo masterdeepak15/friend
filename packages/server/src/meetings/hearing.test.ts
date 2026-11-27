@@ -1,8 +1,5 @@
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { AudioHearing, checkWhisper, cleanTranscript, whisperTranscriber } from "./hearing";
+import { AudioHearing, cleanTranscript } from "./hearing";
 import { pcmToWav, systemSpeech } from "./speech";
 import { MeetingSession, type MeetingPage, type Phase } from "./session";
 import { DEFAULT_PREFS } from "./store";
@@ -79,41 +76,6 @@ describe("hearing a meeting that has no captions", () => {
     release();
     await h.finish();
     expect(seen.length).toBeLessThanOrEqual(4); // one running + three waiting at most
-  });
-});
-
-describe("whisper.cpp on this PC", () => {
-  it("is started with the model and a short sound file that is gone afterwards", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "friend-wh-"));
-    let wavAt = "";
-    let existedThen = false;
-    const t = whisperTranscriber({
-      exe: "whisper-cli",
-      model: "ggml-base.bin",
-      tmpRoot: dir,
-      run: async (exe, args) => {
-        wavAt = args[args.indexOf("-f") + 1]!;
-        existedThen = existsSync(wavAt);
-        expect(exe).toBe("whisper-cli");
-        expect(args.slice(0, 2)).toEqual(["-m", "ggml-base.bin"]);
-        expect(args).toContain("-nt");
-        return " Hello there.\n";
-      },
-    });
-    expect((await t(speech(1))).trim()).toBe("Hello there.");
-    expect(existedThen).toBe(true);
-    expect(existsSync(wavAt)).toBe(false);
-  });
-
-  it("says which of the two files is missing", () => {
-    const dir = mkdtempSync(join(tmpdir(), "friend-wh-"));
-    const exe = join(dir, "whisper-cli.exe");
-    const model = join(dir, "ggml-base.bin");
-    expect(checkWhisper(exe, model)).toMatch(/program/);
-    writeFileSync(exe, "x");
-    expect(checkWhisper(exe, model)).toMatch(/model/);
-    writeFileSync(model, "x");
-    expect(checkWhisper(exe, model)).toBeNull();
   });
 });
 
