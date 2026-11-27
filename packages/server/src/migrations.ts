@@ -362,4 +362,70 @@ create table pc_tokens (
 );
 create index pc_tokens_previous on pc_tokens (previous_refresh_hash);`,
   },
+  {
+    id: 24,
+    sql: `create table mail_accounts (
+  id integer primary key autoincrement,
+  name text not null unique collate nocase,
+  address text not null,
+  imap_host text not null,
+  imap_port integer not null,
+  imap_tls integer not null default 1,
+  smtp_host text not null,
+  smtp_port integer not null,
+  smtp_secure integer not null default 1,
+  username text not null,
+  owners_json text not null default '[]',
+  systems_json text not null default '[]',
+  ladder_json text not null default '{}',
+  enabled integer not null default 1,
+  status text not null default 'new',
+  status_detail text not null default '',
+  cursor_json text not null default '',
+  created_at integer not null
+);
+create table mail_messages (
+  id integer primary key autoincrement,
+  account_id integer not null references mail_accounts (id) on delete cascade,
+  provider_id text not null,
+  thread_id text not null,
+  from_addr text not null,
+  from_name text not null default '',
+  to_json text not null,
+  cc_json text not null default '[]',
+  subject text not null,
+  date integer not null,
+  body text not null,
+  headers_json text not null default '{}',
+  attachments_json text not null default '[]',
+  class text not null,
+  read integer not null default 0,
+  archived integer not null default 0,
+  unique (account_id, provider_id)
+);
+create index mail_messages_account on mail_messages (account_id, id);
+create table mail_events (
+  id integer primary key autoincrement,
+  account_id integer not null references mail_accounts (id) on delete cascade,
+  kind text not null,
+  provider_id text not null,
+  status text not null default 'pending',
+  attempts integer not null default 0,
+  next_at integer not null default 0,
+  last_error text not null default '',
+  created_at integer not null,
+  unique (account_id, kind, provider_id)
+);
+create table mail_sends (
+  id integer primary key autoincrement,
+  account_id integer not null references mail_accounts (id) on delete cascade,
+  to_json text not null,
+  subject text not null,
+  kind text not null,
+  approver text not null,
+  result text not null,
+  created_at integer not null
+);
+create index mail_sends_account on mail_sends (account_id, created_at);`,
+  },
 ];

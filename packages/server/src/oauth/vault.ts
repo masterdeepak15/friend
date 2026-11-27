@@ -14,6 +14,8 @@ export interface VaultEntry {
   needsReconnect?: boolean;
   /** A client secret the owner typed for a known service (write-only). */
   clientSecret?: string;
+  /** A mailbox login (write-only), under the key `mail:<account id>`. */
+  secret?: string;
 }
 
 /**
