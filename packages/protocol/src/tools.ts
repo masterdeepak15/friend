@@ -1,4 +1,5 @@
 import { z, type ZodTypeAny } from "zod";
+import { PC_TOOL_DEFS, describePcCall } from "./pc";
 import { DECK_CONTROLS, DECK_LIMITS, DeckItemInput, DeckSlideInput } from "./deck";
 import { ViewPreset } from "./messages";
 import { OBJECT_TYPES, ObjectRole, Placement, PresenceState, PresenceStyle, SceneMode, StageObject } from "./stage";
@@ -1072,6 +1073,7 @@ export const TOOL_DEFS: ToolDef[] = [
     baseTier: "T1",
     target: "gateway",
   },
+  ...PC_TOOL_DEFS,
 ];
 
 const READ_ONLY_TOOLS = new Set([
@@ -1117,6 +1119,7 @@ export function riskOf(command: string): string[] {
 export function describeCall(name: string, args: unknown, device?: string): string {
   const a = (args ?? {}) as Record<string, unknown>;
   const where = device ? ` on ${visible(device)}` : "";
+  if (name.startsWith("pc.")) return visible(describePcCall(name, a));
   switch (name) {
     case "shell.run":
       return `Run shell command${where}: ${visible(String(a.command ?? ""))}${a.cwd ? ` (in ${visible(String(a.cwd))})` : ""}`;

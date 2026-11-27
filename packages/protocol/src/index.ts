@@ -17,3 +17,4 @@ export * from "./video";
 export * from "./jarvis";
 export * from "./openaiPresets";
 export * from "./deck";
+export * from "./pc";
