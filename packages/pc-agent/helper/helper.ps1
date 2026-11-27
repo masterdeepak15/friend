@@ -775,9 +775,108 @@ namespace FriendHelper
         }
     }
 
+    /// <summary>Terminal sessions on a Windows pseudo console (ConPTY): the program thinks it has a real terminal; we read its output as bytes and write its input as bytes.</summary>
     public static class Terminals
     {
-        public static bool TryDispatch(string op, Dictionary<string, object> a, out object result) { result = null; return false; }
+        [StructLayout(LayoutKind.Sequential)] struct COORD { public short X, Y; }
+        [StructLayout(LayoutKind.Sequential)] struct STARTUPINFO { public int cb; public string lpReserved, lpDesktop, lpTitle; public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags; public short wShowWindow, cbReserved2; public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError; }
+        [StructLayout(LayoutKind.Sequential)] struct STARTUPINFOEX { public STARTUPINFO StartupInfo; public IntPtr lpAttributeList; }
+        [StructLayout(LayoutKind.Sequential)] struct PROCESS_INFORMATION { public IntPtr hProcess, hThread; public int dwProcessId, dwThreadId; }
+        [DllImport("kernel32.dll", SetLastError = true)] static extern bool CreatePipe(out Microsoft.Win32.SafeHandles.SafeFileHandle r, out Microsoft.Win32.SafeHandles.SafeFileHandle w, IntPtr attrs, int size);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern int CreatePseudoConsole(COORD size, Microsoft.Win32.SafeHandles.SafeFileHandle hInput, Microsoft.Win32.SafeHandles.SafeFileHandle hOutput, uint flags, out IntPtr hPC);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern int ResizePseudoConsole(IntPtr hPC, COORD size);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern void ClosePseudoConsole(IntPtr hPC);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, int flags, ref IntPtr size);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern bool UpdateProcThreadAttribute(IntPtr list, uint flags, IntPtr attr, IntPtr value, IntPtr size, IntPtr prev, IntPtr ret);
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool CreateProcess(string app, string cmd, IntPtr pa, IntPtr ta, bool inherit, uint flags, IntPtr env, string cwd, ref STARTUPINFOEX si, out PROCESS_INFORMATION pi);
+        [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr h, uint ms);
+        [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr h, out uint code);
+        [DllImport("kernel32.dll")] static extern bool TerminateProcess(IntPtr h, uint code);
+        [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+
+        class Session { public IntPtr Pty, Process; public FileStream In; public Microsoft.Win32.SafeHandles.SafeFileHandle InW, OutR; public bool Closed; }
+        static readonly Dictionary<string, Session> sessions = new Dictionary<string, Session>();
+
+        public static bool TryDispatch(string op, Dictionary<string, object> a, out object result)
+        {
+            result = null;
+            switch (op)
+            {
+                case "term.open": result = Open(a); return true;
+                case "term.write": result = Write(a); return true;
+                case "term.resize": result = Resize(a); return true;
+                case "term.close": result = Close(a); return true;
+                default: return false;
+            }
+        }
+
+        static Dictionary<string, object> Text(string t) { return new Dictionary<string, object> { { "text", t } }; }
+
+        static Session Get(Dictionary<string, object> a)
+        {
+            Session s; if (!sessions.TryGetValue(Args.S(a, "id", ""), out s) || s.Closed) throw new InvalidOperationException("That terminal is not open."); return s;
+        }
+
+        static object Open(Dictionary<string, object> a)
+        {
+            string id = Args.S(a, "id", ""), cmd = Args.S(a, "cmdline", ""), cwd = Args.S(a, "cwd", "");
+            if (id.Length == 0 || cmd.Length == 0) throw new ArgumentException("A terminal needs an id and a command line.");
+            if (cwd.Length > 0 && !Directory.Exists(cwd)) throw new DirectoryNotFoundException("The folder " + cwd + " does not exist.");
+            var size = new COORD { X = (short)Args.I(a, "cols", 120), Y = (short)Args.I(a, "rows", 40) };
+            Microsoft.Win32.SafeHandles.SafeFileHandle inR, inW, outR, outW;
+            if (!CreatePipe(out inR, out inW, IntPtr.Zero, 0) || !CreatePipe(out outR, out outW, IntPtr.Zero, 0)) throw new InvalidOperationException("Could not make the pipes for the terminal.");
+            IntPtr pty; int hr = CreatePseudoConsole(size, inR, outW, 0, out pty);
+            if (hr != 0) throw new InvalidOperationException("This Windows has no pseudo console (it needs Windows 10 version 1809 or newer). Code " + hr);
+            inR.Dispose(); outW.Dispose();
+            var si = new STARTUPINFOEX(); si.StartupInfo.cb = Marshal.SizeOf(typeof(STARTUPINFOEX));
+            si.StartupInfo.dwFlags = 0x100; // STARTF_USESTDHANDLES with empty handles: the child must not inherit our own stdin and stdout, only the pseudo console
+            IntPtr listSize = IntPtr.Zero; InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref listSize);
+            si.lpAttributeList = Marshal.AllocHGlobal(listSize);
+            if (!InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, ref listSize) || !UpdateProcThreadAttribute(si.lpAttributeList, 0, (IntPtr)0x00020016, pty, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero)) throw new InvalidOperationException("Could not attach the pseudo console.");
+            PROCESS_INFORMATION pi;
+            if (!CreateProcess(null, cmd, IntPtr.Zero, IntPtr.Zero, false, 0x80000, IntPtr.Zero, cwd.Length > 0 ? cwd : null, ref si, out pi)) { int err = Marshal.GetLastWin32Error(); ClosePseudoConsole(pty); throw new InvalidOperationException("Could not start " + cmd + " (error " + err + ")."); }
+            CloseHandle(pi.hThread);
+            var s = new Session { Pty = pty, Process = pi.hProcess, InW = inW, OutR = outR, In = new FileStream(inW, FileAccess.Write, 1024, false) };
+            sessions[id] = s;
+            var reader = new Thread(delegate ()
+            {
+                var buf = new byte[8192];
+                try
+                {
+                    using (var fs = new FileStream(outR, FileAccess.Read, 8192, false))
+                    { int n; while ((n = fs.Read(buf, 0, buf.Length)) > 0) Host.Out("{\"event\":\"term.output\",\"id\":\"" + id + "\",\"data\":\"" + Convert.ToBase64String(buf, 0, n) + "\"}"); }
+                }
+                catch (Exception) { }
+            });
+            reader.IsBackground = true; reader.Start();
+            var waiter = new Thread(delegate ()
+            {
+                WaitForSingleObject(pi.hProcess, 0xFFFFFFFF); uint code; GetExitCodeProcess(pi.hProcess, out code);
+                Thread.Sleep(300); // let the last output through
+                s.Closed = true; try { ClosePseudoConsole(pty); } catch (Exception) { } CloseHandle(pi.hProcess);
+                Host.Out("{\"event\":\"term.exit\",\"id\":\"" + id + "\",\"code\":" + code + "}");
+            });
+            waiter.IsBackground = true; waiter.Start();
+            return Text("Opened " + id);
+        }
+
+        static object Write(Dictionary<string, object> a)
+        {
+            var s = Get(a); byte[] bytes = Convert.FromBase64String(Args.S(a, "data", ""));
+            s.In.Write(bytes, 0, bytes.Length); s.In.Flush(); return Text("ok");
+        }
+
+        static object Resize(Dictionary<string, object> a)
+        {
+            var s = Get(a); ResizePseudoConsole(s.Pty, new COORD { X = (short)Args.I(a, "cols", 120), Y = (short)Args.I(a, "rows", 40) }); return Text("ok");
+        }
+
+        static object Close(Dictionary<string, object> a)
+        {
+            Session s; if (!sessions.TryGetValue(Args.S(a, "id", ""), out s)) return Text("not open");
+            if (!s.Closed) TerminateProcess(s.Process, 1);
+            sessions.Remove(Args.S(a, "id", "")); return Text("closed");
+        }
     }
 }
 '@

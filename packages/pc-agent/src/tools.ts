@@ -15,7 +15,7 @@ type Exec = (file: string, args: string[], opts: { timeout: number; env?: NodeJS
 
 /** The tools that terminals add (Task: terminal sessions). */
 export interface TerminalTools {
-  run(name: string, args: Record<string, unknown>, perms: PcPermissions): Promise<ToolOutcome>;
+  run(name: string, args: Record<string, unknown>, perms: PcPermissions, approved: boolean): Promise<ToolOutcome>;
 }
 
 export interface PcToolDeps {
@@ -131,7 +131,7 @@ async function dispatch(d: PcToolDeps, name: string, a: Record<string, unknown>,
     case "pc.tasks":
       return tasks(d, a);
     default:
-      if (name.startsWith("pc.term.") || name === "pc.claude.sessions") return d.terms ? d.terms.run(name, a, perms) : fail("Terminal sessions are not available on this PC.");
+      if (name.startsWith("pc.term.") || name === "pc.claude.sessions") return d.terms ? d.terms.run(name, a, perms, approved) : fail("Terminal sessions are not available on this PC.");
       return fail(`This PC does not know the tool ${name}.`);
   }
 }
