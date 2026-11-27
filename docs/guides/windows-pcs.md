@@ -65,3 +65,14 @@ The assistant can open a terminal on a PC (it needs the *Commands and terminals*
 ## Remove a PC
 
 **Revoke** in Friend signs it out at once (it stops and cannot connect again). To take the agent off the PC: run `node.exe agent.cjs --uninstall` in `%LOCALAPPDATA%\Friend\pc-agent`, or delete the task "Friend PC Agent" in Task Scheduler and the folder.
+
+## It stays online
+
+You approve a PC once, with its code. After that it signs itself in again and again by itself: nothing has to be approved after a restart, an update or a lost connection.
+
+- **One agent at a time.** A second copy (started by hand, or an update starting while the old one ends) would share the same sign-in. The agent keeps a lock file, so a second copy stops quietly.
+- **A lost reply does not cost the approval.** The sign-in is renewed by trading a secret for a new one. If the reply is lost (a restart, a crash), asking again with the old secret within 15 minutes is taken as a retry and gets a new one. Only the old secret used again much later (a sign of a copy) revokes the PC, as before.
+- **It starts again by itself.** The logon task starts the agent at every logon and also every five minutes if it is not running (an update or a crash used to leave the PC offline until the next logon). While it runs, the task ignores that trigger. A PC that was installed before this keeps the task it has until the agent, on its next start, adds the second trigger to its own task.
+- **Only removing the PC ends it.** If you remove the PC in Friend, the agent stops and removes its task. Nothing else does.
+
+What can still ask you is the safety floor and not the connection: a button that cannot be undone (delete, uninstall, format, pay) or a risky question in a terminal asks first, whatever was approved before.

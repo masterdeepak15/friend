@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { openDb } from "../db";
-import { PcEnroll } from "./enroll";
+import { PcEnroll, REFRESH_GRACE_MS } from "./enroll";
 import { PcStore } from "./store";
 
 const b64 = (b: Buffer) => b.toString("base64url");
@@ -97,7 +97,7 @@ describe("adding a PC with a code the PC keeps secret (device authorization with
 });
 
 describe("keeping a PC signed in", () => {
-  it("rotates the refresh token, and a refresh token used a second time means it was stolen: the PC is revoked", () => {
+  it("rotates the refresh token; the old one used again long after means it was copied: the PC is revoked", () => {
     const r = rig();
     const { started, k } = approved(r);
     const first = r.enroll.poll({ deviceCode: started.deviceCode, verifier: k.verifier }) as { refresh: string; access: string; pcId: number };
@@ -105,12 +105,29 @@ describe("keeping a PC signed in", () => {
     if (!("access" in second)) throw new Error("no refresh");
     expect(second.refresh).not.toBe(first.refresh);
     expect(r.enroll.verifyAccess(second.access)).toBe(first.pcId);
-    expect(r.enroll.refresh(first.refresh)).toMatchObject({ error: expect.any(String) }); // the old one again
+    r.advance(REFRESH_GRACE_MS + 60_000);
+    expect(r.enroll.refresh(first.refresh)).toMatchObject({ error: expect.any(String) }); // the old one again, much later
     expect(r.store.get(first.pcId)!.revoked).toBe(true);
     expect(r.enroll.verifyAccess(second.access)).toBeNull();
     expect(r.enroll.refresh(second.refresh)).toMatchObject({ error: expect.any(String) });
   });
 
+  it("an old refresh token used again soon after is a retry (the reply was lost, an update restarted the program): it gets a new pair and the PC stays", () => {
+    const r = rig();
+    const { started, k } = approved(r);
+    const first = r.enroll.poll({ deviceCode: started.deviceCode, verifier: k.verifier }) as { refresh: string; access: string; pcId: number };
+    const second = r.enroll.refresh(first.refresh);
+    if (!("access" in second)) throw new Error("no refresh");
+    r.advance(60_000);
+    const retry = r.enroll.refresh(first.refresh); // the PC never got the reply and asks again with what it has
+    if (!("access" in retry)) throw new Error("the retry was refused");
+    expect(r.store.get(first.pcId)!.revoked).toBe(false);
+    expect(r.enroll.verifyAccess(retry.access)).toBe(first.pcId);
+    // either pair may be the one the PC holds
+    expect(r.enroll.refresh(second.refresh)).toHaveProperty("access");
+    expect(r.enroll.refresh(retry.refresh)).toHaveProperty("access");
+    expect(r.store.get(first.pcId)!.revoked).toBe(false);
+  });
   it("an access token lasts an hour", () => {
     const r = rig();
     const { started, k } = approved(r);

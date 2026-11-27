@@ -68,10 +68,10 @@ if ($got -ne $agentSha) {
 }
 Move-Item -Force $part $agent
 
-# 3. start at every logon, and again after a crash or an update
+# 3. start at every logon, and every five minutes if it is not running (after a crash or an update; while it runs the task ignores the trigger)
 $who = $env:USERDOMAIN + '\\' + $env:USERNAME
 $action = New-ScheduledTaskAction -Execute $nodeExe -Argument ($q + $agent + $q) -WorkingDirectory $dir
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $who
+$trigger = @((New-ScheduledTaskTrigger -AtLogOn -User $who), (New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(2)) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)))
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
 $principal = New-ScheduledTaskPrincipal -UserId $who -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null

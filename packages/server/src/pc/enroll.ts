@@ -6,6 +6,8 @@ import type { PcStore } from "./store";
 /** How long a PC has to be approved once it asked. */
 export const CODE_TTL_MS = 10 * 60_000;
 export const ACCESS_TTL_MS = 60 * 60_000;
+/** How long after a refresh the old refresh token still counts as a retry and not as a copy. */
+export const REFRESH_GRACE_MS = 15 * 60_000;
 /** Letters and digits that cannot be mistaken for each other. */
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -104,8 +106,16 @@ export class PcEnroll {
     const h = sha(refresh);
     const cur = this.db.prepare("select * from pc_tokens where refresh_hash = ?").get(h) as { id: number; pc_id: number } | undefined;
     if (!cur) {
-      const old = this.db.prepare("select pc_id from pc_tokens where previous_refresh_hash = ?").get(h) as { pc_id: number } | undefined;
-      if (old) this.store.revoke(old.pc_id);
+      const old = this.db.prepare("select id, pc_id, created_at from pc_tokens where previous_refresh_hash = ?").get(h) as { id: number; pc_id: number; created_at: number } | undefined;
+      if (old) {
+        // the reply that carried the new token may have been lost (a restart, a crash, two programs at once): the old token used again soon
+        // after is a retry and gets a new pair; used again long after, it is a copy, and the PC is revoked
+        const pc = this.store.get(old.pc_id);
+        if (pc && !pc.revoked && this.clock() - old.created_at < REFRESH_GRACE_MS) {
+          return this.issue(pc.id, h); // (the pair the first reply carried stays valid too: either one may be the one the PC holds)
+        }
+        this.store.revoke(old.pc_id);
+      }
       return { error: "That sign-in is no longer valid. Add the PC again." };
     }
     const pc = this.store.get(cur.pc_id);

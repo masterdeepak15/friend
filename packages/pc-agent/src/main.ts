@@ -7,6 +7,7 @@ import WebSocket from "ws";
 import { PcAgent } from "./agent";
 import { Helper, powershellSpawner } from "./helper";
 import { AgentStore } from "./store";
+import { ensureWatchdog, restartSoon, takeLock } from "./watchdog";
 
 const VERSION = process.env.FRIEND_PC_AGENT_VERSION ?? "0.1.97";
 const TASK = "Friend PC Agent";
@@ -54,6 +55,8 @@ async function main(): Promise<void> {
     if (process.stdout.isTTY) process.stdout.write(text);
   };
 
+  // one agent at a time: two of them would use the same sign-in and one would lose it (a second program started by hand, an update restarting)
+  if (!(await takeLock(dir, log))) process.exit(0);
   const store = new AgentStore(join(dir, "agent.db"));
   if (typeof args.server === "string") store.set("server", args.server.replace(/\/+$/, ""));
   if (typeof args.name === "string") store.set("name", args.name);
@@ -80,7 +83,8 @@ async function main(): Promise<void> {
       writeFileSync(`${self}.new`, body);
       renameSync(`${self}.new`, self);
       log(`updated to ${sha256.slice(0, 8)}, restarting`);
-      process.exit(75); // not zero: the logon task restarts it
+      restartSoon(dir, log);
+      process.exit(75);
     } catch (e) {
       log(`update failed: ${(e as Error).message}`);
     }
@@ -109,6 +113,8 @@ async function main(): Promise<void> {
     },
   });
   holder.agent = agent;
+  // it has to stay available: the logon task also starts it again every few minutes if it is not running (an update, a crash)
+  void ensureWatchdog(log);
   const stop = (): void => void agent.stop().finally(() => process.exit(0));
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
