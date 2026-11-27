@@ -57,6 +57,21 @@ export async function takeLock(dir: string, log: (line: string) => void, waitMs 
   return true;
 }
 
+/**
+ * The little script the task runs instead of node.exe: node is a console program and would open a terminal window at every logon and every
+ * restart. Windows Script Host starts it with no window at all (style 0), waits for it, and gives back its exit code.
+ */
+export function launcherVbs(dir: string, nodeExe: string, agentFile: string): string {
+  const q = (s: string) => s.replace(/"/g, '""');
+  return [
+    'Set s = CreateObject("WScript.Shell")',
+    `s.CurrentDirectory = "${q(dir)}"`,
+    `rc = s.Run("""${q(nodeExe)}"" ""${q(agentFile)}""", 0, True)`,
+    "WScript.Quit rc",
+    "",
+  ].join("\r\n");
+}
+
 const POWERSHELL = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"];
 
 /** After an update the program ends and the logon task starts it again: this asks for that a few seconds later, when the task has ended. */
@@ -74,21 +89,43 @@ export function restartSoon(dir: string, log: (line: string) => void): void {
  * the PC offline until the next logon. This adds a second trigger to the same task that starts it every five minutes; while the agent is
  * running the task ignores it. Only the agent's own task is changed, and only when it has no such trigger yet.
  */
-export async function ensureWatchdog(log: (line: string) => void): Promise<void> {
+export async function ensureWatchdog(dir: string, nodeExe: string, agentFile: string, log: (line: string) => void): Promise<void> {
   if (process.platform !== "win32" || process.env.FRIEND_PC_NO_TASK) return;
+  const vbs = join(dir, "run.vbs");
+  try {
+    writeFileSync(vbs, launcherVbs(dir, nodeExe, agentFile));
+  } catch (e) {
+    log(`could not write the launcher: ${(e as Error).message}`);
+    return;
+  }
+  const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
   const script = `$ErrorActionPreference = 'Stop'
 $task = '${TASK}'
+$vbs = ${q(vbs)}
+$dir = ${q(dir)}
 $t = Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
 if (-not $t) { Write-Output 'no task'; exit 0 }
-foreach ($x in $t.Triggers) { if ($x.Repetition -and $x.Repetition.Interval) { Write-Output 'already'; exit 0 } }
-$who = $env:USERDOMAIN + '\\' + $env:USERNAME
-$triggers = @((New-ScheduledTaskTrigger -AtLogOn -User $who), (New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(2)) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)))
-Set-ScheduledTask -TaskName $task -Trigger $triggers | Out-Null
-Write-Output 'added'`;
+$did = @()
+$exe = ''
+if ($t.Actions.Count -gt 0) { $exe = [string]$t.Actions[0].Execute }
+if ($exe -notmatch 'wscript') {
+  $action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//B //Nologo ' + [char]34 + $vbs + [char]34) -WorkingDirectory $dir
+  Set-ScheduledTask -TaskName $task -Action $action | Out-Null
+  $did += 'hidden'
+}
+$has = $false
+foreach ($x in $t.Triggers) { if ($x.Repetition -and $x.Repetition.Interval) { $has = $true } }
+if (-not $has) {
+  $who = $env:USERDOMAIN + '\\' + $env:USERNAME
+  $triggers = @((New-ScheduledTaskTrigger -AtLogOn -User $who), (New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(2)) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)))
+  Set-ScheduledTask -TaskName $task -Trigger $triggers | Out-Null
+  $did += 'watchdog'
+}
+Write-Output ('changed: ' + ($did -join ','))`;
   await new Promise<void>((resolve) => {
     execFile("powershell.exe", [...POWERSHELL, script], { windowsHide: true, timeout: 30_000 }, (e, out) => {
       if (e) log(`could not check the restart task: ${e.message.split("\n")[0]}`);
-      else if (/added/.test(out)) log("the logon task now also starts the agent again every five minutes if it is not running");
+      else if (/changed: \S/.test(out)) log(`the logon task was updated (${out.replace(/^[\s\S]*changed:\s*/, "").trim()}): it starts the agent without a window, and again every five minutes if it is not running`);
       resolve();
     });
   });

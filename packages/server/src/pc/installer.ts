@@ -70,7 +70,11 @@ Move-Item -Force $part $agent
 
 # 3. start at every logon, and every five minutes if it is not running (after a crash or an update; while it runs the task ignores the trigger)
 $who = $env:USERDOMAIN + '\\' + $env:USERNAME
-$action = New-ScheduledTaskAction -Execute $nodeExe -Argument ($q + $agent + $q) -WorkingDirectory $dir
+# node.exe is a console program and would open a terminal window at every logon: Windows Script Host starts it with no window at all
+$vbs = Join-Path $dir 'run.vbs'
+$vbsLines = @('Set s = CreateObject(' + $q + 'WScript.Shell' + $q + ')', ('s.CurrentDirectory = ' + $q + $dir + $q), ('rc = s.Run(' + $q + $q + $q + $nodeExe + $q + $q + ' ' + $q + $q + $agent + $q + $q + $q + ', 0, True)'), 'WScript.Quit rc')
+[IO.File]::WriteAllText($vbs, (($vbsLines -join [Environment]::NewLine) + [Environment]::NewLine), [Text.Encoding]::Default)
+$action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//B //Nologo ' + $q + $vbs + $q) -WorkingDirectory $dir
 $trigger = @((New-ScheduledTaskTrigger -AtLogOn -User $who), (New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(2)) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)))
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
 $principal = New-ScheduledTaskPrincipal -UserId $who -LogonType Interactive -RunLevel Limited

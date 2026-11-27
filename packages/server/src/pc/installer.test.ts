@@ -38,6 +38,11 @@ describe("the install script a new PC runs", () => {
 
   it("is safe to run twice: it stops a running agent first, and reuses the Node.js that is there", () => {
     expect(script).toContain("Stop-ScheduledTask");
+    // it starts without a terminal window and does not leave the PC offline: a launcher with no window, and a second trigger every five minutes
+    expect(script).toContain("-Execute 'wscript.exe'");
+    expect(script).toContain("run.vbs");
+    expect(script).not.toMatch(/New-ScheduledTaskAction -Execute \$nodeExe/);
+    expect(script).toContain("-RepetitionInterval (New-TimeSpan -Minutes 5)");
     expect(script).toContain("Stop-Process");
     expect(script).toContain("$have -eq $nodeVersion");
   });

@@ -114,7 +114,7 @@ async function main(): Promise<void> {
   });
   holder.agent = agent;
   // it has to stay available: the logon task also starts it again every few minutes if it is not running (an update, a crash)
-  void ensureWatchdog(log);
+  void ensureWatchdog(dir, process.execPath, self, log);
   const stop = (): void => void agent.stop().finally(() => process.exit(0));
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);

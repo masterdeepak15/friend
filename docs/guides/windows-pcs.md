@@ -72,6 +72,8 @@ You approve a PC once, with its code. After that it signs itself in again and ag
 
 - **One agent at a time.** A second copy (started by hand, or an update starting while the old one ends) would share the same sign-in. The agent keeps a lock file, so a second copy stops quietly.
 - **A lost reply does not cost the approval.** The sign-in is renewed by trading a secret for a new one. If the reply is lost (a restart, a crash), asking again with the old secret within 15 minutes is taken as a retry and gets a new one. Only the old secret used again much later (a sign of a copy) revokes the PC, as before.
+- **No window.** The task does not run 
+ode.exe (a console program, which would open a terminal at every logon and restart). It runs a tiny launcher (un.vbs, by Windows Script Host) that starts the agent with no window at all. You never see a terminal. It starts when you log in to Windows (with automatic sign-in that is at startup); starting before anyone signs in would need administrator rights, which Friend never asks for.
 - **It starts again by itself.** The logon task starts the agent at every logon and also every five minutes if it is not running (an update or a crash used to leave the PC offline until the next logon). While it runs, the task ignores that trigger. A PC that was installed before this keeps the task it has until the agent, on its next start, adds the second trigger to its own task.
 - **Only removing the PC ends it.** If you remove the PC in Friend, the agent stops and removes its task. Nothing else does.
 
