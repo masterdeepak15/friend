@@ -151,3 +151,28 @@ describe("what a new PC downloads", () => {
   });
 });
 
+describe("approving on the screen, and starting a control session", () => {
+  it("serves the page the owner approves on, with nothing from the request in it", async () => {
+    const t = await boot();
+    const res = await t.anon("/pc/approve?code=%3Cscript%3Ealert(1)%3C/script%3E");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(res.headers.get("cache-control")).toContain("no-store");
+    const html = await res.text();
+    expect(html).toContain("Approve this PC");
+    expect(html).not.toContain("alert(1)");
+  });
+
+  it("lets the owner start and stop a control session only on a PC that is connected and allowed", async () => {
+    const t = await boot();
+    const added = (await (await t.api("/api/pc", send({ name: "Office", pin: owner.pin }))).json()) as { pc: { id: number } };
+    expect((await t.anon(`/api/pc/${added.pc.id}/control`, send({ action: "stop" }))).status).toBe(401);
+    expect((await t.api(`/api/pc/${added.pc.id}/control`, send({ action: "start" }))).status).toBe(400); // control is off for this PC
+    await t.api(`/api/pc/${added.pc.id}/permissions`, send({ permissions: { control: true, screen: true, shell: false, registry: false, process: false, files: "off", folders: [] }, pin: owner.pin }, "PUT"));
+    expect((await t.api(`/api/pc/${added.pc.id}/control`, send({ action: "start", minutes: 10 }))).status).toBe(409); // not connected
+    expect((await t.api(`/api/pc/${added.pc.id}/control`, send({ action: "stop" }))).status).toBe(200);
+    expect((await t.api("/api/pc/999/control", send({ action: "stop" }))).status).toBe(404);
+    expect((await t.api(`/api/pc/${added.pc.id}/control`, send({ action: "dance" }))).status).toBe(400);
+  });
+});
+

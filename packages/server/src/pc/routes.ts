@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { LockoutError } from "../auth";
 import { HttpError } from "../http-error";
+import { approvePage } from "./approvePage";
 import { installCmd, installCommand, installScript } from "./installer";
 import type { AgentBundle } from "./agentBundle";
 import type { PcService } from "./service";
@@ -110,6 +111,9 @@ export function registerPcRoutes(app: FastifyInstance, deps: PcRouteDeps): void 
     return reply.header("x-agent-sha256", bundle.sha256).type("application/javascript; charset=utf-8").send(bundle.js);
   });
 
+  /** The page the owner approves a new PC on (the agent opens it in the browser). */
+  app.get("/pc/approve", async (_req, reply) => reply.header("cache-control", "no-store").header("referrer-policy", "no-referrer").type("text/html; charset=utf-8").send(approvePage()));
+
   // ---- the owner ----
   app.get("/api/pc", { onRequest: ownerGuard }, async (_req, reply) => {
     reply.header("cache-control", "no-store");
@@ -145,6 +149,16 @@ export function registerPcRoutes(app: FastifyInstance, deps: PcRouteDeps): void 
     if (!body.success || !Code.test(req.params.code)) return reply.code(400).send({ error: "Enter your PIN." });
     try {
       return await svc.approve(req.params.code, { permissions: body.data.permissions, name: body.data.name }, body.data.pin, req.ip);
+    } catch (e) {
+      return failure(reply, e);
+    }
+  });
+  app.post<{ Params: { id: string } }>("/api/pc/:id/control", { onRequest: ownerGuard }, async (req, reply) => {
+    const body = z.object({ action: z.enum(["start", "stop"]), minutes: z.number().int().min(1).max(480).optional() }).strict().safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Start or stop, with an optional number of minutes." });
+    try {
+      svc.control(Number(req.params.id), body.data.action, body.data.minutes, req.ip);
+      return { ok: true };
     } catch (e) {
       return failure(reply, e);
     }

@@ -928,7 +928,7 @@ export async function createApp(opts: AppOptions) {
   const pcHere = dirname(fileURLToPath(import.meta.url));
   // the agent file: next to the program when installed from npm, in the repository when run from source
   const pcAgentFile = new AgentFile([opts.pcAgentPath, resolve(pcHere, "pc-agent", "agent.js"), resolve(pcHere, "../../pc-agent/dist/agent.js"), resolve(pcHere, "../../../pc-agent/dist/agent.js")]);
-  const pcService: PcService = new PcService({ db, auth, audit, online: (id) => pcHub.isOnline(id), onRevoke: (id) => pcHub.revoke(id), onPermissions: (id, p) => pcHub.sendPermissions(id, p) });
+  const pcService: PcService = new PcService({ db, auth, audit, online: (id) => pcHub.isOnline(id), leaseInfo: (id) => pcHub.leaseInfo(id), lease: { start: (id, m) => pcHub.startLease(id, m), end: (id) => pcHub.endLease(id, "the owner stopped it") }, onRevoke: (id) => pcHub.revoke(id), onPermissions: (id, p) => pcHub.sendPermissions(id, p) });
   const pcHub: PcHub = new PcHub({
     store: pcService.store,
     // a PC that runs an older agent file is told to update itself

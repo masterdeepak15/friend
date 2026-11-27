@@ -3,6 +3,7 @@ import { HoloCardList, paginate, pagingFor } from "../orb/HoloCards";
 import { HoloPanel } from "../orb/HoloPanel";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
+import { WindowsPcsPanel } from "./WindowsPcsPanel";
 import { IntegrationConfig } from "./IntegrationConfig";
 import { httpPluginsApi, type CatalogPlugin, type IntegrationEntry, type PluginList, type PluginsApi } from "./pluginsApi";
 
@@ -121,6 +122,7 @@ export function PluginsPanel({ api = httpPluginsApi, onClose, initialConfigure, 
   const installedIntegrations = integrations.filter((i) => i.installed);
   const offeredIntegrations = integrations.filter((i) => !i.installed);
   const shown = configuring ? integrations.find((i) => i.id === configuring && i.installed) : undefined;
+  const windowsPcs = configuring === "windows-pcs";
 
   const toggle = (id: string, name: string, enabled: boolean): Action => ({
     label: enabled ? "Turn off" : "Turn on",
@@ -217,6 +219,16 @@ export function PluginsPanel({ api = httpPluginsApi, onClose, initialConfigure, 
     </>
   );
 
+  const pcsPanel = <WindowsPcsPanel onBack={() => setConfiguring(null)} />;
+  /** Windows PCs are built in (nothing to install), so they have a button of their own above the lists. */
+  const pcsEntry = (
+    <div className="pcs-entry" data-integration="windows-pcs">
+      <span className="auth-note">Windows PCs: let the assistant use your PCs like a person (see the screen, click, type, run commands, work in a terminal such as Claude Code).</span>{" "}
+      <button type="button" style={touch} className={variant === "holo" ? "holo-btn" : "primary"} onClick={() => setConfiguring("windows-pcs")}>
+        Windows PCs
+      </button>
+    </div>
+  );
   const configure = shown && (
     <IntegrationConfig
       integration={shown}
@@ -232,14 +244,17 @@ export function PluginsPanel({ api = httpPluginsApi, onClose, initialConfigure, 
   if (variant === "holo") {
     const entries = section === "installed" ? installed : available;
     const { here, at, pages } = paginate(entries, pageIdx);
-    const inList = !pending && !shown;
+    const inList = !pending && !shown && !windowsPcs;
     const body: ReactNode = pending ? (
       pinStep
+    ) : windowsPcs ? (
+      pcsPanel
     ) : shown ? (
       configure
     ) : (
       <>
         {errorLine}
+        {pcsEntry}
         <HoloCardList
           tabs={[
             { id: "installed" as Section, label: "Installed", count: installed.length },
@@ -259,7 +274,7 @@ export function PluginsPanel({ api = httpPluginsApi, onClose, initialConfigure, 
     return (
       <HoloPanel
         label="Plugins"
-        title={pending ? "Confirm with PIN" : shown ? shown.name : "Plugins"}
+        title={pending ? "Confirm with PIN" : windowsPcs ? "Windows PCs" : shown ? shown.name : "Plugins"}
         {...(inList && pages > 1 ? { page: pagingFor(at, pages, setPageIdx)! } : {})}
         help={inList ? <>Turn plugins on or off, set them up, or install more. Installing and switching on need your <b>PIN</b>.</> : undefined}
         extra={
@@ -303,11 +318,14 @@ export function PluginsPanel({ api = httpPluginsApi, onClose, initialConfigure, 
       <div className="plugins-body">
         {pending ? (
           pinStep
+        ) : windowsPcs ? (
+          pcsPanel
         ) : shown ? (
           configure
         ) : (
           <>
             {errorLine}
+            {pcsEntry}
             <h4 className="plugins-heading">Installed</h4>
             {list && installed.length === 0 && <p className="auth-note">Nothing installed yet.</p>}
             <ul className="plugin-list">{installed.map(item)}</ul>

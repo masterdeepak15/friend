@@ -16,6 +16,8 @@ export interface PcView {
   status: PcStatus | null;
   lastSeen: number;
   revoked: boolean;
+  /** A control session, when one is running or paused. */
+  lease: { until: number | null; paused: boolean } | null;
 }
 
 export interface PcServiceDeps {
@@ -27,6 +29,10 @@ export interface PcServiceDeps {
   online?: (pcId: number) => boolean;
   /** A PC was revoked or removed: close its socket and end what it was doing. */
   onRevoke?: (pcId: number) => void;
+  /** The control session of a PC, if there is one. */
+  leaseInfo?: (pcId: number) => { until: number | null; paused: boolean } | null;
+  /** Starts or ends a control session on a connected PC. */
+  lease?: { start(pcId: number, minutes?: number): { ok: true } | { ok: false; error: string }; end(pcId: number): void };
   /** The owner changed what a PC may do: tell the PC if it is connected. */
   onPermissions?: (pcId: number, permissions: PcPermissions) => void;
 }
@@ -42,7 +48,7 @@ export class PcService {
 
   view(pc: Pc): PcView {
     const online = this.deps.online?.(pc.id) ?? false;
-    return { id: pc.id, name: pc.name, os: pc.os, host: pc.host, online, permissions: pc.permissions, status: online ? pc.status : pc.status ? { ...pc.status, state: "offline" } : null, lastSeen: pc.lastSeen, revoked: pc.revoked };
+    return { id: pc.id, name: pc.name, os: pc.os, host: pc.host, online, permissions: pc.permissions, status: online ? pc.status : pc.status ? { ...pc.status, state: "offline" } : null, lastSeen: pc.lastSeen, revoked: pc.revoked, lease: online ? this.deps.leaseInfo?.(pc.id) ?? null : null };
   }
 
   list(): PcView[] {
@@ -112,6 +118,18 @@ export class PcService {
     this.deps.audit.log("owner", "pc.permissions", { pc: before.name, from: before.permissions, to: permissions, ip });
     this.deps.onPermissions?.(id, permissions);
     return this.view(this.store.get(id)!);
+  }
+
+  /** The owner starts or ends a control session from the screen. */
+  control(id: number, action: "start" | "stop", minutes: number | undefined, ip: string): void {
+    const pc = this.store.get(id);
+    if (!pc || pc.revoked) throw new HttpError(404, "There is no such PC.");
+    if (action === "start") {
+      if (!pc.permissions.control) throw new HttpError(400, "This PC is not allowed to be controlled. Switch on Control in its permissions first.");
+      const r = this.deps.lease?.start(id, minutes);
+      if (!r || !r.ok) throw new HttpError(409, r && !r.ok ? r.error : "The PC is not connected.");
+    } else this.deps.lease?.end(id);
+    this.deps.audit.log("owner", action === "start" ? "pc.control.start" : "pc.control.stop", { pc: pc.name, minutes: minutes ?? null, by: "owner", ip });
   }
 
   async revoke(id: number, pin: string, ip: string): Promise<void> {
