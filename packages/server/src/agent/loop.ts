@@ -26,7 +26,7 @@ import type { Memory } from "../memory";
 import type { DeckStore } from "../deck/store";
 import type { Presenter } from "../deck/presenter";
 import type { PcTools, PreparedPc } from "../pc/tools";
-import { mailAuditArgs, type MailTools, type PreparedMail } from "../mail/tools";
+import { MAIL_TURN_TOOLS, mailAuditArgs, type MailTools, type PreparedMail } from "../mail/tools";
 import { runDeckTool } from "../deck/tools";
 import { MemoryTree, capIndex, inboxName } from "../memory/tree";
 import type { Soul } from "../memory/soul";
@@ -193,6 +193,8 @@ export interface TurnCtx {
   spoken?: string;
   /** Where the request came from (voice, chat, task, channel), for the token count. */
   source?: string;
+  /** Set when someone else's mail started this turn: only the mail tools exist for it, and it can answer that person only. */
+  mail?: { from: string; roleAuto: boolean; caseId: number };
 }
 
 /** What a household member said and was answered in the last while, kept in memory only: it is never written to disk. */
@@ -377,7 +379,9 @@ export class Agent {
       const marketOn = webOn && !!d.market;
       const browserOn = !!d.browser?.enabled();
       const tools = (
-        ctx.trust === "owner"
+        ctx.mail
+          ? toolSpecs().filter((t) => MAIL_TURN_TOOLS.has(t.name))
+          : ctx.trust === "owner"
           ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])]
           : member
             ? toolSpecs().filter((t) => MEMBER_TOOLS.has(t.name))
@@ -807,6 +811,12 @@ export class Agent {
   ): Promise<{ text: string; isError: boolean; image?: { mime: string; data: string }; images?: { mime: string; data: string }[] }> {
     const d = this.deps;
     const fail = (error: string) => ({ text: `Error: ${error}`, isError: true });
+    // a turn that someone else's mail started can do nothing but read and answer that mail, whatever the mail says
+    if (ctx.mail && !MAIL_TURN_TOOLS.has(call.name)) {
+      rec.outcome = "refused";
+      d.audit.log("agent", "tool.denied", { tool: call.name, reason: "mail turn" });
+      return fail("That is not possible while answering someone else's mail.");
+    }
     const plugin = call.name.startsWith("plugin.") ? d.plugins?.tool(call.name) : undefined;
     // every plugin tool needs the owner's approval, whatever the plugin says about itself
     // a connector's tool is asked about every time (T2), whatever the connector says about itself
@@ -841,7 +851,7 @@ export class Agent {
     if (call.name.startsWith("email.")) {
       if (!d.mail) return fail("Mailboxes are not available.");
       if (ctx.trust !== "owner") return fail("Only the owner can use the mailboxes.");
-      const prep = d.mail.prepare(call.name, args, { cause: ctx.source === "mail" ? "owner-order" : "owner-chat" });
+      const prep = d.mail.prepare(call.name, args, ctx.mail ? { cause: "inbound-other", inboundFrom: ctx.mail.from, roleAuto: ctx.mail.roleAuto, caseId: ctx.mail.caseId } : { cause: ctx.source === "mail" ? "owner-order" : "owner-chat" });
       if ("error" in prep) {
         rec.outcome = "refused";
         return fail(prep.error);

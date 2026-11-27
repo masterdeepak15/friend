@@ -27,6 +27,8 @@ export interface MailToolsDeps {
   audit: Audit;
   /** Whether the plugin is installed and switched on. */
   enabled: () => boolean;
+  /** Tells the owner something that needs them (a case a role could not settle). */
+  notify?: (text: string) => void;
   /** One look at a watch right now. */
   check?: (w: MailWatch) => Promise<{ ok: boolean; detail: string }>;
 }
@@ -41,6 +43,9 @@ export interface MailCtx {
 
 /** How long after reading a stranger's mail every send asks, whatever the ladder says (the mail may have tried to steer it). */
 const TAINT_MS = 10 * 60_000;
+
+/** The only tools a turn may use when someone else's mail started it: read and answer that mail, and keep the case. Nothing else exists for it. */
+export const MAIL_TURN_TOOLS: ReadonlySet<string> = new Set(["email.inbox", "email.read", "email.search", "email.reply", "email.send", "email.draft", "email.mark_read", "email.archive", "email.attachments", "email.case"]);
 
 /** What the audit trail keeps of a call: where it went and how long it was, never the words. */
 export function mailAuditArgs(a: Record<string, unknown>): Record<string, unknown> {
@@ -256,6 +261,10 @@ export class MailTools {
       if (id === undefined || !auto.getCase(id)) return bad("There is no such case.");
       if (ctx.cause === "inbound-other" && id !== ctx.caseId) return bad("You can only update the case you are working on.");
       auto.updateCase(id, { ...(a.status ? { status: a.status as never } : {}), ...(typeof a.note === "string" ? { note: a.note } : {}) });
+      if (a.status === "escalated") {
+        const c = auto.getCase(id)!;
+        this.d.notify?.(`A mail needs you: "${c.subject}" from ${c.from}.${c.note ? ` ${c.note}` : ""}`);
+      }
       return ok("Case updated.");
     }
 

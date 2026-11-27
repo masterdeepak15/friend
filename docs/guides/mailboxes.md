@@ -61,6 +61,25 @@ Under **What it may send**, per mailbox, for new mail, replies and forwarding: *
 
 Say: "Check the support inbox." / "Reply to the invoice mail and say it goes out today." / "Search the mail from Ann." And, from your own address: write "restart nginx and tell me" to the mailbox. Friend does it and answers by email (you are asked before it sends).
 
+## Templates, rules, roles, schedules and watches
+
+You set these up by **talking to Friend**: it proposes, shows you the full text, and you approve each one. (Mail from anyone else can never create or change any of them.)
+
+- **Templates**: a mail with `{{values}}` to fill in, designed with you and saved by name ("server-down", "daily-status"). Friend fills it and sends it through the usual approval.
+- **Rules**: what happens to mail that is *not* an order, by conditions (sender or `@domain`, recipient, words or a pattern in the subject, words in the text, has an attachment, attachment type). The first rule that matches decides: **ignore**, **notify** (Friend tells you) or **role** (hand it to a role).
+- **Roles**: a job for a mailbox, with written guidelines ("Support agent: answer billing questions kindly, never promise refunds"). A role works through the mailbox tools only. While it handles someone's mail, Friend can do nothing else: no files, no commands, no other tools, whatever the mail says. It can answer that person and update its **case**; if you allowed it (**answers by itself**), the answer goes out without a card, but only to the person who wrote, and all the rules above still hold. Otherwise every answer asks you first. Bulk mail, robots and the mailbox's own mail never reach a role.
+- **Cases**: one per conversation, with a status (open, waiting, done, **escalated**) and a one-line note. When a role escalates, Friend tells you.
+- **Schedules**: "every day at 08:00, email me the status of my servers with the template daily-status", or every N minutes. They run as you, so the approvals you set for sending still apply.
+- **Watches**: a web address (or a host and port) checked by plain code on its own interval. Friend is woken **only when it changes**: down after two failed checks in a row, up again after one good one. While all is well it costs nothing.
+
+### Example: an IT monitor
+
+Say: "Hire someone to watch my shop and email me." Friend proposes a watch on `https://shop.example.com` every 5 minutes with the instruction "email me an alert with the template server-down", a template `server-down`, and a schedule at 08:00 for a status mail with the template `daily-status`. You approve each. Nothing is sent without your approval unless you allowed that kind of mail to go by itself.
+
+### Example: a support address
+
+Say: "Make support@example.com answer billing questions." Friend adds the mailbox, a role **Support agent** with the guidelines you agree on, and a rule *subject contains "invoice" → role*. Start with answers that ask you first. When you trust it, allow the role to answer by itself: it still answers only the person who wrote, never forwards, never writes to a third person and never answers a robot.
+
 ## Later
 
-Mail rules and templates (for example a daily status email, or a server-down alert), agents hired in the Office with their own mailbox and role, and sign-in with Google or Microsoft instead of an app password are planned. See `docs/superpowers/specs/2026-11-27-agent-mailboxes-design.md`.
+Pages for roles and cases in the Mailboxes screen (today you see and change them by asking Friend), and sign-in with Google or Microsoft instead of an app password. See `docs/superpowers/specs/2026-11-27-agent-mailboxes-design.md`.
