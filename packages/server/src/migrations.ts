@@ -325,4 +325,41 @@ alter table office_workers add column mcp text not null default '[]';`,
   created_at integer not null
 );`,
   },
+  {
+    id: 23,
+    sql: `create table pcs (
+  id integer primary key autoincrement,
+  name text not null unique collate nocase,
+  os text not null default '',
+  host text not null default '',
+  perms_json text not null,
+  status_json text not null default '',
+  created_at integer not null,
+  last_seen integer not null default 0,
+  revoked integer not null default 0
+);
+create table pc_enroll (
+  id text primary key,
+  pc_id integer not null references pcs (id) on delete cascade,
+  user_code text unique,
+  device_hash text unique,
+  challenge text,
+  expires_at integer not null,
+  approved integer not null default 0,
+  used integer not null default 0,
+  os text,
+  host text,
+  created_at integer not null
+);
+create table pc_tokens (
+  id integer primary key autoincrement,
+  pc_id integer not null references pcs (id) on delete cascade,
+  access_hash text not null unique,
+  access_expires integer not null,
+  refresh_hash text not null unique,
+  previous_refresh_hash text,
+  created_at integer not null
+);
+create index pc_tokens_previous on pc_tokens (previous_refresh_hash);`,
+  },
 ];

@@ -113,6 +113,7 @@ import { OpenAiProvider } from "./provider/openai";
 import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
 import { DeckStore } from "./deck/store";
+import { PcService } from "./pc/service";
 import { Presenter } from "./deck/presenter";
 import { deckToHtml } from "./deck/exportHtml";
 import { deckToPptx } from "./deck/exportPptx";
@@ -1636,8 +1637,10 @@ export async function createApp(opts: AppOptions) {
   };
 
   const tls = config.https ? await ensureTlsCert(opts.dataDir, [...config.allowedHosts, ...(config.publicUrl ? [new URL(config.publicUrl).hostname] : [])]) : undefined;
+  const pcService = new PcService({ db, auth, audit });
   const gateway = createGateway({
     ...(tls ? { tls } : {}),
+    pc: pcService,
     connectors: connectorsApi,
     oauth: oauthApi,
     chrome: chromeRemoteApi,

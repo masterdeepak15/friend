@@ -17,6 +17,8 @@ import { LockoutError, type Auth, type Device, type Session } from "./auth";
 import { RateLimiter } from "./ratelimit";
 import type { Config } from "./config";
 import { HttpError } from "./http-error";
+import { registerPcRoutes } from "./pc/routes";
+import type { PcService } from "./pc/service";
 import { chromeAddresses, keyFromRequest, proxyMcp, relayExtension, sameKey, type ChromeAccess } from "./connectors/chromeRemote";
 
 export const COOKIE_NAME = "friend_session";
@@ -80,6 +82,8 @@ export interface GatewayDeps {
   connectors?: ConnectorsApi;
   /** Signing in with a link; the routes answer 503 without it. */
   oauth?: OAuthApi;
+  /** The Windows PCs: the list, signing in a PC, permissions and revoking. */
+  pc?: PcService;
   /** Changing settings from the owner's screen; the routes answer 503 without it. */
   settings?: SettingsApi;
   /** Says a short sentence in the named voice and returns it as a WAV recording, so the owner can hear a voice before choosing it. */
@@ -1068,6 +1072,21 @@ export function createGateway(deps: GatewayDeps) {
     if (!file) return reply.code(404).send({ error: "There is no such file." });
     return reply.header("content-disposition", `attachment; filename="${req.params.file.replace(/[^A-Za-z0-9._-]/g, "_")}"`).type(file.type).send(file.text);
   });
+
+  // ---- Windows PCs (owner session; the PC itself signs in without a cookie) ----
+  const pcWindow = new SlidingWindow(60, 60_000);
+  if (deps.pc) {
+    registerPcRoutes(app, {
+      svc: deps.pc,
+      ownerGuard: async (req, reply) => {
+        const token = req.cookies[COOKIE_NAME];
+        const session = token ? auth.resolveSession(token) : null;
+        if (!session) return reply.code(401).send({ error: "Unauthorized" });
+        if (!pcWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
+        reply.header("cache-control", "no-store");
+      },
+    });
+  }
 
   // ---- plugins (owner session only) ----
   const pluginWindow = new SlidingWindow(30, 60_000);
