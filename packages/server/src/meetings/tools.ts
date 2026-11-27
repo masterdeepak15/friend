@@ -75,8 +75,7 @@ export class MeetingTools {
           if (!Number.isFinite(at)) return bad("The time is not a valid ISO 8601 time with an offset, like 2026-12-01T15:00:00+05:30.");
           if (at < Date.now() - 5 * 60_000) return bad("That time has already passed.");
         }
-        const host = new URL(url).hostname;
-        if (!(await ask(at ? "Join a meeting later" : "Join a meeting now", `Join ${host}${a.title ? ` "${String(a.title).slice(0, 80)}"` : ""} ${at ? `at ${when(at)}` : "now"} as a guest named ${store.prefs().joinName || "the assistant"}.\nIt writes in the chat that it is taking notes, listens through the live captions, and speaks only if someone calls it by name.`))) return bad("The owner declined.");
+        // the owner asking for it (in a message, or by sending the invitation) is the approval, so it is not asked again
         const m = await service.join(url, { ...(at ? { at } : {}), ...(typeof a.title === "string" ? { title: a.title } : {}) });
         return ok(m.status === "scheduled" ? `Scheduled: ${describe(m)}.` : `Joining: ${describe(m)}.`);
       }

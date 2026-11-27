@@ -127,7 +127,7 @@ describe("what was said cannot close its own marker", () => {
 });
 
 describe("the meeting tools", () => {
-  it("open nothing but Teams meeting links and ask the owner before joining", async () => {
+  it("open nothing but meeting links, and join on the owner's word without asking again", async () => {
     const r = rig(new Page(["in", "ended"], [[]]));
     const ask = vi.fn(async () => true);
     const run = async (name: string, args: Record<string, unknown>, ctx = {}) => {
@@ -140,8 +140,7 @@ describe("the meeting tools", () => {
     expect(ask).not.toHaveBeenCalled();
     const ok = await run("meeting.join", { url: "https://teams.live.com/meet/5", at: new Date(Date.now() + 7_200_000).toISOString(), title: "Planning" });
     expect(ok).toMatchObject({ isError: false });
-    expect(ask).toHaveBeenCalledTimes(1);
-    expect((ask.mock.calls[0] as unknown as string[])[1]).toContain("teams.live.com");
+    expect(ask).not.toHaveBeenCalled(); // asking to join is the approval
     expect(((await run("meeting.list", {})) as { text: string }).text).toContain("Planning");
   });
 

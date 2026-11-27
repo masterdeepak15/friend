@@ -42,7 +42,9 @@ const tone = (seconds: number, rate = 22050, hz = 440): Buffer => {
 const open = async (html: string) => {
   page = new ChromeMeetingPage({ chrome: chrome!, tmpRoot: mkdtempSync(join(tmpdir(), "friend-aud-")), anyHost: true });
   await page.open(await serve(html));
-  return page as unknown as Pick<ChromeMeetingPage, "speak" | "audio" | "mic"> & { run<R>(e: string): Promise<R> };
+  const ready = page as unknown as { run<R>(e: string): Promise<R> };
+  await until(async () => (await ready.run<string>("document.readyState").catch(() => "")) === "complete");
+  return page as unknown as Pick<ChromeMeetingPage, "speak" | "audio" | "mic" | "camera" | "enableCaptions" | "captions" | "chat"> & { dom: unknown } & { run<R>(e: string): Promise<R> };
 };
 
 describe.skipIf(!chrome)("sound in a real Chrome, with no driver on the PC", () => {
@@ -111,4 +113,76 @@ document.getElementById("cam").onclick = () => { window.camClicked = true; };
     const p = await open("<!doctype html><body><p>no call here</p></body>");
     expect(await p.mic(true)).toBe(false);
   }, 90_000);
+
+  it("shows a picture of its own as the camera, and it moves", async () => {
+    const p = await open(`<!doctype html><body><video id="v" autoplay muted playsinline></video><canvas id="c" width="64" height="36"></canvas><script>
+window.frames = [];
+navigator.mediaDevices.getUserMedia({ video: true }).then((s) => {
+  window.vtracks = s.getVideoTracks().length;
+  const v = document.getElementById("v"); v.srcObject = s; v.play();
+  const c = document.getElementById("c").getContext("2d");
+  setInterval(() => { if (!v.videoWidth) return; window.w = v.videoWidth; c.drawImage(v, 0, 0, 64, 36); const d = c.getImageData(0, 0, 64, 36).data; let h = 0; for (let i = 0; i < d.length; i += 4) h = (h * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7) | 0; window.frames.push(h); }, 150);
+});
+</script></body>`);
+    await until(async () => (await p.run<number>("window.w || 0")) > 0);
+    expect(await p.run<number>("window.vtracks")).toBe(1);
+    expect(await p.run<number>("window.w")).toBe(640);
+    await new Promise((r) => setTimeout(r, 1800));
+    const frames = await p.run<number[]>("window.frames");
+    expect(new Set(frames).size).toBeGreaterThan(2); // not a still picture
+    // while it speaks, the picture is different from the quiet one
+    const quietNow = frames.at(-1);
+    void p.speak(tone(1.5));
+    await new Promise((r) => setTimeout(r, 700));
+    const during = await p.run<number[]>("window.frames.slice(-4)");
+    expect(during.every((h) => h !== quietNow)).toBe(true);
+  }, 60_000);
+
+  it("puts the camera button the way it is wanted", async () => {
+    const p = await open(`<!doctype html><body><button id="cam" aria-label="Turn camera off">Camera</button><button id="fx" aria-label="Video effects and settings">fx</button><script>
+window.fx = 0; const cam = document.getElementById("cam"); let on = true;
+cam.onclick = () => { on = !on; cam.setAttribute("aria-label", on ? "Turn camera off" : "Turn camera on"); };
+document.getElementById("fx").onclick = () => { window.fx++; };
+</script></body>`);
+    expect(await p.camera(true)).toBe(true); // already on: left alone
+    expect(await p.run<string>('document.getElementById("cam").getAttribute("aria-label")')).toBe("Turn camera off");
+    expect(await p.camera(false)).toBe(true);
+    expect(await p.run<string>('document.getElementById("cam").getAttribute("aria-label")')).toBe("Turn camera on");
+    expect(await p.camera(true)).toBe(true);
+    expect(await p.run<string>('document.getElementById("cam").getAttribute("aria-label")')).toBe("Turn camera off");
+    expect(await p.run<number>("window.fx")).toBe(0);
+  }, 60_000);
+
+  it("turns on the captions of the Teams page of today: the more menu that opens only for a real mouse, an item called Captions, and not again once they are on", async () => {
+    const p = await open(`<!doctype html><body><button id="callingButtons-showMoreBtn" aria-label="More">More</button><div id="menu"></div><div id="cc"></div><script>
+window.toggles = 0; let open = false; let on = false;
+const more = document.getElementById("callingButtons-showMoreBtn");
+// like Teams: a plain click() from a script does nothing, a real press does
+more.addEventListener("mousedown", () => { open = !open; render(); });
+function render() {
+  const m = document.getElementById("menu");
+  m.innerHTML = open ? '<div role="menu"><div role="menuitem" id="meeting-info-button" aria-label="Meeting info">Meeting info</div><div role="menuitem" id="closed-captions-button" aria-label="Captions" aria-checked="' + on + '" title="Show live captions">Captions</div></div>' : "";
+  const item = document.getElementById("closed-captions-button");
+  if (item) item.onclick = () => { on = !on; window.toggles++; open = false; render(); document.getElementById("cc").innerHTML = on ? '<div data-tid="closed-caption-renderer-wrapper"><div data-tid="closed-caption-v2-virtual-list-content"></div></div>' : ""; };
+}
+</script></body>`);
+    expect(await p.captions()).toBeNull();
+    await p.enableCaptions();
+    expect(await p.captions()).toEqual([]); // the panel is there, nobody has spoken
+    expect(await p.run<number>("window.toggles")).toBe(1);
+    await p.enableCaptions(); // asked again while they are on: they are not switched off
+    expect(await p.run<number>("window.toggles")).toBe(1);
+    expect(await p.captions()).toEqual([]);
+  }, 60_000);
+
+  it("sends a chat message with the site's own send button when Enter does not send it", async () => {
+    const p = await open(`<!doctype html><body><div data-tid="chat-button" id="chat-button">Chat</div><div id="chat" style="display:none"><div role="textbox" contenteditable="true" data-tid="ckeditor" style="min-height:20px;border:1px solid"></div><button data-tid="newMessageCommands-send" aria-label="Send">Send</button></div><script>
+window.log = [];
+document.getElementById("chat-button").onclick = () => { document.getElementById("chat").style.display = "block"; };
+// Enter inserts a line break and sends nothing, like a box that wants the button
+document.querySelector("[data-tid=newMessageCommands-send]").onclick = () => { const b = document.querySelector("[data-tid=ckeditor]"); if (b.innerText.trim()) { window.log.push(b.innerText.trim()); b.innerText = ""; } };
+</script></body>`);
+    expect(await p.chat("Hello, I am Maya.")).toBe(true);
+    expect(await p.run<string[]>("window.log")).toEqual(["Hello, I am Maya."]);
+  }, 60_000);
 });

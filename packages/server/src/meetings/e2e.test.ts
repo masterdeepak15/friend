@@ -40,6 +40,11 @@ class Page implements MeetingPage {
   async leave() {}
   async close() {}
   mics: boolean[] = [];
+  cams: boolean[] = [];
+  async camera(on: boolean) {
+    this.cams.push(on);
+    return true;
+  }
   played = 0;
   async mic(on: boolean) {
     this.mics.push(on);
@@ -146,6 +151,7 @@ describe("a real Friend that answers aloud", () => {
     await until(() => page.played === 1);
     expect(spoken).toEqual(["The release is on track for Friday."]);
     expect(page.mics.slice(-2)).toEqual([true, false]); // on to speak, off again
+    expect(page.cams).toEqual([true]); // its picture is on from the start
     expect(page.chats).toEqual([expect.stringMatching(/AI assistant/)]); // the announcement only: the answer was spoken
   }, 30_000);
 
@@ -153,6 +159,7 @@ describe("a real Friend that answers aloud", () => {
     const spoken: string[] = [];
     const page = new Page([[{ speaker: "Ann", text: "Maya, are you there?" }]]);
     const t = await boot([[{ type: "tool_call", id: "1", name: "meeting.speak", args: { text: "Yes." } }], [{ type: "done" }]], page, { spoken });
+    t.store.setPrefs({ speak: false });
     await t.service.join("https://teams.live.com/meet/81", {});
     await until(() => t.model.calls.length >= 2);
     expect(JSON.stringify(t.model.calls[1]!.messages)).toContain("switched off: write it with meeting.chat");
@@ -168,6 +175,7 @@ describe("a real Friend that answers aloud", () => {
       if ("error" in p) throw new Error(p.error);
       return p.run(async () => yes, new AbortController().signal);
     };
+    t.store.setPrefs({ speak: false });
     const dir = mkdtempSync(join(tmpdir(), "friend-wh-"));
     expect(await run({ whisperExe: join(dir, "nope.exe"), whisperModel: join(dir, "m.bin") })).toMatchObject({ isError: true, text: expect.stringMatching(/program was not found/) });
     writeFileSync(join(dir, "w.exe"), "x");
@@ -177,5 +185,21 @@ describe("a real Friend that answers aloud", () => {
     expect(await run({ whisperExe: join(dir, "w.exe"), whisperModel: join(dir, "m.bin"), speak: true })).toMatchObject({ isError: false });
     expect(t.store.prefs()).toMatchObject({ speak: true, whisperExe: join(dir, "w.exe"), whisperModel: join(dir, "m.bin") });
     expect((await run({})).text).toMatch(/Speaks aloud: yes\. Hears without captions: yes/);
+  }, 30_000);
+});
+
+describe("joining on the owner's word", () => {
+  it("does not ask the owner again to join a meeting they asked for, nor to schedule one", async () => {
+    const t = await boot([[{ type: "done" }]], new Page([[]]));
+    const tools = new MeetingTools({ service: t.service, store: t.store, audit: undefined as never, enabled: () => true });
+    let asked = 0;
+    const p = tools.prepare("meeting.join", { url: "https://teams.live.com/meet/932616617490?p=abc", at: new Date(Date.now() + 3_600_000).toISOString(), title: "Sync" });
+    if ("error" in p) throw new Error(p.error);
+    const r = await p.run(async () => (asked++, true), new AbortController().signal);
+    expect(asked).toBe(0);
+    expect(r).toMatchObject({ isError: false, text: expect.stringMatching(/Scheduled/) });
+    // and the tool itself is not one that the agent asks about either
+    const { MEETING_TOOL_DEFS } = await import("@friend/protocol");
+    expect(MEETING_TOOL_DEFS.find((d) => d.name === "meeting.join")!.baseTier).toBe("T1");
   }, 30_000);
 });

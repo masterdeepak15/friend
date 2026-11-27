@@ -1,4 +1,4 @@
-import { HELPERS, clickLabel, type DomSet } from "./domKit";
+import { HELPERS, SEND_CHAT, clickLabel, type DomSet } from "./domKit";
 
 /**
  * What the Google Meet page looks like to a program (guest join: no Google account). Meet changes its page now and then, so everything
@@ -21,7 +21,7 @@ const advance = (name: string, anyHost: boolean): string => `(() => { ${HELPERS}
   if (nameBox || join) {
     if (nameBox && nameBox.value !== NAME) setValue(nameBox, NAME);
     // a guest arrives with the camera and the microphone off
-    for (const t of all('[role=button][aria-label*="Turn off camera" i], [role=button][aria-label*="Turn off microphone" i]')) t.click();
+    for (const t of all('[role=button][aria-label*="Turn off microphone" i]')) t.click();
     if (join && (!nameBox || nameBox.value === NAME)) { join.click(); return { phase: "prejoin", detail: "Pressed " + txt(join) + "." }; }
     return { phase: "prejoin", detail: "Filling in the guest name." };
   }
@@ -55,5 +55,6 @@ export const MEET: DomSet = {
   captionSteps: [clickLabel(String.raw`/turn on captions/i`), clickLabel(String.raw`/^\s*(got it|ok)\s*$/i`)],
   shortcut: { key: "c", code: "KeyC", vk: 67, modifiers: 0 },
   focusChat,
+  sendChat: SEND_CHAT('textarea[aria-label*="send a message" i], textarea[placeholder*="send a message" i]', 'button[aria-label*="send a message" i], button[aria-label^="Send" i]'),
   hangUp: clickLabel(String.raw`/^\s*leave call\b/i`),
 };

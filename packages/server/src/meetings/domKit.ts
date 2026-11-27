@@ -26,6 +26,8 @@ export interface DomSet {
   shortcut?: { key: string; code: string; vk: number; modifiers: number };
   /** Opens the chat if it is closed and puts the cursor in the message box; true when it could. */
   focusChat: string;
+  /** After a message was typed: true when the box is empty (it was sent), or the centre of the send button to press with the mouse. */
+  sendChat: string;
   hangUp: string;
 }
 
@@ -46,4 +48,24 @@ export const micTo = (on: boolean): string => `(() => { ${HELPERS}
   if (muted === ${!on}) return true;
   btn.click();
   return true;
+})()`;
+
+/** Puts the meeting camera button in the state wanted (true = the picture goes out). */
+export const camTo = (on: boolean): string => `(() => { ${HELPERS}
+  const OFF = /turn camera on|turn on (your |my )?camera|start (my )?video|camera is off/i;
+  const ON = /turn camera off|turn off (your |my )?camera|stop (my )?video|camera is on/i;
+  const btn = all('button, [role=button], [role=switch]').find((e) => (OFF.test(label(e)) || ON.test(label(e))) && !/effects|background|settings|devices/i.test(label(e)));
+  if (!btn) return false;
+  if (OFF.test(label(btn)) === ${on}) btn.click();
+  return true;
+})()`;
+
+/** What a chat box looks like to a program, the same on every site: empty once the message went. */
+export const SEND_CHAT = (boxSel: string, sendSel: string): string => `(() => { ${HELPERS}
+  const box = all(${JSON.stringify(boxSel)})[0];
+  if (!box || !((box.value !== undefined ? box.value : txt(box)) || "").trim()) return true;
+  const send = all(${JSON.stringify(sendSel)})[0] || byText(/^\\s*send\\b/i, "button, [role=button]");
+  if (!send) return false;
+  const b = send.getBoundingClientRect();
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 })()`;

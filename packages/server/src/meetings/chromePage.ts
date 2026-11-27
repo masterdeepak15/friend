@@ -9,8 +9,8 @@ import type { MeetingPage, Phase } from "./session";
 import { domFor } from "./dom";
 import type { DomSet } from "./domKit";
 import { meetingPlatform } from "./logic";
-import { AUDIO_HOOK } from "./audioHook";
-import { micTo } from "./domKit";
+import { audioHook } from "./audioHook";
+import { camTo, micTo } from "./domKit";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -38,7 +38,7 @@ export class ChromeMeetingPage implements MeetingPage {
 
   constructor(private o: ChromePageOptions) {}
 
-  async open(url: string): Promise<void> {
+  async open(url: string, name = "Assistant"): Promise<void> {
     this.dom = domFor(meetingPlatform(url) ?? "teams");
     const root = this.o.tmpRoot ?? tmpdir();
     mkdirSync(root, { recursive: true });
@@ -82,7 +82,7 @@ export class ChromeMeetingPage implements MeetingPage {
     await c.send("Browser.setDownloadBehavior", { behavior: "deny" }).catch(() => {});
     await this.send("Page.enable");
     // a microphone that is ours and ears on the call, in every page, before the site runs
-    await this.send("Page.addScriptToEvaluateOnNewDocument", { source: AUDIO_HOOK });
+    await this.send("Page.addScriptToEvaluateOnNewDocument", { source: audioHook(name) });
     // a headless Chrome names itself so; Teams does not like that
     const v = await c.send<{ userAgent?: string }>("Browser.getVersion").catch(() => ({}) as { userAgent?: string });
     if (v.userAgent) await this.send("Emulation.setUserAgentOverride", { userAgent: v.userAgent.replace("HeadlessChrome", "Chrome"), acceptLanguage: "en-US,en" });
@@ -120,23 +120,43 @@ export class ChromeMeetingPage implements MeetingPage {
       return;
     }
     // the menu way: each step finds its button, and the last may be a question asked the first time (which language is spoken)
+    // (only the first step must be found: the menus differ from one version of the site to the next, and the later steps are tried in turn)
     for (const [i, step] of this.dom.captionSteps.entries()) {
-      const found = await this.run<boolean>(step).catch(() => false);
-      if (!found && i < this.dom.captionSteps.length - 1) return;
-      await sleep(i < 2 ? 600 : 800);
+      const found = await this.run<boolean | { x: number; y: number }>(step).catch(() => false);
+      if (!found && i === 0) return;
+      // some buttons open their menu only for a real mouse click
+      if (found && typeof found === "object") await this.mouseClick(found.x, found.y);
+      await sleep(i < 2 ? 900 : 800);
     }
+  }
+
+  private async mouseClick(x: number, y: number): Promise<void> {
+    for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) await this.send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1, buttons: type === "mouseReleased" ? 0 : 1 });
   }
 
   async chat(text: string): Promise<boolean> {
     try {
       if (!(await this.run<boolean>(this.dom.focusChat))) return false;
       await this.send("Input.insertText", { text: text.slice(0, 600) });
-      await sleep(150);
-      for (const type of ["rawKeyDown", "keyUp"]) await this.send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-      return true;
+      await sleep(200);
+      await this.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+      await this.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      await sleep(400);
+      // if Enter did not send it, the send button of the site does
+      const sent = await this.run<boolean | { x: number; y: number }>(this.dom.sendChat).catch(() => true);
+      if (sent && typeof sent === "object") {
+        await this.mouseClick(sent.x, sent.y);
+        await sleep(400);
+      }
+      return sent !== false;
     } catch {
       return false;
     }
+  }
+
+  /** Switches the meeting camera (the picture of the assistant) on or off; false when the button was not found. */
+  async camera(on: boolean): Promise<boolean> {
+    return (await this.run<boolean>(camTo(on)).catch(() => false)) === true;
   }
 
   /** Switches the meeting microphone on or off; false when the button was not found. */

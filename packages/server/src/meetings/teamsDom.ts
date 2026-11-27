@@ -4,7 +4,7 @@
  * inside the page and returns plain data.
  */
 
-import { HELPERS, type DomSet } from "./domKit";
+import { HELPERS, SEND_CHAT, type DomSet } from "./domKit";
 
 const ENDED = String.raw`/(you['’]ve left|you left|you have left) the (meeting|call)|the (meeting|call) (has )?ended|this meeting has ended|(you were|you['’]ve been|you have been) removed from the (meeting|call)|removed you from the (meeting|call)/i`;
 const LOBBY = String.raw`/waiting for (someone|the organi[sz]er|the host)[^.]{0,40}(let|admit)|someone in the meeting (will|should) let you in|we['’]ll let (people|them) know you['’]re (here|waiting)|let you in (soon|shortly)|someone will let you in/i`;
@@ -27,11 +27,6 @@ export const ADVANCE = (name: string, anyHost = false): string => `(() => { ${HE
   const join = document.querySelector('[data-tid="prejoin-join-button"]') || byText(/^\\s*join now\\s*$/i, "button, [role=button]");
   if (nameBox || join) {
     if (nameBox && nameBox.value !== NAME) setValue(nameBox, NAME);
-    // a guest arrives with the camera and the microphone off
-    for (const t of all('[data-tid="toggle-video"], [data-tid="toggle-mute"], [role=switch], [role=checkbox], [role=button][aria-pressed]')) {
-      if (!/camera|video|microphone|mic\\b|mute/i.test(label(t))) continue;
-      if (t.getAttribute("aria-checked") === "true" || t.getAttribute("aria-pressed") === "true") { if (/camera|video/i.test(label(t)) || t.getAttribute("data-tid") === "toggle-video") t.click(); }
-    }
     if (join && !join.disabled && (!nameBox || nameBox.value === NAME)) { join.click(); return { phase: "prejoin", detail: "Pressed Join now." }; }
     return { phase: "prejoin", detail: "Filling in the guest name." };
   }
@@ -62,7 +57,10 @@ export const CAPTIONS = `(() => { ${HELPERS}
 })()`;
 
 /** Opens the "more" menu. */
-export const OPEN_MORE = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="more-button"], #callingButtons-showMoreBtn, [id*="showMoreBtn"]') || byText(/^\\s*more( actions)?\\b/i, "button, [role=button]"); if (!b) return false; b.click(); return true; })()`;
+// the more menu opens only for a real mouse click, so this gives back where to click
+export const OPEN_MORE = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="more-button"], #callingButtons-showMoreBtn, [id*="showMoreBtn"]') || byText(/^\\s*more( actions)?\\b/i, "button, [role=button]"); if (!b) return false; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`;
+// in the menu the item is called "Captions" (and is checked when they are on: it is then left alone); older versions have "Language and speech"
+export const CLICK_CAPTIONS_ITEM = `(() => { ${HELPERS} const b = document.getElementById("closed-captions-button") || byText(/^\\s*captions\\b/i, "[role=menuitem], [role=menuitemcheckbox]"); if (!b) return false; if (b.getAttribute("aria-checked") !== "true") b.click(); return true; })()`;
 export const CLICK_LANGUAGE = `(() => { ${HELPERS} const b = byText(/language and speech/i); if (!b) return false; b.click(); return true; })()`;
 export const CLICK_CAPTIONS = `(() => { ${HELPERS} const b = byText(/turn on live captions|show live captions|live captions/i); if (!b) return false; b.click(); return true; })()`;
 export const CLICK_CONFIRM = `(() => { ${HELPERS} const b = byText(/^\\s*confirm\\s*$/i, "button, [role=button]"); if (!b) return false; b.click(); return true; })()`;
@@ -80,9 +78,10 @@ export const HANG_UP = `(() => { ${HELPERS} const b = document.querySelector('[d
 export const TEAMS: DomSet = {
   advance: ADVANCE,
   captions: CAPTIONS,
-  captionSteps: [OPEN_MORE, CLICK_LANGUAGE, CLICK_CAPTIONS, CLICK_CONFIRM],
+  captionSteps: [OPEN_MORE, CLICK_CAPTIONS_ITEM, CLICK_LANGUAGE, CLICK_CAPTIONS, CLICK_CONFIRM],
   // Ctrl+Shift+U switches live captions on or off in Teams
   shortcut: { key: "U", code: "KeyU", vk: 85, modifiers: 10 },
   focusChat: FOCUS_CHAT,
+  sendChat: SEND_CHAT('[data-tid="ckeditor"], div[role="textbox"][contenteditable="true"]', '[data-tid="newMessageCommands-send"], button[aria-label^="Send" i]'),
   hangUp: HANG_UP,
 };

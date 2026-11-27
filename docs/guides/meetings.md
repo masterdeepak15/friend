@@ -13,13 +13,13 @@ Friend can join a Microsoft Teams, Google Meet or Zoom meeting as a **guest**, l
 
 - "Join this meeting: *link*" (now), or "Join this meeting at 3pm tomorrow: *link*" (Friend joins by itself a minute early).
 - "Leave the meeting." "What are the notes of the last meeting?" "What did they decide?"
-- Friend asks you before it joins or schedules a join, and shows the address and time.
+- Asking Friend to join (or sending it the invitation) is the approval: it does not ask again. It tells you when it has joined.
 
 ## What it does in the meeting
 
 | | |
 |---|---|
-| **Joins** | in a private Chrome of its own, as a guest named after the assistant, with camera and microphone off. Someone has to let it in from the lobby (if the meeting has one). |
+| **Joins** | in a private Chrome of its own, as a guest named after the assistant, with its microphone off and its camera showing an animated picture of the assistant (a glowing orb that pulses when it listens and spreads rings while it speaks, with its name). Someone has to let it in from the lobby (if the meeting has one). |
 | **Says it is there** | one line in the chat when it arrives: it is an AI assistant taking notes, and speaks only when asked by name. |
 | **Listens** | by reading Teams' live captions. Plain code watches every line: no model is used until something needs it. |
 | **Called by name** | waits for the speaker to finish, then answers in a sentence or two **in the chat**. If it cannot answer or it needs you, it says it will check with you and messages you. |
@@ -52,9 +52,9 @@ When the Mailboxes plugin is on and a mail that is not from you carries a meetin
 
 **Plugins, Meetings, Configure** lists the meetings with their state, the notes, decisions and tasks, and has buttons to make it leave, cancel a scheduled one or delete one that is over.
 
-## Answering aloud (optional)
+## Answering aloud (on by default)
 
-Say once: "In meetings, answer aloud." Friend shows the change and you approve it (`meeting.setup speak`). After that, when someone calls it by name, it speaks the answer in the voice your PC already has (Windows speech, macOS `say`, or `espeak-ng` on Linux), and writes it in the chat only if speaking fails.
+It is on unless you say "In meetings, only write in the chat" (`meeting.setup speak: false`, which you approve). When someone calls it by name, it speaks the answer in the voice your PC already has (Windows speech, macOS `say`, or `espeak-ng` on Linux), and writes it in the chat only if speaking fails.
 
 - No driver and no virtual microphone: the browser's microphone for the meeting is a stream Friend makes itself. It is silent, and **muted in the meeting**, until Friend has something to say. It then switches the microphone on, plays the voice, and switches it off again.
 - It waits until nobody is talking, speaks at most once every 20 seconds, and keeps each answer to one or two short sentences.

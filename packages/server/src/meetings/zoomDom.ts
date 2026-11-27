@@ -1,4 +1,4 @@
-import { HELPERS, clickLabel, type DomSet } from "./domKit";
+import { HELPERS, SEND_CHAT, clickLabel, type DomSet } from "./domKit";
 
 /**
  * What the Zoom web client looks like to a program (join from the browser as a guest, no account). Zoom changes its page now and then,
@@ -55,5 +55,6 @@ export const ZOOM: DomSet = {
   captions,
   captionSteps: [clickLabel(String.raw`/^\s*(more|more meeting controls)\b/i`), clickLabel(String.raw`/captions|subtitle|transcript/i`), clickLabel(String.raw`/show subtitle|show captions|enable captions/i`)],
   focusChat,
+  sendChat: SEND_CHAT('.chat-box__chat-textarea, #chat-textarea, textarea[aria-label*="message" i], [contenteditable="true"][aria-label*="message" i]', 'button[aria-label^="Send" i], .chat-box__send-button'),
   hangUp: `(() => { ${HELPERS} const b = document.querySelector('button.footer__leave-btn, button[aria-label*="Leave" i]'); if (!b) return false; b.click(); const c = byText(/^\\s*(leave meeting|leave)\\s*$/i); if (c) c.click(); return true; })()`,
 };

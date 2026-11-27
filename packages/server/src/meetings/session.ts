@@ -18,6 +18,8 @@ export interface MeetingPage {
   chat(text: string): Promise<boolean>;
   leave(): Promise<void>;
   close(): Promise<void>;
+  /** Switches the meeting camera (the picture of the assistant) on or off. */
+  camera?(on: boolean): Promise<boolean>;
   /** Switches the meeting microphone on or off; false when its button was not found. Pages that cannot speak leave this out. */
   mic?(on: boolean): Promise<boolean>;
   /** Plays a spoken WAV into the meeting microphone; true when it was played to the end. */
@@ -185,6 +187,7 @@ export class MeetingSession {
             this.lastChat = 0;
             if (!(await d.page.chat(d.announcement).catch(() => false))) d.events.problem("It is in the meeting but could not write in the chat, so people were not told that it takes notes.");
             await d.page.mic?.(false).catch(() => false); // it arrives with the microphone off
+            await d.page.camera?.(true).catch(() => false); // and with its picture on: it moves with the voice
           }
           await this.listen(captionsTried, noCaptions, warned).then((r) => ({ captionsTried, noCaptions, warned } = r));
         } else if (this.now() - began > 120_000 && !inSince) {

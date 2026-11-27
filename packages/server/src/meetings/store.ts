@@ -30,14 +30,14 @@ export interface MeetingPrefs {
   keywords: string[];
   joinName: string;
   notesEveryMinutes: number;
-  /** Answer aloud when called by name (in a computer voice), not only in the chat. */
+  /** Answer aloud when called by name (in a computer voice); on unless the owner turns it off. If speaking fails it writes in the chat. */
   speak: boolean;
   /** The whisper.cpp program and model on this PC: used to hear the meeting when it has no live captions. */
   whisperExe: string;
   whisperModel: string;
 }
 
-export const DEFAULT_PREFS: MeetingPrefs = { names: [], ownerNames: [], keywords: [], joinName: "", notesEveryMinutes: 5, speak: false, whisperExe: "", whisperModel: "" };
+export const DEFAULT_PREFS: MeetingPrefs = { names: [], ownerNames: [], keywords: [], joinName: "", notesEveryMinutes: 5, speak: true, whisperExe: "", whisperModel: "" };
 
 interface Row {
   id: number;

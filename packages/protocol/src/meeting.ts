@@ -11,9 +11,9 @@ const id = z.number().int().min(1);
 export const MEETING_TOOL_DEFS: ToolDef[] = [
   def(
     "meeting.join",
-    "Join an online meeting as a guest and listen: give the invitation link of Microsoft Teams (teams.microsoft.com, teams.live.com), Google Meet (meet.google.com/abc-defg-hij) or Zoom (zoom.us/j/number). With at (ISO 8601 with a UTC offset) it joins then, by itself; without it, now. It shows as a guest named after the assistant and says in the chat that it is taking notes. The owner is asked before it joins or is scheduled.",
+    "Join an online meeting as a guest and listen: give the invitation link of Microsoft Teams (teams.microsoft.com, teams.live.com), Google Meet (meet.google.com/abc-defg-hij) or Zoom (zoom.us/j/number). With at (ISO 8601 with a UTC offset) it joins then, by itself; without it, now. It shows as a guest named after the assistant and says in the chat that it is taking notes. The owner asking for it is the approval: do not ask again.",
     z.object({ url: z.string().min(10).max(2000), at: z.string().max(40).optional(), title: z.string().max(120).optional() }),
-    "T2",
+    "T1",
   ),
   def("meeting.leave", "Leave a meeting now, or cancel one that has not started. Without id: the meeting it is in now.", z.object({ id: id.optional() }), "T1"),
   def("meeting.list", "List the meetings: scheduled, live and recent, with what state each is in.", z.object({ limit: z.number().int().min(1).max(30).optional() }), "T1", true),
