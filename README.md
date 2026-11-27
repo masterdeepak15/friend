@@ -440,6 +440,10 @@ Add as many Windows PCs as you want: install the **Windows PCs** plugin (Plugins
 - **Safe by default:** what cannot be undone (deleting, uninstalling, paying, registry, risky prompts) asks you first, with the PC's name; password managers, UAC and banks are never touched; typed text is audited only as a length.
 - Tools: `pc.list`, `pc.control`, `pc.tasks`, `pc.snapshot`, `pc.screenshot`, `pc.click`, `pc.type`, `pc.scroll`, `pc.move`, `pc.shortcut`, `pc.app`, `pc.clipboard`, `pc.wait`, `pc.wait_for`, `pc.shell`, `pc.files`, `pc.process`, `pc.registry`, `pc.term.*`, `pc.claude.sessions`. The full guide is in `docs/guides/windows-pcs.md`.
 
+## Mailboxes: email accounts of its own
+
+Give Friend an address (Gmail, Microsoft 365 or any IMAP and SMTP mailbox) from **Plugins, Mailboxes**. It reads new mail, searches it, and answers or sends from it. **Only mail proven to come from you** (your address, with the mail server's DKIM or SPF check passing) can give it an order; mail from anyone else is only information and can never make it forward, write to a third person or ignore a rule. Every send asks you first unless you allowed it for that kind of mail and a person the mailbox already knows; it never answers newsletters, no-reply addresses or robots. The password is kept sealed in the vault. See [docs/guides/mailboxes.md](docs/guides/mailboxes.md).
+
 ## Presentations: it makes a deck and presents it live
 
 Say "make a presentation on hacking". The assistant writes a whole deck (slides, each with items that appear one by one, a spoken line for every item, and an animation per item), saves it, and can present it on your screen: each item appears with its animation and is spoken, slide after slide, like a teacher in class. It does not call the model while a slide plays, so playing is fast and costs nothing extra.

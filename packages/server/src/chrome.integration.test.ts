@@ -40,9 +40,9 @@ describe("the chrome setting", () => {
 });
 
 describe("chrome among the integrations", () => {
-  it("is one of them, next to last", () => {
+  it("is one of them, before Windows PCs, Mailboxes and video", () => {
     expect(isIntegrationId("chrome")).toBe(true);
-    expect(INTEGRATION_IDS[INTEGRATION_IDS.length - 3]).toBe("chrome");
+    expect(INTEGRATION_IDS[INTEGRATION_IDS.length - 4]).toBe("chrome");
   });
   it("starts as not installed, and says what it is", () => {
     const v = view(cfg());

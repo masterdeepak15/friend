@@ -192,6 +192,8 @@ export interface AppOptions {
   pcAgentPath?: string;
   /** Tries a mailbox login. Tests give a stand-in so nothing reaches a mail server. */
   mailCheck?: (settings: import("./mail/imap").ImapSmtpSettings) => Promise<void>;
+  /** Gives a mailbox a stand-in for the mail server (tests). */
+  mailProvider?: (account: import("./mail/types").MailAccount, password: string) => import("./mail/provider").MailProvider;
   /** Starting Friend when the computer starts, and updating it. Everything has a real default; tests hand in their own. */
   system?: {
     /** The program that starts Friend (Node and the Friend program file). */
@@ -1127,7 +1129,7 @@ export async function createApp(opts: AppOptions) {
       if (!a) throw new Error("There is no such mailbox.");
       const password = mailSecrets.get(id);
       if (!password) throw new MailAuthError("No password is saved for this mailbox.");
-      return new ImapSmtpProvider({ imap: a.imap, smtp: a.smtp, username: a.username, password });
+      return opts.mailProvider ? opts.mailProvider(a, password) : new ImapSmtpProvider({ imap: a.imap, smtp: a.smtp, username: a.username, password });
     },
     onMail: async (msg, cls) => {
       const todo = mailService.inbound(msg, cls);
