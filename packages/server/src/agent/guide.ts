@@ -4,7 +4,7 @@ import { jarvisCatalog } from "@friend/protocol";
  * every widget with its props and an example, how to arrange them, and when to put something on top or clear the screen.
  */
 
-export const GUIDE_TOPICS = ["all", "widgets", "layout", "overlay", "theme", "files", "recipes", "presentations"] as const;
+export const GUIDE_TOPICS = ["all", "widgets", "layout", "overlay", "theme", "files", "recipes", "presentations", "pcs"] as const;
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];
 
 const WIDGETS = `WIDGETS (stage.show {object:{id, type, props, placement?, ttl?, layer?}})
@@ -89,7 +89,16 @@ const PRESENTATIONS = `PRESENTATIONS (deck.create, deck.present, deck.control; t
 7. deck.control also has next, back, repeat, goto (slide) and stop. deck.edit changes a saved deck ("add a slide on phishing", "change slide 3"). deck.export saves a deck as pptx (to edit in PowerPoint) or html (plays alone in any browser); it asks the owner first. deck.list and deck.show read decks.
 8. A presentation uses the stage while it runs: do not put other pictures on the screen until it stops.`;
 
-const SECTIONS: Record<Exclude<GuideTopic, "all">, string> = { widgets: WIDGETS, layout: LAYOUT, overlay: OVERLAY, theme: THEME, files: FILES, recipes: RECIPES, presentations: PRESENTATIONS };
+const PCS = `WINDOWS PCS (pc.* tools; the owner's Windows PCs, added in Plugins, Windows PCs)
+1. pc.list shows the PCs, whether each is online, its status and task. Every other pc.* tool takes "pc" (the PC's name); leave it out when only one PC is online. If you get "Which PC?", ask the owner.
+2. To look at the screen or use the mouse and keyboard you need a control session: pc.control {action:"start", minutes?}. The owner is asked once (the card names the PC). While it runs the PC shows a border and banner. If the person at the PC touches the mouse or keyboard it pauses at once: do not fight it; tell them, and start again only when they say so. pc.control stop when you are done.
+3. Work like a person: pc.snapshot (screenshot with numbered elements plus the list of elements and windows), then act on a number with pc.click, pc.type (clear, enter), pc.scroll, pc.move (drag), pc.shortcut (ctrl+c, alt+tab, win+r), pc.app (launch, switch, resize, close), pc.clipboard, pc.multi_select, pc.multi_edit. After an action, wait for the result with pc.wait_for (text, window, element) instead of guessing, then pc.snapshot again to check. Numbers change when the screen changes: never reuse an old number after the screen moved. Prefer a shortcut or pc.app over hunting for a button.
+4. Things that cannot be undone ask the owner (deleting, uninstalling, paying, sending money, ending programs, the registry, commands that remove things). Password managers, UAC and Windows Security prompts, and banking windows are never clicked: say the owner must do that step.
+5. Without a session you can still use, if the PC allows them: pc.shell (PowerShell), pc.files (only the allowed folders), pc.process, pc.registry, pc.displays. A refusal says which permission to switch on; tell the owner.
+6. Terminals (Claude Code and any command line): pc.term.open {cwd, command:"claude", resume|continue} (or "shell") starts a session that keeps running between your turns; pc.claude.sessions {project} lists earlier Claude Code sessions to resume. Read it with pc.term.read (the screen as text, whether it is busy, idle or waiting, and the options shown), answer with pc.term.send (text, enter:true, or keys: Down, Up, Enter, Esc, Tab, Ctrl+C: to choose a menu option press Down until it is highlighted, then Enter), and pc.term.wait until idle. Check the status often; give Claude Code one clear instruction at a time. If it asks to run or delete something destructive, the owner decides, not you. pc.term.close when finished.
+7. pc.tasks queues work for a PC (one runs at a time; they survive a restart and come back paused).`;
+
+const SECTIONS: Record<Exclude<GuideTopic, "all">, string> = { widgets: WIDGETS, layout: LAYOUT, overlay: OVERLAY, theme: THEME, files: FILES, recipes: RECIPES, presentations: PRESENTATIONS, pcs: PCS };
 
 /** The manual for one topic, or all of it. */
 export function screenGuide(topic: GuideTopic = "all"): string {

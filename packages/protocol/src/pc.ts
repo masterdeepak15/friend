@@ -37,7 +37,8 @@ const Result = z.object({ output: z.string(), truncated: z.boolean(), image: z.o
 export const PcUp = z.discriminatedUnion("type", [
   z.object({ type: z.literal("hello"), os: z.string().max(80), host: z.string().max(80), version: z.string().max(40), agentSha256: z.string().max(80).optional() }),
   z.object({ type: z.literal("tool.result"), id: z.string(), result: Result }),
-  z.object({ type: z.literal("tool.error"), id: z.string(), error: z.string().max(4000) }),
+  /** `needsApproval`: the PC found something critical on its own screen (a button called Delete, a destructive prompt); the owner is asked and the call is sent again with approved. */
+  z.object({ type: z.literal("tool.error"), id: z.string(), error: z.string().max(4000), needsApproval: z.object({ reason: z.string().max(300), detail: z.string().max(1500) }).optional() }),
   z.object({ type: z.literal("status"), status: PcStatus }),
   /** The real person at the PC used the mouse or keyboard. */
   z.object({ type: z.literal("human.input") }),
@@ -47,7 +48,7 @@ export type PcUp = z.infer<typeof PcUp>;
 
 /** What Friend sends to a PC. */
 export const PcDown = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("tool.exec"), id: z.string(), tool: z.string().max(60), args: z.unknown(), permissions: PcPermissions.optional() }),
+  z.object({ type: z.literal("tool.exec"), id: z.string(), tool: z.string().max(60), args: z.unknown(), permissions: PcPermissions.optional(), approved: z.boolean().optional() }),
   z.object({ type: z.literal("lease.start"), id: z.string(), minutes: z.number().int().min(1).max(480).optional() }),
   z.object({ type: z.literal("lease.end") }),
   z.object({ type: z.literal("permissions"), permissions: PcPermissions }),
@@ -163,6 +164,11 @@ export const isPcTool = (name: string): boolean => name.startsWith("pc.");
 
 /** What a PC call says on an approval card. */
 export function describePcCall(name: string, a: Record<string, unknown>): string {
+  const base = describeBase(name, a);
+  return typeof a.reason === "string" && a.reason ? `${base}. ${a.reason}${typeof a.detail === "string" && a.detail ? `: ${a.detail.slice(0, 600)}` : ""}` : base;
+}
+
+function describeBase(name: string, a: Record<string, unknown>): string {
   const on = typeof a.pc === "string" && a.pc ? ` on ${a.pc}` : "";
   const q = (v: unknown, n = 200) => String(v ?? "").slice(0, n);
   switch (name) {

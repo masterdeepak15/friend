@@ -41,6 +41,8 @@ export interface GatewayDeps {
   onClientMessage: (session: Session, msg: ClientMsg, conn: ClientConn) => void;
   onClientConnect?: (session: Session, conn: ClientConn) => void | (() => void);
   onDeviceConnect: (device: Device, ws: WebSocket) => void;
+  /** A Windows PC signed in with its access token and opened its socket. */
+  onPcConnect?: (pcId: number, ws: WebSocket) => void;
   onLock?: () => void;
   /** The owner signed out. */
   onSignOut?: () => void;
@@ -1711,6 +1713,7 @@ export function createGateway(deps: GatewayDeps) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
   // Devices send whole tool results (file contents, command output), which can be much larger than a chat frame.
   const deviceWss = new WebSocketServer({ noServer: true, maxPayload: MAX_DEVICE_FRAME_BYTES });
+  const pcWss = new WebSocketServer({ noServer: true, maxPayload: MAX_DEVICE_FRAME_BYTES });
 
   const originAllowed = (req: IncomingMessage): boolean => {
     const origin = req.headers.origin;
@@ -1800,6 +1803,18 @@ export function createGateway(deps: GatewayDeps) {
     deps.onDeviceConnect(device, ws);
   }
 
+  /** A Windows PC: it proves itself with the access token it got by signing in; an unknown or expired token is closed at once. */
+  function handlePc(ws: WebSocket, req: IncomingMessage) {
+    const header = String(req.headers.authorization ?? "");
+    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    const pcId = token && deps.pc ? deps.pc.enroll.verifyAccess(token) : null;
+    if (pcId === null || !deps.onPcConnect) {
+      audit.log("anonymous", "pc.refused", { ip: clientIp(req) });
+      return ws.close(4401, "unauthorized");
+    }
+    deps.onPcConnect(pcId, ws);
+  }
+
   /** The extension (or a program) of Chrome control, on another PC, joining through Friend's own address. */
   const handleChromeUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const chrome = deps.chrome;
@@ -1837,15 +1852,16 @@ export function createGateway(deps: GatewayDeps) {
       }
       return handleChromeUpgrade(req, socket, head);
     }
-    if (path !== "/ws" && path !== "/device") return socket.destroy();
+    if (path !== "/ws" && path !== "/device" && path !== "/pc") return socket.destroy();
     if (!hostAllowed(req.headers.host)) {
       audit.log("anonymous", "host.refused", { host: String(req.headers.host).slice(0, 100) });
       socket.write("HTTP/1.1 421 Misdirected Request\r\nConnection: close\r\n\r\n");
       return socket.destroy();
     }
-    (path === "/device" ? deviceWss : wss).handleUpgrade(req, socket, head, (ws) => {
+    (path === "/device" ? deviceWss : path === "/pc" ? pcWss : wss).handleUpgrade(req, socket, head, (ws) => {
       ws.on("error", () => {});
       if (path === "/ws") handleClient(ws, req);
+      else if (path === "/pc") handlePc(ws, req);
       else handleDevice(ws, req);
     });
   });
@@ -1858,9 +1874,10 @@ export function createGateway(deps: GatewayDeps) {
       return { port: typeof addr === "object" && addr ? addr.port : config.port };
     },
     async close(): Promise<void> {
-      for (const c of [...wss.clients, ...deviceWss.clients, ...chromeWss.clients]) c.terminate();
+      for (const c of [...wss.clients, ...deviceWss.clients, ...pcWss.clients, ...chromeWss.clients]) c.terminate();
       wss.close();
       deviceWss.close();
+      pcWss.close();
       chromeWss.close();
       await app.close();
     },

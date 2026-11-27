@@ -25,6 +25,7 @@ import type { Db } from "../db";
 import type { Memory } from "../memory";
 import type { DeckStore } from "../deck/store";
 import type { Presenter } from "../deck/presenter";
+import type { PcTools, PreparedPc } from "../pc/tools";
 import { runDeckTool } from "../deck/tools";
 import { MemoryTree, capIndex, inboxName } from "../memory/tree";
 import type { Soul } from "../memory/soul";
@@ -149,6 +150,8 @@ export interface AgentDeps {
   /** Reading and changing the owner's settings. Without it the settings tools report they are unavailable. */
   settings?: AgentSettings;
   /** Presentations: the saved decks, the player and the export. Without it the deck tools report they are unavailable. */
+  /** The Windows PCs: the assistant's pc.* tools. Without it they report they are unavailable. */
+  pcs?: PcTools;
   decks?: { store: DeckStore; presenter: Presenter; exportDeck(id: string, format: "pptx" | "html"): Promise<string> };
   /** The tools of the owner's connectors (Gmail, Chrome control, …). Without it there are none. */
   mcp?: McpApi;
@@ -817,6 +820,19 @@ export class Agent {
 
     let tier: Tier = def.baseTier;
     if (call.name === "shell.run") tier = classifyShell(String(args.command), d.config.destructivePatterns);
+    // a Windows PC: only the owner; the PC, its permissions and the control session are checked first, and what is critical asks
+    let pcPrep: PreparedPc | null = null;
+    if (call.name.startsWith("pc.")) {
+      if (!d.pcs) return fail("Windows PCs are not available.");
+      if (ctx.trust !== "owner") return fail("Only the owner can use the PCs.");
+      const prep = d.pcs.prepare(call.name, args);
+      if ("error" in prep) {
+        rec.outcome = "refused";
+        return fail(prep.error);
+      }
+      pcPrep = prep;
+      tier = prep.tier;
+    }
     const p = pathArg(call.name, args);
     // a page the model chose by itself (an address nobody said and no search returned) could be a way to send private data out in the
     // address, so it is asked about like anything else outside what the owner has allowed
@@ -833,7 +849,7 @@ export class Agent {
       if (d.eyeGate.decide(call.name, { trust: ctx.trust, source: ctx.source }, seconds).allow) decision = "allow";
     }
     let approvedOutside = false;
-    const device = def.target === "device" ? d.devices.targetName() : null;
+    const device = pcPrep ? pcPrep.pcName || null : def.target === "device" ? d.devices.targetName() : null;
     if (decision === "deny") {
       rec.outcome = "refused";
       d.audit.log("agent", "tool.denied", { tool: call.name, args: call.name.startsWith("web.") ? {} : clipArgs(args), trust: ctx.trust }); // a web address or a search can be private: only the web tools' own entries say anything about them
@@ -878,7 +894,7 @@ export class Agent {
     const outside = call.name === "shell.run" || call.name === "office.assign" || call.name === "office.say" || (call.name === "office.decide" && args.decision === "allow") ? this.outsideSource() : null;
     if (outside && decision === "allow") decision = "ask";
     // an install shows the owner the source and the whole text of every skill on the card
-    let shown: Record<string, unknown> = args;
+    let shown: Record<string, unknown> = pcPrep?.pcName ? { ...args, pc: pcPrep.pcName } : args;
     if (call.name === "plugins.import" && d.skillMarket && (decision === "ask" || decision === "ask_with_pin")) {
       try {
         shown = { ...args, preview: d.skillMarket.preview(String(args.staging), { ...(typeof args.plugin === "string" ? { plugin: args.plugin } : {}), ...(Array.isArray(args.skills) ? { skills: args.skills.map(String) } : {}) }) };
@@ -898,6 +914,19 @@ export class Agent {
         return fail(`The owner did not approve this action (${outcome.reason ?? "denied"}).`);
       }
       approvedOutside = !insideRoots;
+    }
+
+    if (pcPrep) {
+      const prepared = pcPrep;
+      const r = await prepared.run(async (reason, detail) => {
+        d.decks?.presenter.approvalPending(true);
+        const o = await d.approvals
+          .request({ tool: call.name, args: { ...shown, reason, detail }, tier: "T2", needsPin: false, device: prepared.pcName, remote: ctx.trust !== "voice-device" }, ctx.emit)
+          .finally(() => d.decks?.presenter.approvalPending(false));
+        if (!o.approved) d.audit.log("agent", "tool.not_approved", { tool: call.name, reason: o.reason, pc: prepared.pcName });
+        return o.approved;
+      }, signal);
+      return r.isError ? fail(r.text.replace(/^Error: /, "")) : { text: r.text, isError: false, ...(r.image ? { image: r.image } : {}) };
     }
 
     if (mcpTool) {

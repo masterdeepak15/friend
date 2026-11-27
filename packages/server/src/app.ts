@@ -114,6 +114,8 @@ import type { Provider, ProviderEvent, StreamRequest } from "./provider/types";
 import { StageState } from "./stage";
 import { DeckStore } from "./deck/store";
 import { PcService } from "./pc/service";
+import { PcHub } from "./pc/hub";
+import { PcTools } from "./pc/tools";
 import { Presenter } from "./deck/presenter";
 import { deckToHtml } from "./deck/exportHtml";
 import { deckToPptx } from "./deck/exportPptx";
@@ -919,6 +921,10 @@ export async function createApp(opts: AppOptions) {
   // notes that came over from the older list, or were saved quickly, are filed under topics a little after Friend starts
   const tidyAtStart = setTimeout(() => void memoryOrganizer.maybeRun(), 45_000);
   tidyAtStart.unref();
+  // Windows PCs: the list and sign-in, the connected PCs, and the assistant's pc.* tools
+  const pcService: PcService = new PcService({ db, auth, audit, online: (id) => pcHub.isOnline(id), onRevoke: (id) => pcHub.revoke(id) });
+  const pcHub: PcHub = new PcHub({ store: pcService.store });
+  const pcTools = new PcTools({ hub: pcHub, store: pcService.store, audit, extraPatterns: () => [] });
   // presentations: the saved decks, the player (it speaks through the same speaker and draws through the same broadcast), and the files
   const deckStore = new DeckStore(db);
   const presenter = new Presenter({
@@ -947,6 +953,7 @@ export async function createApp(opts: AppOptions) {
   const agent = new Agent({
     auditQuery: new AuditQuery(db),
     decks: { store: deckStore, presenter, exportDeck },
+    pcs: pcTools,
     notifyOwner: (text, title) => tellOwner(text, title),
     securityAlert: async (text) => {
       const r = await security.notify("assistant", "Someone is trying to get past the rules", `The assistant noticed it while talking: "${text.replace(/\s+/g, " ").trim().slice(0, 300)}"`, 2);
@@ -1637,10 +1644,10 @@ export async function createApp(opts: AppOptions) {
   };
 
   const tls = config.https ? await ensureTlsCert(opts.dataDir, [...config.allowedHosts, ...(config.publicUrl ? [new URL(config.publicUrl).hostname] : [])]) : undefined;
-  const pcService = new PcService({ db, auth, audit });
   const gateway = createGateway({
     ...(tls ? { tls } : {}),
     pc: pcService,
+    onPcConnect: (pcId, ws) => pcHub.attach(pcId, ws),
     connectors: connectorsApi,
     oauth: oauthApi,
     chrome: chromeRemoteApi,
