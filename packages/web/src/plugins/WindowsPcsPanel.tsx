@@ -29,6 +29,25 @@ export function statusLine(pc: PcView): string {
   return parts.join(" | ");
 }
 
+/** A list typed one item per line. The text stays as typed (spaces and all) while the list is passed up. */
+function Lines({ label, help, value, onChange, rows = 2 }: { label: string; help: string; value: string[]; onChange: (v: string[]) => void; rows?: number }) {
+  const [text, setText] = useState(value.join("\n"));
+  return (
+    <label className="settings-field">
+      <span>{help}</span>
+      <textarea
+        aria-label={label}
+        rows={rows}
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          onChange(e.target.value.split("\n").map((l) => l.trim()).filter(Boolean));
+        }}
+      />
+    </label>
+  );
+}
+
 function PermissionsForm({ value, onChange }: { value: PcPermissions; onChange: (p: PcPermissions) => void }) {
   return (
     <div className="pc-perms">
@@ -45,10 +64,9 @@ function PermissionsForm({ value, onChange }: { value: PcPermissions; onChange: 
           <option value="write">read and write</option>
         </select>
       </label>
-      <label className="settings-field">
-        <span>Folders (one per line: files and terminals work only inside these)</span>
-        <textarea aria-label="Folders" rows={3} value={value.folders.join("\n")} onChange={(e) => onChange({ ...value, folders: e.target.value.split("\n").map((l) => l.trim()).filter(Boolean) })} />
-      </label>
+      <Lines label="Folders" rows={3} help="Folders (one per line: files and terminals work only inside these)" value={value.folders} onChange={(folders) => onChange({ ...value, folders })} />
+      <Lines label="Extra words that ask" help="Extra words that make Friend ask first (one per line; added to the fixed list of delete, uninstall, pay...)" value={value.askPatterns ?? []} onChange={(askPatterns) => onChange({ ...value, askPatterns })} />
+      <Lines label="Extra windows never touched" help="Extra windows Friend never touches (one title word per line; password managers, consent prompts and banks are always off limits)" value={value.denyWindows ?? []} onChange={(denyWindows) => onChange({ ...value, denyWindows })} />
     </div>
   );
 }

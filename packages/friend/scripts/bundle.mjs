@@ -4,6 +4,7 @@ import { build } from "esbuild";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgDir = resolve(here, "..");
@@ -84,6 +85,13 @@ await build({
 cpSync(join(chrome, "extension"), join(chromeOut, "extension"), { recursive: true });
 cpSync(join(chrome, "LICENSE"), join(chromeOut, "LICENSE"));
 cpSync(join(chrome, "package.json"), join(chromeOut, "package.json"));
+
+// The Windows PC agent: one file that the PCs download from this Friend (dist/pc-agent/agent.js), made by its own bundle script.
+const agentBuild = spawnSync(process.execPath, [join(repo, "packages/pc-agent/scripts/bundle.mjs"), join(dist, "pc-agent", "agent.js")], { stdio: "inherit", env: { ...process.env, FRIEND_PC_AGENT_VERSION: pkg.version } });
+if (agentBuild.status !== 0) {
+  console.error("The Windows PC agent could not be built.");
+  process.exit(1);
+}
 
 const keep = (src) => !/(^|[\\/])(__pycache__|node_modules|\.venv|\.pytest_cache)([\\/]|$)|\.pyc$/.test(src);
 cpSync(web, join(dist, "web"), { recursive: true });

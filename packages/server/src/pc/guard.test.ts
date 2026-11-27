@@ -25,6 +25,7 @@ describe("what the assistant may do on a PC, before anything is sent", () => {
     }
     expect(check("pc.snapshot", {}, perms({ control: true }), session).decision).toBe("deny"); // the screen switch is its own
     expect(check("pc.displays", {}, perms(), none).decision).toBe("allow");
+    expect(check("pc.wait", { seconds: 2 }, perms(), none).decision).toBe("allow"); // waiting needs no session
   });
 
   it("asks before starting a control session, and only when the PC allows control", () => {

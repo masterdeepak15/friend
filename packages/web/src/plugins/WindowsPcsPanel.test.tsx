@@ -107,6 +107,17 @@ describe("what a PC may do, control, and revoking", () => {
     await waitFor(() => expect(api.setPermissions).toHaveBeenCalledWith(1, expect.objectContaining({ shell: true, files: "read", control: true }), "123456"));
   });
 
+  it("can add the owner's own words and windows to the fixed lists", async () => {
+    const { api } = setup();
+    await userEvent.click(await screen.findByRole("button", { name: "Permissions" }));
+    await userEvent.type(screen.getByLabelText("Extra words that ask"), "send invoice");
+    await userEvent.type(screen.getByLabelText("Extra windows never touched"), "my secret app");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await typePin("123456");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(api.setPermissions).toHaveBeenCalledWith(1, expect.objectContaining({ askPatterns: ["send invoice"], denyWindows: ["my secret app"] }), "123456"));
+  });
+
   it("starts a control session for a chosen time, and stops it", async () => {
     const { api } = setup();
     await userEvent.selectOptions(await screen.findByLabelText("Minutes for Office PC"), "60");

@@ -74,7 +74,7 @@ export function checkPcCall(tool: string, args: unknown, perms: PcPermissions, s
   const a = (args ?? {}) as Record<string, unknown>;
   const str = (k: string): string => (typeof a[k] === "string" ? (a[k] as string) : "");
 
-  if (tool === "pc.list" || tool === "pc.displays") return allow();
+  if (tool === "pc.list" || tool === "pc.displays" || tool === "pc.wait") return allow();
   if (tool === "pc.control") {
     if (str("action") === "start") return perms.control ? ask("Start a control session") : deny(needs("control"));
     return allow();

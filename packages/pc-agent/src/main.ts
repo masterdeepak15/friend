@@ -99,7 +99,7 @@ async function main(): Promise<void> {
     show: (url, code) => {
       log(`Approve this PC in Friend: ${url}  (code ${code})`);
       console.log(`\nFriend PC Agent\n  Approve this PC: ${url}\n  Code: ${code}\n`);
-      execFile("cmd.exe", ["/c", "start", "", url], { windowsHide: true }, () => {});
+      if (!process.env.FRIEND_PC_NO_BROWSER) execFile("cmd.exe", ["/c", "start", "", url], { windowsHide: true }, () => {}); // (the switch is for runs without a person at the screen)
     },
     log,
     onUpdate: (url, sha) => void selfUpdate(url, sha),

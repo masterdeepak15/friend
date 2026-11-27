@@ -427,6 +427,16 @@ The Office lets Friend hire **workers**: separate Claude Code sessions that work
 
 Besides the simple widgets, Every component of the Jarvis HUD library that is safe to draw (stat cards, gauges, bar, line and donut charts, tables, status pills, node graphs, tabs and about forty more) is an object type of its own, by its own name (`JStatCard`, `JGaugeChart`, `JTable`, ...), in the same list as the basic widgets, and the best looking: Friend picks them first. Parts inside a card go in `kids` and `slots`; it is data, never code. Every component and prop is checked against an allow-list before it is drawn, so nothing can run or restyle the screen. `stage.guide` lists the components for him.
 
+## Windows PCs: the assistant uses a PC like a person
+
+Add as many Windows PCs as you want (Plugins, Windows PCs). The assistant can then look at the screen, click, type, open apps, wait for things, run commands, work with files, and drive a terminal such as Claude Code (open a project, resume an earlier session, answer its menus, give it instructions, check its status). Each PC runs a small agent that connects out to your Friend; **nothing of Friend is installed on it**.
+
+- **Add a PC:** one PowerShell line (or a small `.cmd` file) installs the official Node.js (its signature is checked) and the agent (its checksum is checked) into your own user folder, starts it at every logon, and opens a page to approve the PC with your PIN (device authorization with PKCE). No administrator rights, no unsigned program.
+- **Permissions per PC**, all off to start: control the screen, screenshots, commands and terminals, programs, registry, files (off, read, read and write, only inside listed folders).
+- **Control sessions:** one at a time per PC, after a 3 second countdown, with a border and a banner on the PC. Your own mouse or keyboard use pauses it at once; Ctrl+Alt+Shift+Esc ends it. Tasks queue and survive a restart; the PC always keeps a status.
+- **Safe by default:** what cannot be undone (deleting, uninstalling, paying, registry, risky prompts) asks you first, with the PC's name; password managers, UAC and banks are never touched; typed text is audited only as a length.
+- Tools: `pc.list`, `pc.control`, `pc.tasks`, `pc.snapshot`, `pc.screenshot`, `pc.click`, `pc.type`, `pc.scroll`, `pc.move`, `pc.shortcut`, `pc.app`, `pc.clipboard`, `pc.wait`, `pc.wait_for`, `pc.shell`, `pc.files`, `pc.process`, `pc.registry`, `pc.term.*`, `pc.claude.sessions`. The full guide is in `docs/guides/windows-pcs.md`.
+
 ## Presentations: it makes a deck and presents it live
 
 Say "make a presentation on hacking". The assistant writes a whole deck (slides, each with items that appear one by one, a spoken line for every item, and an animation per item), saves it, and can present it on your screen: each item appears with its animation and is spoken, slide after slide, like a teacher in class. It does not call the model while a slide plays, so playing is fast and costs nothing extra.
