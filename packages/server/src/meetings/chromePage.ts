@@ -9,6 +9,8 @@ import type { MeetingPage, Phase } from "./session";
 import { domFor } from "./dom";
 import type { DomSet } from "./domKit";
 import { meetingPlatform } from "./logic";
+import { AUDIO_HOOK } from "./audioHook";
+import { micTo } from "./domKit";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -79,6 +81,8 @@ export class ChromeMeetingPage implements MeetingPage {
     await c.send("Target.setDiscoverTargets", { discover: true });
     await c.send("Browser.setDownloadBehavior", { behavior: "deny" }).catch(() => {});
     await this.send("Page.enable");
+    // a microphone that is ours and ears on the call, in every page, before the site runs
+    await this.send("Page.addScriptToEvaluateOnNewDocument", { source: AUDIO_HOOK });
     // a headless Chrome names itself so; Teams does not like that
     const v = await c.send<{ userAgent?: string }>("Browser.getVersion").catch(() => ({}) as { userAgent?: string });
     if (v.userAgent) await this.send("Emulation.setUserAgentOverride", { userAgent: v.userAgent.replace("HeadlessChrome", "Chrome"), acceptLanguage: "en-US,en" });
@@ -133,6 +137,27 @@ export class ChromeMeetingPage implements MeetingPage {
     } catch {
       return false;
     }
+  }
+
+  /** Switches the meeting microphone on or off; false when the button was not found. */
+  async mic(on: boolean): Promise<boolean> {
+    return (await this.run<boolean>(micTo(on)).catch(() => false)) === true;
+  }
+
+  /** Plays a spoken WAV into the meeting microphone and returns when it has finished. */
+  async speak(wav: Buffer): Promise<boolean> {
+    try {
+      const secs = await this.run<number>(`window.__friend ? window.__friend.speak(${JSON.stringify(wav.toString("base64"))}) : 0`);
+      return typeof secs === "number" && secs > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /** The sound of the other people since the last call, as 16 kHz 16-bit mono; null when the page has no call yet. */
+  async audio(): Promise<Buffer | null> {
+    const b64 = await this.run<string | null>("window.__friend && window.__friend.take ? window.__friend.take() : null").catch(() => null);
+    return typeof b64 === "string" ? Buffer.from(b64, "base64") : null;
   }
 
   async leave(): Promise<void> {

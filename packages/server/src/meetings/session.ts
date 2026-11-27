@@ -1,3 +1,5 @@
+import type { AudioHearing } from "./hearing";
+import type { Speech } from "./speech";
 import { CaptionTracker, Cooldown, concernsOwner, isAddressed, isOwnerSpeaking, type CaptionItem, type Line } from "./logic";
 import type { MeetingPrefs, MeetingStatus } from "./store";
 
@@ -16,6 +18,12 @@ export interface MeetingPage {
   chat(text: string): Promise<boolean>;
   leave(): Promise<void>;
   close(): Promise<void>;
+  /** Switches the meeting microphone on or off; false when its button was not found. Pages that cannot speak leave this out. */
+  mic?(on: boolean): Promise<boolean>;
+  /** Plays a spoken WAV into the meeting microphone; true when it was played to the end. */
+  speak?(wav: Buffer): Promise<boolean>;
+  /** The sound of the other people since the last call (16 kHz, 16-bit, mono), or null when there is none to give. */
+  audio?(): Promise<Buffer | null>;
 }
 
 export interface SessionEvents {
@@ -51,6 +59,10 @@ export interface SessionDeps {
   settleMs?: number;
   /** How long after being called it waits for the speaker to finish. */
   replyDelayMs?: number;
+  /** Turns the sound of the call into lines when it has no live captions (a speech model on this PC). */
+  hearing?: AudioHearing;
+  /** A voice, when the owner switched speaking aloud on. */
+  speech?: Speech;
 }
 
 const CONTEXT = 14;
@@ -68,6 +80,9 @@ export class MeetingSession {
   private lastNotes: number;
   private done: Promise<void> | null = null;
   private status: MeetingStatus | null = null;
+  private audioMode = false;
+  private lastHeard = 0;
+  private lastSpoke = 0;
 
   constructor(private d: SessionDeps) {
     this.tracker = new CaptionTracker(d.settleMs ?? 2500);
@@ -103,6 +118,27 @@ export class MeetingSession {
     if (this.now() - this.lastChat < 15_000) return false;
     this.lastChat = this.now();
     return this.d.page.chat(text.slice(0, 600)).catch(() => false);
+  }
+
+  /** Says it aloud in a computer voice, after the room has gone quiet; at most once every 20 seconds. */
+  async speak(text: string): Promise<{ ok: boolean; message: string }> {
+    const d = this.d;
+    if (this.status !== "live") return { ok: false, message: "It is not in the meeting." };
+    if (!d.speech || !d.page.speak || !d.page.mic) return { ok: false, message: "Speaking aloud is not switched on here." };
+    if (this.now() - this.lastSpoke < 20_000) return { ok: false, message: "It spoke a moment ago: wait twenty seconds between spoken answers." };
+    this.lastSpoke = this.now();
+    // a person does not talk over someone
+    for (let w = 0; this.now() - this.lastHeard < 1500 && w < 20; w++) await this.sleep(400);
+    const wav = await d.speech(text.slice(0, 400)).catch(() => null);
+    if (!wav) return { ok: false, message: "This PC has no voice to speak with." };
+    if (!(await d.page.mic(true).catch(() => false))) return { ok: false, message: "It could not switch the microphone on in the meeting." };
+    let ok = false;
+    try {
+      ok = await d.page.speak(wav).catch(() => false);
+    } finally {
+      await d.page.mic(false).catch(() => false);
+    }
+    return ok ? { ok: true, message: "Said aloud." } : { ok: false, message: "It could not play the sound into the meeting." };
   }
 
   private set(status: MeetingStatus, detail: string): void {
@@ -148,6 +184,7 @@ export class MeetingSession {
             announced = true;
             this.lastChat = 0;
             if (!(await d.page.chat(d.announcement).catch(() => false))) d.events.problem("It is in the meeting but could not write in the chat, so people were not told that it takes notes.");
+            await d.page.mic?.(false).catch(() => false); // it arrives with the microphone off
           }
           await this.listen(captionsTried, noCaptions, warned).then((r) => ({ captionsTried, noCaptions, warned } = r));
         } else if (this.now() - began > 120_000 && !inSince) {
@@ -160,6 +197,10 @@ export class MeetingSession {
       }
       if (this.stopped) reason = this.stopped;
     } finally {
+      if (this.audioMode && this.d.hearing) {
+        await this.d.hearing.finish().catch(() => {});
+        this.take(this.d.hearing.take());
+      }
       const rest = this.tracker.flush();
       if (rest.length) this.take(rest);
       if (this.status && this.status !== "failed") {
@@ -181,12 +222,14 @@ export class MeetingSession {
         tried++;
         await d.page.enableCaptions().catch(() => {});
       }
-      if (none > 60 && !warned) {
+      if (d.hearing && d.page.audio && none > 10) await this.hear();
+      if (none > 60 && !warned && !this.audioMode) {
         warned = true;
         d.events.problem("Live captions are not on in this meeting, so it cannot hear anything. The organiser may have turned them off.");
       }
     } else {
       none = 0;
+      this.audioMode = false;
       const lines = this.tracker.feed(items, this.now());
       if (lines.length) this.take(lines);
     }
@@ -194,8 +237,23 @@ export class MeetingSession {
     return { captionsTried: tried, noCaptions: none, warned };
   }
 
+  /** With no captions: the sound of the call, read by a speech model on this PC. */
+  private async hear(): Promise<void> {
+    const d = this.d;
+    if (!this.audioMode) {
+      this.audioMode = true;
+      await d.page.audio?.().catch(() => null); // what piled up before is old
+      d.events.problem("Live captions are off in this meeting, so it is listening to the sound instead. It cannot tell who is speaking.");
+    }
+    const pcm = await d.page.audio?.().catch(() => null);
+    if (pcm) d.hearing?.push(pcm);
+    const lines = d.hearing?.take() ?? [];
+    if (lines.length) this.take(lines);
+  }
+
   private take(lines: Line[]): void {
     const d = this.d;
+    this.lastHeard = this.now();
     const prefs = d.prefs();
     for (const l of lines) {
       this.recent.push(l);

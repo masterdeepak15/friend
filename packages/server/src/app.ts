@@ -101,6 +101,8 @@ import { MeetingService } from "./meetings/service";
 import { findMeetingLink } from "./meetings/logic";
 import { MeetingStore } from "./meetings/store";
 import { MeetingTools } from "./meetings/tools";
+import { AudioHearing, checkWhisper, whisperTranscriber } from "./meetings/hearing";
+import { systemSpeech } from "./meetings/speech";
 import { PolicyEngine } from "./policy/engine";
 import { ClaudeProvider } from "./provider/claude";
 import { StatsSampler, startStatsFeed } from "./hudStats";
@@ -205,12 +207,14 @@ export interface AppOptions {
   mailCheck?: (settings: import("./mail/imap").ImapSmtpSettings) => Promise<void>;
   /** Hands the mail stores to a test, so it can set up roles and rules without going through the owner's approvals. */
   mailHandles?: (h: { store: import("./mail/store").MailStore; auto: import("./mail/astore").MailAutomationStore }) => void;
-  /** Gives a mailbox a stand-in for the mail server (tests). */
   /** Tests only: the page a meeting is attended in (without it, a Chrome of its own). */
   meetingPage?: () => MeetingPage | null;
   /** Tests only: shorter waits for a meeting, and a way to reach its service. */
   meetingTuning?: NonNullable<ConstructorParameters<typeof MeetingService>[0]["tuning"]>;
   meetingHandles?: (h: { service: MeetingService; store: MeetingStore }) => void;
+  /** Tests only: the voice and the ears a meeting uses (without them: this PC's voice and the whisper.cpp the owner set up). */
+  meetingVoice?: { speech?: import("./meetings/speech").Speech | null; hearing?: () => import("./meetings/hearing").AudioHearing | null };
+  /** Gives a mailbox a stand-in for the mail server (tests). */
   mailProvider?: (account: import("./mail/types").MailAccount, password: string) => import("./mail/provider").MailProvider;
   /** Starting Friend when the computer starts, and updating it. Everything has a real default; tests hand in their own. */
   system?: {
@@ -1055,6 +1059,13 @@ export async function createApp(opts: AppOptions) {
       return chrome ? new ChromeMeetingPage({ chrome, tmpRoot: join(opts.dataDir, "browser-profiles") }) : null;
     },
     ...(opts.meetingTuning ? { tuning: opts.meetingTuning } : {}),
+    speech: () => (opts.meetingVoice && "speech" in opts.meetingVoice ? opts.meetingVoice.speech ?? null : systemSpeech()),
+    hearing: () => {
+      if (opts.meetingVoice?.hearing) return opts.meetingVoice.hearing();
+      const p = meetingStore.prefs();
+      if (!p.whisperExe || !p.whisperModel || checkWhisper(p.whisperExe, p.whisperModel)) return null;
+      return new AudioHearing({ transcribe: whisperTranscriber({ exe: p.whisperExe, model: p.whisperModel, tmpRoot: join(opts.dataDir, "tmp") }) });
+    },
     tellOwner: (text, title) => void tellOwner(text, title ?? "Meeting"),
     runTurn: async (prompt, c) => {
       if (agent.isBusy()) return false;

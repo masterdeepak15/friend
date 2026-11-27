@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,6 +8,7 @@ import type { CaptionItem } from "./logic";
 import type { MeetingService } from "./service";
 import type { MeetingPage, Phase } from "./session";
 import type { MeetingStore } from "./store";
+import { MeetingTools } from "./tools";
 
 let app: Awaited<ReturnType<typeof createApp>> | undefined;
 afterEach(async () => {
@@ -38,9 +39,19 @@ class Page implements MeetingPage {
   }
   async leave() {}
   async close() {}
+  mics: boolean[] = [];
+  played = 0;
+  async mic(on: boolean) {
+    this.mics.push(on);
+    return true;
+  }
+  async speak() {
+    this.played++;
+    return true;
+  }
 }
 
-async function boot(script: ConstructorParameters<typeof FakeProvider>[0], page: Page) {
+async function boot(script: ConstructorParameters<typeof FakeProvider>[0], page: Page, voice?: { spoken: string[] }) {
   const dir = mkdtempSync(join(tmpdir(), "friend-meete2e-"));
   const model = new FakeProvider(script);
   const h: { service?: MeetingService; store?: MeetingStore } = {};
@@ -52,6 +63,7 @@ async function boot(script: ConstructorParameters<typeof FakeProvider>[0], page:
     meetingPage: () => page,
     meetingTuning: { pollMs: 5, settleMs: 40, replyDelayMs: 20, retryMs: 10 },
     meetingHandles: (x) => Object.assign(h, x),
+    ...(voice ? { meetingVoice: { speech: async (t: string) => (voice.spoken.push(t), Buffer.from("RIFFx")) } } : {}),
   });
   const { port } = await app.start();
   await fetch(`http://127.0.0.1:${port}/api/setup`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "correct horse battery", pin: "123456", assistantName: "Maya" }) });
@@ -78,7 +90,7 @@ describe("a real Friend in a meeting", () => {
     expect(t.store.current()!.tasks).toEqual([{ what: "Ship the release", who: "Deepak", due: "Friday" }]);
     const first = t.model.calls[0]!;
     expect(JSON.stringify(first.messages)).toContain("untrusted-meeting");
-    expect(first.tools.map((x) => x.name).sort()).toEqual(["meeting.chat", "meeting.notes", "meeting.save_notes", "meeting.tell_owner"]);
+    expect(first.tools.map((x) => x.name).sort()).toEqual(["meeting.chat", "meeting.notes", "meeting.save_notes", "meeting.speak", "meeting.tell_owner"]);
   }, 30_000);
 
   it("is not fooled by someone in the meeting who tells it to run commands or send mail", async () => {
@@ -115,5 +127,55 @@ describe("a real Friend in a meeting", () => {
     expect(((await left.json()) as { message: string }).message).toMatch(/cancelled/);
     expect((await fetch(`${t.base}/api/meetings/${m.id}`, { method: "DELETE", headers: { cookie } })).status).toBe(200);
     expect(t.store.get(m.id)).toBeNull();
+  }, 30_000);
+});
+describe("a real Friend that answers aloud", () => {
+  it("speaks the answer when the owner switched speaking on, and falls back to the chat when it is off", async () => {
+    const spoken: string[] = [];
+    const page = new Page([[{ speaker: "Ann", text: "Maya, what is the status of the release?" }]]);
+    const t = await boot(
+      [
+        [{ type: "tool_call", id: "1", name: "meeting.speak", args: { text: "The release is on track for Friday." } }],
+        [{ type: "done" }],
+      ],
+      page,
+      { spoken },
+    );
+    t.store.setPrefs({ speak: true });
+    await t.service.join("https://teams.live.com/meet/80", {});
+    await until(() => page.played === 1);
+    expect(spoken).toEqual(["The release is on track for Friday."]);
+    expect(page.mics.slice(-2)).toEqual([true, false]); // on to speak, off again
+    expect(page.chats).toEqual([expect.stringMatching(/AI assistant/)]); // the announcement only: the answer was spoken
+  }, 30_000);
+
+  it("refuses to speak when it is off, and tells the model to write instead", async () => {
+    const spoken: string[] = [];
+    const page = new Page([[{ speaker: "Ann", text: "Maya, are you there?" }]]);
+    const t = await boot([[{ type: "tool_call", id: "1", name: "meeting.speak", args: { text: "Yes." } }], [{ type: "done" }]], page, { spoken });
+    await t.service.join("https://teams.live.com/meet/81", {});
+    await until(() => t.model.calls.length >= 2);
+    expect(JSON.stringify(t.model.calls[1]!.messages)).toContain("switched off: write it with meeting.chat");
+    expect(spoken).toEqual([]);
+    expect(page.played).toBe(0);
+  }, 30_000);
+
+  it("only accepts a whisper program and model that are real files, and saves them once the owner agrees", async () => {
+    const t = await boot([[{ type: "done" }]], new Page([[]]));
+    const tools = new MeetingTools({ service: t.service, store: t.store, audit: undefined as never, enabled: () => true });
+    const run = async (args: Record<string, unknown>, yes = true) => {
+      const p = tools.prepare("meeting.setup", args);
+      if ("error" in p) throw new Error(p.error);
+      return p.run(async () => yes, new AbortController().signal);
+    };
+    const dir = mkdtempSync(join(tmpdir(), "friend-wh-"));
+    expect(await run({ whisperExe: join(dir, "nope.exe"), whisperModel: join(dir, "m.bin") })).toMatchObject({ isError: true, text: expect.stringMatching(/program was not found/) });
+    writeFileSync(join(dir, "w.exe"), "x");
+    writeFileSync(join(dir, "m.bin"), "x");
+    expect(await run({ whisperExe: join(dir, "w.exe"), whisperModel: join(dir, "m.bin"), speak: true }, false)).toMatchObject({ isError: true, text: "The owner declined." });
+    expect(t.store.prefs().speak).toBe(false);
+    expect(await run({ whisperExe: join(dir, "w.exe"), whisperModel: join(dir, "m.bin"), speak: true })).toMatchObject({ isError: false });
+    expect(t.store.prefs()).toMatchObject({ speak: true, whisperExe: join(dir, "w.exe"), whisperModel: join(dir, "m.bin") });
+    expect((await run({})).text).toMatch(/Speaks aloud: yes\. Hears without captions: yes/);
   }, 30_000);
 });

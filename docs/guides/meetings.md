@@ -1,6 +1,6 @@
 # Meetings: the assistant joins your Teams, Google Meet and Zoom calls
 
-Friend can join a Microsoft Teams, Google Meet or Zoom meeting as a **guest**, listen, take notes, tell you on your phone when something concerns you, and send you the summary and the tasks afterwards. It costs nothing: it uses the Chrome or Edge already on your PC and Teams' own live captions. No meeting service, no extra account, no speech model.
+Friend can join a Microsoft Teams, Google Meet or Zoom meeting as a **guest**, listen, take notes, tell you on your phone when something concerns you, and send you the summary and the tasks afterwards. It costs nothing: it uses the Chrome or Edge already on your PC and the meeting's own live captions. No meeting service, no extra account, no driver. Two things are optional and also free: it can answer aloud, and it can hear a meeting that has no captions.
 
 ## Set it up
 
@@ -37,7 +37,7 @@ Friend can join a Microsoft Teams, Google Meet or Zoom meeting as a **guest**, l
 
 ## Limits to know
 
-- **Live captions must be available.** The organiser can turn them off, and then Friend says so and cannot hear. (Listening to the audio itself is planned.)
+- **Live captions are best.** The organiser can turn them off. Then Friend says so, and hears only if you set up whisper.cpp (below); without it, it cannot hear.
 - **Guest join can be blocked** by a company's Teams settings, and some meetings need the organiser to let you in.
 - **The sites change their pages.** Everything that depends on a page is in one file per site (`teamsDom.ts`, `meetDom.ts`, `zoomDom.ts`: the words and attributes it looks for, each with more than one way). The join, captions and chat flow was tested against a page shaped like Teams in a real Chrome, and the Meet and Zoom scripts were checked to run without errors; none has been tried against a live call yet. If a step fails, Friend tells you at which one.
 - **Meet and Zoom guests:** Google Meet lets a guest in only when the host admits them. Zoom needs the browser version enabled by the host, and a passcode in the link (or none).
@@ -52,6 +52,26 @@ When the Mailboxes plugin is on and a mail that is not from you carries a meetin
 
 **Plugins, Meetings, Configure** lists the meetings with their state, the notes, decisions and tasks, and has buttons to make it leave, cancel a scheduled one or delete one that is over.
 
-## Later
+## Answering aloud (optional)
 
-Speaking aloud when called, and listening to the audio when captions are off. Both need a virtual audio device installed on the PC (a driver), so they are left out until you want them.
+Say once: "In meetings, answer aloud." Friend shows the change and you approve it (`meeting.setup speak`). After that, when someone calls it by name, it speaks the answer in the voice your PC already has (Windows speech, macOS `say`, or `espeak-ng` on Linux), and writes it in the chat only if speaking fails.
+
+- No driver and no virtual microphone: the browser's microphone for the meeting is a stream Friend makes itself. It is silent, and **muted in the meeting**, until Friend has something to say. It then switches the microphone on, plays the voice, and switches it off again.
+- It waits until nobody is talking, speaks at most once every 20 seconds, and keeps each answer to one or two short sentences.
+- The voice is the computer voice of your PC, in its language. It is not your voice.
+- The announcement in the chat when it arrives still says it is an AI assistant.
+
+## Hearing a meeting that has no captions (optional)
+
+When live captions are off, Friend can listen to the sound of the call itself and write it down with **whisper.cpp**, a free speech program that runs on your PC (no account, nothing sent anywhere):
+
+1. Download a release of whisper.cpp for your system (the `whisper-cli` program) and a model file such as `ggml-base.bin` (about 150 MB; `ggml-small.bin` is better and slower).
+2. Tell Friend where they are: "For meetings without captions, use whisper at C:\tools\whisper\whisper-cli.exe with the model C:\tools\whisper\ggml-base.bin." You approve it. Friend checks both files exist.
+
+How it works: the browser hands Friend the sound of the other people (it listens to the call's incoming audio tracks, not to your PC's speakers), in pieces cut at the pauses. Pieces with no speech in them are never sent to the model. The sound is never saved. Each piece becomes a line from "Someone" and goes through the same rules as captions (answers by name, tells you what concerns you, notes).
+
+Limits: it cannot tell who is speaking, so your own words are not skipped and the owner is not recognised by name; it needs a PC fast enough for the model (a few seconds per ten seconds of speech with `base`); it is a little behind the conversation; and a model sometimes mishears names. Captions are used again as soon as they come back.
+
+## Not built
+
+Recognising the owner by voice, joining from mail without you, and calendar integration.

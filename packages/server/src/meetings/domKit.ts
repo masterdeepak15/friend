@@ -31,3 +31,19 @@ export interface DomSet {
 
 /** A script that clicks the first visible button whose label matches the pattern. */
 export const clickLabel = (re: string, sel?: string): string => `(() => { ${HELPERS} const b = byText(${re}${sel ? `, ${JSON.stringify(sel)}` : ""}); if (!b) return false; b.click(); return true; })()`;
+
+/**
+ * Puts the meeting's microphone button in the state wanted (true = sound goes out). Every site labels it the same two ways: "Mute"/"Turn off
+ * microphone" while it is live and "Unmute"/"Turn on microphone" while it is muted. Returns true when the microphone is now as wanted.
+ */
+export const micTo = (on: boolean): string => `(() => { ${HELPERS}
+  const MUTED = /unmute|turn on (your |my )?(mic|microphone)|microphone is (off|muted)/i;
+  const LIVE = /(^|\\s)mute\\b|turn off (your |my )?(mic|microphone)|microphone is on/i;
+  const btn = all('button, [role=button], [role=switch]').find((e) => /mic|mute/i.test(label(e)) && (MUTED.test(label(e)) || LIVE.test(label(e))) && !/camera|video|speaker|audio output/i.test(label(e)));
+  if (!btn) return false;
+  const l = label(btn);
+  const muted = btn.getAttribute("data-is-muted") === "true" || MUTED.test(l);
+  if (muted === ${!on}) return true;
+  btn.click();
+  return true;
+})()`;

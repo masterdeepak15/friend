@@ -1,6 +1,7 @@
 import { MEETING_TOOL_DEFS } from "@friend/protocol";
 import type { Audit } from "../audit";
 import type { AskOwner } from "../mail/service";
+import { checkWhisper } from "./hearing";
 import { isMeetingUrl, normalizeMeetingUrl } from "./logic";
 import type { MeetingService } from "./service";
 import type { Meeting, MeetingStore } from "./store";
@@ -16,7 +17,7 @@ export interface PreparedMeeting {
 }
 
 /** The only tools a turn about a meeting may use: it can write in that meeting's chat, tell the owner, and keep the notes. */
-export const MEETING_TURN_TOOLS: ReadonlySet<string> = new Set(["meeting.chat", "meeting.tell_owner", "meeting.save_notes", "meeting.notes"]);
+export const MEETING_TURN_TOOLS: ReadonlySet<string> = new Set(["meeting.chat", "meeting.speak", "meeting.tell_owner", "meeting.save_notes", "meeting.notes"]);
 
 /** What the audit trail keeps of a call: never the words. */
 export function meetingAuditArgs(a: Record<string, unknown>): Record<string, unknown> {
@@ -95,14 +96,20 @@ export class MeetingTools {
       case "meeting.setup": {
         const p = store.prefs();
         const change: Record<string, unknown> = {};
-        for (const k of ["names", "ownerNames", "keywords", "joinName", "notesEveryMinutes"] as const) if (a[k] !== undefined) change[k] = a[k];
-        if (!Object.keys(change).length) return ok(`Answers to: ${[...p.names].join(", ") || "its own name only"}. Owner's names: ${p.ownerNames.join(", ") || "not set"}. Topics: ${p.keywords.join(", ") || "none"}. Joins as: ${p.joinName || "its own name"}. Notes every ${p.notesEveryMinutes} minutes.`);
+        for (const k of ["names", "ownerNames", "keywords", "joinName", "notesEveryMinutes", "speak", "whisperExe", "whisperModel"] as const) if (a[k] !== undefined) change[k] = a[k];
+        const hear = checkWhisperChange(change, p);
+        if (hear) return bad(hear);
+        if (!Object.keys(change).length) return ok(`Answers to: ${[...p.names].join(", ") || "its own name only"}. Owner's names: ${p.ownerNames.join(", ") || "not set"}. Topics: ${p.keywords.join(", ") || "none"}. Joins as: ${p.joinName || "its own name"}. Notes every ${p.notesEveryMinutes} minutes. Speaks aloud: ${p.speak ? "yes" : "no"}. Hears without captions: ${p.whisperExe && p.whisperModel ? "yes (whisper.cpp)" : "no"}.`);
         if (!(await ask("Change meeting settings", Object.entries(change).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("\n")))) return bad("The owner declined.");
         store.setPrefs(change);
         return ok("Saved.");
       }
       case "meeting.chat":
         return ok(await service.say(String(a.text), id));
+      case "meeting.speak": {
+        const r = await service.speak(String(a.text), id);
+        return r.ok ? ok(r.message) : bad(r.message);
+      }
       case "meeting.tell_owner":
         return ok(service.tell(id, String(a.text)));
       case "meeting.save_notes": {
@@ -115,4 +122,13 @@ export class MeetingTools {
         return bad(`Unknown tool: ${name}`);
     }
   }
+}
+
+/** A whisper program and model the owner names must be real files, both set together. */
+function checkWhisperChange(change: Record<string, unknown>, now: { whisperExe: string; whisperModel: string }): string | null {
+  if (change.whisperExe === undefined && change.whisperModel === undefined) return null;
+  const exe = typeof change.whisperExe === "string" ? change.whisperExe : now.whisperExe;
+  const model = typeof change.whisperModel === "string" ? change.whisperModel : now.whisperModel;
+  if (!exe && !model) return null; // switching it off
+  return checkWhisper(exe, model);
 }

@@ -1,5 +1,7 @@
 import type { Audit } from "../audit";
+import type { AudioHearing } from "./hearing";
 import type { Line } from "./logic";
+import type { Speech } from "./speech";
 import { MeetingSession, type MeetingPage } from "./session";
 import type { Meeting, MeetingStore } from "./store";
 
@@ -16,6 +18,10 @@ export interface MeetingServiceDeps {
   /** Gives the assistant one turn that can only use the meeting tools. False when it is busy right now. */
   runTurn: (prompt: string, ctx: { id: number; kind: TurnKind }) => Promise<boolean>;
   tellOwner: (text: string, title?: string) => void;
+  /** The voice to speak with when the owner has switched speaking aloud on, or null. */
+  speech?: () => Speech | null;
+  /** Something that reads the sound of a call when it has no captions (whisper.cpp set up by the owner), or null. */
+  hearing?: () => AudioHearing | null;
   now?: () => number;
   /** Tests make the waits short. */
   tuning?: { retryMs?: number; pollMs?: number; settleMs?: number; replyDelayMs?: number; admitTimeoutMs?: number };
@@ -102,6 +108,16 @@ export class MeetingService {
     return (await s.say(text)) ? "Written in the meeting chat." : "It could not write in the chat now (it waits fifteen seconds between messages, and the chat must be open to it).";
   }
 
+  /** The assistant says something aloud in the live meeting, if the owner switched that on. */
+  async speak(text: string, id?: number): Promise<{ ok: boolean; message: string }> {
+    if (!this.d.store.prefs().speak) return { ok: false, message: "Speaking aloud is switched off: write it with meeting.chat instead." };
+    const target = id ?? this.live()?.id;
+    const s = target ? this.sessions.get(target) : undefined;
+    if (!s) return { ok: false, message: "It is not in a meeting." };
+    const r = await s.speak(text);
+    return r.ok ? r : { ...r, message: `${r.message} Write it with meeting.chat instead.` };
+  }
+
   /** The assistant messages the owner about a meeting; not more than six in ten minutes. */
   tell(id: number | undefined, text: string): string {
     const key = id ?? 0;
@@ -125,12 +141,16 @@ export class MeetingService {
     const prefs = () => this.d.store.prefs();
     const t = this.d.tuning ?? {};
     const self = m.joinName || this.d.assistantName();
+    const speech = prefs().speak ? (this.d.speech?.() ?? null) : null;
+    const hearing = this.d.hearing?.() ?? null;
     const session = new MeetingSession({
       page,
       url: m.url,
       selfName: self,
       names: () => [this.d.assistantName(), ...prefs().names],
       prefs,
+      ...(speech ? { speech } : {}),
+      ...(hearing ? { hearing } : {}),
       announcement: `Hi, I'm ${this.d.assistantName()}, an AI assistant. I'm here to take notes${prefs().ownerNames[0] ? ` for ${prefs().ownerNames[0]}` : ""}. I only speak if someone asks me by name.`,
       now: this.d.now,
       ...(t.pollMs ? { pollMs: t.pollMs } : {}),
@@ -143,7 +163,7 @@ export class MeetingService {
           if (s === "failed") this.d.tellOwner(`I could not stay in the meeting${m.title ? ` "${m.title}"` : ""}: ${detail}`, "Meeting");
         },
         lines: (lines) => this.d.store.addLines(id, lines, this.now()),
-        addressed: (line, ctx) => void this.turn(id, "reply", `${line.speaker} called you by name just now: "${line.text}".\n\nIf you can answer in a sentence or two from what you know, write it with meeting.chat (short, polite, in the language they used). If it needs the owner or you are not sure, write in the chat that you will check with them, and use meeting.tell_owner with the question. Do not promise anything for the owner and do not reveal anything private.`, ctx),
+        addressed: (line, ctx) => void this.turn(id, "reply", `${line.speaker} called you by name just now: "${line.text}".\n\nIf you can answer in a sentence or two from what you know, ${prefs().speak ? "say it aloud with meeting.speak (one or two short spoken sentences, no lists, in the language they used; the chat is the fallback)" : "write it with meeting.chat (short, polite, in the language they used)"}. If it needs the owner or you are not sure, write in the chat that you will check with them, and use meeting.tell_owner with the question. Do not promise anything for the owner and do not reveal anything private.`, ctx),
         ownerRelevant: (line, ctx) => void this.turn(id, "suggest", `Something was said that may concern the owner (${line.speaker}: "${line.text}"). Use meeting.tell_owner with one or two short sentences: what was said, and a suggested answer if they are asked something. Do not write in the meeting chat.`, ctx),
         notesDue: () => void this.notes(id, "notes"),
         problem: (text) => this.d.tellOwner(text, "Meeting"),
