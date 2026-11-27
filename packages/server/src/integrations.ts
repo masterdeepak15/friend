@@ -10,8 +10,8 @@ import { DEFAULT_CHANNELS, type AlexaConfig, type BrowserConfig, type BrokersCon
 
 /** Built-in integrations that are added from the plugins screen (or by the assistant, with the owner's approval) and then configured. */
 export type ChannelIntegrationId = "telegram" | "twilio";
-export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius" | "browser" | "tavily" | "chrome" | "video" | "windows-pcs";
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "browser", "tavily", "chrome", "video", "windows-pcs"];
+export type IntegrationId = ChannelIntegrationId | "zerodha" | "alexa" | "spotify" | "soundcloud" | "audius" | "browser" | "tavily" | "chrome" | "windows-pcs" | "video";
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["telegram", "twilio", "zerodha", "alexa", "spotify", "soundcloud", "audius", "browser", "tavily", "chrome", "windows-pcs", "video"];
 export const isIntegrationId = (id: unknown): id is IntegrationId => typeof id === "string" && (INTEGRATION_IDS as readonly string[]).includes(id);
 
 export interface IntegrationStep {
@@ -116,7 +116,7 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     if (chs.extension === "connected") return { state: "online", detail: "Connected to your Chrome. Every action still asks for your approval." };
     return { state: "online", detail: "Running. Check that the extension is switched on in Chrome (click its icon)." };
   };
-  const pc = config.pcs;
+  const pc = config.pcs ?? { installed: false, enabled: false }; // a config made before this plugin existed has none
   const pcn = pcs?.counts() ?? { total: 0, online: 0 };
   const pcSteps: IntegrationStep[] = [
     { text: "Switch the plugin on.", done: pc.enabled },
@@ -293,8 +293,8 @@ export function integrationViews(config: Config, hub: Pick<ChannelHub, "status">
     { id: "browser", ...META.browser, kind: "integration", installed: bw.installed, enabled: bw.enabled, ...bwState(), steps: bwSteps, settings: { chrome: bwFound ?? "", chromePath: bw.chromePath, timeoutSec: String(bw.timeoutSec), maxChars: String(bw.maxChars) }, secrets: {} },
     { id: "tavily", ...META.tavily, kind: "integration", installed: tv.installed, enabled: tv.enabled, ...tvState(), steps: tvSteps, settings: { depth: tv.depth, maxResults: String(tv.maxResults) }, secrets: { apiKey: tvKey } },
     { id: "chrome", ...META.chrome, kind: "integration", installed: ch.installed, enabled: ch.enabled, ...chState(), steps: chSteps, settings: chs?.extensionFolder ? { extensionFolder: chs.extensionFolder } : {}, secrets: {} },
-    { id: "video", ...META.video, kind: "integration", installed: vd.installed, enabled: vd.enabled, ...vdState(), steps: vdSteps, settings: {}, secrets: {} },
     { id: "windows-pcs", ...META["windows-pcs"], kind: "integration", installed: pc.installed, enabled: pc.enabled, ...pcState(), steps: pcSteps, settings: {}, secrets: {} },
+    { id: "video", ...META.video, kind: "integration", installed: vd.installed, enabled: vd.enabled, ...vdState(), steps: vdSteps, settings: {}, secrets: {} },
   ];
 }
 
