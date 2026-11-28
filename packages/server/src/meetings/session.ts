@@ -3,6 +3,17 @@ import type { Speech } from "./speech";
 import { CaptionTracker, Cooldown, concernsOwner, isAddressed, isOwnerSpeaking, type CaptionItem, type Line } from "./logic";
 import type { MeetingPrefs, MeetingStatus } from "./store";
 
+export interface ChatMessage {
+  sender: string;
+  text: string;
+}
+
+/** What to show to the meeting: slides it writes itself, or a picture or film (base64) from a file. */
+export type Presentation =
+  | { kind: "slides"; slides: { title: string; lines?: string[] }[]; start?: number }
+  | { kind: "image"; mime: string; data: Buffer }
+  | { kind: "video"; mime: string; data: Buffer };
+
 export type Phase = "loading" | "prejoin" | "lobby" | "in" | "ended" | "unknown";
 
 /** One meeting page in a browser: the part of a session that touches a real screen. */
@@ -26,6 +37,15 @@ export interface MeetingPage {
   speak?(wav: Buffer): Promise<boolean>;
   /** The sound of the other people since the last call (16 kHz, 16-bit, mono), or null when there is none to give. */
   audio?(): Promise<Buffer | null>;
+  /** What is written in the meeting chat now, or null when it could not be read. */
+  readChat?(): Promise<ChatMessage[] | null>;
+  /** Who is in the meeting and who is speaking this moment (names as the meeting shows them), or null when it cannot tell. */
+  people?(): Promise<{ names: string[]; speaking: string[] } | null>;
+  /** Shares the screen of the meeting with this content. */
+  present?(c: Presentation): Promise<{ ok: boolean; message: string }>;
+  /** Moves slides on (1) or back (-1); false when nothing is being shown. */
+  flip?(by: number): Promise<boolean>;
+  stopPresenting?(): Promise<boolean>;
 }
 
 export interface SessionEvents {
@@ -40,6 +60,8 @@ export interface SessionEvents {
   /** Something the owner should know about how the meeting is going (captions off, chat unavailable). */
   problem(text: string): void;
   ended(reason: string): void;
+  /** How long a step took (milliseconds), so a slow answer can be traced to its step. */
+  timing?(step: string, ms: number): void;
 }
 
 export interface SessionDeps {
@@ -131,13 +153,17 @@ export class MeetingSession {
     const d = this.d;
     if (this.status !== "live") return { ok: false, message: "It is not in the meeting." };
     if (!d.speech || !d.page.speak || !d.page.mic) return { ok: false, message: "Speaking aloud is not switched on here." };
-    if (this.now() - this.lastSpoke < 20_000) return { ok: false, message: "It spoke a moment ago: wait twenty seconds between spoken answers." };
+    if (this.now() - this.lastSpoke < 6_000) return { ok: false, message: "It spoke a moment ago: wait a few seconds between spoken answers." };
     this.lastSpoke = this.now();
+    const t0 = Date.now();
     // a person does not talk over someone
     // (in audio mode what counts is the sound itself, not the line made from it a few seconds later)
     const quietFor = () => (d.hearing && this.audioMode ? Date.now() - d.hearing.lastVoiceAt : this.now() - this.lastHeard);
+    // (the voice is made while it waits for the room to go quiet, not after)
+    const making = d.speech(text.slice(0, 400)).catch(() => null);
     for (let w = 0; quietFor() < (this.audioMode ? 500 : 1500) && w < 40; w++) await this.sleep(150);
-    const wav = await d.speech(text.slice(0, 400)).catch(() => null);
+    const wav = await making;
+    d.events.timing?.("speak.prepare", Date.now() - t0);
     if (!wav) return { ok: false, message: "This PC has no voice to speak with." };
     if (!(await d.page.mic(true).catch(() => false))) return { ok: false, message: "It could not switch the microphone on in the meeting." };
     let ok = false;
@@ -199,6 +225,8 @@ export class MeetingSession {
             await d.page.camera?.(true).catch(() => false); // and with its picture on: it moves with the voice
           }
           await this.listen(captionsTried, noCaptions, warned).then((r) => ({ captionsTried, noCaptions, warned } = r));
+          await this.watchPeople().catch(() => {});
+          await this.watchChat().catch(() => {});
         } else if (this.now() - began > 120_000 && !inSince) {
           reason = s.detail || "It could not join the meeting.";
           d.events.problem(reason);
@@ -259,8 +287,77 @@ export class MeetingSession {
     }
     const pcm = await d.page.audio?.().catch(() => null);
     if (pcm && this.now() >= this.deafUntil) d.hearing?.push(pcm);
-    const lines = d.hearing?.take() ?? [];
+    const lines = (d.hearing?.take() ?? []).map((l) => (l.verified ? l : { ...l, speaker: this.who(l.speaker) }));
     if (lines.length) this.take(lines);
+  }
+
+  /** People in the meeting, as the page last showed them, and who was seen speaking just now. */
+  private roster: string[] = [];
+  private seenSpeaking: { name: string; at: number }[] = [];
+  private lastPeople = 0;
+  private lastChatRead = 0;
+  private chatSeen = new Set<string>();
+  private chatReady = false;
+
+  private isSelf(name: string): boolean {
+    const n = name.trim().toLowerCase();
+    return !n || n === this.d.selfName.trim().toLowerCase() || n === "you" || n.startsWith(`${this.d.selfName.trim().toLowerCase()} (`);
+  }
+
+  private async watchPeople(): Promise<void> {
+    if (!this.d.page.people || this.now() - this.lastPeople < 1200) return;
+    this.lastPeople = this.now();
+    const p = await this.d.page.people();
+    if (!p) return;
+    this.roster = p.names.filter((n) => !this.isSelf(n));
+    for (const n of p.speaking) if (!this.isSelf(n)) this.seenSpeaking.push({ name: n, at: this.now() });
+    this.seenSpeaking = this.seenSpeaking.filter((s) => this.now() - s.at < 12_000);
+  }
+
+  /** A line from "Someone" gets the name the meeting shows: whoever was seen speaking just now, or the one other person who is there. */
+  private who(speaker: string): string {
+    if (speaker.trim().toLowerCase() !== "someone") return speaker;
+    const recent = [...new Set(this.seenSpeaking.filter((s) => this.now() - s.at < 8000).map((s) => s.name))];
+    if (recent.length === 1) return recent[0]!;
+    const owners = this.d.prefs().ownerNames.map((n) => n.toLowerCase());
+    const others = this.roster.filter((n) => !owners.some((o) => n.toLowerCase().includes(o)));
+    return others.length === 1 ? others[0]! : speaker;
+  }
+
+  /** What people write in the chat is read like what they say: it is kept, and it can be addressed to the assistant. */
+  private async watchChat(): Promise<void> {
+    if (!this.d.page.readChat || this.now() - this.lastChatRead < 3000) return;
+    this.lastChatRead = this.now();
+    const msgs = await this.d.page.readChat();
+    if (!msgs) return;
+    const fresh: Line[] = [];
+    const counts = new Map<string, number>();
+    for (const m of msgs) {
+      const base = `${m.sender}\u0000${m.text}`;
+      const n = (counts.get(base) ?? 0) + 1;
+      counts.set(base, n);
+      const key = `${base}\u0000${n}`;
+      if (this.chatSeen.has(key)) continue;
+      this.chatSeen.add(key);
+      if (this.chatReady && !this.isSelf(m.sender) && m.text.trim()) fresh.push({ speaker: m.sender, text: `(in the chat) ${m.text.trim()}` });
+    }
+    this.chatReady = true; // what was written before it came in is history, not read as new
+    if (fresh.length) this.take(fresh);
+  }
+
+  /** Shows something to the meeting by sharing its screen. */
+  async present(c: Presentation): Promise<{ ok: boolean; message: string }> {
+    if (this.status !== "live") return { ok: false, message: "It is not in the meeting." };
+    if (!this.d.page.present) return { ok: false, message: "This meeting page cannot share a screen." };
+    return this.d.page.present(c);
+  }
+
+  async flip(by: number): Promise<boolean> {
+    return (await this.d.page.flip?.(by).catch(() => false)) === true;
+  }
+
+  async stopPresenting(): Promise<boolean> {
+    return (await this.d.page.stopPresenting?.().catch(() => false)) === true;
   }
 
   private take(lines: Line[]): void {

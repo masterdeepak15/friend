@@ -1,4 +1,5 @@
 import { HttpVoiceService, SidecarProcess, createApp, loadConfig } from "@friend/server";
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -134,7 +135,47 @@ export function waitForSignal(): Promise<void> {
   });
 }
 
+/**
+ * Keeps Friend up. A background Friend runs inside this small watcher: when it ends in any way but a stop that was asked for, it is
+ * started again after a short wait (longer after each quick failure), and what ended it is in the log.
+ */
+export async function superviseFriend(io: IO, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<number> {
+  let asked = false;
+  let child: ReturnType<typeof spawn> | null = null;
+  const stop = () => {
+    asked = true;
+    child?.kill();
+  };
+  process.once("SIGTERM", stop);
+  process.once("SIGINT", stop);
+  let quick = 0;
+  while (!asked) {
+    const began = Date.now();
+    const code = await new Promise<number | null>((done) => {
+      child = spawn(process.execPath, [process.argv[1]!, "start"], { stdio: "inherit", windowsHide: true, env: { ...process.env, FRIEND_CHILD: "1" } });
+      child.on("error", () => done(1));
+      child.on("exit", (c) => done(c));
+    });
+    if (asked || code === 0) return 0;
+    quick = Date.now() - began < 60_000 ? quick + 1 : 0;
+    const wait = Math.min(30_000, 2000 * 2 ** Math.min(quick, 4));
+    io.out(`Friend stopped unexpectedly (code ${code ?? "none"}). Starting it again in ${Math.round(wait / 1000)} seconds.`);
+    await sleep(wait);
+  }
+  return 0;
+}
+
+/** One stray error must not end the assistant: it is written to the log and Friend carries on. */
+function surviveErrors(io: IO): void {
+  const note = (kind: string, e: unknown) => io.out(`${kind}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
+  process.on("uncaughtException", (e) => note("An error was caught and ignored", e));
+  process.on("unhandledRejection", (e) => note("A failed task was caught and ignored", e));
+}
+
 export async function startCommand(io: IO): Promise<number> {
+  // in the background: a watcher starts it again if it ever ends by itself
+  if (process.env.FRIEND_DAEMON === "1" && process.env.FRIEND_CHILD !== "1" && !io.waitForExit) return superviseFriend(io);
+  if (!io.waitForExit) surviveErrors(io);
   const f = await startFriend({ dataDir: io.dataDir, out: io.out });
   await (io.waitForExit ?? waitForSignal)();
   io.out("Stopping…");

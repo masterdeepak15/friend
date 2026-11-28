@@ -215,7 +215,7 @@ describe("speaking aloud", () => {
     const done = a.s.start();
     await until(() => (a.s as unknown as { status: string }).status === "live");
     expect((await a.s.speak("one")).ok).toBe(true);
-    expect(await a.s.speak("two")).toMatchObject({ ok: false, message: expect.stringMatching(/twenty seconds/) });
+    expect(await a.s.speak("two")).toMatchObject({ ok: false, message: expect.stringMatching(/few seconds/) });
     await a.s.stop("x");
     await done;
     const b = make({ speech: undefined as never });

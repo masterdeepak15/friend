@@ -56,7 +56,11 @@ export class ImapSmtpProvider implements MailProvider {
 
   private makeImap(): ImapClient {
     if (this.deps.imap) return this.deps.imap();
-    return new ImapFlow({ host: this.s.imap.host, port: this.s.imap.port, secure: this.s.imap.tls, auth: { user: this.s.username, pass: this.s.password }, logger: false }) as unknown as ImapClient;
+    const c = new ImapFlow({ host: this.s.imap.host, port: this.s.imap.port, secure: this.s.imap.tls, auth: { user: this.s.username, pass: this.s.password }, logger: false });
+    // a dropped connection (ECONNRESET) is announced as an 'error' event; with no listener Node ends the whole program. The call that was
+    // running on it fails by itself and is reported as a network problem, so the event needs no more than a listener.
+    c.on("error", () => {});
+    return c as unknown as ImapClient;
   }
 
   private wrap(e: unknown, host: string): Error {

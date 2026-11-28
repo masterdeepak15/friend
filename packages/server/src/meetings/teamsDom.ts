@@ -75,7 +75,55 @@ export const FOCUS_CHAT = `(() => { ${HELPERS}
 
 export const HANG_UP = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="hangup-button"], #hangup-button') || byText(/^\\s*(leave|hang up)\\b/i, "button, [role=button]"); if (!b) return false; b.click(); return true; })()`;
 
+/** The messages in the meeting chat, oldest first. Opens the chat when no list is on screen (and says null that time). */
+export const READ_CHAT = `(() => { ${HELPERS}
+  const ITEM = '[data-tid="chat-pane-item"], [data-tid="chat-pane-message"], [data-tid="message-pane-body"] [role="listitem"], [data-tid="chat-message-list"] [role="listitem"], [data-tid="message-pane-list-viewport"] [role="listitem"], [data-tid="message-pane-list-viewport"] [role="group"]';
+  const pane = document.querySelector('[data-tid="message-pane-list-viewport"], [data-tid="chat-pane"], [data-tid="meeting-chat-pane"], [data-tid="chat-message-list"]');
+  if (!pane) { const open = document.querySelector('[data-tid="chat-button"], #chat-button') || byText(/^\\s*chat\\b/i, "button, [role=button]"); if (open) open.click(); return null; }
+  const seen = new Set();
+  const out = [];
+  let prev = "";
+  for (const el of Array.from(document.querySelectorAll(ITEM))) {
+    if (seen.has(el) || Array.from(seen).some((s) => s.contains(el))) continue;
+    seen.add(el);
+    const a = el.querySelector('[data-tid="message-author-name"], [data-tid*="author"]');
+    const b = el.querySelector('[data-tid="chat-pane-message"], [data-tid="message-body-content"], [id^="content-"], [data-tid="message-body"]');
+    let sender = a ? txt(a) : "";
+    if (sender) prev = sender; else sender = prev;
+    let text = b ? txt(b) : txt(el);
+    if (!b && a) text = text.replace(txt(a), "").trim();
+    if (text && sender) out.push({ sender, text: text.slice(0, 600) });
+  }
+  return out;
+})()`;
+
+/** The people on the stage: their names, and who has the speaking ring now (what the page marks varies, so several marks are tried). */
+export const PEOPLE = `(() => { ${HELPERS}
+  const TILE = '[data-tid*="video-tile"], [data-tid*="participant-tile"], [data-tid="calling-participant-stream"], [data-tid*="stream-container"], [data-cid*="tile"], [role="listitem"][aria-label]';
+  const names = [];
+  const speaking = [];
+  for (const el of all(TILE)) {
+    const n = el.querySelector('[data-tid*="display-name"], [data-tid*="participant-name"], [data-tid*="name"]');
+    let name = n ? txt(n) : (el.getAttribute("aria-label") || "").split(",")[0].trim();
+    name = name.replace(/\\s*\\((guest|external|unverified)[^)]*\\)/i, "").trim();
+    if (!name || name.length > 60) continue;
+    if (!names.includes(name)) names.push(name);
+    const ring = el.querySelector('[data-tid*="voice-level"], [data-tid*="speaking"], [class*="speaking" i], [class*="voice-level" i]');
+    if (ring || /speaking/i.test(el.getAttribute("aria-label") || "")) speaking.push(name);
+  }
+  return { names, speaking };
+})()`;
+
+// sharing: the share button, then the choice of what to share (our own page answers the browser's question with its stage)
+export const CLICK_SHARE = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="share-button"], #share-button') || byText(/^\\s*(share|present)\\b/i, "button, [role=button]"); if (!b) return false; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`;
+export const CLICK_SCREEN = `(() => { ${HELPERS} const b = byText(/^\\s*(screen|entire screen|share (the )?screen|present (the )?screen)\\b/i, "button, [role=button], [role=menuitem], [role=option], [data-tid*="screen"]") || document.querySelector('[data-tid*="share-screen"], [data-tid*="screen-share"]'); if (!b) return false; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`;
+export const STOP_SHARE = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="stop-sharing-button"], [data-tid="unshare-button"]') || byText(/stop (presenting|sharing)/i, "button, [role=button]"); if (!b) return false; b.click(); return true; })()`;
+
 export const TEAMS: DomSet = {
+  readChat: READ_CHAT,
+  people: PEOPLE,
+  shareSteps: [CLICK_SHARE, CLICK_SCREEN],
+  stopShare: STOP_SHARE,
   advance: ADVANCE,
   captions: CAPTIONS,
   captionSteps: [OPEN_MORE, CLICK_CAPTIONS_ITEM, CLICK_LANGUAGE, CLICK_CAPTIONS, CLICK_CONFIRM],

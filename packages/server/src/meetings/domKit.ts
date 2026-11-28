@@ -29,6 +29,14 @@ export interface DomSet {
   /** After a message was typed: true when the box is empty (it was sent), or the centre of the send button to press with the mouse. */
   sendChat: string;
   hangUp: string;
+  /** The chat as [{ sender, text }] (null when no chat list is on screen: it is then opened for the next look). */
+  readChat?: string;
+  /** The people on the screen as { names, speaking }. */
+  people?: string;
+  /** Scripts that start sharing the screen, one after the other; each returns true or the centre of a button to press with the mouse. */
+  shareSteps?: string[];
+  /** Stops sharing. */
+  stopShare?: string;
 }
 
 /** A script that clicks the first visible button whose label matches the pattern. */

@@ -174,6 +174,7 @@ Example: `friend config set voice.speakTyped false` keeps typed messages silent.
 |---|---|
 | `FRIEND_HOME` | The folder where Friend keeps its data (default: `.friend` in your home folder). Use another folder to keep a separate test copy. |
 | `FRIEND_DAEMON` | Set to `1` by `friend daemon start` for the Friend it starts in the background. Only a background Friend may restart itself to install an update; one running in a terminal never does. You do not set it yourself. |
+| `FRIEND_CHILD` | Set to `1` by the watcher of a background Friend for the Friend it keeps running; if that one ever ends by itself, the watcher starts it again after a short wait. You do not set it yourself. |
 | `FRIEND_SECRET_KEY` | A passphrase to lock the saved keys, tokens and passwords with, instead of the `secret.key` file Friend makes in its data folder. Keys in `config.json` are always stored encrypted (on every system); with this set, the unlocking key is not on the disk at all. Set the same value on every start; if it is lost, those keys must be entered again. |
 | `FRIEND_ANTHROPIC_KEY` | An API key to use when none is saved. |
 | `FRIEND_PC_DIR` | On a Windows PC: the folder where the PC agent keeps its data and its log (default `%LOCALAPPDATA%\Friend\pc-agent`). |

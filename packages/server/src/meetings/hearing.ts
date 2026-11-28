@@ -56,7 +56,7 @@ export class AudioHearing {
   private o: Required<Omit<HearingOptions, "transcribe">> & { transcribe: Transcriber };
 
   constructor(o: HearingOptions) {
-    this.o = { speaker: "Someone", silence: 0.012, minSeconds: 1.2, maxSeconds: 10, ...o };
+    this.o = { speaker: "Someone", silence: 0.012, minSeconds: 0.9, maxSeconds: 10, ...o };
   }
 
   /** When someone was last heard talking (milliseconds, Date.now): it never starts to speak over them. */
