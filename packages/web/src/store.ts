@@ -13,6 +13,7 @@ import {
   type MusicCommand,
   type MusicState,
   type MusicView,
+  type CrewWorkerView,
   type OfficeQuota,
   type OfficeTicketView,
   type OfficeWorkerView,
@@ -112,7 +113,25 @@ export interface StageViewState {
   stats: HudStats | null;
   /** The hired workers, their tickets and the subscription window, with the newest lines of what each worker is doing. */
   office: OfficeState;
+  /** The crew: workers on Friend's own engine, what each is doing now, and what a screen asked to read of them. */
+  crew: CrewState;
 }
+
+export interface CrewFeedLine {
+  at: number;
+  kind: string;
+  text: string;
+}
+
+export interface CrewState {
+  workers: CrewWorkerView[];
+  feed: Record<string, CrewFeedLine[]>;
+  /** What was read of a worker (its talk or its wiki): `<workerId>:<what>`. */
+  data: Record<string, { path: string; text: string }>;
+}
+
+/** How many lines of one crew worker's feed the screen keeps. */
+export const CREW_FEED_LINES = 80;
 
 export interface OfficeFeedLine {
   at: number;
@@ -174,6 +193,7 @@ export const initialState: StageViewState = {
   uiOpen: null,
   stats: null,
   office: { enabled: false, workers: [], tickets: [], quota: { fiveHour: null, sevenDay: null }, feed: {} },
+  crew: { workers: [], feed: {}, data: {} },
 };
 
 export interface ChatLine {
@@ -346,6 +366,17 @@ export function reduce(state: StageViewState, input: unknown): StageViewState {
       const lines = [...(state.office.feed[m.workerId] ?? []), line].slice(-OFFICE_FEED_LINES);
       return { ...state, office: { ...state.office, feed: { ...state.office.feed, [m.workerId]: lines } } };
     }
+    case "crew.state": {
+      const feed: Record<string, CrewFeedLine[]> = {};
+      for (const w of m.workers) if (state.crew.feed[w.id]) feed[w.id] = state.crew.feed[w.id]!; // a worker that is gone takes its lines with it
+      return { ...state, crew: { ...state.crew, workers: m.workers, feed } };
+    }
+    case "crew.feed": {
+      const lines = [...(state.crew.feed[m.workerId] ?? []), { at: m.at, kind: m.kind, text: m.text }].slice(-CREW_FEED_LINES);
+      return { ...state, crew: { ...state.crew, feed: { ...state.crew.feed, [m.workerId]: lines } } };
+    }
+    case "crew.data":
+      return { ...state, crew: { ...state.crew, data: { ...state.crew.data, [`${m.workerId}:${m.what}`]: { path: m.path, text: m.text } } } };
     case "hud.stats":
       return { ...state, stats: { cpu: m.cpu, ramUsed: m.ramUsed, ramTotal: m.ramTotal, netDown: m.netDown, netUp: m.netUp, at: Date.now() } };
     case "status":

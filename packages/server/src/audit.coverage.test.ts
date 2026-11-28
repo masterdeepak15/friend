@@ -128,6 +128,7 @@ describe("every message from a screen leaves an entry", () => {
     "office.fire": { workerId: "nobody" },
     "office.tidy": { workerId: "nobody" },
     "office.say": { workerId: "nobody", text: "hi" },
+    "crew.view": { workerId: "nobody", what: "history" },
   };
   const SKIPS: Skip[] = [
     { what: "ping", why: "a keep-alive heartbeat, sent every few seconds, that changes nothing" },

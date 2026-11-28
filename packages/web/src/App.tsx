@@ -13,6 +13,7 @@ import { OwnerMenu } from "./overlay/OwnerMenu";
 import { readMenuStyle, readMuted, readQuiet, saveMenuStyle, saveMuted, saveQuiet, type MenuStyle } from "./overlay/menuShared";
 import { OrbMenu, type OrbMenuProps } from "./orb/OrbMenu";
 import type { SettingsTab } from "./settings/tabs";
+import { CrewDock } from "./crew/CrewDock";
 import { Overlay } from "./overlay/Overlay";
 import { describeStatus } from "./overlay/StatusBadge";
 import { PluginsPanel } from "./plugins/PluginsPanel";
@@ -251,6 +252,7 @@ export function StageApp({ onSignedOut }: { onSignedOut: () => void }) {
         {state.viewKnown && panels.show.tasks && <TasksPanel busy={state.busy} onClose={() => panels.toggle("tasks", false)} />}
         {state.viewKnown && panels.show.launcher && state.hud && !orbital && <QuickLaunch items={state.hud.launcher} animations={animations} onAction={launch} />}
         {state.viewKnown && panels.show.music && <MusicPlayerView player={player} music={state.music} animations={animations} />}
+        <CrewDock crew={state.crew} send={send} />
         {enrolling && <EnrollmentFlow onClose={() => setEnrolling(false)} />}
         {household && <HouseholdPanel onClose={() => setHousehold(false)} />}
         {managingPlugins && (

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ServerMsg } from "@friend/protocol";
+import type { CrewWorkerView, ServerMsg } from "@friend/protocol";
 import { Agent, type AgentDeps } from "../agent/loop";
 import { loadHistory } from "../agent/history";
 import { openDb, type Db } from "../db";
@@ -58,8 +58,60 @@ const textOf = (blocks: { type: string; text?: string }[]): string =>
  */
 export class Crew {
   private live = new Map<string, Live>();
+  private feed = new Map<string, { at: number; kind: "task" | "tool" | "text" | "done" | "error"; text: string }[]>();
+  private working = new Map<string, { task: string; since: number }>();
+  private listeners = new Set<(m: ServerMsg) => void>();
 
   constructor(private d: CrewDeps) {}
+
+  /** Screens listen here: what the workers do is shown live, and nothing in it asks anything of the owner. */
+  onEvent(fn: (m: ServerMsg) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private emit(m: ServerMsg): void {
+    for (const l of this.listeners) {
+      try {
+        l(m);
+      } catch {
+        // a screen that fails must not stop a worker
+      }
+    }
+  }
+
+  /** Who is in the crew and what each is doing now, as a screen is told. */
+  state(): ServerMsg {
+    const workers: CrewWorkerView[] = this.d.store.list().map((w) => {
+      const on = this.working.get(w.id);
+      return { id: w.id, name: w.name, role: w.role, tools: w.tools, status: on ? "working" : "idle", task: on?.task ?? "", since: on?.since ?? null, lastAt: w.lastAt };
+    });
+    return { type: "crew.state", workers };
+  }
+
+  /** The newest lines of what the workers did (for a screen that has just opened). */
+  recent(limit = 40): ServerMsg[] {
+    const out: ServerMsg[] = [];
+    for (const [id, lines] of this.feed) for (const l of lines.slice(-limit)) out.push({ type: "crew.feed", workerId: id, at: l.at, kind: l.kind, text: l.text });
+    return out;
+  }
+
+  private note(id: string, kind: "task" | "tool" | "text" | "done" | "error", text: string): void {
+    const clean = text.replace(/\s+/g, " ").trim().slice(0, 600);
+    if (!clean) return;
+    const at = Date.now();
+    this.feed.set(id, [...(this.feed.get(id) ?? []), { at, kind, text: clean }].slice(-200));
+    this.emit({ type: "crew.feed", workerId: id, at, kind, text: clean });
+  }
+
+  /** What a screen asked to read of one worker: its own conversation, or a note (or folder) of its own wiki. */
+  view(who: string, what: "history" | "memory", path = ""): { ok: true; text: string } | { ok: false; error: string } {
+    const w = this.d.store.find(who);
+    if (!w) return { ok: false, error: "No such worker." };
+    if (what === "history") return this.history(w.id, 20);
+    const r = new MemoryTree(join(this.d.dataDir, "crew", w.id, "memory")).read(path);
+    return r.ok ? { ok: true, text: r.text.slice(0, 20000) } : { ok: false, error: r.error };
+  }
 
   list(): CrewWorker[] {
     return this.d.store.list();
@@ -71,7 +123,10 @@ export class Crew {
 
   hire(input: { name: string; role: string; brief?: string; tools?: string[] }): { ok: true; worker: CrewWorker } | { ok: false; error: string } {
     const r = this.d.store.hire({ name: input.name, role: input.role, brief: input.brief ?? "", tools: input.tools ?? [] });
-    if (r.ok) this.d.audit.log("agent", "crew.hire", { worker: r.worker.id, tools: r.worker.tools });
+    if (r.ok) {
+      this.d.audit.log("agent", "crew.hire", { worker: r.worker.id, tools: r.worker.tools });
+      this.emit(this.state());
+    }
     return r;
   }
 
@@ -80,6 +135,7 @@ export class Crew {
     if (!w) return { ok: false, error: `There is no crew worker called ${who}.` };
     this.d.store.setTools(w.id, tools);
     this.d.audit.log("agent", "crew.equip", { worker: w.id, tools });
+    this.emit(this.state());
     return { ok: true };
   }
 
@@ -98,6 +154,8 @@ export class Crew {
       }
     }
     this.d.audit.log("agent", "crew.fire", { worker: w.id, keep, ...(left ? { folderLeft: true } : {}) });
+    this.feed.delete(w.id);
+    this.emit(this.state());
     return { ok: true };
   }
 
@@ -141,7 +199,15 @@ export class Crew {
     const timer = setTimeout(stop, TASK_MS);
     o.signal?.addEventListener("abort", stop, { once: true });
     const spoken: string[] = [];
+    let pending = "";
+    const flush = () => {
+      this.note(w.id, "text", pending);
+      pending = "";
+    };
     this.d.audit.log("agent", "crew.ask", { worker: w.id, chars: text.length });
+    this.working.set(w.id, { task: text.replace(/\s+/g, " ").trim().slice(0, 200), since: Date.now() });
+    this.note(w.id, "task", text);
+    this.emit(this.state());
     try {
       await agent.runTurn(text, {
         trust: "owner",
@@ -149,16 +215,26 @@ export class Crew {
         source: "crew",
         crew: { allows: (tool) => grantAllows(this.d.store.find(w.id)?.tools ?? [], tool) },
         emit: (m) => {
-          if (m.type === "caption.delta") spoken.push(m.text);
+          if (m.type === "caption.delta") {
+            spoken.push(m.text);
+            pending += m.text;
+          } else if (m.type === "activity" && m.text) {
+            flush();
+            if (m.text !== "Thinking" && m.text !== "Answering") this.note(w.id, "tool", m.text);
+          }
         },
       });
     } finally {
       clearTimeout(timer);
       o.signal?.removeEventListener("abort", stop);
+      flush();
+      this.working.delete(w.id);
     }
     this.d.store.touch(w.id);
     const reply = [...loadHistory(db)].reverse().find((m) => m.role === "assistant" && textOf(m.content as { type: string; text?: string }[]));
     const answer = reply ? textOf(reply.content as { type: string; text?: string }[]) : spoken.join("").trim();
+    this.note(w.id, answer ? "done" : "error", answer || "Finished without an answer.");
+    this.emit(this.state());
     return { ok: true, text: answer || `${w.name} finished without an answer.` };
   }
 

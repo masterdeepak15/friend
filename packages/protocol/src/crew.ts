@@ -50,3 +50,19 @@ export function describeCrewCall(name: string, a: Record<string, unknown>): stri
       return "List the crew workers";
   }
 }
+
+/** What a screen is told about the crew. */
+export const CREW_FEED_KINDS = ["task", "tool", "text", "done", "error"] as const;
+export const CrewWorkerView = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().min(1).max(40),
+  role: z.string().max(200),
+  /** The tools it may use: names, or prefixes ending in *. */
+  tools: z.array(z.string().max(60)).max(40),
+  status: z.enum(["idle", "working"]),
+  /** What it is working on now (clipped), empty when idle. */
+  task: z.string().max(200),
+  since: z.number().nullable(),
+  lastAt: z.number(),
+});
+export type CrewWorkerView = z.infer<typeof CrewWorkerView>;

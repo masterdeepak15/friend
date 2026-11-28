@@ -234,3 +234,32 @@ describe("working without the owner and without blocking the assistant", () => {
     expect(JSON.stringify(p.calls[1]!.messages)).toContain("two");
   });
 });
+
+describe("seeing what the workers do", () => {
+  it("tells screens when a worker starts, what it does step by step, and when it is done", async () => {
+    const p = new FakeProvider([[call("1", "memory.remember", { text: "Paris is the capital" }), done], [text("Paris."), done]]);
+    const { crew } = build(p);
+    const seen: ServerMsg[] = [];
+    crew.onEvent((m) => seen.push(m));
+    crew.hire({ name: "Ada", role: "researcher" });
+    await crew.ask("Ada", "capital of France?");
+    const states = seen.filter((m) => m.type === "crew.state") as Extract<ServerMsg, { type: "crew.state" }>[];
+    expect(states.map((m) => m.workers[0]!.status)).toEqual(["idle", "working", "idle"]); // hired, started, finished
+    expect(states[1]!.workers[0]!.task).toBe("capital of France?");
+    const lines = seen.filter((m) => m.type === "crew.feed") as Extract<ServerMsg, { type: "crew.feed" }>[];
+    expect(lines.map((l) => l.kind)).toEqual(["task", "tool", "text", "done"]);
+    expect(lines.at(-1)!.text).toBe("Paris.");
+    expect(crew.recent().length).toBe(4); // a screen that opens later is told the same
+  });
+
+  it("lets a screen read a worker's own conversation and its wiki, and nothing of anyone else's", async () => {
+    const p = new FakeProvider([[call("1", "memory.remember", { text: "Paris is the capital" }), done], [text("Paris."), done]]);
+    const { crew } = build(p);
+    crew.hire({ name: "Ada", role: "researcher" });
+    await crew.ask("Ada", "capital of France?");
+    expect(crew.view("Ada", "history")).toMatchObject({ ok: true });
+    expect((crew.view("Ada", "history") as { text: string }).text).toContain("capital of France?");
+    expect((crew.view("Ada", "memory") as { text: string }).text).toMatch(/inbox/);
+    expect(crew.view("Zed", "memory")).toMatchObject({ ok: false });
+  });
+});

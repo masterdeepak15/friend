@@ -1141,6 +1141,7 @@ export async function createApp(opts: AppOptions) {
   // the crew: workers on Friend's own engine, built from these same dependencies (read when a worker first works)
   let baseDeps!: AgentDeps;
   const crew = new Crew({ store: new CrewStore(db), dataDir: config.dataDir, base: () => baseDeps, assistantName: () => auth.assistantName(), audit, done: (worker, r) => crewDone(worker, r) });
+  crew.onEvent((m) => broadcast(m));
   const crewDone = (worker: string, r: { ok: boolean; text: string }): void => {
     const safe = (s: string, n: number) => s.replace(/[<>]/g, "‹").trim().slice(0, n);
     const text = `[Crew update, from your crew worker ${safe(worker, 40)} and not from the owner]
@@ -2406,6 +2407,8 @@ ${todo.text}`;
       conn.send(statusMsg());
       conn.send(uiMsg());
       conn.send(office.snapshot());
+      conn.send(crew.state());
+      for (const m of crew.recent()) conn.send(m);
       for (const w of office.status().workers) for (const e of officeStore.events(w.id, 30)) conn.send({ type: "office.feed", workerId: w.id, at: e.at, kind: e.kind as "text", text: e.text }); // what each worker did lately
       conn.send({ type: "music.host", state: hostPlayer.state() });
       if (ducker.level < 1) conn.send({ type: "audio.duck", level: ducker.level });
@@ -2510,6 +2513,11 @@ ${todo.text}`;
         case "office.fire": {
           const r = office.fire(msg.workerId, "owner");
           if (!r.ok) audit.log("owner", "office.fire_failed", { error: r.error });
+          break;
+        }
+        case "crew.view": {
+          const r = crew.view(msg.workerId, msg.what, msg.path ?? "");
+          conn.send({ type: "crew.data", workerId: msg.workerId, what: msg.what, path: msg.path ?? "", text: r.ok ? r.text : r.error });
           break;
         }
         case "office.say": {

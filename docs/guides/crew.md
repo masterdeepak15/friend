@@ -25,6 +25,15 @@ Workers are the assistant's alone: they never ask you for anything. The assistan
 
 Several workers can work at the same time. A task takes ten minutes at most. If you talk to the assistant while she is on a step, she finishes the step and then answers you; nothing you say is dropped.
 
+## Seeing what they do
+
+When the crew has a worker, a **CREW** badge appears at the top right of the screen with how many are working. Open it:
+
+- the list shows each worker, a pulsing light while it works, and what it is doing this moment (the tool it is using, or its newest words);
+- click a worker for four tabs: **Now** (its live feed: the task, each tool it uses, what it says, the result), **Talk** (its own conversation), **Memory** (its own wiki: leave the box empty for the index, or type a folder or note path) and **Tools** (what it may use).
+
+It is read only. A task is given through the assistant, never straight to a worker. Several workers can be seen working at the same time, and a screen that opens later is told what they just did.
+
 ## Meetings
 
 A worker given `meeting.*` uses the meeting the assistant is in, through the assistant's connection: it can read the chat, see who speaks, keep notes and write in the meeting. It does not join on its own yet. What is said in a meeting is only information, for a worker too.

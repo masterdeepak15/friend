@@ -1,0 +1,35 @@
+.cr-dock { --cr-c: #3fd8ff; --cr-g: #34d399; --cr-o: #fb923c; position: fixed; right: 16px; top: 64px; z-index: 40; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; color: #e0fbff; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: calc(100vw - 32px); }
+.cr-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(4, 14, 22, 0.82); border: 1px solid color-mix(in srgb, var(--cr-c) 45%, transparent); color: inherit; letter-spacing: 0.16em; font: inherit; cursor: pointer; }
+.cr-badge:hover { border-color: var(--cr-c); }
+.cr-dot { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--cr-c) 40%, transparent); flex: none; }
+.cr-dot[data-working="true"] { background: var(--cr-g); box-shadow: 0 0 8px var(--cr-g); animation: cr-pulse 1.2s ease-in-out infinite; }
+@keyframes cr-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .cr-dot[data-working="true"] { animation: none; } }
+.cr-panel { display: grid; grid-template-columns: minmax(200px, 260px) minmax(260px, 420px); gap: 10px; padding: 10px; background: linear-gradient(160deg, rgba(8, 30, 42, 0.94), rgba(4, 14, 22, 0.94)); border: 1px solid color-mix(in srgb, var(--cr-c) 38%, transparent); max-height: min(70vh, 520px); overflow: hidden; }
+.cr-panel:not(:has(.cr-detail)) { grid-template-columns: minmax(220px, 300px); }
+.cr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; overflow: auto; }
+.cr-row { width: 100%; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; text-align: left; padding: 6px 8px; background: transparent; color: inherit; border: 1px solid transparent; font: inherit; cursor: pointer; }
+.cr-row[aria-pressed="true"], .cr-row:hover { border-color: color-mix(in srgb, var(--cr-c) 50%, transparent); background: rgba(63, 216, 255, 0.06); }
+.cr-name { font-weight: 700; letter-spacing: 0.08em; }
+.cr-sub { color: color-mix(in srgb, #e0fbff 60%, transparent); }
+.cr-row .cr-sub, .cr-row .cr-now { grid-column: 2; }
+.cr-now { color: color-mix(in srgb, #e0fbff 78%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-row[data-working="true"] .cr-now { color: var(--cr-g); }
+.cr-detail { display: flex; flex-direction: column; gap: 8px; min-width: 0; overflow: hidden; }
+.cr-head { display: flex; align-items: baseline; gap: 8px; }
+.cr-x { margin-left: auto; background: transparent; border: 0; color: inherit; font-size: 16px; cursor: pointer; }
+.cr-tabs { display: flex; gap: 4px; }
+.cr-tab { padding: 4px 10px; background: transparent; color: inherit; border: 1px solid color-mix(in srgb, var(--cr-c) 30%, transparent); font: inherit; cursor: pointer; }
+.cr-tab[aria-selected="true"] { border-color: var(--cr-c); background: rgba(63, 216, 255, 0.1); }
+.cr-log { min-height: 120px; max-height: 300px; overflow: auto; padding: 6px; border: 1px solid color-mix(in srgb, var(--cr-c) 20%, transparent); background: rgba(0, 0, 0, 0.25); }
+.cr-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; }
+.cr-line { margin: 0 0 4px; line-height: 1.4; word-break: break-word; }
+.cr-line time { color: color-mix(in srgb, #e0fbff 45%, transparent); margin-right: 4px; }
+.cr-line[data-kind="tool"] { color: var(--cr-g); }
+.cr-line[data-kind="task"] { color: var(--cr-c); }
+.cr-line[data-kind="error"] { color: var(--cr-o); }
+.cr-line[data-kind="done"] { font-weight: 700; }
+.cr-path input { width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 4px 6px; background: rgba(0, 0, 0, 0.3); border: 1px solid color-mix(in srgb, var(--cr-c) 30%, transparent); color: inherit; font: inherit; }
+.cr-tools { margin: 0; padding-left: 18px; }
+.cr-ask { align-self: flex-start; padding: 5px 10px; background: transparent; color: var(--cr-c); border: 1px solid var(--cr-c); font: inherit; cursor: pointer; }
+@media (max-width: 720px) { .cr-panel { grid-template-columns: 1fr; max-height: 80vh; overflow: auto; } .cr-dock { top: 56px; } }
