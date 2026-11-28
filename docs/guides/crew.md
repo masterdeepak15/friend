@@ -12,16 +12,18 @@ Ask your assistant: "hire Ada as a researcher, she may use the web" or "hire Ben
 
 ## The tools
 
-| Tool | What it does | Asks you |
-| --- | --- | --- |
-| `crew.hire` | Hire a worker: name, role, a brief, and the tools it may use | yes, the card shows the tools |
-| `crew.equip` | Replace the tools a worker may use | yes |
-| `crew.ask` | Give a worker a task and wait for its answer | no |
-| `crew.list` | Who is in the crew and what each may use | no |
-| `crew.history` | The last lines of one worker's own conversation | no |
-| `crew.fire` | Remove a worker (and its notes, unless `keep`) | yes |
+Workers are the assistant's alone: they never ask you for anything. The assistant hires, equips and removes them, and what a worker was given it may use. What would need your approval (critical actions, or anything that follows text from the internet) is refused to the worker, and it says so in its answer so the assistant decides.
 
-A worker's own tool calls follow the same rules as the assistant's: what needs your approval asks you, on the screen or your phone. A task takes ten minutes at most.
+| Tool | What it does |
+| --- | --- |
+| `crew.hire` | Hire a worker: name, role, a brief, and the tools it may use |
+| `crew.equip` | Replace the tools a worker may use |
+| `crew.ask` | Give a worker a task. It works on its own and the assistant stays free; the answer comes back as a crew update. `wait: true` waits for a quick answer |
+| `crew.list` | Who is in the crew and what each may use |
+| `crew.history` | The last lines of one worker's own conversation |
+| `crew.fire` | Remove a worker (and its notes, unless `keep`) |
+
+Several workers can work at the same time. A task takes ten minutes at most. If you talk to the assistant while she is on a step, she finishes the step and then answers you; nothing you say is dropped.
 
 ## Meetings
 

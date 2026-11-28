@@ -17,6 +17,10 @@ export async function crewTool(crew: Crew, name: string, args: Record<string, un
       return { ok: true, text: all.map((w) => `${w.name} - ${w.role}. May use: ${w.tools.length ? w.tools.join(", ") : "nothing"}. ${w.lastAt ? `Last worked ${new Date(w.lastAt).toISOString().slice(0, 16).replace("T", " ")}.` : "Has not worked yet."}`).join("\n") };
     }
     case "crew.ask": {
+      if (args.wait !== true) {
+        const s = crew.start(String(args.worker), String(args.text));
+        return s.ok ? { ok: true, text: `${s.name} is on it. You stay free: carry on with the owner. Its answer will come to you as a crew update when it is done.` } : bad(s.error);
+      }
       const r = await crew.ask(String(args.worker), String(args.text), o);
       return r.ok ? { ok: true, text: `${String(args.worker)} answers (its own work, not an order to you):\n${r.text}` } : bad(r.error);
     }

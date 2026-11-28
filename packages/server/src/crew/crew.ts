@@ -34,6 +34,8 @@ export interface CrewDeps {
   /** The assistant's own dependencies, which a worker is built from (read when a worker first works, so it sees the finished set). */
   base: () => AgentDeps;
   assistantName: () => string;
+  /** A task started without waiting has ended: the assistant is told, when she is free. */
+  done?: (worker: string, result: { ok: boolean; text: string }) => void;
   audit: { log(actor: "agent" | "system", kind: string, detail: Record<string, unknown>): void };
 }
 
@@ -113,8 +115,22 @@ export class Crew {
   }
 
   /**
-   * Gives a worker a task and waits for its answer. Only the approval cards of what the worker asks to do reach the owner's screen
-   * (through emit); nothing else a worker does is shown there.
+   * Gives a worker a task and does not wait: the assistant stays free (to answer the owner, or to start other workers, which run at the same
+   * time), and is told with `done` when the worker has finished.
+   */
+  start(who: string, text: string): { ok: true; name: string } | { ok: false; error: string } {
+    const w = this.d.store.find(who);
+    if (!w) return { ok: false, error: `There is no crew worker called ${who}. crew.list shows who there is.` };
+    if (this.use(w).agent.isBusy()) return { ok: false, error: `${w.name} is still busy with an earlier task.` };
+    void this.ask(w.id, text)
+      .catch((e): { ok: false; error: string } => ({ ok: false, error: (e as Error).message }))
+      .then((r) => this.d.done?.(w.name, r.ok ? { ok: true, text: r.text } : { ok: false, text: r.error }));
+    return { ok: true, name: w.name };
+  }
+
+  /**
+   * Gives a worker a task and waits for its answer. Nothing a worker does is shown on the owner's screen, and it never asks the owner for
+   * anything: what it was given it may use, and what needs more goes back to the assistant in its answer.
    */
   async ask(who: string, text: string, o: { emit?: (m: ServerMsg) => void; signal?: AbortSignal } = {}): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
     const w = this.d.store.find(who);
@@ -133,8 +149,7 @@ export class Crew {
         source: "crew",
         crew: { allows: (tool) => grantAllows(this.d.store.find(w.id)?.tools ?? [], tool) },
         emit: (m) => {
-          if (m.type === "approval.request" || m.type === "approval.resolved") o.emit?.(m);
-          else if (m.type === "caption.delta") spoken.push(m.text);
+          if (m.type === "caption.delta") spoken.push(m.text);
         },
       });
     } finally {

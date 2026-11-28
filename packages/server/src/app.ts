@@ -1140,7 +1140,25 @@ export async function createApp(opts: AppOptions) {
   };
   // the crew: workers on Friend's own engine, built from these same dependencies (read when a worker first works)
   let baseDeps!: AgentDeps;
-  const crew = new Crew({ store: new CrewStore(db), dataDir: config.dataDir, base: () => baseDeps, assistantName: () => auth.assistantName(), audit });
+  const crew = new Crew({ store: new CrewStore(db), dataDir: config.dataDir, base: () => baseDeps, assistantName: () => auth.assistantName(), audit, done: (worker, r) => crewDone(worker, r) });
+  const crewDone = (worker: string, r: { ok: boolean; text: string }): void => {
+    const safe = (s: string, n: number) => s.replace(/[<>]/g, "‹").trim().slice(0, n);
+    const text = `[Crew update, from your crew worker ${safe(worker, 40)} and not from the owner]
+${r.ok ? `It finished:
+${safe(r.text, 6000)}` : `It could not finish: ${safe(r.text, 400)}`}
+Use it for what the owner asked and tell the owner what matters, in a few words.`;
+    const go = () =>
+      runWithRequest({ prefix: "crew-note" }, async () => {
+        let note = "";
+        const emit = (m: ServerMsg) => {
+          broadcast(m);
+          if (m.type === "caption.delta") note += m.text;
+        };
+        await agent.runTurn(text, { trust: "owner", emit, ip: "127.0.0.1", source: "crew" });
+        if (note.trim()) await tellOwner(note, "Crew update");
+      });
+    void turnQueue.run(go).catch((err) => audit.log("system", "crew.notify_failed", { message: (err as Error).message }));
+  };
   const agent = new Agent((baseDeps = {
     crew,
     auditQuery: new AuditQuery(db),

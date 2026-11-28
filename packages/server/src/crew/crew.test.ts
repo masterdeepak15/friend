@@ -27,7 +27,7 @@ const ip = "9.9.9.9";
 let dir: string;
 let db: Db;
 let approvals: Approvals;
-let build: (provider: FakeProvider) => { agent: Agent; crew: Crew; deps: AgentDeps };
+let build: (provider: FakeProvider, done?: (w: string, r: { ok: boolean; text: string }) => void) => { agent: Agent; crew: Crew; deps: AgentDeps };
 let emitted: ServerMsg[];
 
 beforeEach(async () => {
@@ -40,14 +40,14 @@ beforeEach(async () => {
   const config = loadConfig(dir);
   const policy = new PolicyEngine(db, config);
   approvals = new Approvals({ auth, policy, audit, db }, 200);
-  build = (provider) => {
+  build = (provider, done) => {
     let base!: AgentDeps;
-    const crew = new Crew({ store: new CrewStore(db), dataDir: dir, base: () => base, assistantName: () => "Maya", audit });
+    const crew = new Crew({ store: new CrewStore(db), dataDir: dir, base: () => base, assistantName: () => "Maya", audit, ...(done ? { done } : {}) });
     base = {
       provider,
       policy,
       approvals,
-      devices: { exec: vi.fn(), hasOnline: () => true, targetName: () => "pc" } as never,
+      devices: { exec: vi.fn(async () => ({ ok: true, output: "written", truncated: false })), hasOnline: () => true, targetName: () => "pc" } as never,
       stage: new StageState(),
       db,
       audit,
@@ -178,18 +178,17 @@ describe("the crew", () => {
 });
 
 describe("the assistant's crew tools", () => {
-  it("hire asks the owner, ask returns the worker's answer, and the worker's talk stays out of the assistant's conversation", async () => {
+  it("hire needs no card, ask returns the worker's answer, and the worker's talk stays out of the assistant's conversation", async () => {
     const p = new FakeProvider([
       [call("1", "crew.hire", { name: "Ada", role: "researcher", tools: ["web.*"] }), done],
-      [call("2", "crew.ask", { worker: "Ada", text: "find the capital of France" }), done],
+      [call("2", "crew.ask", { worker: "Ada", text: "find the capital of France", wait: true }), done],
       [text("Paris."), done], // the worker
       [text("Ada says Paris."), done], // the assistant
     ]);
-    const { agent } = build(p);
+    const { agent, crew } = build(p);
     await agent.runTurn("hire Ada to research and ask her", owner());
-    const card = emitted.find((m) => m.type === "approval.request") as { tool: string; summary?: string } | undefined;
-    expect(card?.tool).toBe("crew.hire");
-    expect(JSON.stringify(card)).toContain("web.*");
+    expect(emitted.some((m) => m.type === "approval.request")).toBe(false); // the crew is the assistant's alone: the owner is never asked
+    expect(crew.find("Ada")?.tools).toEqual(["web.*"]);
     const last = JSON.stringify(p.calls[3]!.messages);
     expect(last).toContain("Ada answers");
     expect(last).toContain("Paris.");
@@ -198,5 +197,40 @@ describe("the assistant's crew tools", () => {
     const adaDb = openDb(join(dir, "crew", "ada"));
     const theirs = (adaDb.prepare("select content_json from messages").all() as { content_json: string }[]).map((r) => r.content_json).join("\n");
     expect(theirs).toContain("find the capital of France");
+  });
+});
+
+describe("working without the owner and without blocking the assistant", () => {
+  it("a worker uses what it was given without asking the owner", async () => {
+    const p = new FakeProvider([[call("1", "fs.write", { path: "C:\somewhere\a.txt", content: "x" }), done], [text("written"), done]]);
+    const { crew, deps } = build(p);
+    crew.hire({ name: "Ada", role: "writer", tools: ["fs.write"] });
+    const r = await crew.ask("Ada", "write a file", { emit: (m) => emitted.push(m) });
+    expect(r).toMatchObject({ ok: true });
+    expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
+    expect(deps.devices.exec).toHaveBeenCalled();
+  });
+
+  it("a task started without waiting leaves the assistant free and reports when it is done", async () => {
+    const p = new FakeProvider([[text("Paris."), done]]);
+    const told: { w: string; r: { ok: boolean; text: string } }[] = [];
+    const { crew } = build(p, (w, r) => told.push({ w, r }));
+    crew.hire({ name: "Ada", role: "r" });
+    const s = crew.start("Ada", "capital of France?");
+    expect(s).toEqual({ ok: true, name: "Ada" });
+    expect(told).toEqual([]); // not waited for
+    await vi.waitFor(() => expect(told).toHaveLength(1));
+    expect(told[0]).toEqual({ w: "Ada", r: { ok: true, text: "Paris." } });
+  });
+
+  it("what the owner says while the assistant is busy waits for her and is answered, never dropped", async () => {
+    const p = new FakeProvider([[text("first"), done], [text("second"), done]]);
+    const { agent } = build(p);
+    const chat = { trust: "owner" as const, emit: (m: ServerMsg) => emitted.push(m), ip, source: "chat" };
+    const a = agent.runTurn("one", chat);
+    void agent.runTurn("two", chat); // arrives while she is on the first
+    await a;
+    await vi.waitFor(() => expect(p.calls).toHaveLength(2));
+    expect(JSON.stringify(p.calls[1]!.messages)).toContain("two");
   });
 });

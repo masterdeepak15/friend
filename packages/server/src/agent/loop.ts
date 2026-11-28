@@ -348,6 +348,12 @@ export class Agent {
     const { emit } = ctx;
     const d = this.deps;
     if (this.busy) {
+      // the owner talking to her is never lost: it waits for the step she is on, then she answers
+      if (ctx.trust === "owner" && (ctx.source === "chat" || ctx.source === "voice" || ctx.source === "channel")) {
+        emit({ type: "status", busy: true, deviceOnline: d.devices.hasOnline(), message: "Finishing one step, then I will answer" });
+        this.idleJobs.push(() => void this.runTurn(text, ctx));
+        return;
+      }
       emit({ type: "status", busy: true, deviceOnline: d.devices.hasOnline(), message: "Still busy with the previous request" });
       return;
     }
@@ -962,6 +968,15 @@ export class Agent {
     // (a message or a task for an Office worker can carry a command to someone who would run it, so it is held to the same rule)
     const outside = call.name === "shell.run" || call.name === "office.assign" || call.name === "office.say" || call.name === "crew.ask" || (call.name === "office.decide" && args.decision === "allow") ? this.outsideSource() : null;
     if (outside && decision === "allow") decision = "ask";
+    // a crew worker never asks the owner: what it was given it may use; what would need the owner (critical, or from the internet) goes back to the assistant
+    if (ctx.crew && (decision === "ask" || decision === "ask_with_pin")) {
+      if (tier === "T3" || outside || decision === "ask_with_pin") {
+        rec.outcome = "refused";
+        d.audit.log("agent", "tool.denied", { tool: call.name, reason: "crew needs the owner" });
+        return fail("This needs the owner's approval, and a crew worker cannot ask for it. Say in your answer what you need and why; the assistant decides.");
+      }
+      decision = "allow";
+    }
     // an install shows the owner the source and the whole text of every skill on the card
     let shown: Record<string, unknown> = pcPrep?.pcName ? { ...args, pc: pcPrep.pcName } : args;
     if (call.name === "plugins.import" && d.skillMarket && (decision === "ask" || decision === "ask_with_pin")) {
@@ -987,6 +1002,7 @@ export class Agent {
 
     if (meetPrep) {
       const r = await meetPrep.run(async (reason, detail) => {
+        if (ctx.crew) return false; // a crew worker never asks the owner
         d.decks?.presenter.approvalPending(true);
         const o = await d.approvals
           .request({ tool: call.name, args: { ...args, reason, detail }, tier: "T2", needsPin: false, device: null, remote: ctx.trust !== "voice-device" }, ctx.emit)
@@ -1000,6 +1016,7 @@ export class Agent {
 
     if (mailPrep) {
       const r = await mailPrep.run(async (reason, detail) => {
+        if (ctx.crew) return false; // a crew worker never asks the owner
         d.decks?.presenter.approvalPending(true);
         const { text: _body, note: _note, ...shownArgs } = args;
         const o = await d.approvals
@@ -1015,6 +1032,7 @@ export class Agent {
     if (pcPrep) {
       const prepared = pcPrep;
       const r = await prepared.run(async (reason, detail) => {
+        if (ctx.crew) return false; // a crew worker never asks the owner
         d.decks?.presenter.approvalPending(true);
         const o = await d.approvals
           .request({ tool: call.name, args: { ...shown, reason, detail }, tier: "T2", needsPin: false, device: prepared.pcName, remote: ctx.trust !== "voice-device" }, ctx.emit)
