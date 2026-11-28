@@ -1,5 +1,5 @@
 import { hudInstrumentsOn, parseRef, type ClientMsg, type MusicState, type ServerMsg } from "@friend/protocol";
-import { Agent, type AgentSettings } from "./agent/loop";
+import { type AgentDeps, Agent, type AgentSettings } from "./agent/loop";
 import { HINDI_VOICES, LISTENING_MODELS, MARATHI_VOICES, clampToSafe, downloadSize, isCatalogVoice, voiceLabel } from "@friend/protocol";
 import { makeAdmin } from "./admin";
 import { firstExistingDir } from "./assets";
@@ -125,6 +125,8 @@ import { StageState } from "./stage";
 import { DeckStore } from "./deck/store";
 import { PcService } from "./pc/service";
 import { PcHub } from "./pc/hub";
+import { Crew } from "./crew/crew";
+import { CrewStore } from "./crew/store";
 import { AgentFile } from "./pc/agentBundle";
 import { PcTools } from "./pc/tools";
 import { isAutomatic, wrapUntrusted } from "@friend/protocol";
@@ -1136,7 +1138,11 @@ export async function createApp(opts: AppOptions) {
     await saveVisitorFile(path, format === "html" ? deckToHtml(deck) : await deckToPptx(deck));
     return path;
   };
-  const agent = new Agent({
+  // the crew: workers on Friend's own engine, built from these same dependencies (read when a worker first works)
+  let baseDeps!: AgentDeps;
+  const crew = new Crew({ store: new CrewStore(db), dataDir: config.dataDir, base: () => baseDeps, assistantName: () => auth.assistantName(), audit });
+  const agent = new Agent((baseDeps = {
+    crew,
     auditQuery: new AuditQuery(db),
     decks: { store: deckStore, presenter, exportDeck },
     pcs: pcTools,
@@ -1225,7 +1231,7 @@ export async function createApp(opts: AppOptions) {
     office,
     attachments: { read: (id, part) => readAttachment(attachments, id, part) },
     integrations: { summary: () => integrationSummary(integrationViews(config, channelHub, brokerHub, alexaHub, spotifyHub, scView, audiusHub, chromePlugin, videoHub, browserHub, pcCounts, mailCounts)) },
-  });
+  }));
   // the owner's schedules and watches wake the assistant with their instruction (the instruction is the owner's, so it runs as the owner)
   let invitationTimes: number[] = [];
   const mailAutomation = new MailAutomation({

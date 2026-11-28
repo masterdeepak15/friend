@@ -2,6 +2,7 @@ import { z, type ZodTypeAny } from "zod";
 import { PC_TOOL_DEFS, describePcCall } from "./pc";
 import { MAIL_TOOL_DEFS, describeMailCall } from "./mail";
 import { MEETING_TOOL_DEFS, describeMeetingCall } from "./meeting";
+import { CREW_TOOL_DEFS, describeCrewCall } from "./crew";
 import { DECK_CONTROLS, DECK_LIMITS, DeckItemInput, DeckSlideInput } from "./deck";
 import { ViewPreset } from "./messages";
 import { OBJECT_TYPES, ObjectRole, Placement, PresenceState, PresenceStyle, SceneMode, StageObject } from "./stage";
@@ -1078,6 +1079,7 @@ export const TOOL_DEFS: ToolDef[] = [
   ...PC_TOOL_DEFS,
   ...MAIL_TOOL_DEFS,
   ...MEETING_TOOL_DEFS,
+  ...CREW_TOOL_DEFS,
 ];
 
 const READ_ONLY_TOOLS = new Set([
@@ -1126,6 +1128,7 @@ export function describeCall(name: string, args: unknown, device?: string): stri
   if (name.startsWith("pc.")) return visible(describePcCall(name, a));
   if (name.startsWith("email.") || name.startsWith("watch.")) return visible(describeMailCall(name, a));
   if (name.startsWith("meeting.")) return visible(describeMeetingCall(name, a));
+  if (name.startsWith("crew.")) return visible(describeCrewCall(name, a));
   switch (name) {
     case "shell.run":
       return `Run shell command${where}: ${visible(String(a.command ?? ""))}${a.cwd ? ` (in ${visible(String(a.cwd))})` : ""}`;

@@ -27,6 +27,8 @@ import type { DeckStore } from "../deck/store";
 import type { Presenter } from "../deck/presenter";
 import type { PcTools, PreparedPc } from "../pc/tools";
 import { MAIL_TURN_TOOLS, mailAuditArgs, type MailTools, type PreparedMail } from "../mail/tools";
+import type { Crew } from "../crew/crew";
+import { crewBrief, crewTool } from "../crew/tools";
 import { meetingTurnAllows, meetingAuditArgs, type MeetingTools, type PreparedMeeting } from "../meetings/tools";
 import { runDeckTool } from "../deck/tools";
 import { MemoryTree, capIndex, inboxName } from "../memory/tree";
@@ -158,6 +160,8 @@ export interface AgentDeps {
   mail?: MailTools;
   /** The meetings: the assistant's meeting.* tools. Without it they report they are unavailable. */
   meetings?: MeetingTools;
+  /** The crew: workers on Friend's own engine, each with a conversation and memory of its own. Without it the crew tools report they are unavailable. */
+  crew?: Crew;
   decks?: { store: DeckStore; presenter: Presenter; exportDeck(id: string, format: "pptx" | "html"): Promise<string> };
   /** The tools of the owner's connectors (Gmail, Chrome control, …). Without it there are none. */
   mcp?: McpApi;
@@ -198,6 +202,8 @@ export interface TurnCtx {
   source?: string;
   /** Set when someone else's mail started this turn: only the mail tools exist for it, and it can answer that person only. */
   mail?: { from: string; roleAuto: boolean; caseId: number };
+  /** Set when a crew worker runs this turn: only the tools it was given exist for it. */
+  crew?: { allows(tool: string): boolean };
   /** Set when a meeting started this turn: only the meeting tools exist for it, and only about that meeting. */
   meeting?: { id: number; /** The line that started the turn was said by the owner, recognised by their voiceprint: the turn has all the owner's tools. */ owner?: boolean };
 }
@@ -384,7 +390,9 @@ export class Agent {
       const marketOn = webOn && !!d.market;
       const browserOn = !!d.browser?.enabled();
       const tools = (
-        ctx.mail
+        ctx.crew
+          ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])].filter((t) => ctx.crew!.allows(t.name))
+          : ctx.mail
           ? toolSpecs().filter((t) => MAIL_TURN_TOOLS.has(t.name))
           : ctx.meeting && !ctx.meeting.owner
           ? toolSpecs().filter((t) => meetingTurnAllows(t.name))
@@ -399,7 +407,7 @@ export class Agent {
       // Clear requests for real data (weather in a named city, the computer's stats) are answered with the real tools
       // right away: the pictures appear at once, and the model only has to say a short summary.
       // (not for a turn a meeting started for someone other than the owner: what is said in a call must not start tools by its words)
-      if (!isolated && !(ctx.meeting && !ctx.meeting.owner)) {
+      if (!isolated && !ctx.crew && !(ctx.meeting && !ctx.meeting.owner)) {
         for (const [i, auto] of detectIntents(text).entries()) {
           const id = `auto-${Date.now().toString(36)}-${i}`;
           const callMsg: Msg = { role: "assistant", content: [{ type: "tool_use", id, name: auto.name, input: auto.args }] };
@@ -430,7 +438,7 @@ export class Agent {
           notes,
           localIso(new Date(d.tasks?.now() ?? Date.now())),
           isolated ? undefined : d.plugins?.skills(),
-          isolated ? undefined : [d.mcp?.summary(), d.integrations?.summary(), d.ownerReach?.(), officeBrief(d.config.office), ctx.trust === "owner" ? d.decks?.presenter.contextLine() : undefined].filter(Boolean).join("\n") || undefined,
+          isolated ? undefined : [d.mcp?.summary(), d.integrations?.summary(), d.ownerReach?.(), officeBrief(d.config.office), d.crew ? crewBrief(d.crew) : undefined, ctx.trust === "owner" ? d.decks?.presenter.contextLine() : undefined].filter(Boolean).join("\n") || undefined,
           member ? ctx.person!.name : undefined,
           languageNote(text, ctx.spoken, voiceGender(devanagariLanguage(text) === "mr" || ctx.spoken?.toLowerCase().startsWith("mr") ? "mr" : "hi", { main: d.config.voice.ttsVoice, hindi: d.config.voice.hindiVoice || undefined, marathi: d.config.voice.marathiVoice || undefined })),
           memoryIndex,
@@ -704,7 +712,7 @@ export class Agent {
 
   /** Writes the request of a turn: its words, where it came from, and who asked. */
   private recordRequest(text: string, ctx: TurnCtx): void {
-    const system = ctx.source === "office" || ctx.source === "task" || ctx.source === "proactive";
+    const system = ctx.source === "office" || ctx.source === "crew" || ctx.source === "task" || ctx.source === "proactive";
     try {
       this.deps.audit.record({
         kind: "request",
@@ -831,6 +839,12 @@ export class Agent {
       d.audit.log("agent", "tool.denied", { tool: call.name, reason: "meeting turn" });
       return fail("That is not possible while handling a meeting.");
     }
+    // a crew worker uses only the tools it was given, whatever it is told
+    if (ctx.crew && !ctx.crew.allows(call.name)) {
+      rec.outcome = "refused";
+      d.audit.log("agent", "tool.denied", { tool: call.name, reason: "crew grants" });
+      return fail("That is not one of your tools.");
+    }
     const plugin = call.name.startsWith("plugin.") ? d.plugins?.tool(call.name) : undefined;
     // every plugin tool needs the owner's approval, whatever the plugin says about itself
     // a connector's tool is asked about every time (T2), whatever the connector says about itself
@@ -917,6 +931,7 @@ export class Agent {
     if (call.name === "file.present" && !d.media) return fail("Showing files is not available.");
     if (call.name === "message.send_file" && d.channels && !d.media) return fail("Sending files is not available.");
     if (call.name.startsWith("message.") && !d.channels) return fail("Messaging is not available.");
+    if (call.name.startsWith("crew.") && (!d.crew || ctx.trust !== "owner")) return fail(d.crew ? "Only the owner can use the crew." : "The crew is not available.");
     if (call.name.startsWith("office.") && (!d.office || !d.config.office.enabled)) return fail("The Office is not available.");
     if (call.name.startsWith("music.") && !d.music) return fail("Music is not available.");
     if (call.name.startsWith("video.") && !d.video) return fail("Web video is not available.");
@@ -945,7 +960,7 @@ export class Agent {
     }
     // a command that follows text from the internet is never waived: not by a remembered rule, not by a harmless-looking shape
     // (a message or a task for an Office worker can carry a command to someone who would run it, so it is held to the same rule)
-    const outside = call.name === "shell.run" || call.name === "office.assign" || call.name === "office.say" || (call.name === "office.decide" && args.decision === "allow") ? this.outsideSource() : null;
+    const outside = call.name === "shell.run" || call.name === "office.assign" || call.name === "office.say" || call.name === "crew.ask" || (call.name === "office.decide" && args.decision === "allow") ? this.outsideSource() : null;
     if (outside && decision === "allow") decision = "ask";
     // an install shows the owner the source and the whole text of every skill on the card
     let shown: Record<string, unknown> = pcPrep?.pcName ? { ...args, pc: pcPrep.pcName } : args;
@@ -1103,6 +1118,12 @@ export class Agent {
       if (!d.attachments) return fail("Attached files are not available.");
       d.audit.log("agent", "tool.call", { tool: call.name, args: clipArgs(args), tier, ok: true });
       return d.attachments.read(String(args.id), typeof args.part === "number" ? args.part : 1);
+    }
+
+    if (call.name.startsWith("crew.")) {
+      const r = await crewTool(d.crew!, call.name, args, { emit: ctx.emit, signal });
+      d.audit.log("agent", "tool.call", { tool: call.name, args: { worker: args.worker ?? args.name }, tier, ok: r.ok });
+      return r.ok ? { text: r.text, isError: false } : fail(r.text);
     }
 
     if (call.name.startsWith("office.")) {

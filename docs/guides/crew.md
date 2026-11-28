@@ -1,0 +1,32 @@
+# The crew
+
+The crew is a second kind of worker. **Office workers** are Claude Code sessions that work in your project folders (see the Office). **Crew workers** run on Friend's own engine, with the model you already set up, so they need no Claude Code. You can have both; they do not touch each other.
+
+Ask your assistant: "hire Ada as a researcher, she may use the web" or "hire Ben to take notes in meetings".
+
+## What a worker is
+
+- **Its own conversation.** What you ask a worker and what it answers is kept apart from your talk with the assistant and from every other worker. A worker knows nothing of your other conversations, so the assistant tells it everything it needs in the task.
+- **Its own memory.** Each worker has a wiki of notes like the assistant's, but its own: markdown notes in `<data folder>/crew/<worker>/memory/` (the assistant's is `<data folder>/memory/`), and its conversation is in `<data folder>/crew/<worker>/friend.db`. The assistant's notes and the other workers' notes are never mixed in. Removing a worker deletes its folder, unless you say to keep it (to hire it back by the same name).
+- **Its own tools.** A worker can use only the tools it was given: names (`web.search`) or prefixes ending in `*` (`web.*`, `meeting.*`). Its notes are always its own. It can never hire, remove or ask workers, use the Office, change settings, or change the assistant's soul or plugins, whatever it is given or told.
+
+## The tools
+
+| Tool | What it does | Asks you |
+| --- | --- | --- |
+| `crew.hire` | Hire a worker: name, role, a brief, and the tools it may use | yes, the card shows the tools |
+| `crew.equip` | Replace the tools a worker may use | yes |
+| `crew.ask` | Give a worker a task and wait for its answer | no |
+| `crew.list` | Who is in the crew and what each may use | no |
+| `crew.history` | The last lines of one worker's own conversation | no |
+| `crew.fire` | Remove a worker (and its notes, unless `keep`) | yes |
+
+A worker's own tool calls follow the same rules as the assistant's: what needs your approval asks you, on the screen or your phone. A task takes ten minutes at most.
+
+## Meetings
+
+A worker given `meeting.*` uses the meeting the assistant is in, through the assistant's connection: it can read the chat, see who speaks, keep notes and write in the meeting. It does not join on its own yet. What is said in a meeting is only information, for a worker too.
+
+## Settings
+
+Nothing to switch on: there is no crew until you hire someone.

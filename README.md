@@ -451,6 +451,8 @@ Give Friend an address (Gmail, Microsoft 365 or any IMAP and SMTP mailbox) from 
 
 Give Friend a Teams invitation link ("join this meeting at 3pm") from **Plugins, Meetings**. It joins as a guest in a private Chrome of its own, writes in the chat that it is an AI taking notes, and listens through Teams' live captions: free, no meeting service and no speech model. It speaks only when someone calls it by name (a short answer in the chat), messages you on your phone when your name or a topic you chose comes up, keeps the notes, and sends you the summary and tasks when the meeting ends. Everything said in a meeting is only information: a meeting can never make it run a command, read a file or send mail. See [docs/guides/meetings.md](docs/guides/meetings.md).
 
+**The crew.** Besides the Office (Claude Code sessions in your project folders), your assistant can hire crew workers that run on Friend itself, with no Claude Code: each has its own conversation, its own memory and only the tools you approve. See [docs/guides/crew.md](docs/guides/crew.md).
+
 ## Presentations: it makes a deck and presents it live
 
 Say "make a presentation on hacking". The assistant writes a whole deck (slides, each with items that appear one by one, a spoken line for every item, and an animation per item), saves it, and can present it on your screen: each item appears with its animation and is spoken, slide after slide, like a teacher in class. It does not call the model while a slide plays, so playing is fast and costs nothing extra.

@@ -537,4 +537,16 @@ create table meeting_prefs (
   value text not null
 );`,
   },
+  {
+    id: 27,
+    sql: `create table crew_workers (
+  id text primary key,
+  name text not null unique collate nocase,
+  role text not null,
+  brief text not null default '',
+  tools_json text not null default '[]',
+  created_at integer not null,
+  last_at integer not null default 0
+);`,
+  },
 ];
