@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { BudgetBoard, TicketBoard } from "../hud/orbital/OfficeViews";
 import { feedTree } from "../hud/orbital/jtrees";
 import { teamLines } from "../hud/orbital/office";
 import { ActivityList } from "./ActivityList";
@@ -56,10 +57,61 @@ describe("the Activity instrument drawn with the Jarvis feed", () => {
     );
     const feed = feedTree(lines, null, false).kids![0] as unknown as { p: { items: { message: string; source?: string; level: string; time?: string }[]; showSource: boolean; showTime: boolean } };
     expect(feed.p.showSource).toBe(true);
-    expect(feed.p.showTime).toBe(true);
+    expect(feed.p.showTime).toBe(false); // the small instrument has no room for a time column; the opened one shows it
     expect(feed.p.items.map((i) => [i.source, i.message, i.level])).toEqual([
-      ["⬡ BEN · OFFICE", "Write a.txt", "active"],
-      ["▣ ADA · CREW", "Found it", "success"],
+      ["⬡ BEN", "Write a.txt", "active"],
+      ["▣ ADA", "Found it", "success"],
     ]);
+  });
+});
+
+const office = (over: Record<string, unknown> = {}) => ({
+  enabled: true,
+  workers: [
+    { id: "ben", name: "Ben", title: "builder", status: "running", tokens: 2500, budget: 5000, context: { tokens: 70000, window: 200000 } },
+    { id: "kai", name: "Kai", title: "tester", status: "idle", tokens: 900, budget: null, context: null },
+  ],
+  tickets: [
+    { id: 1, projectId: "site", title: "Fix login", status: "doing", workerId: "ben" },
+    { id: 2, projectId: "site", title: "Write tests", status: "review", workerId: "kai" },
+    { id: 3, projectId: "api", title: "Add route", status: "todo", workerId: null },
+    { id: 4, projectId: "api", title: "Old thing", status: "done", workerId: "ben" },
+  ],
+  quota: { fiveHour: null, sevenDay: null },
+  feed: {},
+  ...over,
+});
+
+describe("the tickets view", () => {
+  it("puts each ticket on a card in its column, with its project and whose it is", () => {
+    render(<TicketBoard office={office() as never} />);
+    const col = (name: string) => screen.getByRole("region", { name });
+    expect(col("Being worked on").textContent).toContain("Fix login");
+    expect(col("Being worked on").textContent).toContain("Ben");
+    expect(col("Needs a look").textContent).toContain("Write tests");
+    expect(col("Not started").textContent).toContain("nobody yet");
+    expect(col("Done").textContent).toContain("Old thing");
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1"); // one of four done
+  });
+
+  it("says so when the Office is off", () => {
+    render(<TicketBoard office={office({ enabled: false }) as never} />);
+    expect(screen.getByText(/switched off/)).toBeTruthy();
+  });
+});
+
+describe("the budget view", () => {
+  it("shows each worker's tokens against its limit, or against the busiest worker when it has none", () => {
+    render(<BudgetBoard office={office() as never} />);
+    expect(screen.getByText(/3.4K/)).toBeTruthy(); // the total
+    expect(screen.getByRole("progressbar", { name: "Ben budget" }).getAttribute("aria-valuenow")).toBe("50");
+    expect(screen.getByText(/50% of its limit · session 35% full/)).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "Kai budget" }).getAttribute("aria-valuenow")).toBe("36"); // 900 of the busiest 2500
+    expect(screen.getByText(/no limit set/)).toBeTruthy();
+  });
+
+  it("says so with no workers", () => {
+    render(<BudgetBoard office={office({ workers: [] }) as never} />);
+    expect(screen.getByText(/No workers yet/)).toBeTruthy();
   });
 });

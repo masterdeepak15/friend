@@ -78,11 +78,11 @@ export function feedTree(lines: FeedItem[], activity: string | null, busy: boole
     id: `l${i}`,
     message: (l.body ?? l.text).slice(0, 120),
     level: (l.kind && LEVEL[l.kind]) || (l.tone === "orange" ? "warning" : l.tone === "green" ? "active" : "info"),
-    ...(l.who ? { source: `${MARK[l.who.kind]} ${l.who.name.toUpperCase().slice(0, 12)} · ${KIND[l.who.kind]}` } : {}),
+    ...(l.who ? { source: `${MARK[l.who.kind]} ${l.who.name.toUpperCase().slice(0, 8)}` } : {}),
     ...(l.at ? { time: clock(l.at) } : {}),
   }));
-  if (busy && activity) items.push({ id: "now", message: activity, level: "active", source: `${MARK.friend} FRIEND · ${KIND.friend}` });
-  return frame("Activity", [{ c: "JActivityFeed", p: { items: items.length ? items : [{ id: "none", message: "Nothing yet", level: "info" }], maxRows: 6, showTime: items.some((i) => i.time), showSource: items.some((i) => i.source) } }], "green");
+  if (busy && activity) items.push({ id: "now", message: activity, level: "active", source: `${MARK.friend} FRIEND` });
+  return frame("Activity", [{ c: "JActivityFeed", p: { items: items.length ? items : [{ id: "none", message: "Nothing yet", level: "info" }], maxRows: 6, showTime: false, showSource: items.some((i) => i.source) } }], "green");
 }
 
 export function radarTree(deviceOnline: boolean, voiceAvailable: boolean): JarvisNode {

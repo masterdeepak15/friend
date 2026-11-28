@@ -60,7 +60,7 @@ export function ActivityList({ items, empty = "Nothing yet", live = [], legend =
                 {b.who.role ? <span className="ac-role">{b.who.role}</span> : null}
               </header>
               {b.lines.map((l, j) => (
-                <p key={`${l.at}-${j}`} className="ac-line" data-kind={l.kind}>
+                <p key={`${l.at}-${j}`} className="ac-line" data-kind={l.kind} data-feed-line="">
                   {l.at > 0 && <time>{time(l.at)}</time>}
                   {markOf(l.kind) && <i>{markOf(l.kind)}</i>} {l.text}
                 </p>

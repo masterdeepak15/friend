@@ -1,7 +1,10 @@
 import type { ClientMsg, OfficeWorkerView } from "@friend/protocol";
 import { useEffect, useRef, useState } from "react";
+import { ActivityList, Avatar } from "../../people/ActivityList";
+import type { Act, Who } from "../../people/people";
 import type { OfficeFeedLine } from "../../store";
 import { Frame } from "./kit";
+import "./office-views.css";
 import { usingKeyboard } from "./modality";
 import type { Rect } from "./ExpandedView";
 
@@ -32,6 +35,8 @@ export function WorkerView({ worker, feed, rect, send, onClose }: WorkerViewProp
     send({ type: "office.say", workerId: worker.id, text: t });
     setText("");
   };
+  const who: Who = { id: worker.id, name: worker.name, kind: "office", role: worker.title };
+  const acts: Act[] = feed.map((l) => ({ who, at: l.at, kind: l.kind, text: l.text }));
   const active = worker.status === "starting" || worker.status === "running" || worker.status === "waiting";
   return (
     <Frame variant="chamfer" running title={worker.name} className="ob-expanded ob-hit" style={{ position: "absolute", left: rect.x, top: rect.y, width: rect.width, height: rect.height }} role="dialog" aria-label={worker.name}>
@@ -39,11 +44,31 @@ export function WorkerView({ worker, feed, rect, send, onClose }: WorkerViewProp
         ×
       </button>
       <div className="ob-expanded-body ob-worker">
-        <p className="ob-li">
-          {worker.status}
-          {worker.detail ? ` · ${worker.detail}` : ""}
-        </p>
-        <p className="ob-li ob-sub">Tokens {worker.tokens}{worker.budget ? ` of ${worker.budget}` : ""}</p>
+        <div className="ow-head">
+          <Avatar who={who} size={40} live={active} />
+          <div className="ow-id">
+            <strong>{worker.name}</strong>
+            <span className="ow-sub">{worker.title || "Office worker"}{worker.capabilities ? ` · ${worker.capabilities}` : ""}</span>
+          </div>
+          <span className="ow-status" data-status={worker.status}>
+            {worker.status}
+          </span>
+        </div>
+        {worker.detail ? <p className="ob-li ow-now">{worker.detail}</p> : null}
+        <div className="ow-meters">
+          <div className="ow-meter">
+            <span className="ow-sub">Tokens</span>
+            <b>{worker.tokens}{worker.budget ? ` of ${worker.budget}` : ""}</b>
+            {worker.budget ? <div className="ow-track"><i style={{ width: `${Math.min(100, (100 * worker.tokens) / worker.budget)}%` }} /></div> : null}
+          </div>
+          {worker.context ? (
+            <div className="ow-meter" data-context="">
+              <span className="ow-sub">Session</span>
+              <b>Context {Math.round(worker.context.tokens / 1000)}k of {Math.round(worker.context.window / 1000)}k ({Math.round((worker.context.tokens / worker.context.window) * 100)}%)</b>
+              <div className="ow-track"><i style={{ width: `${Math.min(100, (100 * worker.context.tokens) / worker.context.window)}%` }} /></div>
+            </div>
+          ) : null}
+        </div>
         {worker.skills?.length || worker.mcp?.length ? (
           <p className="ob-li ob-sub" data-grants="">
             {worker.skills?.length ? `Skills: ${worker.skills.join(", ")}` : ""}
@@ -51,17 +76,8 @@ export function WorkerView({ worker, feed, rect, send, onClose }: WorkerViewProp
             {worker.mcp?.length ? `Tools: ${worker.mcp.join(", ")}` : ""}
           </p>
         ) : null}
-        {worker.context ? (
-          <p className="ob-li ob-sub" data-context="">
-            Context {Math.round(worker.context.tokens / 1000)}k of {Math.round(worker.context.window / 1000)}k ({Math.round((worker.context.tokens / worker.context.window) * 100)}%)
-          </p>
-        ) : null}
-        <div className="ob-worker-log" ref={logRef} aria-live="polite">
-          {feed.length === 0 ? <p className="ob-li ob-sub">Nothing yet</p> : feed.map((l, i) => (
-            <p key={`${l.at}-${i}`} data-feed-line="" data-kind={l.kind} className={`ob-li${l.kind === "tool" || l.kind === "result" ? " ob-live" : ""}`}>
-              {l.text}
-            </p>
-          ))}
+        <div className="ob-worker-log ow-log" ref={logRef}>
+          <ActivityList items={acts} live={active ? [worker.id] : []} legend={false} empty="Nothing yet" />
         </div>
       </div>
       <form

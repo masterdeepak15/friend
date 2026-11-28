@@ -152,7 +152,9 @@ describe("a worker opened on the screen", () => {
     expect(d.textContent).toContain("250");
     expect(d.textContent).toContain("1000");
     const lines = [...d.querySelectorAll("[data-feed-line]")].map((e) => e.textContent);
-    expect(lines).toEqual(["Write a.txt", "Almost done"]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("Write a.txt");
+    expect(lines[1]).toContain("Almost done");
   });
 
   it("stops the worker", () => {
