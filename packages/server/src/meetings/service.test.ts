@@ -31,7 +31,7 @@ class Page implements MeetingPage {
 
 const say = (speaker: string, text: string): CaptionItem[] => [{ speaker, text }];
 
-function rig(page: Page | null, busyFirst = 0) {
+function rig(page: Page | null, busyFirst = 0, failTell = false) {
   const db = openDb(mkdtempSync(join(tmpdir(), "friend-meet-")));
   const store = new MeetingStore(db);
   const audit = new Audit(db);
@@ -45,7 +45,7 @@ function rig(page: Page | null, busyFirst = 0) {
     enabled: () => true,
     assistantName: () => "Maya",
     page: () => page,
-    tellOwner: (t) => void told.push(t),
+    tellOwner: (t) => { if (failTell) throw new Error("no way to reach"); told.push(t); },
     runTurn: async (prompt, ctx) => {
       if (busy > 0) {
         busy--;
@@ -58,7 +58,7 @@ function rig(page: Page | null, busyFirst = 0) {
       }
       return true;
     },
-    tuning: { pollMs: 5, settleMs: 40, replyDelayMs: 20, retryMs: 5 },
+    tuning: { missionDelayMs: 20, pollMs: 5, settleMs: 40, replyDelayMs: 20, retryMs: 5 },
   });
   tools.current = new MeetingTools({ service, store, audit, enabled: () => true });
   store.setPrefs({ ownerNames: ["Deepak"] });
@@ -111,10 +111,10 @@ describe("a meeting the assistant attends", () => {
     expect(r.told[0]).toMatch(/Chrome or Edge/);
   });
 
-  it("limits how often it tells the owner", () => {
+  it("limits how often it tells the owner", async () => {
     const r = rig(null);
-    for (let i = 0; i < 6; i++) expect(r.service.tell(1, "x")).toBe("The owner was told.");
-    expect(r.service.tell(1, "x")).toMatch(/wait/);
+    for (let i = 0; i < 6; i++) expect(await r.service.tell(1, "x")).toBe("The owner was told.");
+    expect(await r.service.tell(1, "x")).toMatch(/wait/);
   });
 });
 
@@ -165,5 +165,71 @@ describe("the meeting tools", () => {
     expect(r.store.prefs().keywords).toEqual([]);
     await p.run(async () => true, new AbortController().signal);
     expect(r.store.prefs().keywords).toEqual(["invoice", "budget"]);
+  });
+});
+
+describe("attending for the owner, who is not in the call", () => {
+  const toolRun = async (r: ReturnType<typeof rig>, name: string, args: Record<string, unknown>, ctx: Record<string, unknown>) => {
+    const p = r.tools.prepare(name, args, ctx);
+    return "error" in p ? { isError: true, text: p.error } : p.run(async () => true, new AbortController().signal);
+  };
+  const inCall = () => new Page(Array(600).fill("in") as Phase[], [[]]);
+
+  it("starts on the owner's instructions by itself when it is in, and says in every turn that the owner is not there and no approval is needed", async () => {
+    const r = rig(inCall());
+    const j = await toolRun(r, "meeting.join", { url: "https://teams.live.com/meet/77", mission: "Present the Q3 plan, answer questions about it, and note any decision." }, {});
+    expect(j).toMatchObject({ isError: false });
+    const m = r.store.current()!;
+    expect(r.store.mission(m.id)).toMatch(/Q3 plan/);
+    await until(() => r.turns.some((t) => t.kind === "mission"));
+    const t = r.turns.find((x) => x.kind === "mission")!;
+    expect(t.prompt).toMatch(/Present the Q3 plan/);
+    expect(t.prompt).toMatch(/owner is not in it/);
+    expect(t.prompt).toMatch(/without asking for approval/);
+    await r.service.leave(m.id);
+  });
+
+  it("really sends the question to the owner with the same call that tells the people it will ask", async () => {
+    const r = rig(inCall());
+    const m = await r.service.join("https://teams.live.com/meet/78", {});
+    await until(() => r.store.get(m.id)!.status === "live");
+    const res = (await toolRun(r, "meeting.chat", { text: "I will check with Deepak and tell you.", ask_owner: "They ask to move the review to Friday. Is that fine?" }, { inMeeting: m.id })) as { isError: boolean; text: string };
+    expect(res.isError).toBe(false);
+    expect(res.text).toMatch(/The owner was told/);
+    expect(r.told.some((x) => /move the review to Friday/.test(x))).toBe(true);
+    await r.service.leave(m.id);
+  });
+
+  it("says plainly when the owner could not be reached, so it is never claimed that they were told", async () => {
+    const r = rig(inCall(), 0, true);
+    const m = await r.service.join("https://teams.live.com/meet/79", {});
+    await until(() => r.store.get(m.id)!.status === "live");
+    const res = (await toolRun(r, "meeting.chat", { text: "I will ask Deepak.", ask_owner: "Can we do Friday?" }, { inMeeting: m.id })) as { isError: boolean; text: string };
+    expect(res.text).toMatch(/could NOT be reached/);
+    await r.service.leave(m.id);
+  });
+
+  it("shows a file from outside the folders it may open only when the owner is the one asking", async () => {
+    const r = rig(inCall());
+    const m = await r.service.join("https://teams.live.com/meet/80", {});
+    await until(() => r.store.get(m.id)!.status === "live");
+    const away = (await toolRun(r, "meeting.present", { file: "C:/secret/film.mp4" }, { inMeeting: m.id })) as { isError: boolean; text: string };
+    expect(away).toMatchObject({ isError: true });
+    expect(away.text).toMatch(/outside the folders/);
+    const owner = (await toolRun(r, "meeting.present", { file: "C:/secret/film.mp4" }, { inMeeting: m.id, owner: true })) as { isError: boolean; text: string };
+    expect(owner.text).toMatch(/does not exist/); // not stopped by the folder rule
+    await r.service.leave(m.id);
+  });
+
+  it("looks at the meeting screen and hands the picture to the model", async () => {
+    const page = inCall();
+    Object.assign(page, { look: async () => ({ mime: "image/jpeg", data: "AAAA" }) });
+    const r = rig(page);
+    const m = await r.service.join("https://teams.live.com/meet/81", {});
+    await until(() => r.store.get(m.id)!.status === "live");
+    const res = (await toolRun(r, "meeting.look", {}, { inMeeting: m.id })) as { isError: boolean; image?: { mime: string; data: string } };
+    expect(res.isError).toBe(false);
+    expect(res.image).toEqual({ mime: "image/jpeg", data: "AAAA" });
+    await r.service.leave(m.id);
   });
 });

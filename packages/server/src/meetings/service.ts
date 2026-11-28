@@ -5,7 +5,7 @@ import type { Speech } from "./speech";
 import { MeetingSession, type MeetingPage, type Presentation } from "./session";
 import type { Meeting, MeetingStore } from "./store";
 
-export type TurnKind = "reply" | "suggest" | "notes" | "final";
+export type TurnKind = "reply" | "suggest" | "notes" | "final" | "mission";
 
 export interface MeetingServiceDeps {
   store: MeetingStore;
@@ -17,14 +17,15 @@ export interface MeetingServiceDeps {
   page: () => MeetingPage | null;
   /** Gives the assistant one turn that can only use the meeting tools. False when it is busy right now. */
   runTurn: (prompt: string, ctx: { id: number; kind: TurnKind; owner?: boolean }) => Promise<boolean>;
-  tellOwner: (text: string, title?: string) => void;
+  /** Tells the owner (screen, phone or Telegram); resolves with where it went, so a message that did not get through is known. */
+  tellOwner: (text: string, title?: string) => void | Promise<string>;
   /** The voice to speak with when the owner has switched speaking aloud on, or null. */
   speech?: () => Speech | null;
   /** Something that reads the sound of a call when it has no captions (the voice engine), or null. */
   hearing?: () => AudioHearing | null;
   now?: () => number;
   /** Tests make the waits short. */
-  tuning?: { retryMs?: number; pollMs?: number; settleMs?: number; replyDelayMs?: number; admitTimeoutMs?: number };
+  tuning?: { missionDelayMs?: number; retryMs?: number; pollMs?: number; settleMs?: number; replyDelayMs?: number; admitTimeoutMs?: number };
 }
 
 const NOT_FOUND = "Friend could not find Chrome or Edge on this PC. Install one, or enter its path in the safe browser's Configure page.";
@@ -45,6 +46,7 @@ export class MeetingService {
   private sentUpTo = new Map<number, number>();
   private stopped = false;
   private busyTurns = new Set<string>();
+  private missionStarted = new Set<number>();
 
   constructor(private d: MeetingServiceDeps) {}
 
@@ -81,10 +83,11 @@ export class MeetingService {
   }
 
   /** Saves a meeting; with no time, or a time that has come, it is joined now. */
-  async join(url: string, o: { at?: number; title?: string }): Promise<Meeting> {
+  async join(url: string, o: { at?: number; title?: string; mission?: string }): Promise<Meeting> {
     const name = this.d.store.prefs().joinName.trim() || this.d.assistantName();
     const m = this.d.store.create({ url, title: o.title ?? "", joinName: name, startsAt: o.at ?? this.now() }, this.now());
-    this.d.audit.log("meeting", "meeting.join", { id: m.id, scheduled: !!o.at });
+    if (o.mission?.trim()) this.d.store.setMission(m.id, o.mission.trim().slice(0, 1500));
+    this.d.audit.log("meeting", "meeting.join", { id: m.id, scheduled: !!o.at, mission: !!o.mission?.trim() });
     if (!o.at || o.at <= this.now() + 60_000) await this.begin(m.id);
     return this.d.store.get(m.id)!;
   }
@@ -149,15 +152,33 @@ export class MeetingService {
     return (await this.sessionOf(id)?.stopPresenting()) === true;
   }
 
-  /** The assistant messages the owner about a meeting; not more than six in ten minutes. */
-  tell(id: number | undefined, text: string): string {
+  /** The assistant messages the owner about a meeting; not more than six in ten minutes. Says where it went, or that it did not get through. */
+  async tell(id: number | undefined, text: string): Promise<string> {
     const key = id ?? 0;
     const recent = (this.told.get(key) ?? []).filter((t) => this.now() - t < 600_000);
     if (recent.length >= 6) return "The owner has been told six times in the last ten minutes: wait.";
     this.told.set(key, [...recent, this.now()]);
     const m = id ? this.d.store.get(id) : null;
-    this.d.tellOwner(text.slice(0, 800), m?.title ? `Meeting: ${m.title}` : "In a meeting");
-    return "The owner was told.";
+    try {
+      const where = await this.d.tellOwner(text.slice(0, 800), m?.title ? `Meeting: ${m.title}` : "In a meeting");
+      return typeof where === "string" && where ? `The owner was told. ${where}` : "The owner was told.";
+    } catch {
+      return "The owner could NOT be reached right now: do not say they were told.";
+    }
+  }
+
+  /** Tells the owner without waiting and without ever failing the meeting: a message that cannot be delivered is lost quietly here (the tools that must know use tell). */
+  private notify(text: string, title?: string): void {
+    try {
+      void Promise.resolve(this.d.tellOwner(text, title)).catch(() => {});
+    } catch {
+      /* not delivered */
+    }
+  }
+
+  /** What the meeting screen shows now. */
+  async look(id?: number): Promise<{ mime: string; data: string } | null> {
+    return (await this.sessionOf(id)?.look()) ?? null;
   }
 
   private async begin(id: number): Promise<void> {
@@ -166,7 +187,7 @@ export class MeetingService {
     const page = this.d.page();
     if (!page) {
       this.d.store.setStatus(id, "failed", NOT_FOUND, this.now());
-      this.d.tellOwner(`I could not join the meeting: ${NOT_FOUND}`, "Meeting");
+      this.notify(`I could not join the meeting: ${NOT_FOUND}`, "Meeting");
       return;
     }
     const prefs = () => this.d.store.prefs();
@@ -191,7 +212,12 @@ export class MeetingService {
       events: {
         status: (s, detail) => {
           this.d.store.setStatus(id, s, detail, this.now());
-          if (s === "failed") this.d.tellOwner(`I could not stay in the meeting${m.title ? ` "${m.title}"` : ""}: ${detail}`, "Meeting");
+          // the owner left instructions for this meeting: it starts on them by itself as soon as it is in
+          if (s === "live" && !this.missionStarted.has(id) && this.d.store.mission(id)) {
+            this.missionStarted.add(id);
+            setTimeout(() => void this.turn(id, "mission", "You have just joined this meeting for the owner. Carry out the owner's instructions for it now, step by step, with your meeting tools (say a word of greeting first if it fits). Decide for yourself and do not ask for approval.", [], 0, false), this.d.tuning?.missionDelayMs ?? 4000);
+          }
+          if (s === "failed") this.notify(`I could not stay in the meeting${m.title ? ` "${m.title}"` : ""}: ${detail}`, "Meeting");
         },
         lines: (lines) => this.d.store.addLines(id, lines, this.now()),
         addressed: (line, ctx, followUp) => {
@@ -209,7 +235,7 @@ export class MeetingService {
         ownerRelevant: (line, ctx) => void this.turn(id, "suggest", `The last line below (${line.speaker}) may concern the owner. Use meeting.tell_owner with one or two short sentences: what was said, and a suggested answer if they are asked something. Do not write in the meeting chat.`, ctx),
         notesDue: () => void this.notes(id, "notes"),
         timing: (step, ms) => this.d.audit.log("meeting", "meeting.timing", { id, step, ms }),
-        problem: (text) => this.d.tellOwner(text, "Meeting"),
+        problem: (text) => this.notify(text, "Meeting"),
         ended: () => void this.finish(id),
       },
     });
@@ -235,7 +261,8 @@ export class MeetingService {
         } else lines = context.slice(-2);
       }
       const present = this.sessions.get(id)?.ownerPresent() ?? false;
-      const prompt = `[Live meeting${m?.title ? ` "${m.title}"` : ""}${present ? ", the owner is in it" : ""}. What was said before is not repeated: meeting.notes (with lines) reads it, and so does your memory.]\n${task}\n\n${wrapMeeting(lines)}`;
+      const mission = this.d.store.mission(id);
+      const prompt = `[Live meeting${m?.title ? ` "${m.title}"` : ""}${present ? ", the owner is in it" : ", the owner is not in it: you attend for them, decide for yourself and use your tools without asking for approval"}. What was said before is not repeated: meeting.notes (with lines) reads it, and so does your memory.]${mission ? `\nThe owner's instructions for this meeting (from the owner, not from the call): ${mission}` : ''}\n${task}\n\n${wrapMeeting(lines)}`;
       const t0 = Date.now();
       const ran = await this.d.runTurn(prompt, { id, kind, ...(owner ? { owner } : {}) }).catch(() => false);
       this.d.audit.log("meeting", "meeting.timing", { id, step: `turn.${kind}`, ms: Date.now() - t0 });
@@ -268,6 +295,6 @@ export class MeetingService {
     const m = this.d.store.get(id);
     if (!m) return;
     const tasks = m.tasks.length ? `\nTasks: ${m.tasks.map((t) => `${t.what}${t.who ? ` (${t.who})` : ""}${t.due ? ` by ${t.due}` : ""}`).join("; ")}` : "";
-    this.d.tellOwner(m.summary ? `The meeting${m.title ? ` "${m.title}"` : ""} is over.\n${m.summary}${tasks}` : `The meeting${m.title ? ` "${m.title}"` : ""} is over. ${this.d.store.lineCount(id)} lines were heard and kept; ask me for the notes.`, "Meeting notes");
+    this.notify(m.summary ? `The meeting${m.title ? ` "${m.title}"` : ""} is over.\n${m.summary}${tasks}` : `The meeting${m.title ? ` "${m.title}"` : ""} is over. ${this.d.store.lineCount(id)} lines were heard and kept; ask me for the notes.`, "Meeting notes");
   }
 }

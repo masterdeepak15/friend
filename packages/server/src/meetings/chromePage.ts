@@ -192,7 +192,11 @@ export class ChromeMeetingPage implements MeetingPage {
   /** Puts the content on the stage of the page and, when the screen is not shared yet, shares it in the meeting. */
   async present(c: Presentation): Promise<{ ok: boolean; message: string }> {
     try {
-      if (c.kind === "slides") await this.run<number>(`window.__friend.slides(${JSON.stringify(c.slides)}, ${c.start ?? 0})`);
+      if (c.kind === "slides") {
+        // (what goes to the page is what is drawn: the words of each line, and whether its lines come in one by one)
+        const drawn = c.slides.map((s) => ({ title: s.title, lines: (s.lines ?? []).map((l) => ({ text: typeof l === "string" ? l : l.text })), anim: (s.lines ?? []).some((l) => typeof l !== "string" && !!l.say) }));
+        await this.run<number>(`window.__friend.slides(${JSON.stringify(drawn)}, ${c.start ?? 0})`);
+      }
       else {
         const b64 = c.data.toString("base64");
         const size = 400_000;
@@ -223,6 +227,20 @@ export class ChromeMeetingPage implements MeetingPage {
       return { ok: false, message: "The meeting did not start sharing: the share button was not found or this meeting does not let guests share." };
     } catch {
       return { ok: false, message: "Sharing the screen failed." };
+    }
+  }
+
+  async reveal(n: number): Promise<boolean> {
+    return (await this.run<boolean>(`window.__friend.reveal(${n | 0})`).catch(() => false)) === true;
+  }
+
+  /** A picture of the page as it is: when someone shares their screen, Teams shows it large on the stage. */
+  async look(): Promise<{ mime: string; data: string } | null> {
+    try {
+      const r = await this.send<{ data?: string }>("Page.captureScreenshot", { format: "jpeg", quality: 75 });
+      return r.data ? { mime: "image/jpeg", data: r.data } : null;
+    } catch {
+      return null;
     }
   }
 

@@ -10,9 +10,19 @@ export interface ChatMessage {
 
 /** What to show to the meeting: slides it writes itself, or a picture or film (base64) from a file. */
 export type Presentation =
-  | { kind: "slides"; slides: { title: string; lines?: string[]; /** What is said aloud while this slide is shown. */ say?: string }[]; start?: number }
+  | { kind: "slides"; slides: Slide[]; start?: number }
   | { kind: "image"; mime: string; data: Buffer }
   | { kind: "video"; mime: string; data: Buffer };
+
+/** A line of a slide: plain text, or text with what is said while it comes in (then the lines of that slide appear one by one). */
+export type SlideLine = string | { text: string; say?: string };
+
+export interface Slide {
+  title: string;
+  lines?: SlideLine[];
+  /** What is said aloud when the slide comes up (before its lines). */
+  say?: string;
+}
 
 export type Phase = "loading" | "prejoin" | "lobby" | "in" | "ended" | "unknown";
 
@@ -46,6 +56,10 @@ export interface MeetingPage {
   /** Moves slides on (1) or back (-1); false when nothing is being shown. */
   flip?(by: number): Promise<boolean>;
   stopPresenting?(): Promise<boolean>;
+  /** Makes the first n lines of the slide on the stage appear (with their animation). */
+  reveal?(n: number): Promise<boolean>;
+  /** A picture of the meeting screen as it is now (what someone is sharing), or null. */
+  look?(): Promise<{ mime: string; data: string } | null>;
 }
 
 export interface SessionEvents {
@@ -352,28 +366,47 @@ export class MeetingSession {
     if (!this.d.page.present) return { ok: false, message: "This meeting page cannot share a screen." };
     this.narrateToken++;
     const r = await this.d.page.present(c);
-    if (!r.ok || c.kind !== "slides" || !c.slides.some((s) => s.say)) return r;
+    if (!r.ok || c.kind !== "slides" || !c.slides.some((s) => s.say || s.lines?.some((l) => typeof l !== "string" && l.say))) return r;
     if (!this.d.speech || !this.d.page.speak) return { ok: true, message: `${r.message} Speaking aloud is not switched on, so the slides are shown without talking.` };
-    void this.narrate(c.slides.map((s) => s.say));
+    void this.narrate(c.slides);
     return { ok: true, message: `${r.message} It is talking through the ${c.slides.length} slides, turning to the next when each is told. Anyone who speaks to it stops the talk.` };
   }
 
   private narrateToken = 0;
 
-  /** Says what goes with each slide, and turns to the next slide when it has been said, so what is shown and what is heard stay together. */
-  private async narrate(says: (string | undefined)[]): Promise<void> {
+  /**
+   * Talks through the slides: the introduction of each slide, then each of its lines that comes in with its animation while that line is
+   * explained, and on to the next slide when everything of this one is said, so what is shown and what is heard stay together.
+   */
+  private async narrate(slides: Slide[]): Promise<void> {
     const token = ++this.narrateToken;
     const going = () => token === this.narrateToken && this.status === "live";
-    for (let i = 0; i < says.length && going(); i++) {
-      const say = says[i];
-      if (say) {
-        const r = await this.speak(say, { narration: true });
-        if (!r.ok) return;
-      } else await this.sleep(4000);
+    for (let i = 0; i < slides.length && going(); i++) {
+      const s = slides[i]!;
+      if (s.say && !(await this.speak(s.say, { narration: true })).ok) return;
+      const lines = s.lines ?? [];
+      const animated = lines.some((l) => typeof l !== "string" && l.say);
+      if (animated) {
+        for (let j = 0; j < lines.length && going(); j++) {
+          await this.d.page.reveal?.(j + 1).catch(() => false);
+          await this.sleep(450); // the line comes in
+          const l = lines[j]!;
+          const say = typeof l === "string" ? undefined : l.say;
+          if (say) {
+            if (!(await this.speak(say, { narration: true })).ok) return;
+          } else await this.sleep(2500);
+        }
+      } else if (!s.say) await this.sleep(4000);
       if (!going()) return;
       await this.sleep(500);
-      if (i < says.length - 1) await this.d.page.flip?.(1).catch(() => false);
+      if (i < slides.length - 1) await this.d.page.flip?.(1).catch(() => false);
     }
+  }
+
+  /** What the meeting screen shows now (the screen someone shares), as a picture. */
+  async look(): Promise<{ mime: string; data: string } | null> {
+    if (this.status !== "live") return null;
+    return (await this.d.page.look?.().catch(() => null)) ?? null;
   }
 
   /** The chat as it is on the screen now. */

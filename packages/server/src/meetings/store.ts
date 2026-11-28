@@ -137,6 +137,17 @@ export class MeetingStore {
 
   remove(id: number): void {
     this.db.prepare("delete from meetings where id = ?").run(id);
+    this.db.prepare("delete from meeting_prefs where key = ?").run(`mission.${id}`);
+  }
+
+  /** What the owner wants done in this meeting when they are not in it (kept beside the settings; nothing in the call can change it). */
+  mission(id: number): string {
+    const r = this.db.prepare("select value from meeting_prefs where key = ?").get(`mission.${id}`) as { value: string } | undefined;
+    return r ? parse<string>(r.value, "") : "";
+  }
+
+  setMission(id: number, text: string): void {
+    this.db.prepare("insert into meeting_prefs (key, value) values (?, ?) on conflict (key) do update set value = excluded.value").run(`mission.${id}`, JSON.stringify(text));
   }
 
   /** A Friend that was stopped in the middle of a meeting must not think it is still in it. */

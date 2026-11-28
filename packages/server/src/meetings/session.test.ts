@@ -195,6 +195,35 @@ describe("a meeting session", () => {
     await run;
   });
 
+  it("animates a slide line by line: the title and its introduction first, then each line comes in while it is explained, then the next slide", async () => {
+    const log: string[] = [];
+    const page = new FakePage(["in"], [[]]);
+    Object.assign(page, { mic: async () => true, speak: async () => (log.push("said"), true), present: async () => ({ ok: true, message: "shared" }), flip: async (by: number) => (log.push(`flip${by}`), true), reveal: async (n: number) => (log.push(`reveal${n}`), true) });
+    let t = 0;
+    const status: string[] = [];
+    const session = new MeetingSession({ page, url: "https://teams.live.com/meet/1", selfName: "Maya", names: () => ["Maya"], prefs: () => DEFAULT_PREFS, announcement: "x", speech: async (s) => (log.push(`say:${s}`), Buffer.from("x")), events: { status: (s: MeetingStatus) => status.push(s), lines() {}, addressed() {}, ownerRelevant() {}, notesDue() {}, problem() {}, ended() {} }, now: () => t, sleep: async (ms) => { t += ms; await new Promise((r) => setImmediate(r)); } });
+    const run = session.start();
+    const until = async (c: () => boolean) => { for (let i = 0; i < 400 && !c(); i++) await new Promise((r) => setTimeout(r, 5)); };
+    await until(() => status.includes("live"));
+    await session.present({ kind: "slides", slides: [{ title: "Plan", say: "Here is the plan.", lines: [{ text: "Scope", say: "First, the scope." }, { text: "Date", say: "Then the date." }] }, { title: "Next", say: "And next steps.", lines: [{ text: "Ship", say: "We ship." }] }] });
+    await until(() => log.includes("say:We ship.") && log.filter((x) => x === "said").length === 5);
+    expect(log).toEqual(["say:Here is the plan.", "said", "reveal1", "say:First, the scope.", "said", "reveal2", "say:Then the date.", "said", "flip1", "say:And next steps.", "said", "reveal1", "say:We ship.", "said"]);
+    await session.stop("x");
+    await run;
+  });
+
+  it("looks at the screen a participant shares: a picture of the meeting, and nothing before it is in", async () => {
+    const page = new FakePage(["in"], [[]]);
+    Object.assign(page, { look: async () => ({ mime: "image/jpeg", data: "QUJD" }) });
+    const { session } = rig(page);
+    expect(await session.look()).toBeNull(); // not in the meeting yet
+    const run = session.start();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(await session.look()).toEqual({ mime: "image/jpeg", data: "QUJD" });
+    await session.stop("x");
+    await run;
+  });
+
   it("writes in the chat only when told to, not more than once every fifteen seconds, and not before it is in", async () => {
     const page = new FakePage(["in", "in", "in", "in", "in"], [[]]);
     const { session } = rig(page);

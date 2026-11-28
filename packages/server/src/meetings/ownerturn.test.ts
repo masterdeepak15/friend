@@ -113,7 +113,7 @@ describe("a turn started by the owner's voice in a meeting", () => {
     await t.service.join("https://teams.live.com/meet/502", {});
     await until(() => t.model.calls.length >= 2);
     expect(JSON.stringify(t.model.calls[1]!.messages)).toContain("not possible while handling a meeting");
-    expect(t.model.calls[0]!.tools.map((x) => x.name).sort()).toEqual(["meeting.chat", "meeting.notes", "meeting.people", "meeting.read_chat", "meeting.save_notes", "meeting.speak", "meeting.tell_owner"]);
+    expect(t.model.calls[0]!.tools.map((x) => x.name).sort()).toEqual(["meeting.chat", "meeting.look", "meeting.notes", "meeting.people", "meeting.present", "meeting.read_chat", "meeting.save_notes", "meeting.speak", "meeting.tell_owner", "task.add", "weather.get", "web.read", "web.search"]);
     expect(t.store.current()!.status).toBe("live");
   }, 40_000);
 

@@ -103,7 +103,7 @@ export const audioHook = (name: string): string => String.raw`(() => {
   sv.width = 1280;
   sv.height = 720;
   const sg = sv.getContext("2d");
-  const stage = (F.stage = { kind: null, slides: [], i: 0, el: null, url: null });
+  const stage = (F.stage = { kind: null, slides: [], i: 0, el: null, url: null, prev: null, prevReveal: null, reveal: null, changedAt: 0 });
   F.asked = 0;
   F.parts = [];
   const wrapText = (t, maxW) => {
@@ -121,25 +121,58 @@ export const audioHook = (name: string): string => String.raw`(() => {
     const r = Math.min(1280 / w, 720 / h);
     sg.drawImage(el, (1280 - w * r) / 2, (720 - h * r) / 2, w * r, h * r);
   };
+  const ease = (x) => 1 - Math.pow(1 - x, 3);
+  // one slide: its title, and its lines; with reveal (a number) only that many lines are there, the last one lit and the earlier ones dim, each coming in with a slide-up and a fade
+  const drawSlide = (s, o) => {
+    sg.save();
+    sg.globalAlpha = o.alpha;
+    sg.translate(o.dx, 0);
+    sg.textAlign = "left";
+    sg.fillStyle = "#e8edff";
+    sg.font = "700 56px Segoe UI, Arial, sans-serif";
+    let y = 130;
+    for (const r of wrapText(s.title || "", 1120)) { sg.fillText(r, 80, y); y += 66; }
+    y += 24;
+    sg.font = "400 38px Segoe UI, Arial, sans-serif";
+    const lines = s.lines || [];
+    const shown = o.reveal === null ? lines.length : Math.min(o.reveal, lines.length);
+    for (let i = 0; i < shown; i++) {
+      const l = typeof lines[i] === "string" ? lines[i] : lines[i].text;
+      const age = o.reveal === null ? 1 : Math.min(1, (o.now - ((s.born && s.born[i]) || 0)) / 450);
+      const e = ease(age);
+      const current = o.reveal !== null && i === shown - 1;
+      const rows = wrapText(l, 1060);
+      const up = (1 - e) * 26;
+      sg.globalAlpha = o.alpha * e * (o.reveal === null || current ? 1 : 0.5);
+      if (current) {
+        sg.fillStyle = "rgba(127,227,255,0.14)";
+        sg.fillRect(60, y - 40 + up, 1160, rows.length * 50 + 14);
+        sg.fillStyle = "#7fe3ff";
+        sg.fillRect(60, y - 40 + up, 6, rows.length * 50 + 14);
+      }
+      sg.fillStyle = "#7fe3ff";
+      sg.fillText("•", 84, y + up);
+      sg.fillStyle = current ? "#ffffff" : "#c3cdf5";
+      for (const r of rows) { sg.fillText(r, 130, y + up); y += 50; }
+      y += 12;
+    }
+    sg.restore();
+  };
   const drawStage = () => {
     sg.fillStyle = "#0b1230";
     sg.fillRect(0, 0, 1280, 720);
     if (stage.kind === "slides") {
+      const now = Date.now();
       const s = stage.slides[stage.i] || { title: "", lines: [] };
-      sg.textAlign = "left";
-      sg.fillStyle = "#e8edff";
-      sg.font = "700 56px Segoe UI, Arial, sans-serif";
-      let y = 130;
-      for (const r of wrapText(s.title || "", 1120)) { sg.fillText(r, 80, y); y += 66; }
-      y += 24;
-      sg.font = "400 38px Segoe UI, Arial, sans-serif";
-      for (const l of s.lines || []) {
-        sg.fillStyle = "#7fe3ff";
-        sg.fillText("•", 80, y);
-        sg.fillStyle = "#c3cdf5";
-        for (const r of wrapText(l, 1060)) { sg.fillText(r, 126, y); y += 50; }
-        y += 12;
-      }
+      const p = stage.prev ? Math.min(1, (now - stage.changedAt) / 500) : 1;
+      const e = ease(p);
+      // the slide that was there slides out to the left while the new one slides in from the right
+      if (stage.prev && p < 1) drawSlide(stage.prev, { dx: -e * 120, alpha: 1 - e, now, reveal: stage.prevReveal });
+      drawSlide(s, { dx: stage.prev ? (1 - e) * 160 : 0, alpha: stage.prev ? e : 1, now, reveal: stage.reveal });
+      sg.fillStyle = "#1c2650";
+      sg.fillRect(0, 712, 1280, 8);
+      sg.fillStyle = "#7fe3ff";
+      sg.fillRect(0, 712, 1280 * ((stage.i + 1) / stage.slides.length), 8);
       sg.fillStyle = "#5d6a99";
       sg.font = "22px Segoe UI, Arial, sans-serif";
       sg.textAlign = "right";
@@ -156,8 +189,11 @@ export const audioHook = (name: string): string => String.raw`(() => {
     stage.kind = null; stage.slides = []; stage.i = 0; stage.el = null; stage.url = null;
   };
   if (md) md.getDisplayMedia = async () => { F.asked++; return new MediaStream(stageStream.getVideoTracks().map((t) => t.clone())); };
-  F.slides = (slides, start) => { clearStage(); stage.kind = "slides"; stage.slides = slides; stage.i = Math.max(0, Math.min(slides.length - 1, start || 0)); drawStage(); return slides.length; };
-  F.flip = (by) => { if (stage.kind !== "slides") return false; stage.i = Math.max(0, Math.min(stage.slides.length - 1, stage.i + by)); drawStage(); return true; };
+  // a slide with .anim has its lines come in one by one (F.reveal), the others show every line at once
+  const first = (s) => (s && s.anim ? 0 : null);
+  F.slides = (slides, start) => { clearStage(); stage.kind = "slides"; stage.slides = slides; stage.i = Math.max(0, Math.min(slides.length - 1, start || 0)); stage.prev = null; stage.reveal = first(slides[stage.i]); stage.changedAt = Date.now(); drawStage(); return slides.length; };
+  F.flip = (by) => { if (stage.kind !== "slides") return false; const n = Math.max(0, Math.min(stage.slides.length - 1, stage.i + by)); if (n === stage.i) return true; stage.prev = stage.slides[stage.i]; stage.prevReveal = stage.reveal; stage.i = n; stage.slides[n].born = []; stage.reveal = first(stage.slides[n]); stage.changedAt = Date.now(); drawStage(); return true; };
+  F.reveal = (n) => { if (stage.kind !== "slides") return false; const s = stage.slides[stage.i]; s.born = s.born || []; for (let k = (stage.reveal || 0); k < n; k++) s.born[k] = Date.now(); stage.reveal = n; return true; };
   F.put = (b64, reset) => { if (reset) F.parts = []; const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); F.parts.push(u); return F.parts.length; };
   F.showFile = (kind, mime) => new Promise((done) => {
     clearStage();

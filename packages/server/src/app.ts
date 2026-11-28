@@ -101,6 +101,7 @@ import { MeetingService } from "./meetings/service";
 import { findMeetingLink } from "./meetings/logic";
 import { MeetingStore } from "./meetings/store";
 import { MeetingTools } from "./meetings/tools";
+import { lexicalInsideRoots } from "./tools/registry";
 import { AudioHearing } from "./meetings/hearing";
 import { pcmToWav, systemSpeech } from "./meetings/speech";
 import { PolicyEngine } from "./policy/engine";
@@ -1098,7 +1099,7 @@ export async function createApp(opts: AppOptions) {
         },
       });
     },
-    tellOwner: (text, title) => void tellOwner(text, title ?? "Meeting"),
+    tellOwner: (text, title) => tellOwner(text, title ?? "Meeting"),
     runTurn: async (prompt, c) => {
       if (agent.isBusy()) return false;
       await runWithRequest({ prefix: "meeting", actorKind: "system", actorId: `meeting ${c.id}` }, async () => {
@@ -1108,7 +1109,7 @@ export async function createApp(opts: AppOptions) {
     },
   });
   opts.meetingHandles?.({ service: meetingService, store: meetingStore });
-  const meetingTools = new MeetingTools({ service: meetingService, store: meetingStore, audit, enabled: () => config.meetings.installed && config.meetings.enabled });
+  const meetingTools = new MeetingTools({ service: meetingService, store: meetingStore, audit, enabled: () => config.meetings.installed && config.meetings.enabled, fileAllowed: (p) => lexicalInsideRoots(p, config.roots) });
   const pcTools = new PcTools({ hub: pcHub, store: pcService.store, audit, extraPatterns: () => [], enabled: () => config.pcs.installed && config.pcs.enabled });
   // presentations: the saved decks, the player (it speaks through the same speaker and draws through the same broadcast), and the files
   const deckStore = new DeckStore(db);

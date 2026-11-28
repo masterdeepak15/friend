@@ -27,7 +27,7 @@ import type { DeckStore } from "../deck/store";
 import type { Presenter } from "../deck/presenter";
 import type { PcTools, PreparedPc } from "../pc/tools";
 import { MAIL_TURN_TOOLS, mailAuditArgs, type MailTools, type PreparedMail } from "../mail/tools";
-import { MEETING_TURN_TOOLS, meetingAuditArgs, type MeetingTools, type PreparedMeeting } from "../meetings/tools";
+import { meetingTurnAllows, meetingAuditArgs, type MeetingTools, type PreparedMeeting } from "../meetings/tools";
 import { runDeckTool } from "../deck/tools";
 import { MemoryTree, capIndex, inboxName } from "../memory/tree";
 import type { Soul } from "../memory/soul";
@@ -387,7 +387,7 @@ export class Agent {
         ctx.mail
           ? toolSpecs().filter((t) => MAIL_TURN_TOOLS.has(t.name))
           : ctx.meeting && !ctx.meeting.owner
-          ? toolSpecs().filter((t) => MEETING_TURN_TOOLS.has(t.name))
+          ? toolSpecs().filter((t) => meetingTurnAllows(t.name))
           : ctx.trust === "owner"
           ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])]
           : member
@@ -826,7 +826,7 @@ export class Agent {
       return fail("That is not possible while answering someone else's mail.");
     }
     // a turn that a meeting started can do nothing but write in that meeting, tell the owner and keep the notes, whatever was said there
-    if (ctx.meeting && !ctx.meeting.owner && !MEETING_TURN_TOOLS.has(call.name)) {
+    if (ctx.meeting && !ctx.meeting.owner && !meetingTurnAllows(call.name)) {
       rec.outcome = "refused";
       d.audit.log("agent", "tool.denied", { tool: call.name, reason: "meeting turn" });
       return fail("That is not possible while handling a meeting.");
@@ -878,6 +878,7 @@ export class Agent {
     if (call.name.startsWith("meeting.")) {
       if (!d.meetings) return fail("Meetings are not available.");
       if (ctx.trust !== "owner") return fail("Only the owner can use the meetings.");
+      if (call.name === "meeting.look" && !d.provider.vision) return fail("This model cannot look at pictures. Use a vision model (Claude, or an Ollama vision model with ollama.vision true).");
       const prep = d.meetings.prepare(call.name, args, ctx.meeting ? { inMeeting: ctx.meeting.id, ...(ctx.meeting.owner ? { owner: true } : {}) } : {});
       if ("error" in prep) {
         rec.outcome = "refused";
@@ -979,7 +980,7 @@ export class Agent {
         return o.approved;
       }, signal);
       d.audit.log("agent", "tool.call", { tool: call.name, args: meetingAuditArgs(args), tier, ok: !r.isError });
-      return r.isError ? fail(r.text) : { text: r.text, isError: false };
+      return r.isError ? fail(r.text) : { text: r.text, isError: false, ...(r.image ? { image: r.image } : {}) };
     }
 
     if (mailPrep) {

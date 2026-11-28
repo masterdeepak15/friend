@@ -248,6 +248,31 @@ document.querySelector("[data-tid=ckeditor]").addEventListener("keydown", (e) =>
     expect((await p.people())!.speaking).toEqual([]);
   }, 60_000);
 
+  it("brings the lines of a slide in one by one with an animation, and lights the line it is on", async () => {
+    const p = await open(`<!doctype html><body><button data-tid="share-button" aria-label="Share">Share</button><video id="v" autoplay muted playsinline></video><canvas id="c" width="64" height="36"></canvas><script>
+window.hash = 0;
+document.querySelector("[data-tid=share-button]").onclick = async () => {
+  const s = await navigator.mediaDevices.getDisplayMedia({ video: true });
+  const v = document.getElementById("v"); v.srcObject = s; v.play();
+  const c = document.getElementById("c").getContext("2d");
+  setInterval(() => { if (!v.videoWidth) return; c.drawImage(v, 0, 0, 64, 36); const d = c.getImageData(0, 0, 64, 36).data; let h = 0; for (let i = 0; i < d.length; i += 4) h = (h * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7) | 0; window.hash = h; }, 100);
+};
+</script></body>`);
+    const r = await p.present({ kind: "slides", slides: [{ title: "Plan", lines: [{ text: "Scope of the work", say: "a" }, { text: "The date", say: "b" }] }] });
+    expect(r.ok).toBe(true);
+    await until(async () => (await p.run<number>("window.hash")) !== 0);
+    const settle = () => new Promise((res) => setTimeout(res, 900));
+    await settle();
+    const titleOnly = await p.run<number>("window.hash");
+    expect(await p.run<boolean>("window.__friend.reveal(1)")).toBe(true);
+    await settle();
+    const one = await p.run<number>("window.hash");
+    expect(await p.run<boolean>("window.__friend.reveal(2)")).toBe(true);
+    await settle();
+    const two = await p.run<number>("window.hash");
+    expect(new Set([titleOnly, one, two]).size).toBe(3); // each line that comes in changes what is on the stage
+  }, 90_000);
+
   it("shares a stage of its own when the site asks for a screen: slides that can be turned, a picture, and nothing shared when there is no share button", async () => {
     const p = await open(`<!doctype html><body><button data-tid="share-button" aria-label="Share">Share</button><video id="v" autoplay muted playsinline></video><canvas id="c" width="64" height="36"></canvas><script>
 window.hashes = [];
