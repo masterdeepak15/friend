@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { feedTree } from "../hud/orbital/jtrees";
 import { teamLines } from "../hud/orbital/office";
 import { ActivityList } from "./ActivityList";
 import { colourOf, hueOf, initials, type Act, type Who } from "./people";
@@ -44,5 +45,21 @@ describe("the team feed", () => {
     const lines = teamLines(office, crew, 8);
     expect(lines.map((l) => `${l.who!.kind}:${l.who!.name}:${l.body}`)).toEqual(["crew:Ada:Searching", "office:Ben:Write a.txt", "crew:Ada:Found it"]);
     expect(teamLines({ ...office, enabled: false }, crew).map((l) => l.who!.kind)).toEqual(["crew", "crew"]); // the Office is off: only the crew
+  });
+});
+
+describe("the Activity instrument drawn with the Jarvis feed", () => {
+  it("puts each line under its person, with the kind and the time", () => {
+    const lines = teamLines(
+      { enabled: true, workers: [{ id: "ben", name: "Ben", title: "builder" }] as never, feed: { ben: [{ at: 2000, kind: "tool", text: "Write a.txt" }] } },
+      { workers: [{ id: "ada", name: "Ada", role: "researcher" }] as never, feed: { ada: [{ at: 3000, kind: "done", text: "Found it" }] } },
+    );
+    const feed = feedTree(lines, null, false).kids![0] as unknown as { p: { items: { message: string; source?: string; level: string; time?: string }[]; showSource: boolean; showTime: boolean } };
+    expect(feed.p.showSource).toBe(true);
+    expect(feed.p.showTime).toBe(true);
+    expect(feed.p.items.map((i) => [i.source, i.message, i.level])).toEqual([
+      ["⬡ BEN · OFFICE", "Write a.txt", "active"],
+      ["▣ ADA · CREW", "Found it", "success"],
+    ]);
   });
 });

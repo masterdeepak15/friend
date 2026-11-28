@@ -282,7 +282,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
         const lines = preview ? SAMPLE_FEED : workerLines.length > 0 ? workerLines : view.chat;
         const plain = <FeedWidget lines={lines} activity={view.activity} busy={preview || workerLines.length > 0 ? false : view.busy} marquee={preview} />;
         if (preview) return plain;
-        const items = workerLines.length > 0 ? workerLines : view.chat.map((c) => ({ text: `${c.role === "user" ? "You" : "Friend"}: ${c.text}`, tone: "plain" as const }));
+        const items = workerLines.length > 0 ? workerLines : view.chat.map((c) => ({ text: `${c.role === "user" ? "You" : "Friend"}: ${c.text}`, body: c.text, tone: "plain" as const, who: { name: c.role === "user" ? "You" : "Friend", kind: c.role === "user" ? ("you" as const) : ("friend" as const) } }));
         return (
           <JLive node={feedTree(items, view.activity, view.busy)}>
             {plain}

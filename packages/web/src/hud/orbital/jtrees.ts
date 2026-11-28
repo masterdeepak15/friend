@@ -17,7 +17,18 @@ const row = (label: string, value: string, bar?: number, state?: "active" | "war
 export interface FeedItem {
   text: string;
   tone: "green" | "orange" | "plain";
+  /** Whose line it is, when known: the line is drawn under that name. */
+  who?: { name: string; kind: "office" | "crew" | "you" | "friend" };
+  /** The words without the name in front. */
+  body?: string;
+  at?: number;
+  kind?: string;
 }
+
+const MARK = { office: "⬡", crew: "▣", you: "●", friend: "◆" } as const;
+const KIND = { office: "OFFICE", crew: "CREW", you: "YOU", friend: "FRIEND" } as const;
+const LEVEL: Record<string, "active" | "success" | "warning" | "error"> = { tool: "active", result: "success", done: "success", approval: "warning", error: "error" };
+const clock = (at: number): string => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 export function systemTree(stats: HudStats | null, detail = false): JarvisNode {
   const cpu = stats ? pct(stats.cpu) : 0;
@@ -61,9 +72,17 @@ export function networkTree(stats: HudStats | null, history: number[]): JarvisNo
 }
 
 export function feedTree(lines: FeedItem[], activity: string | null, busy: boolean): JarvisNode {
-  const items = lines.slice(-6).map((l, i) => ({ id: `l${i}`, message: l.text.slice(0, 120), level: l.tone === "orange" ? "warn" : "info" }));
-  if (busy && activity) items.push({ id: "now", message: activity, level: "info" });
-  return frame("Activity", [{ c: "JActivityFeed", p: { items: items.length ? items : [{ id: "none", message: "Nothing yet", level: "info" }], maxRows: 6, showTime: false, showSource: false } }], "green");
+  // every line is under the name of whoever it belongs to (with the kind: OFFICE, CREW, YOU, FRIEND), with its time and a level for what it is
+  type Row = { id: string; message: string; level: string; source?: string; time?: string };
+  const items: Row[] = lines.slice(-6).map((l, i) => ({
+    id: `l${i}`,
+    message: (l.body ?? l.text).slice(0, 120),
+    level: (l.kind && LEVEL[l.kind]) || (l.tone === "orange" ? "warning" : l.tone === "green" ? "active" : "info"),
+    ...(l.who ? { source: `${MARK[l.who.kind]} ${l.who.name.toUpperCase().slice(0, 12)} · ${KIND[l.who.kind]}` } : {}),
+    ...(l.at ? { time: clock(l.at) } : {}),
+  }));
+  if (busy && activity) items.push({ id: "now", message: activity, level: "active", source: `${MARK.friend} FRIEND · ${KIND.friend}` });
+  return frame("Activity", [{ c: "JActivityFeed", p: { items: items.length ? items : [{ id: "none", message: "Nothing yet", level: "info" }], maxRows: 6, showTime: items.some((i) => i.time), showSource: items.some((i) => i.source) } }], "green");
 }
 
 export function radarTree(deviceOnline: boolean, voiceAvailable: boolean): JarvisNode {
