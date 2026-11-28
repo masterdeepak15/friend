@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState, reduce } from "../store";
@@ -50,5 +51,12 @@ describe("the crew badge and panel", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Tools" }));
     expect(screen.getByText("web.*")).toBeTruthy();
     expect(screen.queryByRole("textbox", { name: /say to/i })).toBeNull();
+  });
+});
+
+describe("the badge can be clicked", () => {
+  it("takes the pointer back from the overlay layer, which ignores it", () => {
+    const css = readFileSync(new URL("./crew.css", import.meta.url), "utf8");
+    expect(css).toMatch(/.cr-badge, .cr-panel { pointer-events: auto;/);
   });
 });
