@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { CrewWorkerView, ServerMsg } from "@friend/protocol";
-import { Agent, type AgentDeps } from "../agent/loop";
+import { Agent, type AgentDeps, type TurnCtx } from "../agent/loop";
+import { MAIL_TURN_TOOLS } from "../mail/tools";
 import { loadHistory } from "../agent/history";
 import { openDb, type Db } from "../db";
 import { Memory } from "../memory";
@@ -9,7 +10,7 @@ import type { Soul } from "../memory/soul";
 import { MemoryKeeper } from "../memory/keeper";
 import { MemoryOrganizer } from "../memory/organizer";
 import { MemoryTree } from "../memory/tree";
-import { CrewStore, type CrewWorker } from "./store";
+import { CrewStore, type CrewWorker, type RouteKind } from "./store";
 import { rmSync } from "node:fs";
 
 /** What a worker can never use, whatever it is given: running the house (hiring, settings, the owner's soul, plugins) is not its job. */
@@ -34,6 +35,10 @@ export interface CrewDeps {
   /** The assistant's own dependencies, which a worker is built from (read when a worker first works, so it sees the finished set). */
   base: () => AgentDeps;
   assistantName: () => string;
+  /** A worker could not do something that needs the owner (a mail to send, say): the assistant is told, and decides. */
+  escalate?: (worker: string, text: string) => void;
+  /** Finds a mailbox (by name or address) or a meeting (by id); without it nothing can be given away. */
+  resolve?: { mailbox(q: string): { key: string; label: string } | null; meeting(id: number): { key: string; label: string } | null; labelOf(kind: RouteKind, key: string): string };
   /** A task started without waiting has ended: the assistant is told, when she is free. */
   done?: (worker: string, result: { ok: boolean; text: string }) => void;
   audit: { log(actor: "agent" | "system", kind: string, detail: Record<string, unknown>): void };
@@ -84,7 +89,8 @@ export class Crew {
   state(): ServerMsg {
     const workers: CrewWorkerView[] = this.d.store.list().map((w) => {
       const on = this.working.get(w.id);
-      return { id: w.id, name: w.name, role: w.role, tools: w.tools, status: on ? "working" : "idle", task: on?.task ?? "", since: on?.since ?? null, lastAt: w.lastAt };
+      const handles = this.d.store.routes().filter((r) => r.worker === w.id).map((r) => `${r.kind === "mail" ? "mailbox" : "meeting"} ${this.d.resolve?.labelOf(r.kind, r.key) ?? r.key}`);
+      return { id: w.id, name: w.name, role: w.role, tools: w.tools, status: on ? "working" : "idle", task: on?.task ?? "", since: on?.since ?? null, lastAt: w.lastAt, handles };
     });
     return { type: "crew.state", workers };
   }
@@ -105,12 +111,65 @@ export class Crew {
   }
 
   /** What a screen asked to read of one worker: its own conversation, or a note (or folder) of its own wiki. */
-  view(who: string, what: "history" | "memory", path = ""): { ok: true; text: string } | { ok: false; error: string } {
+  view(who: string, what: "history" | "memory" | "tree", path = ""): { ok: true; text: string } | { ok: false; error: string } {
     const w = this.d.store.find(who);
     if (!w) return { ok: false, error: "No such worker." };
     if (what === "history") return this.history(w.id, 20);
-    const r = new MemoryTree(join(this.d.dataDir, "crew", w.id, "memory")).read(path);
+    const tree = new MemoryTree(join(this.d.dataDir, "crew", w.id, "memory"));
+    if (what === "tree") return { ok: true, text: JSON.stringify(tree.outline()).slice(0, 60000) };
+    const r = tree.read(path);
     return r.ok ? { ok: true, text: r.text.slice(0, 20000) } : { ok: false, error: r.error };
+  }
+
+  /** The worker a mailbox or a meeting was given to; undefined when the assistant handles it herself. */
+  routeOf(kind: RouteKind, key: string): CrewWorker | undefined {
+    const id = this.d.store.route(kind, key);
+    return id ? this.d.store.find(id) : undefined;
+  }
+
+  /** Gives a mailbox or a meeting to a worker, or (worker null) back to the assistant. */
+  assign(kind: RouteKind, key: string, who: string | null): { ok: true; name: string | null } | { ok: false; error: string } {
+    if (who === null) {
+      this.d.store.setRoute(kind, key, null);
+      this.d.audit.log("agent", "crew.assign", { kind, key, worker: null });
+      this.emit(this.state());
+      return { ok: true, name: null };
+    }
+    const w = this.d.store.find(who);
+    if (!w) return { ok: false, error: `There is no crew worker called ${who}. crew.list shows who there is.` };
+    this.d.store.setRoute(kind, key, w.id);
+    this.d.audit.log("agent", "crew.assign", { kind, key, worker: w.id });
+    this.emit(this.state());
+    return { ok: true, name: w.name };
+  }
+
+  find_mailbox(q: string): { key: string; label: string } | null {
+    return this.d.resolve?.mailbox(q) ?? null;
+  }
+
+  find_meeting(id: number): { key: string; label: string } | null {
+    return this.d.resolve?.meeting(id) ?? null;
+  }
+
+  /** What a worker handles, by name. */
+  handles(id: string): string[] {
+    return this.d.store.routes().filter((r) => r.worker === id).map((r) => `${r.kind === "mail" ? "mailbox" : "meeting"} ${this.d.resolve?.labelOf(r.kind, r.key) ?? r.key}`);
+  }
+
+  routes(): { kind: RouteKind; key: string; worker: string }[] {
+    return this.d.store.routes();
+  }
+
+  /** The same as assign, by the worker's id and the key of the mailbox or meeting (what the owner's screen sends). */
+  assignKey(kind: RouteKind, key: string, who: string | null): { ok: true } | { ok: false; error: string } {
+    const r = this.assign(kind, key, who);
+    return r.ok ? { ok: true } : r;
+  }
+
+  /** Whether this worker is busy with something (so that mail given to it waits). */
+  isBusy(who: string): boolean {
+    const w = this.d.store.find(who);
+    return !!w && this.use(w).agent.isBusy();
   }
 
   list(): CrewWorker[] {
@@ -190,7 +249,7 @@ export class Crew {
    * Gives a worker a task and waits for its answer. Nothing a worker does is shown on the owner's screen, and it never asks the owner for
    * anything: what it was given it may use, and what needs more goes back to the assistant in its answer.
    */
-  async ask(who: string, text: string, o: { emit?: (m: ServerMsg) => void; signal?: AbortSignal } = {}): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  async ask(who: string, text: string, o: { emit?: (m: ServerMsg) => void; signal?: AbortSignal; mail?: TurnCtx["mail"]; meeting?: TurnCtx["meeting"]; source?: string; /** What the work implies the worker may use besides its own list (the mail tools for a mailbox given to it). */ implied?: (tool: string) => boolean } = {}): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
     const w = this.d.store.find(who);
     if (!w) return { ok: false, error: `There is no crew worker called ${who}. crew.list shows who there is.` };
     const { agent, db } = this.use(w);
@@ -212,8 +271,10 @@ export class Crew {
       await agent.runTurn(text, {
         trust: "owner",
         ip: "crew",
-        source: "crew",
-        crew: { allows: (tool) => grantAllows(this.d.store.find(w.id)?.tools ?? [], tool) },
+        source: o.source ?? "crew",
+        ...(o.mail ? { mail: o.mail } : {}),
+        ...(o.meeting ? { meeting: o.meeting } : {}),
+        crew: { allows: (tool) => !!o.implied?.(tool) || grantAllows(this.d.store.find(w.id)?.tools ?? [], tool), escalate: (what) => this.d.escalate?.(w.name, what) },
         emit: (m) => {
           if (m.type === "caption.delta") {
             spoken.push(m.text);

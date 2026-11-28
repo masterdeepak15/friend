@@ -549,4 +549,13 @@ create table meeting_prefs (
   last_at integer not null default 0
 );`,
   },
+  {
+    id: 28,
+    sql: `create table crew_routes (
+  kind text not null,
+  key text not null,
+  worker text not null,
+  primary key (kind, key)
+);`,
+  },
 ];

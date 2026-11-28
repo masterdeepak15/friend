@@ -19,6 +19,8 @@ import type { Config } from "./config";
 import { HttpError } from "./http-error";
 import { registerPcRoutes } from "./pc/routes";
 import { registerMailRoutes } from "./mail/routes";
+import { registerCrewRoutes } from "./crew/routes";
+import type { Crew } from "./crew/crew";
 import type { MailAccounts } from "./mail/accounts";
 import { registerMeetingRoutes } from "./meetings/routes";
 import type { MeetingService } from "./meetings/service";
@@ -93,6 +95,8 @@ export interface GatewayDeps {
   pc?: PcService;
   /** Adding, changing and removing mailboxes (the Mailboxes plugin). */
   mail?: MailAccounts;
+  /** The crew: who handles which mailbox and meeting. */
+  crew?: Crew;
   /** The meetings screen (the Meetings plugin). */
   meetings?: { service: MeetingService; store: MeetingStore };
   /** The agent file the PCs download. */
@@ -1115,6 +1119,21 @@ export function createGateway(deps: GatewayDeps) {
         if (!session) return reply.code(401).send({ error: "Unauthorized" });
         if (!mailWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
         if (!config.mail.installed) return reply.code(409).send({ error: "Mailboxes is not installed. Install it in Plugins first." });
+        reply.header("cache-control", "no-store");
+      },
+    });
+  }
+
+  // ---- the crew: who handles each mailbox and meeting (owner session) ----
+  if (deps.crew) {
+    const crewWindow = new SlidingWindow(60, 60_000);
+    registerCrewRoutes(app, {
+      crew: deps.crew,
+      ownerGuard: async (req, reply) => {
+        const token = req.cookies[COOKIE_NAME];
+        const session = token ? auth.resolveSession(token) : null;
+        if (!session) return reply.code(401).send({ error: "Unauthorized" });
+        if (!crewWindow.allow(String(session.id))) return reply.code(429).header("retry-after", 10).send({ error: "Too many requests" });
         reply.header("cache-control", "no-store");
       },
     });

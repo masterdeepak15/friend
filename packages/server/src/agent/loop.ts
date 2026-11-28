@@ -203,7 +203,7 @@ export interface TurnCtx {
   /** Set when someone else's mail started this turn: only the mail tools exist for it, and it can answer that person only. */
   mail?: { from: string; roleAuto: boolean; caseId: number };
   /** Set when a crew worker runs this turn: only the tools it was given exist for it. */
-  crew?: { allows(tool: string): boolean };
+  crew?: { allows(tool: string): boolean; /** What it could not do because it needs the owner: goes to the assistant. */ escalate?(what: string): void };
   /** Set when a meeting started this turn: only the meeting tools exist for it, and only about that meeting. */
   meeting?: { id: number; /** The line that started the turn was said by the owner, recognised by their voiceprint: the turn has all the owner's tools. */ owner?: boolean };
 }
@@ -397,7 +397,7 @@ export class Agent {
       const browserOn = !!d.browser?.enabled();
       const tools = (
         ctx.crew
-          ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])].filter((t) => ctx.crew!.allows(t.name))
+          ? [...toolSpecs(), ...pluginTools, ...(d.mcp?.toolSpecs() ?? [])].filter((t) => ctx.crew!.allows(t.name) && (!ctx.mail || MAIL_TURN_TOOLS.has(t.name)) && (!(ctx.meeting && !ctx.meeting.owner) || meetingTurnAllows(t.name)))
           : ctx.mail
           ? toolSpecs().filter((t) => MAIL_TURN_TOOLS.has(t.name))
           : ctx.meeting && !ctx.meeting.owner
@@ -1002,7 +1002,10 @@ export class Agent {
 
     if (meetPrep) {
       const r = await meetPrep.run(async (reason, detail) => {
-        if (ctx.crew) return false; // a crew worker never asks the owner
+        if (ctx.crew) {
+          ctx.crew.escalate?.(`${call.name}: ${reason}`);
+          return false; // a crew worker never asks the owner: what needs them goes to the assistant
+        }
         d.decks?.presenter.approvalPending(true);
         const o = await d.approvals
           .request({ tool: call.name, args: { ...args, reason, detail }, tier: "T2", needsPin: false, device: null, remote: ctx.trust !== "voice-device" }, ctx.emit)
@@ -1016,7 +1019,10 @@ export class Agent {
 
     if (mailPrep) {
       const r = await mailPrep.run(async (reason, detail) => {
-        if (ctx.crew) return false; // a crew worker never asks the owner
+        if (ctx.crew) {
+          ctx.crew.escalate?.(`${call.name}: ${reason}`);
+          return false; // a crew worker never asks the owner: what needs them goes to the assistant
+        }
         d.decks?.presenter.approvalPending(true);
         const { text: _body, note: _note, ...shownArgs } = args;
         const o = await d.approvals
@@ -1032,7 +1038,10 @@ export class Agent {
     if (pcPrep) {
       const prepared = pcPrep;
       const r = await prepared.run(async (reason, detail) => {
-        if (ctx.crew) return false; // a crew worker never asks the owner
+        if (ctx.crew) {
+          ctx.crew.escalate?.(`${call.name}: ${reason}`);
+          return false; // a crew worker never asks the owner: what needs them goes to the assistant
+        }
         d.decks?.presenter.approvalPending(true);
         const o = await d.approvals
           .request({ tool: call.name, args: { ...shown, reason, detail }, tier: "T2", needsPin: false, device: prepared.pcName, remote: ctx.trust !== "voice-device" }, ctx.emit)

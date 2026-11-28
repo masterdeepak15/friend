@@ -34,3 +34,10 @@
 .cr-tools { margin: 0; padding-left: 18px; }
 .cr-ask { align-self: flex-start; padding: 5px 10px; background: transparent; color: var(--cr-c); border: 1px solid var(--cr-c); font: inherit; cursor: pointer; }
 @media (max-width: 720px) { .cr-panel { grid-template-columns: 1fr; max-height: 80vh; overflow: auto; } .cr-dock { top: 56px; } }
+.cr-tree { list-style: none; margin: 0; padding: 0; }
+.cr-node { display: block; width: 100%; text-align: left; padding: 2px 4px; background: transparent; border: 0; color: inherit; font: inherit; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-node:hover, .cr-node[data-open="true"] { background: rgba(63, 216, 255, 0.1); }
+.cr-node[data-kind="folder"] { font-weight: 700; color: var(--cr-c); }
+.cr-node small { color: color-mix(in srgb, #e0fbff 50%, transparent); }
+.cr-mem { display: grid; gap: 8px; }
+.cr-handles { margin-left: auto; margin-right: 6px; color: var(--cr-g); font-size: 11px; }

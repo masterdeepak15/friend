@@ -1,5 +1,7 @@
 import type { Db } from "../db";
 
+export type RouteKind = "mail" | "meeting";
+
 export interface CrewWorker {
   id: string;
   name: string;
@@ -63,5 +65,21 @@ export class CrewStore {
 
   remove(id: string): void {
     this.db.prepare("delete from crew_workers where id = ?").run(id);
+    this.db.prepare("delete from crew_routes where worker = ?").run(id);
+  }
+
+  /** Who handles a mailbox or a meeting (a worker id), when it is not the assistant herself. */
+  route(kind: RouteKind, key: string): string | undefined {
+    return (this.db.prepare("select worker from crew_routes where kind = ? and key = ?").get(kind, key) as { worker: string } | undefined)?.worker;
+  }
+
+  /** Hands a mailbox or a meeting to a worker; null gives it back to the assistant. */
+  setRoute(kind: RouteKind, key: string, worker: string | null): void {
+    if (worker === null) this.db.prepare("delete from crew_routes where kind = ? and key = ?").run(kind, key);
+    else this.db.prepare("insert into crew_routes (kind, key, worker) values (?, ?, ?) on conflict (kind, key) do update set worker = excluded.worker").run(kind, key, worker);
+  }
+
+  routes(): { kind: RouteKind; key: string; worker: string }[] {
+    return this.db.prepare("select kind, key, worker from crew_routes order by kind, key").all() as { kind: RouteKind; key: string; worker: string }[];
   }
 }

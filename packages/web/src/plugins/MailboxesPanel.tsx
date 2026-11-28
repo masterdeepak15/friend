@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PinPad } from "../overlay/PinPad";
 import { touch } from "../overlay/touch";
-import { httpMailApi, type Ladder, type MailAccountInput, type MailAccountView, type MailApi } from "./mailApi";
+import { httpMailApi, type Handlers, type Ladder, type MailAccountInput, type MailAccountView, type MailApi } from "./mailApi";
 
 type Draft = { id?: number; name: string; address: string; username: string; password: string; imap: MailAccountInput["imap"]; smtp: MailAccountInput["smtp"]; owners: string[]; systems: string[] };
 type Step = { kind: "list" } | { kind: "form"; draft: Draft } | { kind: "rules"; account: MailAccountView; ladder: Ladder } | { kind: "pin"; what: "add" | "update" | "rules" | "remove"; draft?: Draft; account?: MailAccountView; ladder?: Ladder };
@@ -50,12 +50,15 @@ export function MailboxesPanel({ api = httpMailApi, pollMs = 5000, onBack }: { a
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [preset, setPreset] = useState(PRESETS[2]!.help);
+  const [handlers, setHandlers] = useState<Handlers | null>(null);
   const alive = useRef(true);
 
   const refresh = useCallback(async () => {
     try {
       const l = await api.list();
       if (alive.current) setAccounts(l);
+      const h = await api.handlers?.().catch(() => null);
+      if (alive.current && h) setHandlers(h);
     } catch (e) {
       if (alive.current) setError((e as Error).message);
     }
@@ -206,6 +209,26 @@ export function MailboxesPanel({ api = httpMailApi, pollMs = 5000, onBack }: { a
             <b>{a.name}</b> <small>{a.address}</small> <span className={`pc-state ${a.status}`}>{STATUS[a.status]}</span>
             {a.statusDetail && <p className="auth-note">{a.statusDetail}</p>}
             <p className="auth-note">Orders from: {a.owners.join(", ") || "nobody yet"}</p>
+            {handlers && handlers.workers.length > 0 && api.setHandler && (
+              <label className="auth-note">
+                Handled by{" "}
+                <select
+                  aria-label={`Handled by, ${a.name}`}
+                  value={handlers.routes.find((r) => r.kind === "mail" && r.key === String(a.id))?.worker ?? ""}
+                  onChange={(e) => void run(async () => {
+                    await api.setHandler!(a.id, e.target.value || null);
+                    await refresh();
+                  })}
+                >
+                  <option value="">The assistant</option>
+                  {handlers.workers.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} (crew, {w.role})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="approval-actions">
               <button type="button" style={touch} onClick={() => setStep({ kind: "form", draft: { id: a.id, name: a.name, address: a.address, username: a.username === a.address ? "" : a.username, password: "", imap: a.imap, smtp: a.smtp, owners: a.owners, systems: a.systems } })}>
                 Change

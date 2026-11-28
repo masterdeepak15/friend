@@ -16,6 +16,7 @@ import { PolicyEngine } from "../policy/engine";
 import { FakeProvider } from "../provider/fake";
 import type { ProviderEvent } from "../provider/types";
 import { StageState } from "../stage";
+import { MAIL_TURN_TOOLS } from "../mail/tools";
 import { Crew, grantAllows } from "./crew";
 import { CrewStore } from "./store";
 
@@ -27,7 +28,7 @@ const ip = "9.9.9.9";
 let dir: string;
 let db: Db;
 let approvals: Approvals;
-let build: (provider: FakeProvider, done?: (w: string, r: { ok: boolean; text: string }) => void) => { agent: Agent; crew: Crew; deps: AgentDeps };
+let build: (provider: FakeProvider, done?: (w: string, r: { ok: boolean; text: string }) => void, extra?: Partial<ConstructorParameters<typeof Crew>[0]> & { mail?: unknown }) => { agent: Agent; crew: Crew; deps: AgentDeps };
 let emitted: ServerMsg[];
 
 beforeEach(async () => {
@@ -40,9 +41,9 @@ beforeEach(async () => {
   const config = loadConfig(dir);
   const policy = new PolicyEngine(db, config);
   approvals = new Approvals({ auth, policy, audit, db }, 200);
-  build = (provider, done) => {
+  build = (provider, done, extra) => {
     let base!: AgentDeps;
-    const crew = new Crew({ store: new CrewStore(db), dataDir: dir, base: () => base, assistantName: () => "Maya", audit, ...(done ? { done } : {}) });
+    const crew = new Crew({ store: new CrewStore(db), dataDir: dir, base: () => base, assistantName: () => "Maya", audit, ...(done ? { done } : {}), ...(extra ? { ...extra, mail: undefined } : {}) });
     base = {
       provider,
       policy,
@@ -55,6 +56,7 @@ beforeEach(async () => {
       assistantName: () => "Maya",
       memory: new Memory(db),
       crew,
+      ...(extra?.mail ? { mail: extra.mail as never } : {}),
     };
     return { agent: new Agent(base), crew, deps: base };
   };
@@ -260,6 +262,68 @@ describe("seeing what the workers do", () => {
     expect(crew.view("Ada", "history")).toMatchObject({ ok: true });
     expect((crew.view("Ada", "history") as { text: string }).text).toContain("capital of France?");
     expect((crew.view("Ada", "memory") as { text: string }).text).toMatch(/inbox/);
+    const tree = JSON.parse((crew.view("Ada", "tree") as { text: string }).text) as { path: string; kind: string }[];
+    expect(tree.some((e) => e.kind === "folder" && e.path === "inbox/")).toBe(true); // the wiki as folders and notes, for the tree on the screen
+    expect(tree.some((e) => e.kind === "note" && e.path.startsWith("inbox/"))).toBe(true);
     expect(crew.view("Zed", "memory")).toMatchObject({ ok: false });
+  });
+});
+
+describe("a mailbox or a meeting given to a worker", () => {
+  const resolve = {
+    mailbox: (q: string) => (q.toLowerCase() === "support" ? { key: "7", label: "support" } : null),
+    meeting: (id: number) => (id === 3 ? { key: "3", label: "standup" } : null),
+    labelOf: (kind: "mail" | "meeting", key: string) => (kind === "mail" ? "support" : "standup") + (key ? "" : ""),
+  };
+
+  it("is given by the assistant's tool, shows on the worker, and goes back to her", async () => {
+    const p = new FakeProvider([[call("1", "crew.assign", { worker: "Ada", mailbox: "support" }), done], [call("2", "crew.assign", { worker: "Ada", meeting: 3 }), done], [text("done"), done]]);
+    const { agent, crew } = build(p, undefined, { resolve });
+    crew.hire({ name: "Ada", role: "support" });
+    await agent.runTurn("give Ada the support mailbox and the standup", owner());
+    expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
+    expect(crew.routeOf("mail", "7")?.name).toBe("Ada");
+    expect(crew.routeOf("meeting", "3")?.name).toBe("Ada");
+    expect((crew.state() as { workers: { handles: string[] }[] }).workers[0]!.handles).toEqual(["mailbox support", "meeting standup"]);
+    expect(crew.assign("mail", "7", null)).toEqual({ ok: true, name: null });
+    expect(crew.routeOf("mail", "7")).toBeUndefined();
+    crew.fire("Ada");
+    expect(crew.routes()).toEqual([]); // a worker that is gone takes its mailboxes back to the assistant
+  });
+
+  it("refuses a mailbox that does not exist", async () => {
+    const p = new FakeProvider([[call("1", "crew.assign", { worker: "Ada", mailbox: "nowhere" }), done], [text("no"), done]]);
+    const { agent, crew } = build(p, undefined, { resolve });
+    crew.hire({ name: "Ada", role: "support" });
+    await agent.runTurn("give Ada nowhere", owner());
+    expect(JSON.stringify(p.calls[1]!.messages.at(-1))).toMatch(/no mailbox called nowhere/);
+    expect(crew.routes()).toEqual([]);
+  });
+
+  it("a mail turn on a worker has only the mail tools, whatever the worker was given", async () => {
+    const p = new FakeProvider([[text("answered"), done]]);
+    const { crew } = build(p, undefined, { resolve });
+    crew.hire({ name: "Ada", role: "support", tools: ["web.*", "shell.run"] });
+    await crew.ask("Ada", "a mail arrived", { source: "mail-role", mail: { from: "x@y.z", roleAuto: false, caseId: 1 }, implied: (t) => MAIL_TURN_TOOLS.has(t) });
+    const offered = names(p);
+    expect(offered.length).toBeGreaterThan(0);
+    expect(offered.every((n) => MAIL_TURN_TOOLS.has(n))).toBe(true);
+    expect(offered).not.toContain("web.search");
+    expect(offered).not.toContain("shell.run");
+  });
+
+  it("a mail the worker may not send without the owner is not asked of the owner: it comes back to the assistant", async () => {
+    const asked: string[] = [];
+    const mail = { prepare: () => ({ tier: "T2", run: async (ask: (r: string, d: string) => Promise<boolean>) => ({ text: (await ask("sending to someone new", "to bob")) ? "sent" : "not sent", isError: false }) }) };
+    const p = new FakeProvider([[call("1", "email.reply", { id: "m1", text: "hi" }), done], [text("could not send"), done]]);
+    const escalated: string[] = [];
+    const { crew } = build(p, undefined, { resolve, mail, escalate: (w, what) => escalated.push(`${w}: ${what}`) });
+    crew.hire({ name: "Ada", role: "support" });
+    const r = await crew.ask("Ada", "a mail arrived", { source: "mail-role", mail: { from: "x@y.z", roleAuto: false, caseId: 1 }, implied: (t) => MAIL_TURN_TOOLS.has(t), emit: (m) => asked.push(m.type) });
+    expect(r).toMatchObject({ ok: true });
+    expect(emitted.some((m) => m.type === "approval.request")).toBe(false);
+    expect(asked).not.toContain("approval.request");
+    expect(escalated).toHaveLength(1);
+    expect(escalated[0]).toMatch(/Ada: email\.reply: sending to someone new/);
   });
 });

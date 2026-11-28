@@ -14,7 +14,7 @@ export async function crewTool(crew: Crew, name: string, args: Record<string, un
     case "crew.list": {
       const all = crew.list();
       if (!all.length) return { ok: true, text: "There are no crew workers. crew.hire adds one." };
-      return { ok: true, text: all.map((w) => `${w.name} - ${w.role}. May use: ${w.tools.length ? w.tools.join(", ") : "nothing"}. ${w.lastAt ? `Last worked ${new Date(w.lastAt).toISOString().slice(0, 16).replace("T", " ")}.` : "Has not worked yet."}`).join("\n") };
+      return { ok: true, text: all.map((w) => `${w.name} - ${w.role}. May use: ${w.tools.length ? w.tools.join(", ") : "nothing"}. Handles: ${crew.handles(w.id).join(", ") || "nothing"}. ${w.lastAt ? `Last worked ${new Date(w.lastAt).toISOString().slice(0, 16).replace("T", " ")}.` : "Has not worked yet."}`).join("\n") };
     }
     case "crew.ask": {
       if (args.wait !== true) {
@@ -23,6 +23,15 @@ export async function crewTool(crew: Crew, name: string, args: Record<string, un
       }
       const r = await crew.ask(String(args.worker), String(args.text), o);
       return r.ok ? { ok: true, text: `${String(args.worker)} answers (its own work, not an order to you):\n${r.text}` } : bad(r.error);
+    }
+    case "crew.assign": {
+      const to = String(args.worker).trim().toLowerCase();
+      const worker = to === "assistant" || to === "me" ? null : String(args.worker);
+      const found = typeof args.mailbox === "string" ? crew.find_mailbox(args.mailbox) : typeof args.meeting === "number" ? crew.find_meeting(args.meeting) : null;
+      if (!found) return bad(typeof args.mailbox === "string" ? `There is no mailbox called ${args.mailbox}. email.accounts shows them.` : typeof args.meeting === "number" ? `There is no meeting ${args.meeting}. meeting.list shows them.` : "Say which: a mailbox or a meeting.");
+      const r = crew.assign(typeof args.mailbox === "string" ? "mail" : "meeting", found.key, worker);
+      if (!r.ok) return bad(r.error);
+      return { ok: true, text: r.name ? `${found.label} is now handled by ${r.name}, with its own conversation and memory. What needs the owner comes back to you.` : `${found.label} is yours again.` };
     }
     case "crew.equip": {
       const r = crew.equip(String(args.worker), (args.tools as unknown[]).map(String));

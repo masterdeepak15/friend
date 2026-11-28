@@ -27,6 +27,12 @@ export const CREW_TOOL_DEFS: ToolDef[] = [
     "T1",
   ),
   def("crew.equip", "Change what a crew worker may use. tools replaces the whole list (names or prefixes ending in *).", z.object({ worker, tools: grants }), "T1"),
+  def(
+    "crew.assign",
+    "Give a mailbox or a meeting to a crew worker, or take it back. mailbox: the name or address of a mailbox; from then on the mail that arrives there is handled by that worker, with its own conversation and memory, and what needs the owner comes back to you. meeting: the id of a meeting (meeting.list); the worker handles what is said in that meeting. worker: the worker's name, or \"assistant\" to take it back yourself. Only one of mailbox or meeting.",
+    z.object({ worker, mailbox: z.string().min(1).max(254).optional(), meeting: z.number().int().min(1).optional() }),
+    "T1",
+  ),
   def("crew.history", "Read the last lines of a crew worker's own conversation: what it was asked and what it answered.", z.object({ worker, last: z.number().int().min(1).max(40).optional() }), "T1", true),
   def("crew.fire", "Remove a crew worker. By default its conversation and memory are deleted with it; keep: true keeps them, for hiring it back by the same name.", z.object({ worker, keep: z.boolean().optional() }), "T1"),
 ];
@@ -44,6 +50,8 @@ export function describeCrewCall(name: string, a: Record<string, unknown>): stri
       return `Remove the crew worker "${q(a.worker, 40)}"${a.keep ? ", keeping its memory" : " and delete its memory"}`;
     case "crew.ask":
       return `Give the crew worker "${q(a.worker, 40)}" a task`;
+    case "crew.assign":
+      return `${String(a.worker).toLowerCase() === "assistant" ? "Take back" : `Give the crew worker "${q(a.worker, 40)}"`} ${a.mailbox ? `the mailbox "${q(a.mailbox, 60)}"` : `the meeting ${q(a.meeting, 10)}`}`;
     case "crew.history":
       return `Read the conversation of the crew worker "${q(a.worker, 40)}"`;
     default:
@@ -64,5 +72,7 @@ export const CrewWorkerView = z.object({
   task: z.string().max(200),
   since: z.number().nullable(),
   lastAt: z.number(),
+  /** What it handles for the assistant: the mailboxes and meetings given to it, by name. */
+  handles: z.array(z.string().max(100)).max(40).optional(),
 });
 export type CrewWorkerView = z.infer<typeof CrewWorkerView>;

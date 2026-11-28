@@ -28,7 +28,16 @@ export interface MailAccountInput {
   systems: string[];
 }
 
+/** Who handles a mailbox: the assistant (no route) or a crew worker. */
+export interface Handlers {
+  workers: { id: string; name: string; role: string }[];
+  routes: { kind: "mail" | "meeting"; key: string; worker: string }[];
+}
+
 export interface MailApi {
+  /** Who can handle a mailbox, and who does now. Without it (a screen without the crew) the choice is not shown. */
+  handlers?(): Promise<Handlers>;
+  setHandler?(accountId: number, worker: string | null): Promise<void>;
   list(): Promise<MailAccountView[]>;
   add(input: MailAccountInput, password: string, pin: string): Promise<MailAccountView>;
   update(id: number, input: Partial<MailAccountInput> & { enabled?: boolean }, password: string | undefined, pin: string): Promise<MailAccountView>;
@@ -51,5 +60,7 @@ export const httpMailApi: MailApi = {
   update: async (id, input, password, pin) => (await call<{ account: MailAccountView }>(`/api/mail/accounts/${id}`, json("PATCH", { ...input, ...(password ? { password } : {}), pin }))).account,
   setLadder: async (id, ladder, pin) => (await call<{ account: MailAccountView }>(`/api/mail/accounts/${id}/ladder`, json("PUT", { ladder, pin }))).account,
   test: (id) => call(`/api/mail/accounts/${id}/test`, json("POST", {})),
+  handlers: () => call<Handlers>("/api/crew/routes"),
+  setHandler: async (id, worker) => void (await call("/api/crew/routes", json("PUT", { kind: "mail", key: String(id), worker }))),
   remove: async (id, pin) => void (await call(`/api/mail/accounts/${id}`, json("DELETE", { pin }))),
 };

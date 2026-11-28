@@ -2,6 +2,7 @@ import type { ClientMsg, CrewWorkerView } from "@friend/protocol";
 import { useEffect, useRef, useState } from "react";
 import type { CrewFeedLine, CrewState } from "../store";
 import { ActivityList, Avatar } from "../people/ActivityList";
+import { MemoryTreeView, parseOutline } from "./MemoryTreeView";
 import type { Act, Who } from "../people/people";
 import "./crew.css";
 
@@ -47,11 +48,14 @@ export function CrewDock({ crew, send, askAssistant }: CrewDockProps) {
   useEffect(() => {
     if (!worker) return;
     if (tab === "talk") send({ type: "crew.view", workerId: worker.id, what: "history" });
-    if (tab === "memory") send({ type: "crew.view", workerId: worker.id, what: "memory", ...(path ? { path } : {}) });
+    if (tab === "memory") {
+      send({ type: "crew.view", workerId: worker.id, what: "tree" });
+      send({ type: "crew.view", workerId: worker.id, what: "memory", ...(path ? { path } : {}) });
+    }
   }, [worker?.id, tab, path, lastAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (crew.workers.length === 0) return null;
-  const data = (what: "history" | "memory") => (worker ? crew.data[`${worker.id}:${what}`] : undefined);
+  const data = (what: "history" | "memory" | "tree") => (worker ? crew.data[`${worker.id}:${what}`] : undefined);
 
   return (
     <div className="cr-dock" data-open={open}>
@@ -78,6 +82,7 @@ export function CrewDock({ crew, send, askAssistant }: CrewDockProps) {
             <section className="cr-detail" aria-label={worker.name}>
               <header className="cr-head">
                 <Avatar who={whoOf(worker)} live={worker.status === "working"} /> <strong>{worker.name}</strong> <span className="cr-sub">{worker.role}</span>
+                {worker.handles?.length ? <span className="cr-handles" title="What it handles for the assistant">handles {worker.handles.join(", ")}</span> : null}
                 <button type="button" className="cr-x" aria-label="Close worker" onClick={() => setPicked(null)}>×</button>
               </header>
               <nav className="cr-tabs" role="tablist">
@@ -94,11 +99,12 @@ export function CrewDock({ crew, send, askAssistant }: CrewDockProps) {
               )}
               {tab === "talk" && <pre className="cr-log cr-pre">{data("history")?.text ?? "Loading…"}</pre>}
               {tab === "memory" && (
-                <div>
-                  <form className="cr-path" onSubmit={(e) => e.preventDefault()}>
-                    <input aria-label="Note or folder" placeholder="folder/note.md (empty: the index)" value={path} onChange={(e) => setPath(e.target.value)} />
-                  </form>
-                  <pre className="cr-log cr-pre">{data("memory")?.text ?? "Loading…"}</pre>
+                <div className="cr-mem">
+                  {(() => {
+                    const outline = parseOutline(data("tree")?.text);
+                    return outline ? <div className="cr-log"><MemoryTreeView outline={outline} open={path} onOpen={setPath} /></div> : <p className="cr-sub">Loading…</p>;
+                  })()}
+                  <pre className="cr-log cr-pre" aria-label="Note">{path ? (data("memory")?.text ?? "Loading…") : "Open a note to read it."}</pre>
                 </div>
               )}
               {tab === "tools" && (
