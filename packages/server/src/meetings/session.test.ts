@@ -127,6 +127,42 @@ describe("a meeting session", () => {
     expect(log.problems.join(" ")).toMatch(/captions/i);
   });
 
+  it("reads what people write in the chat like what they say: not the history from before it came in, not its own messages, and a message to it by name is answered", async () => {
+    const page = new FakePage(Array(14).fill("in").concat("ended") as Phase[], [[]]);
+    const reads: { sender: string; text: string }[][] = [
+      [{ sender: "Ann", text: "welcome, old news" }],
+      [{ sender: "Ann", text: "welcome, old news" }, { sender: "Maya (assistant)", text: "Hi, I am Maya." }],
+      [{ sender: "Ann", text: "welcome, old news" }, { sender: "Maya (assistant)", text: "Hi, I am Maya." }, { sender: "Priya Shah", text: "Maya, can you hear the chat?" }],
+    ];
+    (page as unknown as { readChat: () => Promise<unknown> }).readChat = async () => (reads.length > 1 ? reads.shift()! : reads[0]!);
+    const { session, log } = rig(page);
+    await session.start();
+    expect(log.lines.map((l) => l.speaker)).toEqual(["Priya Shah"]);
+    expect(log.lines[0]!.text).toContain("Maya, can you hear the chat?");
+    expect(log.addressed).toHaveLength(1);
+    expect(log.addressed[0]!.line.speaker).toBe("Priya Shah");
+  });
+
+  it("names the people it hears without captions by the names the meeting shows: who is speaking, and no guess when it cannot tell", async () => {
+    const mk = (speaking: string[]) => {
+      const page = new FakePage(Array(40).fill("in").concat("ended") as Phase[], [null]);
+      Object.assign(page, { audio: async () => Buffer.alloc(10), people: async () => ({ names: ["Maya (assistant)", "Deepak", "Priya Shah", "Raj Kumar"], speaking }) });
+      let given = false;
+      const hearing = { lastVoiceAt: 0, push() {}, async finish() {}, take: () => (given ? [] : ((given = true), [{ speaker: "Someone", text: "hello there everyone" }])) };
+      return { page, hearing };
+    };
+    const a = mk(["Priya Shah"]);
+    const ra = rig(a.page);
+    (ra.session as unknown as { d: { hearing: unknown } }).d.hearing = a.hearing;
+    await ra.session.start();
+    expect(ra.log.lines[0]).toMatchObject({ speaker: "Priya Shah" });
+    const b = mk([]);
+    const rb = rig(b.page);
+    (rb.session as unknown as { d: { hearing: unknown } }).d.hearing = b.hearing;
+    await rb.session.start();
+    expect(rb.log.lines[0]).toMatchObject({ speaker: "Someone" });
+  });
+
   it("writes in the chat only when told to, not more than once every fifteen seconds, and not before it is in", async () => {
     const page = new FakePage(["in", "in", "in", "in", "in"], [[]]);
     const { session } = rig(page);

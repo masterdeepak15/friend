@@ -76,6 +76,13 @@ A meeting turn is short: a small note and only the lines said since her last tur
 
 It listens all the time and watches for the room going quiet, so it never starts over someone and answers a moment after the pause. For 45 seconds after it was called or answered, a follow-up counts as meant for it even without its name; it stays quiet if the line is clearly people talking among themselves. It does not listen to its own voice (sound that arrives while it speaks, and for 3 seconds after, is ignored), and a name the speech engine garbled ("Umayyad" for "Maya") still counts.
 
+## The chat, the names and the screen
+
+- **Chat.** What people write in the meeting chat is read like what they say: it is kept with their name, and a message that calls the assistant by name is answered. `meeting.read_chat` reads it on demand. A message the assistant writes is checked against the chat list on the page; if it does not appear there, the tool says it failed instead of claiming it was written.
+- **Names.** Without captions, a voice that is not the owner's is named by the meeting: whoever the page shows speaking just then, or the one other person there. If it cannot tell, it says "Someone" rather than guess. `meeting.people` lists who is there.
+- **Presenting.** When the owner asks, `meeting.present` shares the call's screen: slides the assistant writes, or a picture or film from a file on the PC. The meeting sees a stage of its own, never the real screen, and nothing is installed. Whether a guest may share depends on the meeting; if it may not, the tool says so.
+- **Speed.** The voice is made while it waits for the room to go quiet, a pause of about a second ends a sentence, and the time of each step is in the audit trail (`meeting.timing`).
+
 ## Not built
 
 Recognising the owner by voice, joining from mail without you, and calendar integration.

@@ -98,6 +98,87 @@ export const audioHook = (name: string): string => String.raw`(() => {
     };
   }
 
+  // the screen: what is shared when the site asks for a screen is a stage of our own (slides, a picture or a film), never the real screen
+  const sv = document.createElement("canvas");
+  sv.width = 1280;
+  sv.height = 720;
+  const sg = sv.getContext("2d");
+  const stage = (F.stage = { kind: null, slides: [], i: 0, el: null, url: null });
+  F.asked = 0;
+  F.parts = [];
+  const wrapText = (t, maxW) => {
+    const words = String(t).split(/\s+/);
+    const rows = [];
+    let row = "";
+    for (const w of words) {
+      const next = row ? row + " " + w : w;
+      if (sg.measureText(next).width > maxW && row) { rows.push(row); row = w; } else row = next;
+    }
+    if (row) rows.push(row);
+    return rows;
+  };
+  const contain = (el, w, h) => {
+    const r = Math.min(1280 / w, 720 / h);
+    sg.drawImage(el, (1280 - w * r) / 2, (720 - h * r) / 2, w * r, h * r);
+  };
+  const drawStage = () => {
+    sg.fillStyle = "#0b1230";
+    sg.fillRect(0, 0, 1280, 720);
+    if (stage.kind === "slides") {
+      const s = stage.slides[stage.i] || { title: "", lines: [] };
+      sg.textAlign = "left";
+      sg.fillStyle = "#e8edff";
+      sg.font = "700 56px Segoe UI, Arial, sans-serif";
+      let y = 130;
+      for (const r of wrapText(s.title || "", 1120)) { sg.fillText(r, 80, y); y += 66; }
+      y += 24;
+      sg.font = "400 38px Segoe UI, Arial, sans-serif";
+      for (const l of s.lines || []) {
+        sg.fillStyle = "#7fe3ff";
+        sg.fillText("•", 80, y);
+        sg.fillStyle = "#c3cdf5";
+        for (const r of wrapText(l, 1060)) { sg.fillText(r, 126, y); y += 50; }
+        y += 12;
+      }
+      sg.fillStyle = "#5d6a99";
+      sg.font = "22px Segoe UI, Arial, sans-serif";
+      sg.textAlign = "right";
+      sg.fillText((stage.i + 1) + " / " + stage.slides.length, 1230, 690);
+    } else if (stage.kind === "image" && stage.el && stage.el.naturalWidth) contain(stage.el, stage.el.naturalWidth, stage.el.naturalHeight);
+    else if (stage.kind === "video" && stage.el && stage.el.videoWidth) contain(stage.el, stage.el.videoWidth, stage.el.videoHeight);
+  };
+  drawStage();
+  setInterval(drawStage, 66);
+  const stageStream = sv.captureStream(15);
+  const clearStage = () => {
+    if (stage.el && stage.el.pause) { try { stage.el.pause(); } catch (e) {} }
+    if (stage.url) { try { URL.revokeObjectURL(stage.url); } catch (e) {} }
+    stage.kind = null; stage.slides = []; stage.i = 0; stage.el = null; stage.url = null;
+  };
+  if (md) md.getDisplayMedia = async () => { F.asked++; return new MediaStream(stageStream.getVideoTracks().map((t) => t.clone())); };
+  F.slides = (slides, start) => { clearStage(); stage.kind = "slides"; stage.slides = slides; stage.i = Math.max(0, Math.min(slides.length - 1, start || 0)); drawStage(); return slides.length; };
+  F.flip = (by) => { if (stage.kind !== "slides") return false; stage.i = Math.max(0, Math.min(stage.slides.length - 1, stage.i + by)); drawStage(); return true; };
+  F.put = (b64, reset) => { if (reset) F.parts = []; const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); F.parts.push(u); return F.parts.length; };
+  F.showFile = (kind, mime) => new Promise((done) => {
+    clearStage();
+    const blob = new Blob(F.parts, { type: mime });
+    F.parts = [];
+    stage.url = URL.createObjectURL(blob);
+    if (kind === "image") {
+      const im = new Image();
+      im.onload = () => { stage.kind = "image"; stage.el = im; drawStage(); done(true); };
+      im.onerror = () => done(false);
+      im.src = stage.url;
+    } else {
+      const v = document.createElement("video");
+      v.muted = true; v.loop = true; v.playsInline = true;
+      v.onloadeddata = () => { stage.kind = "video"; stage.el = v; v.play().catch(() => {}); done(true); };
+      v.onerror = () => done(false);
+      v.src = stage.url;
+    }
+  });
+  F.hide = () => { clearStage(); drawStage(); return true; };
+
   // what is said: decode the sound and play it into the microphone stream; resolves with its length in seconds when it has finished
   F.speak = async (b64) => {
     const bin = atob(b64);

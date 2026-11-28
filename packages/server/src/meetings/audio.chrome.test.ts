@@ -44,7 +44,7 @@ const open = async (html: string) => {
   await page.open(await serve(html));
   const ready = page as unknown as { run<R>(e: string): Promise<R> };
   await until(async () => (await ready.run<string>("document.readyState").catch(() => "")) === "complete");
-  return page as unknown as Pick<ChromeMeetingPage, "speak" | "audio" | "mic" | "camera" | "enableCaptions" | "captions" | "chat"> & { dom: unknown } & { run<R>(e: string): Promise<R> };
+  return page as unknown as Pick<ChromeMeetingPage, "speak" | "audio" | "mic" | "camera" | "enableCaptions" | "captions" | "chat" | "present" | "readChat" | "people" | "flip" | "stopPresenting"> & { dom: unknown } & { run<R>(e: string): Promise<R> };
 };
 
 describe.skipIf(!chrome)("sound in a real Chrome, with no driver on the PC", () => {
@@ -176,13 +176,71 @@ function render() {
   }, 60_000);
 
   it("sends a chat message with the site's own send button when Enter does not send it", async () => {
-    const p = await open(`<!doctype html><body><div data-tid="chat-button" id="chat-button">Chat</div><div id="chat" style="display:none"><div role="textbox" contenteditable="true" data-tid="ckeditor" style="min-height:20px;border:1px solid"></div><button data-tid="newMessageCommands-send" aria-label="Send">Send</button></div><script>
+    const p = await open(`<!doctype html><body><div data-tid="chat-button" id="chat-button">Chat</div><div id="list"></div><div id="chat" style="display:none"><div role="textbox" contenteditable="true" data-tid="ckeditor" style="min-height:20px;border:1px solid"></div><button data-tid="newMessageCommands-send" aria-label="Send">Send</button></div><script>
 window.log = [];
 document.getElementById("chat-button").onclick = () => { document.getElementById("chat").style.display = "block"; };
 // Enter inserts a line break and sends nothing, like a box that wants the button
-document.querySelector("[data-tid=newMessageCommands-send]").onclick = () => { const b = document.querySelector("[data-tid=ckeditor]"); if (b.innerText.trim()) { window.log.push(b.innerText.trim()); b.innerText = ""; } };
+document.querySelector("[data-tid=newMessageCommands-send]").onclick = () => { const b = document.querySelector("[data-tid=ckeditor]"); if (b.innerText.trim()) { window.log.push(b.innerText.trim()); document.getElementById("list").append(Object.assign(document.createElement("p"), { innerText: b.innerText.trim() })); b.innerText = ""; } };
 </script></body>`);
     expect(await p.chat("Hello, I am Maya.")).toBe(true);
     expect(await p.run<string[]>("window.log")).toEqual(["Hello, I am Maya."]);
   }, 60_000);
+
+  it("says the message was not sent when the box empties but the chat never shows it", async () => {
+    const p = await open(`<!doctype html><body><div id="chat-button" data-tid="chat-button">Chat</div><div role="textbox" contenteditable="true" data-tid="ckeditor" style="min-height:20px;border:1px solid"></div><script>
+document.querySelector("[data-tid=ckeditor]").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.innerText = ""; } });
+</script></body>`);
+    expect(await p.chat("Does anyone see this?")).toBe(false);
+  }, 60_000);
+
+  it("reads the chat with who wrote each message, and the names of the people on the stage with who is speaking", async () => {
+    const p = await open(`<!doctype html><body>
+<div data-tid="message-pane-list-viewport">
+  <div role="listitem" data-tid="chat-pane-item"><span data-tid="message-author-name">Priya Shah</span><div data-tid="chat-pane-message">Please share the link</div></div>
+  <div role="listitem" data-tid="chat-pane-item"><div data-tid="chat-pane-message">and the date too</div></div>
+  <div role="listitem" data-tid="chat-pane-item"><span data-tid="message-author-name">Deepak</span><div data-tid="chat-pane-message">ok</div></div>
+</div>
+<div data-tid="video-tile"><span data-tid="display-name">Priya Shah</span><div data-tid="voice-level-stream-outline"></div></div>
+<div data-tid="video-tile"><span data-tid="display-name">Deepak (Guest)</span></div>
+</body>`);
+    expect(await p.readChat()).toEqual([
+      { sender: "Priya Shah", text: "Please share the link" },
+      { sender: "Priya Shah", text: "and the date too" },
+      { sender: "Deepak", text: "ok" },
+    ]);
+    expect(await p.people()).toEqual({ names: ["Priya Shah", "Deepak"], speaking: ["Priya Shah"] });
+    // no chat list on screen: nothing is made up
+    await page?.close();
+    page = undefined;
+    const q = await open("<!doctype html><body><p>no chat</p></body>");
+    expect(await q.readChat()).toBeNull();
+  }, 60_000);
+
+  it("shares a stage of its own when the site asks for a screen: slides that can be turned, a picture, and nothing shared when there is no share button", async () => {
+    const p = await open(`<!doctype html><body><button data-tid="share-button" aria-label="Share">Share</button><video id="v" autoplay muted playsinline></video><canvas id="c" width="64" height="36"></canvas><script>
+window.hashes = [];
+document.querySelector("[data-tid=share-button]").onclick = async () => {
+  const s = await navigator.mediaDevices.getDisplayMedia({ video: true });
+  const v = document.getElementById("v"); v.srcObject = s; v.play();
+  const c = document.getElementById("c").getContext("2d");
+  setInterval(() => { if (!v.videoWidth) return; window.w = v.videoWidth; c.drawImage(v, 0, 0, 64, 36); const d = c.getImageData(0, 0, 64, 36).data; let h = 0; for (let i = 0; i < d.length; i += 4) h = (h * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7) | 0; window.hash = h; }, 100);
+};
+</script></body>`);
+    const r = await p.present({ kind: "slides", slides: [{ title: "Plan", lines: ["first thing", "second thing"] }, { title: "Next steps", lines: ["ship it"] }] });
+    expect(r.ok).toBe(true);
+    await until(async () => (await p.run<number>("window.w || 0")) > 0);
+    expect(await p.run<number>("window.w")).toBe(1280);
+    await new Promise((res) => setTimeout(res, 500));
+    const first = await p.run<number>("window.hash");
+    expect(await p.flip(1)).toBe(true);
+    await new Promise((res) => setTimeout(res, 600));
+    expect(await p.run<number>("window.hash")).not.toBe(first); // the slide on the stage changed
+    expect(await p.stopPresenting()).toBe(true);
+    await page?.close();
+    page = undefined;
+    const q = await open("<!doctype html><body><p>a meeting where guests may not share</p></body>");
+    const no = await q.present({ kind: "slides", slides: [{ title: "x" }] });
+    expect(no.ok).toBe(false);
+    expect(no.message).toMatch(/share/i);
+  }, 90_000);
 });

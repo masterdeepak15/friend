@@ -2,7 +2,7 @@ import type { Audit } from "../audit";
 import type { AudioHearing } from "./hearing";
 import type { Line } from "./logic";
 import type { Speech } from "./speech";
-import { MeetingSession, type MeetingPage } from "./session";
+import { MeetingSession, type MeetingPage, type Presentation } from "./session";
 import type { Meeting, MeetingStore } from "./store";
 
 export type TurnKind = "reply" | "suggest" | "notes" | "final";
@@ -123,6 +123,32 @@ export class MeetingService {
     return r.ok ? r : { ...r, message: `${r.message} Write it with meeting.chat instead.` };
   }
 
+  private sessionOf(id?: number): MeetingSession | undefined {
+    const target = id ?? this.live()?.id;
+    return target ? this.sessions.get(target) : undefined;
+  }
+
+  async chatNow(id?: number) {
+    return this.sessionOf(id)?.chatNow() ?? null;
+  }
+
+  async people(id?: number) {
+    return this.sessionOf(id)?.peopleNow() ?? null;
+  }
+
+  async present(id: number | undefined, c: Presentation): Promise<{ ok: boolean; message: string }> {
+    const s = this.sessionOf(id);
+    return s ? s.present(c) : { ok: false, message: "It is not in a meeting." };
+  }
+
+  async flip(id: number | undefined, by: number): Promise<boolean> {
+    return (await this.sessionOf(id)?.flip(by)) === true;
+  }
+
+  async stopPresenting(id?: number): Promise<boolean> {
+    return (await this.sessionOf(id)?.stopPresenting()) === true;
+  }
+
   /** The assistant messages the owner about a meeting; not more than six in ten minutes. */
   tell(id: number | undefined, text: string): string {
     const key = id ?? 0;
@@ -182,6 +208,7 @@ export class MeetingService {
         },
         ownerRelevant: (line, ctx) => void this.turn(id, "suggest", `The last line below (${line.speaker}) may concern the owner. Use meeting.tell_owner with one or two short sentences: what was said, and a suggested answer if they are asked something. Do not write in the meeting chat.`, ctx),
         notesDue: () => void this.notes(id, "notes"),
+        timing: (step, ms) => this.d.audit.log("meeting", "meeting.timing", { id, step, ms }),
         problem: (text) => this.d.tellOwner(text, "Meeting"),
         ended: () => void this.finish(id),
       },
@@ -209,7 +236,9 @@ export class MeetingService {
       }
       const present = this.sessions.get(id)?.ownerPresent() ?? false;
       const prompt = `[Live meeting${m?.title ? ` "${m.title}"` : ""}${present ? ", the owner is in it" : ""}. What was said before is not repeated: meeting.notes (with lines) reads it, and so does your memory.]\n${task}\n\n${wrapMeeting(lines)}`;
+      const t0 = Date.now();
       const ran = await this.d.runTurn(prompt, { id, kind, ...(owner ? { owner } : {}) }).catch(() => false);
+      this.d.audit.log("meeting", "meeting.timing", { id, step: `turn.${kind}`, ms: Date.now() - t0 });
       if (!ran && tries < 8) {
         await new Promise((r) => setTimeout(r, this.d.tuning?.retryMs ?? 3000));
         this.busyTurns.delete(key);

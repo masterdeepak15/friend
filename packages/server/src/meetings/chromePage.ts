@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Cdp } from "../browser/cdp";
 import { endpoint, removeProfile, shutdown } from "../browser/hub";
 import type { CaptionItem } from "./logic";
-import type { MeetingPage, Phase } from "./session";
+import type { ChatMessage, MeetingPage, Phase, Presentation } from "./session";
 import { domFor } from "./dom";
 import type { DomSet } from "./domKit";
 import { meetingPlatform } from "./logic";
@@ -148,10 +148,86 @@ export class ChromeMeetingPage implements MeetingPage {
         await this.mouseClick(sent.x, sent.y);
         await sleep(400);
       }
-      return sent !== false;
+      if (sent === false) return false;
+      // the box being empty is not enough: the message must be in the chat list that people see
+      return await this.appears(text);
     } catch {
       return false;
     }
+  }
+
+  /** Whether the text can be seen on the page, in the chat, a moment after it was sent (the chat is opened once more if it is not). */
+  private async appears(text: string): Promise<boolean> {
+    const snippet = text.replace(/\s+/g, " ").trim().slice(0, 40);
+    const look = `(document.body.innerText || "").replace(/\\s+/g, " ").includes(${JSON.stringify(snippet)})`;
+    for (let i = 0; i < 4; i++) {
+      if (await this.run<boolean>(look).catch(() => false)) return true;
+      if (i === 1) await this.run<boolean>(this.dom.focusChat).catch(() => false);
+      await sleep(500);
+    }
+    return false;
+  }
+
+  async readChat(): Promise<ChatMessage[] | null> {
+    if (!this.dom.readChat) return null;
+    const r = await this.run<ChatMessage[] | null>(this.dom.readChat).catch(() => null);
+    return Array.isArray(r) ? r : null;
+  }
+
+  async people(): Promise<{ names: string[]; speaking: string[] } | null> {
+    if (!this.dom.people) return null;
+    return (await this.run<{ names: string[]; speaking: string[] }>(this.dom.people).catch(() => null)) ?? null;
+  }
+
+  private sharing = false;
+
+  /** Puts the content on the stage of the page and, when the screen is not shared yet, shares it in the meeting. */
+  async present(c: Presentation): Promise<{ ok: boolean; message: string }> {
+    try {
+      if (c.kind === "slides") await this.run<number>(`window.__friend.slides(${JSON.stringify(c.slides)}, ${c.start ?? 0})`);
+      else {
+        const b64 = c.data.toString("base64");
+        const size = 400_000;
+        for (let i = 0; i < b64.length || i === 0; i += size) await this.run<number>(`window.__friend.put(${JSON.stringify(b64.slice(i, i + size))}, ${i === 0})`);
+        if (!(await this.run<boolean>(`window.__friend.showFile(${JSON.stringify(c.kind)}, ${JSON.stringify(c.mime)})`))) return { ok: false, message: "The page could not open that file." };
+      }
+      if (this.sharing) return { ok: true, message: "The shared screen now shows it." };
+      const asked = (await this.run<number>("window.__friend.asked").catch(() => 0)) ?? 0;
+      const steps = this.dom.shareSteps ?? [];
+      for (const [i, step] of steps.entries()) {
+        const found = await this.run<boolean | { x: number; y: number }>(step).catch(() => false);
+        if (!found) {
+          if (i === 0) break; // no share button: guests may not be allowed to share in this meeting
+          continue;
+        }
+        if (typeof found === "object") await this.mouseClick(found.x, found.y);
+        await sleep(1200);
+        if (((await this.run<number>("window.__friend.asked").catch(() => 0)) ?? 0) > asked) break;
+      }
+      for (let w = 0; w < 6; w++) {
+        if (((await this.run<number>("window.__friend.asked").catch(() => 0)) ?? 0) > asked) {
+          this.sharing = true;
+          return { ok: true, message: "Sharing the screen of the meeting." };
+        }
+        await sleep(500);
+      }
+      await this.run<boolean>("window.__friend.hide()").catch(() => false);
+      return { ok: false, message: "The meeting did not start sharing: the share button was not found or this meeting does not let guests share." };
+    } catch {
+      return { ok: false, message: "Sharing the screen failed." };
+    }
+  }
+
+  async flip(by: number): Promise<boolean> {
+    return (await this.run<boolean>(`window.__friend.flip(${by | 0})`).catch(() => false)) === true;
+  }
+
+  async stopPresenting(): Promise<boolean> {
+    if (this.dom.stopShare) await this.run<boolean>(this.dom.stopShare).catch(() => false);
+    await this.run<boolean>("window.__friend.hide()").catch(() => false);
+    const was = this.sharing;
+    this.sharing = false;
+    return was;
   }
 
   /** Switches the meeting camera (the picture of the assistant) on or off; false when the button was not found. */

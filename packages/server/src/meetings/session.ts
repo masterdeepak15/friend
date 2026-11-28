@@ -352,6 +352,16 @@ export class MeetingSession {
     return this.d.page.present(c);
   }
 
+  /** The chat as it is on the screen now. */
+  async chatNow(): Promise<ChatMessage[] | null> {
+    return (await this.d.page.readChat?.().catch(() => null)) ?? null;
+  }
+
+  /** The names the meeting shows, and who is speaking this moment. */
+  async peopleNow(): Promise<{ names: string[]; speaking: string[] } | null> {
+    return (await this.d.page.people?.().catch(() => null)) ?? null;
+  }
+
   async flip(by: number): Promise<boolean> {
     return (await this.d.page.flip?.(by).catch(() => false)) === true;
   }

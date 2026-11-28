@@ -96,7 +96,7 @@ describe("a real Friend in a meeting", () => {
     expect(t.store.current()!.tasks).toEqual([{ what: "Ship the release", who: "Deepak", due: "Friday" }]);
     const first = t.model.calls[0]!;
     expect(JSON.stringify(first.messages)).toContain("untrusted-meeting");
-    expect(first.tools.map((x) => x.name).sort()).toEqual(["meeting.chat", "meeting.notes", "meeting.save_notes", "meeting.speak", "meeting.tell_owner"]);
+    expect(first.tools.map((x) => x.name).sort()).toEqual(["meeting.chat", "meeting.notes", "meeting.people", "meeting.read_chat", "meeting.save_notes", "meeting.speak", "meeting.tell_owner"]);
   }, 30_000);
 
   it("is not fooled by someone in the meeting who tells it to run commands or send mail", async () => {
