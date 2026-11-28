@@ -119,6 +119,14 @@ export class ChromeMeetingPage implements MeetingPage {
       await sleep(800);
       return;
     }
+    if (this.dom.captionQuick) {
+      if (await this.run<boolean>(this.dom.captionQuick).catch(() => false)) {
+        await sleep(900);
+        const confirm = this.dom.captionSteps.at(-1); // the question that may follow (which language is spoken)
+        if (confirm) await this.run<boolean>(confirm).catch(() => false);
+        return;
+      }
+    }
     // the menu way: each step finds its button, and the last may be a question asked the first time (which language is spoken)
     // (only the first step must be found: the menus differ from one version of the site to the next, and the later steps are tried in turn)
     for (const [i, step] of this.dom.captionSteps.entries()) {
@@ -160,7 +168,7 @@ export class ChromeMeetingPage implements MeetingPage {
   private async appears(text: string): Promise<boolean> {
     const snippet = text.replace(/\s+/g, " ").trim().slice(0, 40);
     const look = `(document.body.innerText || "").replace(/\\s+/g, " ").includes(${JSON.stringify(snippet)})`;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 7; i++) {
       if (await this.run<boolean>(look).catch(() => false)) return true;
       if (i === 1) await this.run<boolean>(this.dom.focusChat).catch(() => false);
       await sleep(500);

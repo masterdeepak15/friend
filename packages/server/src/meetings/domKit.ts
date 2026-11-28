@@ -2,7 +2,7 @@
 
 export const HELPERS = `
 const txt = (e) => ((e && (e.innerText || e.textContent)) || "").replace(/\\s+/g, " ").trim();
-const vis = (e) => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
+const vis = (e) => { if (!e || !(e.offsetWidth || e.offsetHeight || e.getClientRects().length)) return false; const r = e.getBoundingClientRect(); return r.right > 0 && r.bottom > 0 && r.left < innerWidth && getComputedStyle(e).visibility !== "hidden"; };
 const all = (sel) => Array.from(document.querySelectorAll(sel)).filter(vis);
 const label = (e) => (e.getAttribute("aria-label") || "") + " " + txt(e);
 const CLICKABLE = "button, [role=button], a, [role=menuitem], [role=menuitemcheckbox], [role=menuitemradio], [role=option]";
@@ -22,6 +22,8 @@ export interface DomSet {
   captions: string;
   /** Scripts that turn the captions on, one after the other; each returns true when it found what to click. */
   captionSteps: string[];
+  /** One script that opens the menu and switches the captions on in a single go (for a page whose menu closes by itself); true when it did, and the last of captionSteps (a question that may follow) is then run. */
+  captionQuick?: string;
   /** A keyboard shortcut that toggles captions, tried on alternate attempts. */
   shortcut?: { key: string; code: string; vk: number; modifiers: number };
   /** Opens the chat if it is closed and puts the cursor in the message box; true when it could. */
@@ -69,11 +71,15 @@ export const camTo = (on: boolean): string => `(() => { ${HELPERS}
 })()`;
 
 /** What a chat box looks like to a program, the same on every site: empty once the message went. */
-export const SEND_CHAT = (boxSel: string, sendSel: string): string => `(() => { ${HELPERS}
+export const SEND_CHAT = (boxSel: string, sendSel: string): string => `(async () => { ${HELPERS}
   const box = all(${JSON.stringify(boxSel)})[0];
   if (!box || !((box.value !== undefined ? box.value : txt(box)) || "").trim()) return true;
   const send = all(${JSON.stringify(sendSel)})[0] || byText(/^\\s*send\\b/i, "button, [role=button]");
   if (!send) return false;
+  // a plain click is what works in Teams (a real mouse press on its send button does nothing); if the box is not empty after it, the mouse is tried
+  send.click();
+  await new Promise((r) => setTimeout(r, 700));
+  if (!((box.value !== undefined ? box.value : txt(box)) || "").trim()) return true;
   const b = send.getBoundingClientRect();
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 })()`;

@@ -58,7 +58,22 @@ export const CAPTIONS = `(() => { ${HELPERS}
 
 /** Opens the "more" menu. */
 // the more menu opens only for a real mouse click, so this gives back where to click
-export const OPEN_MORE = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="more-button"], #callingButtons-showMoreBtn, [id*="showMoreBtn"]') || byText(/^\\s*more( actions)?\\b/i, "button, [role=button]"); if (!b) return false; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`;
+// (some versions of the page open it for a plain click and ignore a mouse press, others the other way round: the plain click is tried first, and if no menu came up the centre of the button is given back for a real mouse press)
+// (the more menu closes by itself within a second on today's page, so opening it and pressing Captions is one step)
+export const CAPTION_QUICK = `(async () => { ${HELPERS}
+  const item = () => { const i = document.getElementById("closed-captions-button"); return i && vis(i) ? i : null; };
+  let i = item();
+  if (!i) {
+    const b = document.querySelector('[data-tid="more-button"], #callingButtons-showMoreBtn, [id*="showMoreBtn"]');
+    if (!b) return false;
+    b.click();
+    for (let k = 0; k < 8 && !(i = item()); k++) await new Promise((r) => setTimeout(r, 150));
+  }
+  if (!i) return false;
+  if (i.getAttribute("aria-checked") !== "true") i.click();
+  return true;
+})()`;
+export const OPEN_MORE = `(async () => { ${HELPERS} const menuUp = () => vis(document.getElementById("closed-captions-button")) || !!byText(/language and speech|^\\s*captions\\b/i, "[role=menuitem], [role=menuitemcheckbox]"); if (menuUp()) return true; const b = document.querySelector('[data-tid="more-button"], #callingButtons-showMoreBtn, [id*="showMoreBtn"]') || byText(/^\\s*more( actions)?\\b/i, "button, [role=button]"); if (!b) return false; b.click(); await new Promise((r) => setTimeout(r, 700)); if (menuUp()) return true; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`;
 // in the menu the item is called "Captions" (and is checked when they are on: it is then left alone); older versions have "Language and speech"
 export const CLICK_CAPTIONS_ITEM = `(() => { ${HELPERS} const b = document.getElementById("closed-captions-button") || byText(/^\\s*captions\\b/i, "[role=menuitem], [role=menuitemcheckbox]"); if (!b) return false; if (b.getAttribute("aria-checked") !== "true") b.click(); return true; })()`;
 export const CLICK_LANGUAGE = `(() => { ${HELPERS} const b = byText(/language and speech/i); if (!b) return false; b.click(); return true; })()`;
@@ -70,7 +85,7 @@ export const FOCUS_CHAT = `(() => { ${HELPERS}
   const box = () => all('[data-tid="ckeditor"], div[role="textbox"][contenteditable="true"], [data-tid="chat-message-input"] [contenteditable="true"]')[0];
   let b = box();
   if (!b) { const open = document.querySelector('[data-tid="chat-button"], #chat-button') || byText(/^\\s*chat\\b/i, "button, [role=button]"); if (open) open.click(); }
-  return new Promise((done) => setTimeout(() => { b = box(); if (!b) return done(false); b.focus(); done(true); }, 700));
+  return new Promise((done) => setTimeout(() => { b = box(); if (!b) return done(false); b.focus(); done(true); }, 1200));
 })()`;
 
 export const HANG_UP = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="hangup-button"], #hangup-button') || byText(/^\\s*(leave|hang up)\\b/i, "button, [role=button]"); if (!b) return false; b.click(); return true; })()`;
@@ -102,7 +117,22 @@ export const PEOPLE = `(() => { ${HELPERS}
   const TILE = '[data-tid*="video-tile"], [data-tid*="participant-tile"], [data-tid="calling-participant-stream"], [data-tid*="stream-container"], [data-cid*="tile"], [role="listitem"][aria-label]';
   const names = [];
   const speaking = [];
-  for (const el of all(TILE)) {
+  // Teams today: a tile is an element with data-stream-type whose data-tid is the person's name; its ring changes its class while they speak
+  // (the class names are hashes that change with every Teams build, so the idle look is learned: the one seen most often)
+  const R = (window.__friendRing = window.__friendRing || {});
+  for (const t of Array.from(document.querySelectorAll("[data-stream-type]"))) {
+    const name = (t.getAttribute("data-tid") || "").replace(/\\s*\\((guest|external|unverified)[^)]*\\)/i, "").trim();
+    if (!name || name.length > 60) continue;
+    if (!names.includes(name)) names.push(name);
+    const o = t.querySelector('[data-tid="voice-level-stream-outline"]');
+    if (!o) continue;
+    const sig = String(o.className);
+    const r = (R[name] = R[name] || {});
+    r[sig] = (r[sig] || 0) + 1;
+    const sigs = Object.keys(r).sort((a, b) => r[b] - r[a]);
+    if (sigs.length > 1 && sig !== sigs[0]) speaking.push(name);
+  }
+  if (!names.length) for (const el of all(TILE)) {
     const n = el.querySelector('[data-tid*="display-name"], [data-tid*="participant-name"], [data-tid*="name"]');
     let name = n ? txt(n) : (el.getAttribute("aria-label") || "").split(",")[0].trim();
     name = name.replace(/\\s*\\((guest|external|unverified)[^)]*\\)/i, "").trim();
@@ -115,8 +145,9 @@ export const PEOPLE = `(() => { ${HELPERS}
 })()`;
 
 // sharing: the share button, then the choice of what to share (our own page answers the browser's question with its stage)
-export const CLICK_SHARE = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="share-button"], #share-button') || byText(/^\\s*(share|present)\\b/i, "button, [role=button]"); if (!b) return false; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`;
-export const CLICK_SCREEN = `(() => { ${HELPERS} const b = byText(/^\\s*(screen|entire screen|share (the )?screen|present (the )?screen)\\b/i, "button, [role=button], [role=menuitem], [role=option], [data-tid*="screen"]") || document.querySelector('[data-tid*="share-screen"], [data-tid*="screen-share"]'); if (!b) return false; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`;
+// (a plain click is what Teams answers: a real mouse press on its buttons does nothing on this page; when it is sharing already the button says so and is left alone)
+export const CLICK_SHARE = `(() => { ${HELPERS} const b = document.querySelector('#screenshare-button, [data-tid="screenshare-button"], [data-tid="share-button"], #share-button') || byText(/^\\s*(share|present)\\b/i, "button, [role=button]"); if (!b || !vis(b)) return false; if (!/stop (sharing|presenting)/i.test(label(b))) b.click(); return true; })()`;
+export const CLICK_SCREEN = `(() => { ${HELPERS} const b = byText(/^\\s*(screen|entire screen|share (the )?screen|present (the )?screen)\\b/i, "button, [role=button], [role=menuitem], [role=option], [data-tid*="screen"]") || document.querySelector('[data-tid*="share-screen"], [data-tid*="screen-share"]'); if (!b) return false; b.click(); return true; })()`;
 export const STOP_SHARE = `(() => { ${HELPERS} const b = document.querySelector('[data-tid="stop-sharing-button"], [data-tid="unshare-button"]') || byText(/stop (presenting|sharing)/i, "button, [role=button]"); if (!b) return false; b.click(); return true; })()`;
 
 export const TEAMS: DomSet = {
@@ -126,6 +157,7 @@ export const TEAMS: DomSet = {
   stopShare: STOP_SHARE,
   advance: ADVANCE,
   captions: CAPTIONS,
+  captionQuick: CAPTION_QUICK,
   captionSteps: [OPEN_MORE, CLICK_CAPTIONS_ITEM, CLICK_LANGUAGE, CLICK_CAPTIONS, CLICK_CONFIRM],
   // Ctrl+Shift+U switches live captions on or off in Teams
   shortcut: { key: "U", code: "KeyU", vk: 85, modifiers: 10 },

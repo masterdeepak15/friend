@@ -10,7 +10,7 @@ export interface ChatMessage {
 
 /** What to show to the meeting: slides it writes itself, or a picture or film (base64) from a file. */
 export type Presentation =
-  | { kind: "slides"; slides: { title: string; lines?: string[] }[]; start?: number }
+  | { kind: "slides"; slides: { title: string; lines?: string[]; /** What is said aloud while this slide is shown. */ say?: string }[]; start?: number }
   | { kind: "image"; mime: string; data: Buffer }
   | { kind: "video"; mime: string; data: Buffer };
 
@@ -149,11 +149,12 @@ export class MeetingSession {
   }
 
   /** Says it aloud in a computer voice, after the room has gone quiet; at most once every 20 seconds. */
-  async speak(text: string): Promise<{ ok: boolean; message: string }> {
+  async speak(text: string, o: { narration?: boolean } = {}): Promise<{ ok: boolean; message: string }> {
     const d = this.d;
+    if (!o.narration) this.narrateToken++; // someone is being answered: the talk through the slides stops here
     if (this.status !== "live") return { ok: false, message: "It is not in the meeting." };
     if (!d.speech || !d.page.speak || !d.page.mic) return { ok: false, message: "Speaking aloud is not switched on here." };
-    if (this.now() - this.lastSpoke < 6_000) return { ok: false, message: "It spoke a moment ago: wait a few seconds between spoken answers." };
+    if (!o.narration && this.now() - this.lastSpoke < 6_000) return { ok: false, message: "It spoke a moment ago: wait a few seconds between spoken answers." };
     this.lastSpoke = this.now();
     const t0 = Date.now();
     // a person does not talk over someone
@@ -349,7 +350,30 @@ export class MeetingSession {
   async present(c: Presentation): Promise<{ ok: boolean; message: string }> {
     if (this.status !== "live") return { ok: false, message: "It is not in the meeting." };
     if (!this.d.page.present) return { ok: false, message: "This meeting page cannot share a screen." };
-    return this.d.page.present(c);
+    this.narrateToken++;
+    const r = await this.d.page.present(c);
+    if (!r.ok || c.kind !== "slides" || !c.slides.some((s) => s.say)) return r;
+    if (!this.d.speech || !this.d.page.speak) return { ok: true, message: `${r.message} Speaking aloud is not switched on, so the slides are shown without talking.` };
+    void this.narrate(c.slides.map((s) => s.say));
+    return { ok: true, message: `${r.message} It is talking through the ${c.slides.length} slides, turning to the next when each is told. Anyone who speaks to it stops the talk.` };
+  }
+
+  private narrateToken = 0;
+
+  /** Says what goes with each slide, and turns to the next slide when it has been said, so what is shown and what is heard stay together. */
+  private async narrate(says: (string | undefined)[]): Promise<void> {
+    const token = ++this.narrateToken;
+    const going = () => token === this.narrateToken && this.status === "live";
+    for (let i = 0; i < says.length && going(); i++) {
+      const say = says[i];
+      if (say) {
+        const r = await this.speak(say, { narration: true });
+        if (!r.ok) return;
+      } else await this.sleep(4000);
+      if (!going()) return;
+      await this.sleep(500);
+      if (i < says.length - 1) await this.d.page.flip?.(1).catch(() => false);
+    }
   }
 
   /** The chat as it is on the screen now. */
@@ -367,6 +391,7 @@ export class MeetingSession {
   }
 
   async stopPresenting(): Promise<boolean> {
+    this.narrateToken++;
     return (await this.d.page.stopPresenting?.().catch(() => false)) === true;
   }
 

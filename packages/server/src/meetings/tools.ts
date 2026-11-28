@@ -135,9 +135,9 @@ export class MeetingTools {
       case "meeting.present": {
         if (a.stop) return ok((await service.stopPresenting(id)) ? "Stopped sharing." : "It was not sharing.");
         if (a.slide) return (await service.flip(id, a.slide === "next" ? 1 : -1)) ? ok(`Turned to the ${a.slide} slide.`) : bad("No slides are being shown.");
-        const slides = a.slides as { title: string; lines?: string[] }[] | undefined;
+        const slides = a.slides as { title: string; lines?: string[]; say?: string }[] | undefined;
         if (slides?.length) {
-          const r = await service.present(id, { kind: "slides", slides: slides.map((s) => ({ title: s.title, ...(s.lines ? { lines: s.lines } : {}) })) });
+          const r = await service.present(id, { kind: "slides", slides: slides.map((s) => ({ title: s.title, ...(s.lines ? { lines: s.lines } : {}), ...(s.say ? { say: s.say } : {}) })) });
           return r.ok ? ok(r.message) : bad(r.message);
         }
         if (typeof a.file === "string") {

@@ -35,10 +35,10 @@ export const MEETING_TOOL_DEFS: ToolDef[] = [
   def("meeting.people", "Who is in the meeting you are in now, and who is speaking this moment, by the names the meeting shows.", z.object({ id: id.optional() }), "T1", true),
   def(
     "meeting.present",
-    "Share the screen of the meeting you are in to show something: slides you write yourself (slides: title and short lines each, three to eight slides), or a picture or film from a file on this PC (file: .png .jpg .gif .webp .mp4 .webm). The meeting sees a stage of its own, never the real screen. With slide next or back it turns the slides; with stop it stops sharing. Only when the owner asked for it.",
+    "Share the screen of the meeting you are in to show something: slides you write yourself (slides: title and short lines each, three to eight slides; give each slide a say, two to four spoken sentences, and you talk through the slides aloud, turning to the next slide when you finish each one, so what is shown and what is said stay together), or a picture or film from a file on this PC (file: .png .jpg .gif .webp .mp4 .webm). The meeting sees a stage of its own, never the real screen. With slide next or back it turns the slides; with stop it stops sharing. Only when the owner asked for it.",
     z.object({
       id: id.optional(),
-      slides: z.array(z.object({ title: z.string().min(1).max(120), lines: z.array(z.string().min(1).max(200)).max(8).optional() })).min(1).max(20).optional(),
+      slides: z.array(z.object({ title: z.string().min(1).max(120), lines: z.array(z.string().min(1).max(200)).max(8).optional(), say: z.string().min(1).max(400).optional() })).min(1).max(20).optional(),
       file: z.string().min(1).max(500).optional(),
       slide: z.enum(["next", "back"]).optional(),
       stop: z.boolean().optional(),

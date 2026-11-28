@@ -175,6 +175,24 @@ function render() {
     expect(await p.captions()).toEqual([]);
   }, 60_000);
 
+  it("turns on the captions of a Teams page whose more menu opens for a plain click and closes by itself within a second", async () => {
+    const p = await open(`<!doctype html><body><button id="callingButtons-showMoreBtn" aria-label="More">More</button><div role="menuitem" data-tid="stage-item">stage</div><div id="menu"></div><div id="cc"></div><script>
+window.toggles = 0; let on = false;
+const more = document.getElementById("callingButtons-showMoreBtn");
+more.addEventListener("click", () => {
+  document.getElementById("menu").innerHTML = '<div role="menu"><div role="menuitem" id="closed-captions-button" aria-label="Captions" aria-checked="' + on + '">Captions</div></div>';
+  document.getElementById("closed-captions-button").onclick = () => { on = !on; window.toggles++; document.getElementById("cc").innerHTML = on ? '<div data-tid="closed-caption-renderer-wrapper"></div>' : ""; };
+  setTimeout(() => { document.getElementById("menu").innerHTML = ""; }, 700);
+});
+</script></body>`);
+    await p.enableCaptions();
+    expect(await p.run<number>("window.toggles")).toBe(1);
+    expect(await p.captions()).toEqual([]);
+    await new Promise((r) => setTimeout(r, 900));
+    await p.enableCaptions(); // on already: left alone
+    expect(await p.run<number>("window.toggles")).toBe(1);
+  }, 60_000);
+
   it("sends a chat message with the site's own send button when Enter does not send it", async () => {
     const p = await open(`<!doctype html><body><div data-tid="chat-button" id="chat-button">Chat</div><div id="list"></div><div id="chat" style="display:none"><div role="textbox" contenteditable="true" data-tid="ckeditor" style="min-height:20px;border:1px solid"></div><button data-tid="newMessageCommands-send" aria-label="Send">Send</button></div><script>
 window.log = [];
@@ -214,6 +232,20 @@ document.querySelector("[data-tid=ckeditor]").addEventListener("keydown", (e) =>
     page = undefined;
     const q = await open("<!doctype html><body><p>no chat</p></body>");
     expect(await q.readChat()).toBeNull();
+  }, 60_000);
+
+  it("names the people of the Teams stage of today by their tiles, and sees who speaks by the ring changing from its usual look", async () => {
+    const p = await open(`<!doctype html><body>
+<div data-stream-type="Video" data-tid="maya"><div></div></div>
+<div data-stream-type="Video" data-tid="Priya Shah"><div data-tid="participant-avatar"></div><div id="ringP" data-tid="voice-level-stream-outline" class="a1 b2"></div></div>
+<div data-stream-type="Video" data-tid="Raj Kumar (Guest)"><div id="ringR" data-tid="voice-level-stream-outline" class="a1 b2"></div></div>
+</body>`);
+    for (let i = 0; i < 4; i++) expect((await p.people())!.speaking).toEqual([]); // the usual look is learned
+    expect((await p.people())!.names).toEqual(["maya", "Priya Shah", "Raj Kumar"]);
+    await p.run<void>(`document.getElementById("ringR").className = "a1 z9"`);
+    expect((await p.people())!.speaking).toEqual(["Raj Kumar"]);
+    await p.run<void>(`document.getElementById("ringR").className = "a1 b2"`);
+    expect((await p.people())!.speaking).toEqual([]);
   }, 60_000);
 
   it("shares a stage of its own when the site asks for a screen: slides that can be turned, a picture, and nothing shared when there is no share button", async () => {

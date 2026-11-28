@@ -163,6 +163,38 @@ describe("a meeting session", () => {
     expect(rb.log.lines[0]).toMatchObject({ speaker: "Someone" });
   });
 
+  it("talks through slides: says what goes with each one, turns to the next when it is said, and stops when someone is answered", async () => {
+    const log: string[] = [];
+    let holdNext: Promise<void> | null = null;
+    const page = new FakePage(["in"], [[]]);
+    Object.assign(page, { mic: async () => true, speak: async () => { log.push("said"); if (holdNext) { const h = holdNext; holdNext = null; await h; } return true; }, present: async () => ({ ok: true, message: "shared" }), flip: async (by: number) => (log.push(`flip${by}`), true) });
+    let t = 0;
+    const status: string[] = [];
+    const session = new MeetingSession({ page, url: "https://teams.live.com/meet/1", selfName: "Maya", names: () => ["Maya"], prefs: () => DEFAULT_PREFS, announcement: "x", speech: async (s) => (log.push(`say:${s}`), Buffer.from("x")), events: { status: (s: MeetingStatus) => status.push(s), lines() {}, addressed() {}, ownerRelevant() {}, notesDue() {}, problem() {}, ended() {} }, now: () => t, sleep: async (ms) => { t += ms; await new Promise((r) => setImmediate(r)); } });
+    const run = session.start();
+    const until = async (c: () => boolean) => { for (let i = 0; i < 400 && !c(); i++) await new Promise((r) => setTimeout(r, 5)); };
+    await until(() => status.includes("live"));
+    const r = await session.present({ kind: "slides", slides: [{ title: "A", say: "one" }, { title: "B", say: "two" }, { title: "C", say: "three" }] });
+    expect(r.ok).toBe(true);
+    expect(r.message).toMatch(/talking through/);
+    await until(() => log.includes("say:three") && log.filter((x) => x === "said").length === 3);
+    expect(log).toEqual(["say:one", "said", "flip1", "say:two", "said", "flip1", "say:three", "said"]);
+    // someone is answered while it talks: the talk through the slides ends there
+    log.length = 0;
+    let release!: () => void;
+    holdNext = new Promise<void>((r) => (release = r)); // the first slide is still being said
+    await session.present({ kind: "slides", slides: [{ title: "A", say: "first" }, { title: "B", say: "second" }] });
+    await until(() => log.includes("said"));
+    t += 10_000;
+    await session.speak("an answer");
+    release();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(log).toContain("say:an answer");
+    expect(log).not.toContain("say:second");
+    await session.stop("x");
+    await run;
+  });
+
   it("writes in the chat only when told to, not more than once every fifteen seconds, and not before it is in", async () => {
     const page = new FakePage(["in", "in", "in", "in", "in"], [[]]);
     const { session } = rig(page);
