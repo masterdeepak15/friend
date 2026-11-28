@@ -6,14 +6,16 @@ import { openDb, type Db } from "../db";
 import { Memory } from "../memory";
 import { StageState } from "../stage";
 import type { Soul } from "../memory/soul";
+import { MemoryKeeper } from "../memory/keeper";
+import { MemoryOrganizer } from "../memory/organizer";
 import { MemoryTree } from "../memory/tree";
 import { CrewStore, type CrewWorker } from "./store";
 import { rmSync } from "node:fs";
 
 /** What a worker can never use, whatever it is given: running the house (hiring, settings, the owner's soul, plugins) is not its job. */
-const NEVER = ["crew.", "office.", "soul.", "settings.", "view.", "look.", "connect.", "connectors.", "plugins.", "integrations.", "audit.", "memory.tidy"];
+const NEVER = ["crew.", "office.", "soul.", "settings.", "view.", "look.", "connect.", "connectors.", "plugins.", "integrations.", "audit."];
 /** What every worker has: a memory of its own (a wiki of notes in its own folder). */
-const OWN_NOTES = new Set(["memory.remember", "memory.search", "memory.forget", "memory.read", "memory.write", "memory.move"]);
+const OWN_NOTES = new Set(["memory.remember", "memory.search", "memory.forget", "memory.read", "memory.write", "memory.move", "memory.tidy"]);
 
 /** Whether a worker with these grants (names, or prefixes ending in *) may use a tool. */
 export function grantAllows(grants: readonly string[], tool: string): boolean {
@@ -38,6 +40,7 @@ export interface CrewDeps {
 interface Live {
   agent: Agent;
   db: Db;
+  keeper: MemoryKeeper;
 }
 
 const textOf = (blocks: { type: string; text?: string }[]): string =>
@@ -153,6 +156,7 @@ export class Crew {
     const l = this.live.get(id);
     if (!l) return;
     l.agent.cancel();
+    l.keeper.stop();
     this.live.delete(id);
     try {
       l.db.close();
@@ -177,16 +181,26 @@ export class Crew {
     const soul = { text: () => persona, set: () => ({ ok: false, error: "A worker's persona is fixed." }), restore: () => ({ ok: false, error: "A worker's persona is fixed." }) } as unknown as Soul;
     // what is the assistant's own (the owner's notes, face and presence, the screen, the Office, the crew) is left out; the rest is shared
     // and each tool is still checked against the worker's grants
+    // memory is kept the way the assistant keeps it: a wiki in the worker's own folder, what is worth keeping saved after the work,
+    // unfiled notes tidied into topics, and the same compaction of a long conversation (the shared session settings)
+    const tree = new MemoryTree(join(this.d.dataDir, "crew", w.id, "memory"));
+    const idle = () => agent.isBusy();
+    const audit = this.d.audit;
+    const organizer = new MemoryOrganizer({ tree, provider: base.provider, config: () => base.config.memory, audit, busy: idle });
+    const keeper = new MemoryKeeper({ tree, db, provider: base.provider, config: () => base.config.memory, audit, busy: idle, after: () => void organizer.maybeRun() });
     const deps: AgentDeps = {
       ...base,
       db,
       memory: new Memory(db),
-      memoryTree: new MemoryTree(join(this.d.dataDir, "crew", w.id, "memory")),
+      memoryTree: tree,
       soul,
       stage: new StageState(),
       assistantName: () => w.name,
-      onOwnerTurnEnd: undefined,
-      memoryTidy: undefined,
+      onOwnerTurnEnd: () => keeper.notify(),
+      memoryTidy: async () => {
+        const r = await organizer.run();
+        return r.skipped === "nothing" ? "There is nothing unfiled." : `Filed ${r.filed} notes and merged ${r.merged}.`;
+      },
       crew: undefined,
       office: undefined,
       decks: undefined,
@@ -200,7 +214,9 @@ export class Crew {
       ownerReach: undefined,
       integrations: undefined,
     };
-    const live = { agent: new Agent(deps), db };
+    const agent = new Agent(deps);
+    if (base.config.memory.enabled && base.config.memory.autoSave === "on") keeper.init();
+    const live = { agent, db, keeper };
     this.live.set(w.id, live);
     return live;
   }
