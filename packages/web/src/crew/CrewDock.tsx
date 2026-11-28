@@ -1,6 +1,8 @@
 import type { ClientMsg, CrewWorkerView } from "@friend/protocol";
 import { useEffect, useRef, useState } from "react";
 import type { CrewFeedLine, CrewState } from "../store";
+import { ActivityList, Avatar } from "../people/ActivityList";
+import type { Act, Who } from "../people/people";
 import "./crew.css";
 
 export interface CrewDockProps {
@@ -31,6 +33,9 @@ export function CrewDock({ crew, send, askAssistant }: CrewDockProps) {
   const worker = crew.workers.find((w) => w.id === picked) ?? null;
   const logRef = useRef<HTMLDivElement>(null);
   const feed: CrewFeedLine[] = worker ? (crew.feed[worker.id] ?? []) : [];
+  const whoOf = (w: CrewWorkerView): Who => ({ id: w.id, name: w.name, kind: "crew", role: w.role });
+  const actsOf = (w: CrewWorkerView): Act[] => (crew.feed[w.id] ?? []).map((l) => ({ who: whoOf(w), at: l.at, kind: l.kind, text: l.text }));
+  const working = crew.workers.filter((w) => w.status === "working").map((w) => w.id);
 
   useEffect(() => {
     const el = logRef.current;
@@ -61,10 +66,18 @@ export function CrewDock({ crew, send, askAssistant }: CrewDockProps) {
               <WorkerRow key={w.id} w={w} last={(crew.feed[w.id] ?? []).at(-1)} on={w.id === picked} onPick={() => { setPicked(w.id); setTab("now"); setPath(""); }} />
             ))}
           </ul>
+          {!worker && (
+            <section className="cr-detail" aria-label="Everyone">
+              <header className="cr-head"><strong>Everyone</strong> <span className="cr-sub">newest last</span></header>
+              <div className="cr-log">
+                <ActivityList items={crew.workers.flatMap(actsOf).sort((a, b) => a.at - b.at).slice(-80)} live={working} empty="Nothing yet. Ask the assistant to give a worker a task." />
+              </div>
+            </section>
+          )}
           {worker && (
             <section className="cr-detail" aria-label={worker.name}>
               <header className="cr-head">
-                <strong>{worker.name}</strong> <span className="cr-sub">{worker.role}</span>
+                <Avatar who={whoOf(worker)} live={worker.status === "working"} /> <strong>{worker.name}</strong> <span className="cr-sub">{worker.role}</span>
                 <button type="button" className="cr-x" aria-label="Close worker" onClick={() => setPicked(null)}>×</button>
               </header>
               <nav className="cr-tabs" role="tablist">
@@ -75,12 +88,8 @@ export function CrewDock({ crew, send, askAssistant }: CrewDockProps) {
                 ))}
               </nav>
               {tab === "now" && (
-                <div className="cr-log" ref={logRef} aria-live="polite">
-                  {feed.length === 0 ? <p className="cr-sub">Nothing yet. Ask {askAssistant ? "the assistant" : "her"} to give {worker.name} a task.</p> : feed.map((l, i) => (
-                    <p key={`${l.at}-${i}`} data-kind={l.kind} className="cr-line">
-                      <time>{new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time> {l.text}
-                    </p>
-                  ))}
+                <div className="cr-log" ref={logRef}>
+                  <ActivityList items={actsOf(worker)} live={worker.status === "working" ? [worker.id] : []} legend={false} empty={`Nothing yet. Ask the assistant to give ${worker.name} a task.`} />
                 </div>
               )}
               {tab === "talk" && <pre className="cr-log cr-pre">{data("history")?.text ?? "Loading…"}</pre>}
@@ -114,7 +123,7 @@ function WorkerRow({ w, last, on, onPick }: { w: CrewWorkerView; last: CrewFeedL
   return (
     <li>
       <button type="button" className="cr-row" aria-pressed={on} data-working={w.status === "working"} onClick={onPick}>
-        <span className="cr-dot" data-working={w.status === "working"} aria-hidden />
+        <Avatar who={{ id: w.id, name: w.name, kind: "crew" }} size={26} live={w.status === "working"} />
         <span className="cr-name">{w.name}</span>
         <span className="cr-sub">{w.role}</span>
         <span className="cr-now">{w.status === "working" ? `working ${w.since ? ago(w.since) : ""} · ${last && last.kind !== "task" ? last.text : w.task}` : w.lastAt ? `idle · last ${ago(w.lastAt)} ago` : "idle"}</span>

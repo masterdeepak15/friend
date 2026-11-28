@@ -1,5 +1,8 @@
 import type { OfficeQuota, OfficeTicketView, OfficeWorkerView } from "@friend/protocol";
 import type { OfficeFeedLine } from "../../store";
+import type { CrewWorkerView } from "@friend/protocol";
+import type { CrewFeedLine } from "../../store";
+import type { Who } from "../../people/people";
 import { clamp, type NodeStatus, type TicketStatus } from "./kit";
 
 /** How many workers the orbit has room for: the ring holds twelve nodes, the last one the place to hire the next. */
@@ -88,13 +91,40 @@ export function officeMood(mode: string, office: { enabled: boolean; workers: Of
   return busy > 0 ? `working · ${busy}` : mode;
 }
 
+/** A line of the team feed: the text with the name in front (for a plain reading), and the person, the words and the kind apart (for a screen that draws who each line belongs to). */
+export interface TeamLine {
+  text: string;
+  tone: "green" | "orange" | "plain";
+  who?: Who;
+  body?: string;
+  at?: number;
+  kind?: string;
+}
+
 /** The newest lines of every worker's feed, oldest first, each starting with the worker's name. */
-export function feedLines(feed: Record<string, OfficeFeedLine[]>, workers: OfficeWorkerView[], limit = 8): { text: string; tone: "green" | "orange" | "plain" }[] {
-  const all = workers.flatMap((w) => (feed[w.id] ?? []).map((l) => ({ ...l, name: w.name.slice(0, 6).toUpperCase().padEnd(7) })));
+export function feedLines(feed: Record<string, OfficeFeedLine[]>, workers: OfficeWorkerView[], limit = 8): TeamLine[] {
+  const all = workers.flatMap((w) => (feed[w.id] ?? []).map((l) => ({ ...l, w, name: w.name.slice(0, 6).toUpperCase().padEnd(7) })));
   return all
     .sort((a, b) => a.at - b.at)
     .slice(-limit)
-    .map((l) => ({ text: `${l.name}${l.text}`, tone: TONE[l.kind] ?? "plain" }));
+    .map((l) => ({ text: `${l.name}${l.text}`, tone: TONE[l.kind] ?? "plain", who: { id: l.w.id, name: l.w.name, kind: "office" as const, role: l.w.title }, body: l.text, at: l.at, kind: l.kind }));
+}
+
+const CREW_TONE: Record<string, "green" | "orange" | "plain"> = { tool: "green", done: "green", error: "orange", task: "plain", text: "plain" };
+
+/** The same for the crew (workers on Friend's own engine). */
+export function crewLines(feed: Record<string, CrewFeedLine[]>, workers: CrewWorkerView[], limit = 8): TeamLine[] {
+  const all = workers.flatMap((w) => (feed[w.id] ?? []).map((l) => ({ ...l, w, name: w.name.slice(0, 6).toUpperCase().padEnd(7) })));
+  return all
+    .sort((a, b) => a.at - b.at)
+    .slice(-limit)
+    .map((l) => ({ text: `${l.name}${l.text}`, tone: CREW_TONE[l.kind] ?? "plain", who: { id: l.w.id, name: l.w.name, kind: "crew" as const, role: l.w.role }, body: l.text, at: l.at, kind: l.kind }));
+}
+
+/** The Office and the crew in one feed, by time, so a line can be told from whose it is. */
+export function teamLines(office: { enabled: boolean; feed: Record<string, OfficeFeedLine[]>; workers: OfficeWorkerView[] }, crew: { feed: Record<string, CrewFeedLine[]>; workers: CrewWorkerView[] }, limit = 8): TeamLine[] {
+  const all = [...(office.enabled ? feedLines(office.feed, office.workers, 200) : []), ...crewLines(crew.feed, crew.workers, 200)];
+  return all.sort((a, b) => (a.at ?? 0) - (b.at ?? 0)).slice(-limit);
 }
 
 const resetText = (ms: number): string => {

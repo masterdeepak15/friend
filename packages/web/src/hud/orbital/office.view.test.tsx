@@ -76,7 +76,7 @@ describe("the orbit with the office on", () => {
     expect(text("tickets")).toContain("DONE 1");
     expect(text("tickets")).toContain("DOING 1");
     expect(text("budget")).toContain("ADA 25%");
-    expect(text("feed")).toContain("ADA");
+    expect(text("feed")).toContain("AD"); // the worker's mark (its initials), then the words
     expect(text("feed")).toContain("Write a.txt");
   });
 

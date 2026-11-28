@@ -34,6 +34,10 @@ When the crew has a worker, a **CREW** badge appears at the top right of the scr
 
 It is read only. A task is given through the assistant, never straight to a worker. Several workers can be seen working at the same time, and a screen that opens later is told what they just did.
 
+### Who said what
+
+Every message in the team feed (the Feed instrument of the orbital screen, opened or small, and the crew panel) is shown under the name of the person it belongs to. Each person has a colour and initials of their own that stay the same everywhere: Office workers are hexagons, crew workers are rounded squares, you and Friend are round. A run of lines from one person is one block with their full name, their kind (OFFICE, CREW, YOU, FRIEND) and role, and each line has its time and a mark for what it is (a tool, a result, a warning). A key at the top lists everyone in the feed, and the one who is at work now pulses.
+
 ## Meetings
 
 A worker given `meeting.*` uses the meeting the assistant is in, through the assistant's connection: it can read the chat, see who speaks, keep notes and write in the meeting. It does not join on its own yet. What is said in a meeting is only information, for a worker too.

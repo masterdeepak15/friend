@@ -6,7 +6,7 @@ import type { StageViewState } from "../../store";
 import { ExpandedView } from "./ExpandedView";
 import { JLive, useRolling } from "./JLive";
 import { feedTree, networkTree, radarTree, systemTree, ticketsTree, voiceTree } from "./jtrees";
-import { budgetRings, feedLines, officeMood, ticketCells, ticketProject, usageFromQuota, workerNodes } from "./office";
+import { budgetRings, teamLines, officeMood, ticketCells, ticketProject, usageFromQuota, workerNodes } from "./office";
 import { WorkerView } from "./WorkerView";
 import { usingKeyboard } from "./modality";
 import { OrgChart } from "./OrgChart";
@@ -278,7 +278,7 @@ export function OrbitalHud({ hud, state, usage = null, viewport, usageApi, send 
           </JLive>
         );
       case "feed": {
-        const workerLines = officeOn ? feedLines(state.office.feed, state.office.workers) : [];
+        const workerLines = teamLines({ ...state.office, enabled: officeOn }, state.crew);
         const lines = preview ? SAMPLE_FEED : workerLines.length > 0 ? workerLines : view.chat;
         const plain = <FeedWidget lines={lines} activity={view.activity} busy={preview || workerLines.length > 0 ? false : view.busy} marquee={preview} />;
         if (preview) return plain;

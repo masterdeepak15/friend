@@ -12,7 +12,7 @@ export interface Rect {
 import { DeviceDetails, NetworkDetails, SystemDetails, TicketDetails, VoiceDetails, type Readings } from "./Details";
 import { Frame } from "./kit";
 import { usingKeyboard } from "./modality";
-import { budgetRings, feedLines, ticketCells, ticketProject } from "./office";
+import { budgetRings, teamLines, ticketCells, ticketProject } from "./office";
 import { WIDGETS } from "./registry";
 import { BudgetWidget } from "./widgets/BudgetWidget";
 import { FeedLog } from "./widgets/FeedWidget";
@@ -92,7 +92,7 @@ export function ExpandedView({ id, state, rect, usageApi = httpUsageApi, reading
       case "voice":
         return <VoiceDetails voice={state.voice} lastHeard={[...state.chat].reverse().find((c) => c.role === "user")?.text ?? null} />;
       case "feed":
-        return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} workers={state.office.enabled ? feedLines(state.office.feed, state.office.workers, 60) : []} />; // the full, scrolling log: what the workers did comes first
+        return <FeedLog lines={state.chat} activity={state.activity} busy={state.busy} workers={teamLines(state.office, state.crew, 60)} working={[...state.office.workers.filter((w) => w.status === "running" || w.status === "starting").map((w) => w.id), ...state.crew.workers.filter((w) => w.status === "working").map((w) => w.id)]} />; // the full, scrolling log: what the workers did comes first
       case "tickets":
         return <TicketDetails office={state.office} />;
       case "budget":

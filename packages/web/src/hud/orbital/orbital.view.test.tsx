@@ -164,10 +164,10 @@ describe("a long list in a dialog", () => {
     const chat = Array.from({ length: 80 }, (_, i) => ({ role: "assistant" as const, text: `line ${i}` }));
     const { container } = mount({ density: "standard" }, { chat });
     fireEvent.click(container.querySelector('[data-widget="feed"]')!);
-    const feed = container.querySelector(".ob-feed") as HTMLElement;
+    const feed = container.querySelector(".ac-list") as HTMLElement;
     Object.defineProperty(feed, "scrollHeight", { value: 5000, configurable: true });
     fireEvent.scroll(feed);
-    expect(feed.querySelectorAll("p")).toHaveLength(80);
+    expect(feed.querySelectorAll(".ac-line")).toHaveLength(80);
   });
 });
 
